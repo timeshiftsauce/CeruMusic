@@ -1,37 +1,76 @@
+# Ceru Music
 
-# ceru-music
+一个跨平台的音乐播放器应用，支持多来源音乐数据获取与播放。
 
-An Electron application with Vue and TypeScript
-  gitee
-## Recommended IDE Setup
+## 项目简介
+Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器，支持从多个音乐平台获取歌曲信息并播放。该项目结合了现代前端技术和桌面应用开发，提供了流畅的用户体验和灵活的音乐数据源支持。
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
+## 技术栈
+- **Electron**：用于构建跨平台桌面应用
+- **Vue 3**：前端框架，提供响应式 UI
+- **TypeScript**：增强代码可维护性和类型安全
+- **Pinia**：状态管理工具
+- **Vite**：快速的前端构建工具
+- **Meting API**：作为备用音乐数据源
 
-## Project Setup
+## 主要功能
+- 支持从多个音乐平台搜索和播放歌曲
+- 获取歌词和专辑信息
+- 支持虚拟滚动列表，优化大量数据渲染性能
+- 本地数据存储与播放列表管理
+- 精美的用户界面与动画效果
 
-### Install
+## 安装与使用
 
-```bash
-$ pnpm install
-```
+### 推荐开发环境
+- **IDE**: VS Code 或 WebStorm
+- **Node.js 版本**: 推荐使用最新稳定版
+- **包管理器**: pnpm
 
-### Development
+### 项目设置
+1. 安装依赖：
+   ```bash
+   pnpm install
+   ```
 
-```bash
-$ pnpm dev
-```
+2. 启动开发服务器：
+   ```bash
+   pnpm dev
+   ```
 
-### Build
+3. 构建应用：
+   ```bash
+   pnpm build
+   ```
 
-```bash
-# For windows
-$ pnpm build:win
+### 平台构建指令
+- **Windows**:
+  ```bash
+  pnpm build:win
+  ```
 
-# For macOS
-$ pnpm build:mac
+- **macOS**:
+  ```bash
+  pnpm build:mac
+  ```
 
-# For Linux
-$ pnpm build:linux
-```
-# CeruMuisc
-FreeMusic for electron
+- **Linux**:
+  ```bash
+  pnpm build:linux
+  ```
+
+## 文档与资源
+- [API 接口文档](docs/api.md)：详细说明了支持的音乐平台和请求格式。
+- [产品设计文档](docs/design.md)：涵盖项目架构、核心功能设计和开发规范。
+
+## 开源许可
+本项目遵循 MIT 许可协议。详情请参阅 [LICENSE](LICENSE) 文件。
+
+## 贡献指南
+欢迎贡献代码和反馈建议！请遵循 [Git 提交规范](docs/design.md#git提交规范) 并确保代码符合项目风格指南。
+
+## 更新日志
+请参阅 [更新日志](docs/api.md#更新日志) 了解最新功能和改进。
+
+## 联系方式
+如有问题或合作意向，请通过 Gitee 私信联系项目维护者。
