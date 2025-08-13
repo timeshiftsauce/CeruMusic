@@ -23,7 +23,10 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "electron-updater": "^6.3.9"
+    "ceru-music": "link:",
+    "electron-updater": "^6.3.9",
+    "pinia": "^3.0.3",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "3.0.0",
