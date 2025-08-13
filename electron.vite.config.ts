@@ -10,11 +10,11 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
+    plugins: [vue()],
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [vue()]
   }
 })
