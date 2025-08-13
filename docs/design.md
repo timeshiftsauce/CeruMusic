@@ -10,10 +10,21 @@ Ceru Music 是一个基于 Electron + Vue 3 的跨平台桌面音乐播放器，
 - **前端框架**: Vue 3 + TypeScript + Composition API
 - **桌面框架**: Electron (v37.2.3)
 - **UI组件库**: TDesign Vue Next (v1.15.2)
+- ![image-20250813180317221](D:\code\Ceru-Music\docs\assets\image-20250813180317221.png)
 - **状态管理**: Pinia (v3.0.3)
 - **路由管理**: Vue Router (v4.5.1)
 - **构建工具**: Vite + electron-vite
 - **包管理器**: PNPM
+- **Node pnpm 版本**：
+
+  ```bash
+  PS D:\code\Ceru-Music> node -v                 
+  v22.17.0
+  PS D:\code\Ceru-Music> pnpm -v
+  10.14.0
+  ```
+
+  
 
 ### 架构设计
 
@@ -156,25 +167,25 @@ https://api.qijieya.cn/meting/?type=playlist&id=2619366284
 ```typescript
 // 音乐服务接口定义
 interface MusicService {
-  search(keyword: string, page?: number, limit?: number): Promise<SearchResult>
-  getSongDetail(id: string): Promise<SongDetail>
-  getSongUrl(id: string): Promise<string>
-  getLyric(id: string): Promise<LyricData>
-  getPlaylist(id: string): Promise<PlaylistData>
+  search({keyword: string, page?: number, limit?: number}): Promise<SearchResult>
+  getSongDetail({id: string)}: Promise<SongDetail>
+  getSongUrl({id: string}): Promise<string>
+  getLyric({id: string}): Promise<LyricData>
+  getPlaylist({id: string}): Promise<PlaylistData>
 }
 
 // 通用请求函数
-async function request(method: string, ...args: any[]): Promise<any> {
+async function request(method: string, ...args: any{},isLoading=false): Promise<any> {
   try {
     switch (method) {
       case 'search':
-        return await musicService.search(...args)
+        return await musicService.search(args)
       case 'getSongDetail':
-        return await musicService.getSongDetail(...args)
+        return await musicService.getSongDetail(args)
       case 'getSongUrl':
-        return await musicService.getSongUrl(...args)
+        return await musicService.getSongUrl(args)
       case 'getLyric':
-        return await musicService.getLyric(...args)
+        return await musicService.getLyric(args)
       default:
         throw new Error(`未知的方法: ${method}`)
     }
@@ -375,6 +386,8 @@ export const useAppStore = defineStore('app', {
 
 ### 欢迎页面设计
 
+![image-20250813180856660](D:\code\Ceru-Music\docs\assets\image-20250813180856660.png)
+
 ```vue
 <template>
   <div class="welcome-container">
@@ -428,6 +441,10 @@ function skipWelcome() {
 }
 </style>
 ```
+
+##### 界面UI参考
+
+![image-20250813180944752](D:\code\Ceru-Music\docs\assets\image-20250813180944752.png)
 
 ## 页面动画设计
 
