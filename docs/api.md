@@ -13,35 +13,35 @@
 
 ## 请求参数
 
-| 参数名 | 类型 | 必填 | 默认值 | 说明 |
-|--------|------|------|--------|------|
-| server | string | 否 | netease | 音乐平台 |
-| type | string | 否 | search | 请求类型 |
-| id | string | 否 | hello | 查询ID或关键词 |
+| 参数名 | 类型   | 必填 | 默认值  | 说明           |
+| ------ | ------ | ---- | ------- | -------------- |
+| server | string | 否   | netease | 音乐平台       |
+| type   | string | 否   | search  | 请求类型       |
+| id     | string | 否   | hello   | 查询ID或关键词 |
 
 ### 支持的音乐平台 (server)
 
-| 平台代码 | 平台名称 |
-|----------|----------|
-| netease | 网易云音乐 |
-| tencent | QQ音乐 |
-| baidu | 百度音乐 |
-| xiami | 虾米音乐 |
-| kugou | 酷狗音乐 |
-| kuwo | 酷我音乐 |
+| 平台代码 | 平台名称   |
+| -------- | ---------- |
+| netease  | 网易云音乐 |
+| tencent  | QQ音乐     |
+| baidu    | 百度音乐   |
+| xiami    | 虾米音乐   |
+| kugou    | 酷狗音乐   |
+| kuwo     | 酷我音乐   |
 
 ### 支持的请求类型 (type)
 
-| 类型 | 说明 | id参数说明 |
-|------|------|------------|
-| search | 搜索歌曲 | 搜索关键词 |
-| song | 获取歌曲详情 | 歌曲ID |
-| album | 获取专辑信息 | 专辑ID |
-| artist | 获取歌手信息 | 歌手ID |
-| playlist | 获取歌单信息 | 歌单ID |
-| lrc | 获取歌词 | 歌曲ID |
-| url | 获取播放链接 | 歌曲ID |
-| pic | 获取封面图片 | 歌曲/专辑/歌手ID |
+| 类型     | 说明         | id参数说明       |
+| -------- | ------------ | ---------------- |
+| search   | 搜索歌曲     | 搜索关键词       |
+| song     | 获取歌曲详情 | 歌曲ID           |
+| album    | 获取专辑信息 | 专辑ID           |
+| artist   | 获取歌手信息 | 歌手ID           |
+| playlist | 获取歌单信息 | 歌单ID           |
+| lrc      | 获取歌词     | 歌曲ID           |
+| url      | 获取播放链接 | 歌曲ID           |
+| pic      | 获取封面图片 | 歌曲/专辑/歌手ID |
 
 ## 响应格式
 
@@ -74,6 +74,7 @@ GET /?server=netease&type=search&id=周杰伦
 ```
 
 **响应示例**:
+
 ```json
 {
   "success": true,
@@ -104,6 +105,7 @@ GET /?server=netease&type=lrc&id=186016
 ```
 
 **响应示例**:
+
 ```json
 {
   "success": true,
@@ -120,6 +122,7 @@ GET /?server=netease&type=url&id=186016
 ```
 
 **响应示例**:
+
 ```json
 {
   "success": true,
@@ -160,11 +163,11 @@ GET /?server=netease&type=pic&id=186016
 
 ## 错误码说明
 
-| 错误信息 | 说明 |
-|----------|------|
-| require id. | 缺少必需的id参数 |
+| 错误信息            | 说明             |
+| ------------------- | ---------------- |
+| require id.         | 缺少必需的id参数 |
 | unsupported server. | 不支持的音乐平台 |
-| unsupported type. | 不支持的请求类型 |
+| unsupported type.   | 不支持的请求类型 |
 
 ## 注意事项
 
@@ -184,6 +187,7 @@ GET /?server=netease&type=pic&id=186016
 ## 技术实现
 
 本API基于以下技术栈：
+
 - **PHP**: 后端语言
 - **Meting**: 音乐数据获取库
 - **Composer**: 依赖管理

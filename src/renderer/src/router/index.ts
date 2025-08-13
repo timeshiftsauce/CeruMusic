@@ -1,11 +1,10 @@
 import { createWebHashHistory, createRouter } from 'vue-router'
 
-
 const routes = [
   {
     path: '/',
     name: 'welcome',
-    component: () => import('@renderer/views/welcome/index.vue'),
+    component: () => import('@renderer/views/welcome/index.vue')
   }
 ]
 
