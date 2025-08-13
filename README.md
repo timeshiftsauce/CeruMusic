@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ceru-music
 
 An Electron application with Vue and TypeScript
@@ -32,3 +33,7 @@ $ pnpm build:mac
 # For Linux
 $ pnpm build:linux
 ```
+=======
+# CeruMuisc
+FreeMusic for electron
+>>>>>>> 166b94b3278165ccd729c53ec45f1d020a66f8ab
