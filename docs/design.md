@@ -7,6 +7,7 @@ Ceru Music 是一个基于 Electron + Vue 3 的跨平台桌面音乐播放器，
 ## 项目架构
 
 ### 技术栈
+
 - **前端框架**: Vue 3 + TypeScript + Composition API
 - **桌面框架**: Electron (v37.2.3)
 - **UI组件库**: TDesign Vue Next (v1.15.2)
@@ -18,17 +19,17 @@ Ceru Music 是一个基于 Electron + Vue 3 的跨平台桌面音乐播放器，
 - **Node pnpm 版本**：
 
   ```bash
-  PS D:\code\Ceru-Music> node -v                 
+  PS D:\code\Ceru-Music> node -v
   v22.17.0
   PS D:\code\Ceru-Music> pnpm -v
   10.14.0
   ```
 
-  
+-
 
 ### 架构设计
 
-```
+```asp
 Ceru Music
 ├── 主进程 (Main Process)
 │   ├── 应用生命周期管理
@@ -45,6 +46,7 @@ Ceru Music
 ```
 
 ### 目录结构
+
 ```
 src/
 ├── main/                   # 主进程代码
@@ -67,6 +69,7 @@ src/
 ## 项目开发使用方式
 
 ### 开发环境启动
+
 ```bash
 # 安装依赖
 pnpm install
@@ -82,6 +85,7 @@ pnpm typecheck
 ```
 
 ### 构建打包
+
 ```bash
 # 构建当前平台
 pnpm build
@@ -101,18 +105,21 @@ pnpm build:linux
 ### 接口1: 网易云音乐原生接口 (主要数据源)
 
 #### 获取音乐信息
+
 - **请求地址**: `https://music.163.com/api/song/detail`
 - **请求参数**: `ids=[ID1,ID2,ID3,...]` 音乐ID列表
 - **示例**: `https://music.163.com/api/song/detail?ids=[36270426]`
 
 #### 获取音乐直链
+
 - **请求地址**: `https://music.163.com/song/media/outer/url`
 - **请求参数**: `id=123` 音乐ID
 - **示例**: `https://music.163.com/song/media/outer/url?id=36270426.mp3`
 
 #### 获取歌词
+
 - **请求地址**: `https://music.163.com/api/song/lyric`
-- **请求参数**: 
+- **请求参数**:
   - `id=123` 音乐ID
   - `lv=-1` 获取歌词
   - `yv=-1` 获取逐字歌词
@@ -120,6 +127,7 @@ pnpm build:linux
 - **示例**: `https://music.163.com/api/song/lyric?id=36270426&lv=-1&yv=-1&tv=-1`
 
 #### 搜索歌曲
+
 - **请求地址**: `https://music.163.com/api/search/get/web`
 - **请求参数**:
   - `s` 歌名
@@ -131,6 +139,7 @@ pnpm build:linux
 ### 接口2: Meting API (备用数据源)
 
 #### 参数说明
+
 - **server**: 数据源
   - `netease` 网易云音乐(默认)
   - `tencent` QQ音乐
@@ -145,6 +154,7 @@ pnpm build:linux
 - **id**: 类型ID（封面ID/单曲ID/歌单ID）
 
 #### 使用示例
+
 ```
 https://api.qijieya.cn/meting/?type=url&id=1969519579
 https://api.qijieya.cn/meting/?type=song&id=591321
@@ -152,10 +162,12 @@ https://api.qijieya.cn/meting/?type=playlist&id=2619366284
 ```
 
 ### 接口3: 备选接口
+
 - **地址**: https://doc.vkeys.cn/api-doc/
 - **说明**: 不建议使用，延迟较高
 
 ### 接口4: 自部署接口 (备用)
+
 - **地址**: `https://music.shiqianjiang.cn?id=你是我的风景&server=netease`
 - **说明**: 不支持分页，用于获取歌曲源、歌词源等
 - **文档**: [API文档](./api.md)
@@ -223,7 +235,7 @@ export const useMusicStore = defineStore('music', {
     currentTime: 0,
     duration: 0
   }),
-  
+
   actions: {
     // 播放歌曲
     async playSong(song: Song) {
@@ -231,23 +243,26 @@ export const useMusicStore = defineStore('music', {
       this.isPlaying = true
       this.saveToStorage()
     },
-    
+
     // 添加到播放列表
     addToPlaylist(songs: Song[]) {
       this.playlist.push(...songs)
       this.saveToStorage()
     },
-    
+
     // 保存到本地存储
     saveToStorage() {
-      localStorage.setItem('music-state', JSON.stringify({
-        currentSong: this.currentSong,
-        playlist: this.playlist,
-        playMode: this.playMode,
-        volume: this.volume
-      }))
+      localStorage.setItem(
+        'music-state',
+        JSON.stringify({
+          currentSong: this.currentSong,
+          playlist: this.playlist,
+          playMode: this.playMode,
+          volume: this.volume
+        })
+      )
     },
-    
+
     // 从本地存储恢复
     loadFromStorage() {
       const saved = localStorage.getItem('music-state')
@@ -266,12 +281,7 @@ export const useMusicStore = defineStore('music', {
 
 ```vue
 <template>
-  <t-virtual-scroll
-    :data="songList"
-    :height="600"
-    :item-height="60"
-    :buffer="10"
-  >
+  <t-virtual-scroll :data="songList" :height="600" :item-height="60" :buffer="10">
     <template #default="{ data: song, index }">
       <div class="song-item" @click="playSong(song)">
         <div class="song-cover">
@@ -291,15 +301,16 @@ export const useMusicStore = defineStore('music', {
 ### 本地数据存储设计
 
 #### 播放列表存储
+
 ```typescript
 // 方案1: LocalStorage (简单方案)
 class PlaylistStorage {
   private key = 'ceru-playlists'
-  
+
   save(playlists: Playlist[]) {
     localStorage.setItem(this.key, JSON.stringify(playlists))
   }
-  
+
   load(): Playlist[] {
     const data = localStorage.getItem(this.key)
     return data ? JSON.parse(data) : []
@@ -309,11 +320,11 @@ class PlaylistStorage {
 // 方案2: Node.js 文件存储 (最优方案，支持分享)
 class FileStorage {
   private filePath = path.join(app.getPath('userData'), 'playlists.json')
-  
+
   async save(playlists: Playlist[]) {
     await fs.writeFile(this.filePath, JSON.stringify(playlists, null, 2))
   }
-  
+
   async load(): Promise<Playlist[]> {
     try {
       const data = await fs.readFile(this.filePath, 'utf-8')
@@ -322,12 +333,12 @@ class FileStorage {
       return []
     }
   }
-  
+
   // 导出播放列表
   async export(playlist: Playlist, exportPath: string) {
     await fs.writeFile(exportPath, JSON.stringify(playlist, null, 2))
   }
-  
+
   // 导入播放列表
   async import(importPath: string): Promise<Playlist> {
     const data = await fs.readFile(importPath, 'utf-8')
@@ -353,12 +364,12 @@ export const useAppStore = defineStore('app', {
       autoPlay: false
     }
   }),
-  
+
   actions: {
     checkFirstLaunch() {
       const hasLaunched = localStorage.getItem('has-launched')
       this.isFirstLaunch = !hasLaunched
-      
+
       if (this.isFirstLaunch) {
         // 跳转到欢迎页面
         router.push('/welcome')
@@ -368,16 +379,16 @@ export const useAppStore = defineStore('app', {
         router.push('/home')
       }
     },
-    
+
     completeWelcome(preferences?: Partial<UserPreferences>) {
       if (preferences) {
         Object.assign(this.userPreferences, preferences)
       }
-      
+
       this.hasCompletedWelcome = true
       localStorage.setItem('has-launched', 'true')
       localStorage.setItem('user-preferences', JSON.stringify(this.userPreferences))
-      
+
       router.push('/home')
     }
   }
@@ -396,7 +407,7 @@ export const useAppStore = defineStore('app', {
       <t-step title="基础设置" content="配置您的偏好设置" />
       <t-step title="完成设置" content="开始您的音乐之旅" />
     </t-steps>
-    
+
     <transition name="slide" mode="out-in">
       <component :is="currentStepComponent" @next="nextStep" @skip="skipWelcome" />
     </transition>
@@ -428,7 +439,8 @@ function skipWelcome() {
 </script>
 
 <style scoped>
-.slide-enter-active, .slide-leave-active {
+.slide-enter-active,
+.slide-leave-active {
   transition: all 0.3s ease;
 }
 .slide-enter-from {
@@ -449,6 +461,7 @@ function skipWelcome() {
 ## 页面动画设计
 
 ### 路由过渡动画
+
 ```vue
 <template>
   <router-view v-slot="{ Component, route }">
@@ -468,8 +481,10 @@ function getTransitionName(route: any) {
 
 <style>
 /* 滑动动画 */
-.slide-left-enter-active, .slide-left-leave-active,
-.slide-right-enter-active, .slide-right-leave-active {
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
@@ -492,10 +507,12 @@ function getTransitionName(route: any) {
 }
 
 /* 淡入淡出动画 */
-.fade-enter-active, .fade-leave-active {
+.fade-enter-active,
+.fade-leave-active {
   transition: opacity 0.3s ease;
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 </style>
@@ -504,6 +521,7 @@ function getTransitionName(route: any) {
 ## 核心组件设计
 
 ### 音乐播放器组件
+
 ```vue
 <template>
   <div class="music-player">
@@ -514,7 +532,7 @@ function getTransitionName(route: any) {
         <div class="song-artist">{{ currentSong?.artist }}</div>
       </div>
     </div>
-    
+
     <div class="player-controls">
       <t-button variant="text" @click="previousSong">
         <t-icon name="skip-previous" />
@@ -526,15 +544,10 @@ function getTransitionName(route: any) {
         <t-icon name="skip-next" />
       </t-button>
     </div>
-    
+
     <div class="player-progress">
       <span class="time-current">{{ formatTime(currentTime) }}</span>
-      <t-slider 
-        v-model="progress" 
-        :max="duration" 
-        @change="seekTo"
-        class="progress-slider"
-      />
+      <t-slider v-model="progress" :max="duration" @change="seekTo" class="progress-slider" />
       <span class="time-duration">{{ formatTime(duration) }}</span>
     </div>
   </div>
@@ -544,6 +557,7 @@ function getTransitionName(route: any) {
 ## 开发规范
 
 ### 代码规范
+
 - 使用 TypeScript 进行类型检查
 - 遵循 ESLint 配置的代码规范
 - 使用 Prettier 进行代码格式化
@@ -551,6 +565,7 @@ function getTransitionName(route: any) {
 - 文件命名使用 kebab-case
 
 ### Git 提交规范
+
 ```
 feat: 新功能
 fix: 修复bug
@@ -562,6 +577,7 @@ chore: 构建过程或辅助工具的变动
 ```
 
 ### 性能优化
+
 - 使用虚拟滚动处理大列表
 - 图片懒加载
 - 组件按需加载
@@ -581,4 +597,4 @@ chore: 构建过程或辅助工具的变动
 
 ---
 
-*本设计文档将随着项目开发进度持续更新和完善。*
+_本设计文档将随着项目开发进度持续更新和完善。_
