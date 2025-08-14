@@ -10,5 +10,4 @@ import router from './router'
 
 app.use(router)
 app.use(createPinia())
-app.use(createPinia())
 app.mount('#app')

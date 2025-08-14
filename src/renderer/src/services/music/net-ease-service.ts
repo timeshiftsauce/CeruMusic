@@ -2,6 +2,7 @@ import { axiosClient, mobileHeaders, MusicServiceBase } from './service-base'
 import { fieldsSelector } from '@renderer/utils/object'
 
 const baseUrl: string = 'https://music.163.com'
+const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
 
 export const netEaseService: MusicServiceBase = {
   async search({
@@ -45,20 +46,13 @@ export const netEaseService: MusicServiceBase = {
       })
   },
   async getSongUrl({ id }: { id: string }): Promise<any> {
-    return await axiosClient
-      .get(`${baseUrl}/song/media/outer/url`, {
-        params: {
-          id: id
-        },
-        headers: mobileHeaders
-      })
-      .then(({ data }) => {
-        if (data.includes('<html>')) {
-          throw new Error('歌曲不存在')
-        }
+    return await axiosClient.get(`${baseTwoUrl}/music_resource/id/${id}`).then(({ data }) => {
+      if (!data.status) {
+        throw new Error('歌曲不存在')
+      }
 
-        return data
-      })
+      return data.song_data
+    })
   },
   async getLyric({
     id,
