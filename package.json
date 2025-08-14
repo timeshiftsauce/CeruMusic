@@ -46,6 +46,7 @@
     "eslint": "^9.31.0",
     "eslint-plugin-vue": "^10.3.0",
     "prettier": "^3.6.2",
+    "sass-embedded": "^1.90.0",
     "scss": "^0.2.4",
     "typescript": "^5.8.3",
     "unplugin-auto-import": "^20.0.0",
