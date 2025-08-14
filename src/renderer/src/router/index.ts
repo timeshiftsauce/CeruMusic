@@ -1,15 +1,22 @@
-import { createWebHashHistory, createRouter } from 'vue-router'
+import { createWebHashHistory, createRouter, RouteRecordRaw, RouterOptions } from 'vue-router'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'welcome',
     component: () => import('@renderer/views/welcome/index.vue')
+  },
+  {
+    path: '/home',
+    name: 'home',
+    component: () => import('@renderer/views/home/index.vue')
   }
 ]
-
-const router = createRouter({
+const option: RouterOptions = {
   history: createWebHashHistory(),
   routes
-})
+}
+
+const router = createRouter(option)
+
 export default router

@@ -24,6 +24,8 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@lrc-player/core": "^1.1.5",
+    "@lrc-player/parse": "^1.0.0",
     "axios": "^1.11.0",
     "ceru-music": "link:",
     "electron-updater": "^6.3.9",
