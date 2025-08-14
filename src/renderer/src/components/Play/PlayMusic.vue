@@ -209,17 +209,7 @@ defineExpose(exposeObj)
 </script>
 
 <template>
-  <div class="bottom-container">
-    <audio
-      @timeupdate="timeupdate"
-      @ended="end"
-      @seeked="seeked"
-      ref="audio"
-      class="plyr-audio"
-      :src="props.src"
-      preload="auto"
-    />
-  </div>
+  <div class="bottom-container"></div>
 </template>
 
 <style lang="scss">

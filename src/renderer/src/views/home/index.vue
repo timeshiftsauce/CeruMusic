@@ -95,7 +95,7 @@ const handleClick = (index: number): void => {
       </t-content>
     </t-layout>
   </t-layout>
-  <PlayMusic />
+  <!-- <PlayMusic /> -->
 </template>
 
 <style lang="scss" scoped>
