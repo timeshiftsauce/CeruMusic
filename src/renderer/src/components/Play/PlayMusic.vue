@@ -22,7 +22,6 @@ export interface MusicPlayerInstanceType {
   cutSongHandler: () => void
 }
 interface Props {
-  src: string
   ids?: number[]
   songs: GetMusicDetailData
 }
@@ -223,7 +222,7 @@ defineExpose(exposeObj)
   </div>
 </template>
 
-<style lang="less">
+<style lang="scss">
 .plan-container {
   display: flex;
   align-items: center;
@@ -236,8 +235,6 @@ defineExpose(exposeObj)
   .music-drawer {
   }
 }
-</style>
-<style lang="less" scoped>
 :deep(.el-drawer) {
   height: 100%;
 }
