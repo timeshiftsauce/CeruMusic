@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.cerumusic.app
 productName: ceru-music
 directories:
   buildResources: build
@@ -13,6 +13,11 @@ asarUnpack:
   - resources/**
 win:
   executableName: ceru-music
+  # 如果有证书文件，取消注释以下配置
+  # certificateFile: path/to/certificate.p12
+  # certificatePassword: your-password
+  # 或者使用证书存储
+  # certificateSubjectName: "Your Company Name"
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
