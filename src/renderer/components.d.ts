@@ -12,6 +12,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TAside: typeof import('tdesign-vue-next')['Aside']
+    TBadge: typeof import('tdesign-vue-next')['Badge']
     TButton: typeof import('tdesign-vue-next')['Button']
     TContent: typeof import('tdesign-vue-next')['Content']
     TFooter: typeof import('tdesign-vue-next')['Footer']
@@ -20,6 +21,7 @@ declare module 'vue' {
     TLayout: typeof import('tdesign-vue-next')['Layout']
     TMenu: typeof import('tdesign-vue-next')['Menu']
     TMenuItem: typeof import('tdesign-vue-next')['MenuItem']
+    TTag: typeof import('tdesign-vue-next')['Tag']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }

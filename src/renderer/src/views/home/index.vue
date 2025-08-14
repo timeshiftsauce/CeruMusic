@@ -101,6 +101,7 @@ const handleClick = (index: number): void => {
 <style lang="scss" scoped>
 .home-container {
   height: 100vh;
+  overflow-y: hidden;
 }
 
 .icon {
@@ -138,11 +139,11 @@ const handleClick = (index: number): void => {
       }
 
       .app-title {
-        font-weight: 800;
+        font-weight: 500;
         font-size: 1.125rem;
         color: #111827;
         span {
-          font-weight: 800;
+          font-weight: 500;
           color: #f54a00;
         }
       }
