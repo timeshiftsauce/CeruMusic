@@ -9,7 +9,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/home',
     name: 'home',
-    component: () => import('@renderer/views/home/index.vue')
+    component: () => import('@renderer/views/home/index.vue'),
+    children: [
+      {
+        path: '',
+        name: 'music',
+        component: () => import('@renderer/views/music/list.vue')
+      }
+    ]
   }
 ]
 const option: RouterOptions = {
