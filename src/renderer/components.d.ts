@@ -16,6 +16,7 @@ declare module 'vue' {
     TContent: typeof import('tdesign-vue-next')['Content']
     TFooter: typeof import('tdesign-vue-next')['Footer']
     TIcon: typeof import('tdesign-vue-next')['Icon']
+    TInput: typeof import('tdesign-vue-next')['Input']
     TLayout: typeof import('tdesign-vue-next')['Layout']
     TMenu: typeof import('tdesign-vue-next')['Menu']
     TMenuItem: typeof import('tdesign-vue-next')['MenuItem']
