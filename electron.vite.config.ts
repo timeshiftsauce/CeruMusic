@@ -7,10 +7,18 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@electron-toolkit/utils']
+      })
+    ]
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@electron-toolkit/preload']
+      })
+    ]
   },
   renderer: {
     plugins: [
