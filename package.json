@@ -26,6 +26,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@lrc-player/core": "^1.1.5",
     "@lrc-player/parse": "^1.0.0",
+    "NeteaseCloudMusicApi": "^4.27.0",
     "axios": "^1.11.0",
     "ceru-music": "link:",
     "electron-updater": "^6.3.9",
