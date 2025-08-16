@@ -1,7 +1,5 @@
 @import './icon_font/iconfont.css';
 
-:root {
-}
 
 *,
 *::before,
@@ -17,6 +15,7 @@ ul {
 
 html {
   font-size: 14px;
+
 }
 
 body {
@@ -34,6 +33,10 @@ body {
     'Helvetica Neue',
     sans-serif;
   text-rendering: optimizeLegibility;
+  height: 100vh;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --play-bottom-height: 86px;
+
 }
