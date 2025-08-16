@@ -48,9 +48,7 @@ const handleError = (event: Event): void => {
   audioStore.publish('error')
 }
 const loaded = (): void => {
-  audioStore.setDuration(
-    audioMeta.value && (audioMeta.value.duration as number)||0
-  )
+  audioStore.setDuration((audioMeta.value && (audioMeta.value.duration as number)) || 0)
 }
 
 onUnmounted(() => {

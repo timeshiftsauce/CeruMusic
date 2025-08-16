@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
-import {  SkipBackIcon, SkipForwardIcon } from '../../assets/icon_font/icons'
+import { SkipBackIcon, SkipForwardIcon } from '../../assets/icon_font/icons'
 import { storeToRefs } from 'pinia'
 import { PlayIcon, PauseIcon } from 'tdesign-icons-vue-next'
 
-
 const controlAudio = ControlAudioStore()
 const { Audio } = storeToRefs(controlAudio)
-const {  setCurrentTime, start, stop } = controlAudio
+const { setCurrentTime, start, stop } = controlAudio
 
-controlAudio.setUrl('http://www.yinsuge.com/d/file/p/2020/05-14/3c3653104476b164566c84184466d193.mp3')
-
+controlAudio.setUrl(
+  'http://www.yinsuge.com/d/file/p/2020/05-14/3c3653104476b164566c84184466d193.mp3'
+)
 
 // 进度条相关
 const progressRef = ref<HTMLDivElement | null>(null)
 const isDraggingProgress = ref(false)
-const tempProgressPercentage = ref(Audio.value.audio?.currentTime||0)
+const tempProgressPercentage = ref(Audio.value.audio?.currentTime || 0)
 const progressPercentage = computed(() => {
   if (isDraggingProgress.value) {
     return tempProgressPercentage.value
@@ -35,7 +35,6 @@ const formatTime = (seconds: number) => {
 // 当前播放时间和总时长的格式化显示
 const currentTimeFormatted = computed(() => formatTime(Audio.value.currentTime))
 const durationFormatted = computed(() => formatTime(Audio.value.duration))
-
 
 // 播放/暂停切换
 const togglePlayPause = async () => {
@@ -109,7 +108,6 @@ const handleProgressDragStart = (event: MouseEvent) => {
   window.addEventListener('mouseup', handleProgressDragEnd)
 }
 
-
 // 歌曲信息
 const songInfo = ref({
   title: '别让我担心 (Acoustic Ver.)',
@@ -123,8 +121,8 @@ const songInfo = ref({
     <!-- 进度条 -->
     <div class="progress-bar-container">
       <div
-        class="progress-bar"
         ref="progressRef"
+        class="progress-bar"
         @mousedown="handleProgressDragStart($event)"
         @click.stop="handleProgressClick"
       >
@@ -155,8 +153,8 @@ const songInfo = ref({
         <button class="control-btn play-btn" @click.stop="togglePlayPause">
           <!-- <component :is="Audio.isPlay ? PauseIcon : PlayIcon " class="icon play-icon" /> -->
           <transition name="fade" mode="out-in">
-            <PauseIcon v-if="Audio.isPlay" class="icon play-icon"/>
-            <PlayIcon v-else class="icon play-icon"/>
+            <PauseIcon v-if="Audio.isPlay" class="icon play-icon" />
+            <PlayIcon v-else class="icon play-icon" />
           </transition>
         </button>
         <button class="control-btn">
@@ -166,9 +164,7 @@ const songInfo = ref({
 
       <!-- 右侧：时间和其他控制 -->
       <div class="right-section">
-        <div class="time-display">
-          {{ currentTimeFormatted }} / {{ durationFormatted }}
-        </div>
+        <div class="time-display">{{ currentTimeFormatted }} / {{ durationFormatted }}</div>
 
         <div class="extra-controls">
           <button class="control-btn">
@@ -190,7 +186,7 @@ const songInfo = ref({
 .fade-leave-active {
   transition: all 0.2s ease-in-out;
 }
-.fade-enter-active{
+.fade-enter-active {
   transition: all 0.1s ease-in-out;
 }
 .fade-leave-to {
@@ -256,10 +252,11 @@ const songInfo = ref({
       opacity: 0;
       // transition: opacity 0.2s ease;
 
-      &:hover ,&:active,&.dragging {
+      &:hover,
+      &:active,
+      &.dragging {
         opacity: 1;
       }
-
     }
 
     &:hover .progress-handle {

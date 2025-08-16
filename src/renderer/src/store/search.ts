@@ -1,15 +1,15 @@
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia'
 
-export const searchValue = defineStore("search", {
+export const searchValue = defineStore('search', {
   state: () => ({
-    value: "",
+    value: ''
   }),
   getters: {
-    getValue: (state) => state.value,
+    getValue: (state) => state.value
   },
   actions: {
     setValue(value: string) {
-      this.value = value;
-    },
-  },
-});
+      this.value = value
+    }
+  }
+})

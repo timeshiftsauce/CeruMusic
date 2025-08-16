@@ -8,7 +8,7 @@ const api = {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   setMiniMode: (isMini: boolean) => ipcRenderer.send('window-mini-mode', isMini),
-  
+
   // 网易云音乐服务API
   netease: {
     search: (args: any) => ipcRenderer.invoke('netease-search', args),
