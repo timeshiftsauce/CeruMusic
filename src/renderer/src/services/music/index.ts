@@ -1,6 +1,7 @@
 import { LoadingPlugin, NotifyPlugin } from 'tdesign-vue-next'
 
 import { MusicServiceBase, ServiceNamesType, ServiceArgsType } from './service-base'
+
 import {
   GetToplistArgs,
   SearchArgs,
@@ -10,6 +11,8 @@ import {
   GetToplistDetailArgs,
   GetListSongsArgs
 } from './service-base'
+
+import { SongDetailResponse, SongResponse } from './service-base'
 
 import { netEaseService } from './net-ease-service'
 import { AxiosError } from 'axios'
@@ -22,13 +25,13 @@ async function request(
   args: SearchArgs,
   isLoading?: boolean,
   showError?: boolean
-): Promise<any>
+): Promise<SongResponse>
 async function request(
   api: 'getSongDetail',
   args: GetSongDetailArgs,
   isLoading?: boolean,
   showError?: boolean
-): Promise<any>
+): Promise<SongDetailResponse>
 async function request(
   api: 'getSongUrl',
   args: GetSongUrlArgs,
@@ -103,3 +106,4 @@ async function request(
 }
 
 export { request }
+export type { SongResponse, SongDetailResponse }
