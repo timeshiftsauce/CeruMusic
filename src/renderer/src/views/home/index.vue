@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import PlayMusic from '@renderer/components/Play/PlayMusic.vue'
+// import PlayMusic from '@renderer/components/Play/PlayMusic.vue'
+import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { ref } from 'vue'
+import { SearchIcon } from 'tdesign-icons-vue-next'
+import { useRouter } from 'vue-router'
+import { searchValue } from '@renderer/store/search'
+
 interface MenuItem {
   name: string
   icon: string
   path: string
 }
-
+const osType = ref(1)
 const menuList: MenuItem[] = [
   {
     name: '发现',
@@ -25,8 +30,48 @@ const menuList: MenuItem[] = [
   }
 ]
 const menuActive = ref(0)
+const router = useRouter()
+
 const handleClick = (index: number): void => {
   menuActive.value = index
+  router.push(menuList[index].path)
+}
+
+// 导航历史前进后退功能
+const goBack = (): void => {
+  router.go(-1)
+}
+
+const goForward = (): void => {
+  router.go(1)
+}
+
+// 搜索相关
+const keyword = ref('')
+
+// 搜索类型：1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单
+// const searchType = ref(1)
+
+// 处理搜索事件
+const handleSearch = async () => {
+  if (!keyword.value.trim()) return
+  const useSearch = searchValue()
+  // 重新设置搜索关键字
+  try {
+    // 跳转到搜索结果页面，并传递搜索结果和关键词
+    useSearch.setValue(keyword.value.trim()) // 设置搜索关键字
+    router.push({
+      path: '/home/search'
+    })
+  } catch (error) {
+    console.error('搜索失败:', error)
+  } finally {
+  }
+}
+
+// 处理按键事件，按下回车键时触发搜索
+const handleKeyDown = () => {
+  handleSearch()
 }
 </script>
 
@@ -40,8 +85,10 @@ const handleClick = (index: number): void => {
             <i class="iconfont icon-music"></i>
           </div>
           <p class="app-title">
-            Such Music
-            <span>PC</span>
+              <span style="
+                color:#000;
+                font-weight: 800;
+              ">Ceru Music</span>
           </p>
         </div>
 
@@ -67,10 +114,10 @@ const handleClick = (index: number): void => {
         <div class="content">
           <!-- Header -->
           <div class="header">
-            <t-button shape="circle" theme="default" class="nav-btn">
+            <t-button shape="circle" theme="default" class="nav-btn" @click="goBack">
               <i class="iconfont icon-xiangzuo"></i>
             </t-button>
-            <t-button shape="circle" theme="default" class="nav-btn">
+            <t-button shape="circle" theme="default" class="nav-btn" @click="goForward">
               <i class="iconfont icon-xiangyou"></i>
             </t-button>
 
@@ -82,15 +129,36 @@ const handleClick = (index: number): void => {
 "
                   ></use>
                 </svg>
-                <t-input placeholder="搜索音乐、歌手" />
+                <t-input
+                  v-model="keyword"
+                  placeholder="搜索音乐、歌手"
+                  :loading="isSearching"
+                  style="width: 100%"
+                  @enter="handleKeyDown"
+                >
+                  <template #suffix>
+                    <t-button
+                      theme="primary"
+                      variant="text"
+                      shape="circle"
+                      :disabled="isSearching"
+                      style="display: flex; align-items: center; justify-content: center"
+                      @click="handleSearch"
+                    >
+                      <SearchIcon style="font-size: 16px; color: #000" />
+                    </t-button>
+                  </template>
+                </t-input>
               </div>
-              <t-button shape="circle" theme="default" class="settings-btn">
-                <i class="iconfont icon-shezhi"></i>
-              </t-button>
+              <TitleBarControls
+                :control-style="osType === 0 ? 'windows' : 'traffic-light'"
+              ></TitleBarControls>
             </div>
           </div>
 
-          <router-view />
+          <div class="mainContent">
+            <router-view v-if="true" />
+          </div>
         </div>
       </t-content>
     </t-layout>
@@ -118,6 +186,7 @@ const handleClick = (index: number): void => {
     padding: 1rem;
 
     .logo-section {
+      -webkit-app-region: drag;
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -193,19 +262,22 @@ const handleClick = (index: number): void => {
   padding: 0;
   background: #f6f6f6;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
 
   .header {
+    -webkit-app-region: drag;
     display: flex;
     align-items: center;
     padding: 1.5rem;
 
     .nav-btn {
+      -webkit-app-region: no-drag;
       margin-right: 0.5rem;
 
       &:last-of-type {
         margin-right: 0.5rem;
       }
-
       .iconfont {
         font-size: 1rem;
         color: #3d4043;
@@ -220,8 +292,9 @@ const handleClick = (index: number): void => {
       display: flex;
       flex: 1;
       position: relative;
-
+      justify-content: space-between;
       .search-input {
+        -webkit-app-region: no-drag;
         display: flex;
         align-items: center;
         padding: 0 0.5rem;
@@ -249,6 +322,36 @@ const handleClick = (index: number): void => {
         }
       }
     }
+  }
+  .mainContent {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+    height: 0; /* 确保flex子元素能够正确计算高度 */
+
+    &::-webkit-scrollbar {
+      width: 0.375rem;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 0.1875rem;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 0.1875rem;
+      transition: background-color 0.2s ease;
+
+      &:hover {
+        background: #94a3b8;
+      }
+    }
+
+    /* Firefox 滚动条样式 */
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
   }
 }
 </style>
