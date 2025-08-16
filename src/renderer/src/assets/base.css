@@ -1,7 +1,6 @@
 @import './icon_font/iconfont.css';
-:root{
-    --play-bottom-height: 86px;
-
+:root {
+  --play-bottom-height: 86px;
 }
 
 *,
@@ -18,7 +17,14 @@ ul {
 
 html {
   font-size: 14px;
+}
 
+.icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  fill: currentColor;
+  overflow: hidden;
 }
 
 body {
@@ -42,31 +48,29 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-
 }
 
 /* 全局滚动条样式 */
 * {
   &::-webkit-scrollbar {
-      width: 0.375rem;
-    }
+    width: 0.375rem;
+  }
 
-    &::-webkit-scrollbar-track {
-      background: #f1f5f9;
-      border-radius: 0.1875rem;
-    }
+  &::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 0.1875rem;
+  }
 
-    &::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 0.1875rem;
-      transition: background-color 0.2s ease;
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 0.1875rem;
+    transition: background-color 0.2s ease;
 
-      &:hover {
-        background: #94a3b8;
-      }
+    &:hover {
+      background: #94a3b8;
     }
-     /* Firefox 滚动条样式 */
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9;
+  }
+  /* Firefox 滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }

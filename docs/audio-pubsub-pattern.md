@@ -13,6 +13,7 @@
 ## 核心特性
 
 ### 1. 精确的订阅管理
+
 每个订阅都会返回一个取消订阅函数，调用该函数即可精确取消对应的订阅：
 
 ```typescript
@@ -26,6 +27,7 @@ unsubscribe()
 ```
 
 ### 2. 支持的事件类型
+
 - `ended`: 音频播放结束
 - `seeked`: 音频拖拽完成
 - `timeupdate`: 音频时间更新
@@ -33,6 +35,7 @@ unsubscribe()
 - `pause`: 音频暂停播放
 
 ### 3. 类型安全
+
 所有的事件类型和回调函数都有完整的TypeScript类型定义，确保编译时类型检查。
 
 ## 使用方法
@@ -81,7 +84,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   // 组件卸载时取消所有订阅
-  unsubscribeFunctions.forEach(unsubscribe => unsubscribe())
+  unsubscribeFunctions.forEach((unsubscribe) => unsubscribe())
 })
 </script>
 ```
@@ -136,16 +139,18 @@ audioStore.subscribe('ended', () => {
 ## 最佳实践
 
 ### 1. 及时清理订阅
+
 ```typescript
 // ✅ 好的做法：组件卸载时清理
 onUnmounted(() => {
-  unsubscribeFunctions.forEach(unsubscribe => unsubscribe())
+  unsubscribeFunctions.forEach((unsubscribe) => unsubscribe())
 })
 
 // ❌ 不好的做法：忘记清理，可能导致内存泄漏
 ```
 
 ### 2. 使用数组管理多个订阅
+
 ```typescript
 // ✅ 好的做法：统一管理
 const unsubscribeFunctions: UnsubscribeFunction[] = []
@@ -156,10 +161,11 @@ unsubscribeFunctions.push(
 )
 
 // 统一清理
-unsubscribeFunctions.forEach(fn => fn())
+unsubscribeFunctions.forEach((fn) => fn())
 ```
 
 ### 3. 避免在高频事件中执行重操作
+
 ```typescript
 // ❌ 不好的做法：在timeupdate中执行重操作
 audioStore.subscribe('timeupdate', () => {
@@ -171,7 +177,8 @@ audioStore.subscribe('timeupdate', () => {
 let lastUpdate = 0
 audioStore.subscribe('timeupdate', () => {
   const now = Date.now()
-  if (now - lastUpdate > 100) { // 限制更新频率
+  if (now - lastUpdate > 100) {
+    // 限制更新频率
     updateUI()
     lastUpdate = now
   }
@@ -183,6 +190,7 @@ audioStore.subscribe('timeupdate', () => {
 ### 从旧版本迁移
 
 旧版本：
+
 ```typescript
 // 旧的实现方式
 provide('setAudioEnd', setEndCallback)
@@ -193,6 +201,7 @@ function setEndCallback(fn: Function): void {
 ```
 
 新版本：
+
 ```typescript
 // 新的实现方式
 provide('audioSubscribe', audioStore.subscribe)
