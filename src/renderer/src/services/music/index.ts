@@ -30,7 +30,7 @@ async function request(
   args: GetSongDetailArgs,
   isLoading?: boolean,
   showError?: boolean
-): Promise<SongDetailResponse>
+): Promise<SongDetailResponse['songs']>
 async function request(
   api: 'getSongUrl',
   args: GetSongUrlArgs,
