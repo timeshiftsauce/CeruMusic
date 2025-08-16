@@ -1,4 +1,6 @@
 import './assets/main.css'
+import './assets/base.css';
+
 // 引入组件库的少量全局样式变量
 import 'tdesign-vue-next/es/style/index.css' //tdesign 组件样式
 // 引入iconfont图标样式

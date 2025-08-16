@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { ref } from 'vue'
-
+const osType = ref(1)
 // 当前选择的控制风格
 const currentStyle = ref<'windows' | 'traffic-light'>('windows')
 
@@ -12,101 +12,112 @@ const switchStyle = (style: 'windows' | 'traffic-light'): void => {
 </script>
 
 <template>
-  <div class="settings-container">
-    <div class="settings-header">
-      <h2>标题栏控制组件演示</h2>
-      <p>这里展示了两种不同风格的标题栏控制按钮</p>
+  <div class="main-container">
+    <div class="header">
+      <TitleBarControls
+        title="设置"
+        :control-style="osType === 0 ? 'windows' : 'traffic-light'"
+        :show-back="true"
+      />
     </div>
-
-    <div class="demo-section">
-      <h3>风格选择</h3>
-      <div class="style-buttons">
-        <t-button
-          :theme="currentStyle === 'windows' ? 'primary' : 'default'"
-          @click="switchStyle('windows')"
-        >
-          Windows 风格
-        </t-button>
-        <t-button
-          :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
-          @click="switchStyle('traffic-light')"
-        >
-          红绿灯风格
-        </t-button>
-      </div>
-    </div>
-
-    <div class="demo-section">
-      <h3>当前风格预览</h3>
-      <div class="preview-container">
-        <div class="mock-titlebar">
-          <div class="mock-title">Ceru Music - 设置</div>
-          <TitleBarControls :control-style="currentStyle" />
+    <div class="settings-container">
+      <div class="settings-content">
+        <div class="settings-header">
+          <h2>标题栏控制组件演示</h2>
+          <p>这里展示了两种不同风格的标题栏控制按钮</p>
         </div>
-      </div>
-    </div>
 
-    <div class="demo-section">
-      <h3>两种风格对比</h3>
-      <div class="comparison-container">
-        <div class="style-demo">
-          <h4>Windows 风格</h4>
-          <div class="mock-titlebar">
-            <div class="mock-title">Windows 风格标题栏</div>
-            <TitleBarControls control-style="windows" />
+        <div class="demo-section">
+          <h3>风格选择</h3>
+          <div class="style-buttons">
+            <t-button
+              :theme="currentStyle === 'windows' ? 'primary' : 'default'"
+              @click="switchStyle('windows')"
+            >
+              Windows 风格
+            </t-button>
+            <t-button
+              :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
+              @click="switchStyle('traffic-light')"
+            >
+              红绿灯风格
+            </t-button>
           </div>
         </div>
 
-        <div class="style-demo">
-          <h4>红绿灯风格 (macOS)</h4>
-          <div class="mock-titlebar">
-            <div class="mock-title">红绿灯风格标题栏</div>
-            <TitleBarControls control-style="traffic-light" />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="demo-section">
-      <h3>功能说明</h3>
-      <div class="feature-list">
-        <div class="feature-item">
-          <i class="iconfont icon-shezhi"></i>
-          <div>
-            <strong>设置按钮</strong>
-            <p>位于控制按钮最左侧，用于打开应用设置</p>
+        <div class="demo-section">
+          <h3>当前风格预览</h3>
+          <div class="preview-container">
+            <div class="mock-titlebar">
+              <div class="mock-title">Ceru Music - 设置</div>
+              <TitleBarControls :control-style="currentStyle" />
+            </div>
           </div>
         </div>
 
-        <div class="feature-item">
-          <i class="iconfont icon-dibu"></i>
-          <div>
-            <strong>Mini 模式</strong>
-            <p>切换到迷你播放模式，节省桌面空间</p>
+        <div class="demo-section">
+          <h3>两种风格对比</h3>
+          <div class="comparison-container">
+            <div class="style-demo">
+              <h4>Windows 风格</h4>
+              <div class="mock-titlebar">
+                <div class="mock-title">Windows 风格标题栏</div>
+                <TitleBarControls control-style="windows" />
+              </div>
+            </div>
+
+            <div class="style-demo">
+              <h4>红绿灯风格 (macOS)</h4>
+              <div class="mock-titlebar">
+                <div class="mock-title">红绿灯风格标题栏</div>
+                <TitleBarControls control-style="traffic-light" />
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="feature-item">
-          <i class="iconfont icon-zuixiaohua"></i>
-          <div>
-            <strong>最小化</strong>
-            <p>将窗口最小化到任务栏</p>
-          </div>
-        </div>
+        <div class="demo-section">
+          <h3>功能说明</h3>
+          <div class="feature-list">
+            <div class="feature-item">
+              <i class="iconfont icon-shezhi"></i>
+              <div>
+                <strong>设置按钮</strong>
+                <p>位于控制按钮最左侧，用于打开应用设置</p>
+              </div>
+            </div>
 
-        <div class="feature-item">
-          <i class="iconfont icon-zengjia"></i>
-          <div>
-            <strong>最大化</strong>
-            <p>切换窗口最大化/还原状态</p>
-          </div>
-        </div>
+            <div class="feature-item">
+              <i class="iconfont icon-dibu"></i>
+              <div>
+                <strong>Mini 模式</strong>
+                <p>切换到迷你播放模式，节省桌面空间</p>
+              </div>
+            </div>
 
-        <div class="feature-item">
-          <i class="iconfont icon-a-quxiaoguanbi"></i>
-          <div>
-            <strong>关闭</strong>
-            <p>关闭应用程序</p>
+            <div class="feature-item">
+              <i class="iconfont icon-zuixiaohua"></i>
+              <div>
+                <strong>最小化</strong>
+                <p>将窗口最小化到任务栏</p>
+              </div>
+            </div>
+
+            <div class="feature-item">
+              <i class="iconfont icon-zengjia"></i>
+              <div>
+                <strong>最大化</strong>
+                <p>切换窗口最大化/还原状态</p>
+              </div>
+            </div>
+
+            <div class="feature-item">
+              <i class="iconfont icon-a-quxiaoguanbi"></i>
+              <div>
+                <strong>关闭</strong>
+                <p>关闭应用程序</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -115,12 +126,35 @@ const switchStyle = (style: 'windows' | 'traffic-light'): void => {
 </template>
 
 <style lang="scss" scoped>
+.main-container {
+  height: 100vh;
+  overflow: hidden;
+}
+.header {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  padding: 1.5rem;
+  position: sticky;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
 .settings-container {
+  width: 100%;
   padding: 2rem;
+  overflow-y: scroll;
+  max-height: 100vh;
+}
+
+.settings-content {
   max-width: 800px;
   margin: 0 auto;
   background: #fff;
-  min-height: 100vh;
+  padding: 2rem;
 }
 
 .settings-header {
