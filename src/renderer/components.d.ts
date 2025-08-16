@@ -8,11 +8,13 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
     PlayMusic: typeof import('./src/components/Play/PlayMusic.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SearchComponent: typeof import('./src/components/Search/SearchComponent.vue')['default']
+    ShaderBackground: typeof import('./src/components/Play/ShaderBackground.vue')['default']
     TAside: typeof import('tdesign-vue-next')['Aside']
     TButton: typeof import('tdesign-vue-next')['Button']
     TContent: typeof import('tdesign-vue-next')['Content']

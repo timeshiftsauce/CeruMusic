@@ -1,9 +1,10 @@
 @font-face {
   font-family: 'iconfont'; /* Project id 4997692 */
   src:
-    url('iconfont.woff2?t=1755019868701') format('woff2'),
-    url('iconfont.woff?t=1755019868701') format('woff'),
-    url('iconfont.ttf?t=1755019868701') format('truetype');
+    url('iconfont.woff2?t=1755340098053') format('woff2'),
+    url('iconfont.woff?t=1755340098053') format('woff'),
+    url('iconfont.ttf?t=1755340098053') format('truetype'),
+    url('iconfont.svg?t=1755340098053#iconfont') format('svg');
 }
 
 .iconfont {
@@ -12,6 +13,46 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-liebiao:before {
+  content: '\e600';
+}
+
+.icon-shengyin:before {
+  content: '\e64c';
+}
+
+.icon-minimize:before {
+  content: '\e697';
+}
+
+.icon-bofang:before {
+  content: '\e63a';
+}
+
+.icon-zanting:before {
+  content: '\e63b';
+}
+
+.icon-shangyishou:before {
+  content: '\e63c';
+}
+
+.icon-xiayishou:before {
+  content: '\e63e';
+}
+
+.icon-xuanxiangshanchu:before {
+  content: '\e657';
+}
+
+.icon-guanbi:before {
+  content: '\e661';
+}
+
+.icon-xinxi:before {
+  content: '\e6bc';
 }
 
 .icon-zuixiaohua:before {

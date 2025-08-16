@@ -11,13 +11,15 @@ interface Props {
   showSettings?: boolean
   showBack?: boolean
   title?: string
+  color?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   controlStyle: 'windows',
   showSettings: true,
   showBack: false,
-  title: ''
+  title: '',
+  color: '#f3f4f6'
 })
 
 // Mini 模式现在是直接隐藏到系统托盘，不需要状态跟踪
@@ -151,13 +153,14 @@ const handleBack = (): void => {
 
 <style lang="scss" scoped>
 .title-controls {
-  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   width: 100%;
   gap: 0.25rem;
+  -webkit-app-region: drag;
 
   .control-btn {
+    -webkit-app-region: no-drag;
     width: 2.25rem;
     height: 2.25rem;
     min-width: 2.25rem;
@@ -167,7 +170,7 @@ const handleBack = (): void => {
 
     .iconfont {
       font-size: 1.125rem;
-      color: #6b7280;
+      color: v-bind(color);
     }
 
     &:hover .iconfont {
@@ -180,11 +183,15 @@ const handleBack = (): void => {
     align-items: center;
     gap: 0.25rem;
     flex: 1;
+    -webkit-app-region: drag;
+    min-height: 20px;
+
     .back-box {
       display: flex;
       align-items: center;
       gap: 0.25rem;
       .back-btn {
+        -webkit-app-region: no-drag;
         margin-right: 0.5rem;
         &:hover {
           background-color: #f3f4f6;

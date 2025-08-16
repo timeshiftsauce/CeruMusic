@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
-import { SkipBackIcon, SkipForwardIcon } from '../../assets/icon_font/icons'
+import icons from '../../assets/icon_font/icons'
+const { shunxubofangtubiao, liebiao, shengyin, shangyishou, xiayishou, bofang, zanting } = icons
 import { storeToRefs } from 'pinia'
 import { PlayIcon, PauseIcon } from 'tdesign-icons-vue-next'
+import FullPlay from './FullPlay.vue'
+import { extractDominantColor } from '@renderer/utils/colorExtractor'
+import { getBestContrastTextColorWithOpacity } from '@renderer/utils/contrastColor'
 
 const controlAudio = ControlAudioStore()
 const { Audio } = storeToRefs(controlAudio)
@@ -12,6 +16,12 @@ const { setCurrentTime, start, stop } = controlAudio
 controlAudio.setUrl(
   'http://www.yinsuge.com/d/file/p/2020/05-14/3c3653104476b164566c84184466d193.mp3'
 )
+
+const showFullPlay = ref(false)
+// 全屏展示相关
+const toggleFullPlay = () => {
+  showFullPlay.value = !showFullPlay.value
+}
 
 // 进度条相关
 const progressRef = ref<HTMLDivElement | null>(null)
@@ -112,12 +122,25 @@ const handleProgressDragStart = (event: MouseEvent) => {
 const songInfo = ref({
   title: '别让我担心 (Acoustic Ver.)',
   artist: 'ChillChill',
-  cover: '@renderer/assets/images/cover.png'
+  cover:
+    'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg'
+})
+const maincolor = ref('rgba(0, 0, 0, 1)')
+const startmaincolor = ref('rgba(0, 0, 0, 1)')
+const contrastTextColor  = ref('rgba(0, 0, 0, .8)')
+const hoverColor = ref('rgba(0,0,0,1)');
+onMounted(async () => {
+  const color = await extractDominantColor(songInfo.value.cover)
+  console.log(color)
+  maincolor.value = `rgba(${color.r},${color.g},${color.b},1)`
+  startmaincolor.value = `rgba(${color.r},${color.g},${color.b},.2)`
+  contrastTextColor.value=await getBestContrastTextColorWithOpacity(songInfo.value.cover,.6)
+  hoverColor.value=await getBestContrastTextColorWithOpacity(`rgba(${color.r},${color.g},${color.b},1)`,1)
 })
 </script>
 
 <template>
-  <div class="player-container">
+  <div class="player-container" @click.stop="toggleFullPlay">
     <!-- 进度条 -->
     <div class="progress-bar-container">
       <div
@@ -136,7 +159,7 @@ const songInfo = ref({
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
         <div class="album-cover">
-          <img src="@renderer/assets/images/cover.png" alt="专辑封面" />
+          <img :src="songInfo.cover" alt="专辑封面" />
         </div>
 
         <div class="song-info">
@@ -147,18 +170,18 @@ const songInfo = ref({
 
       <!-- 中间：播放控制 -->
       <div class="center-controls">
-        <button class="control-btn">
-          <skip-back-icon class="icon" />
+        <button class="control-btn" @click="">
+          <span class="iconfont icon-shangyishou"></span>
         </button>
         <button class="control-btn play-btn" @click.stop="togglePlayPause">
           <!-- <component :is="Audio.isPlay ? PauseIcon : PlayIcon " class="icon play-icon" /> -->
           <transition name="fade" mode="out-in">
-            <PauseIcon v-if="Audio.isPlay" class="icon play-icon" />
-            <PlayIcon v-else class="icon play-icon" />
+            <span v-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
+            <span v-else key="pause" class="iconfont icon-bofang"></span>
           </transition>
         </button>
-        <button class="control-btn">
-          <skip-forward-icon class="icon" />
+        <button class="control-btn" @click="">
+          <span class="iconfont icon-xiayishou"></span>
         </button>
       </div>
 
@@ -168,17 +191,20 @@ const songInfo = ref({
 
         <div class="extra-controls">
           <button class="control-btn">
-            <i class="iconfont icon-suijibofang"></i>
+            <shunxubofangtubiao style="width: 1.5em; height: 1.5em" />
           </button>
           <button class="control-btn">
-            <i class="iconfont icon-a-yinleyinxiaoduomeiti"></i>
+            <shengyin style="width: 1.5em; height: 1.5em" />
           </button>
           <button class="control-btn">
-            <i class="iconfont icon-gengduo"></i>
+            <liebiao style="width: 1.5em; height: 1.5em" />
           </button>
         </div>
       </div>
     </div>
+  </div>
+  <div class="fullbox">
+    <FullPlay :show="showFullPlay" :cover-image="songInfo.cover" />
   </div>
 </template>
 
@@ -203,8 +229,9 @@ const songInfo = ref({
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
-  border-top: 1px solid #e5e7eb;
+  background: #ffffff31;
+  // border-top: 1px solid #e5e7eb;
+  backdrop-filter: blur(1000px);
   z-index: 1000;
   height: var(--play-bottom-height);
   display: flex;
@@ -214,10 +241,15 @@ const songInfo = ref({
 /* 进度条样式 */
 .progress-bar-container {
   width: 100%;
-  height: 4px;
+  height: 2px;
+  position: absolute;
+  // padding-top: 2px;
   cursor: pointer;
-  position: relative;
-
+  transition: all 0.2s ease-in-out;
+  &:has(.progress-handle.dragging, *:hover) {
+    // margin-bottom: 0;
+    height: 4px;
+  }
   .progress-bar {
     width: 100%;
     height: 100%;
@@ -229,7 +261,7 @@ const songInfo = ref({
       left: 0;
       right: 0;
       height: 100%;
-      background: #e5e7eb;
+      background: #ffffff71;
     }
 
     .progress-filled {
@@ -237,7 +269,7 @@ const songInfo = ref({
       top: 0;
       left: 0;
       height: 100%;
-      background: linear-gradient(to right, #ea5a0c2f, #ea5a0ca1 80%);
+      background: linear-gradient(to right, v-bind(startmaincolor), v-bind(maincolor) 80%);
       border-radius: 999px;
     }
 
@@ -246,7 +278,7 @@ const songInfo = ref({
       top: 50%;
       width: 12px;
       height: 12px;
-      background: #f97316;
+      background: #2374ce;
       border-radius: 50%;
       transform: translate(-50%, -50%);
       opacity: 0;
@@ -271,7 +303,7 @@ const songInfo = ref({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 40px;
   height: calc(100% - 4px);
 }
 
@@ -305,7 +337,7 @@ const songInfo = ref({
     .song-name {
       font-size: 14px;
       font-weight: 500;
-      color: #111827;
+      color: v-bind(hoverColor);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -314,7 +346,7 @@ const songInfo = ref({
 
     .artist-name {
       font-size: 12px;
-      color: #6b7280;
+      color: v-bind(contrastTextColor);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -333,37 +365,39 @@ const songInfo = ref({
   .control-btn {
     background: transparent;
     border: none;
-    color: #6b7280;
+    color: v-bind(contrastTextColor);
     cursor: pointer;
-    padding: 8px;
+    padding: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
 
-    .icon {
-      width: 20px;
-      height: 20px;
+    span {
+      font-size: 28px;
     }
 
     &:hover {
-      color: #111827;
+      color: v-bind(hoverColor);
     }
 
     &.play-btn {
-      background-color: #f97316;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      color: white;
+      background-color: #ffffff27;
+      transition: background-color 0.2s ease;
 
+      border-radius: 50%;
+      span {
+        font-size: 28px;
+        font-weight: 800;
+        color: v-bind(hoverColor);
+      }
       .play-icon {
         width: 24px;
         height: 24px;
       }
 
       &:hover {
-        background-color: #ea580c;
-        color: white;
+        background-color: #ffffff62;
+        color: v-bind(contrastTextColor);
       }
     }
   }
@@ -379,7 +413,7 @@ const songInfo = ref({
 
   .time-display {
     font-size: 12px;
-    color: #6b7280;
+    color: v-bind(contrastTextColor);
     white-space: nowrap;
   }
 
@@ -391,7 +425,7 @@ const songInfo = ref({
     .control-btn {
       background: transparent;
       border: none;
-      color: #6b7280;
+      color: v-bind(contrastTextColor);
       cursor: pointer;
       padding: 4px;
       display: flex;
@@ -403,7 +437,7 @@ const songInfo = ref({
       }
 
       &:hover {
-        color: #111827;
+        color: v-bind(hoverColor);
       }
     }
   }
