@@ -42,7 +42,12 @@ export default defineConfig({
     ],
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
+        '@renderer': resolve('src/renderer/src'),
+        '@assets': resolve('src/renderer/assets'),
+        '@components': resolve('src/renderer/src/components'),
+        '@services': resolve('src/renderer/src/services'),
+        '@types': resolve('src/renderer/src/types'),
+        '@store': resolve('src/renderer/src/store')
       }
     },
     build: {

@@ -105,4 +105,5 @@ async function request(
 }
 
 export { request }
+export default request
 export type { SongResponse, SongDetailResponse }

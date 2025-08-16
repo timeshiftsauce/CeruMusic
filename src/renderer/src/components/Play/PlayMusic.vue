@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import {  SkipBackIcon, SkipForwardIcon } from '../../assets/icon_font/icons'
 import { storeToRefs } from 'pinia'
@@ -12,10 +12,6 @@ const {  setCurrentTime, start, stop } = controlAudio
 
 controlAudio.setUrl('http://www.yinsuge.com/d/file/p/2020/05-14/3c3653104476b164566c84184466d193.mp3')
 
-// 全屏状态控制
-const isFullscreen = ref(false)
-const isTransitioning = ref(false)
-const transitionDuration = 300 // 过渡动画持续时间（毫秒）
 
 // 进度条相关
 const progressRef = ref<HTMLDivElement | null>(null)
@@ -40,17 +36,6 @@ const formatTime = (seconds: number) => {
 const currentTimeFormatted = computed(() => formatTime(Audio.value.currentTime))
 const durationFormatted = computed(() => formatTime(Audio.value.duration))
 
-// 切换全屏/迷你模式
-const toggleFullscreen = () => {
-  if (isTransitioning.value) return
-
-  isTransitioning.value = true
-  isFullscreen.value = !isFullscreen.value
-
-  setTimeout(() => {
-    isTransitioning.value = false
-  }, transitionDuration)
-}
 
 // 播放/暂停切换
 const togglePlayPause = async () => {

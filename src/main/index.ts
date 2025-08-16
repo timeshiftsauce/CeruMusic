@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
+import { NetEaseService } from './services/netease-service'
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
@@ -118,6 +119,66 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
+
+// 创建网易云音乐服务实例
+const netEaseService = new NetEaseService()
+
+// 注册网易云音乐服务的IPC处理器
+ipcMain.handle('netease-search', async (_, args) => {
+  try {
+    return await netEaseService.search(args)
+  } catch (error) {
+    throw error
+  }
+})
+
+ipcMain.handle('netease-getSongDetail', async (_, args) => {
+  try {
+    return await netEaseService.getSongDetail(args)
+  } catch (error) {
+    throw error
+  }
+})
+
+ipcMain.handle('netease-getSongUrl', async (_, args) => {
+  try {
+    return await netEaseService.getSongUrl(args)
+  } catch (error) {
+    throw error
+  }
+})
+
+ipcMain.handle('netease-getLyric', async (_, args) => {
+  try {
+    return await netEaseService.getLyric(args)
+  } catch (error) {
+    throw error
+  }
+})
+
+ipcMain.handle('netease-getToplist', async (_, args) => {
+  try {
+    return await netEaseService.getToplist(args)
+  } catch (error) {
+    throw error
+  }
+})
+
+ipcMain.handle('netease-getToplistDetail', async (_, args) => {
+  try {
+    return await netEaseService.getToplistDetail(args)
+  } catch (error) {
+    throw error
+  }
+})
+
+ipcMain.handle('netease-getListSongs', async (_, args) => {
+  try {
+    return await netEaseService.getListSongs(args)
+  } catch (error) {
+    throw error
+  }
+})
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
