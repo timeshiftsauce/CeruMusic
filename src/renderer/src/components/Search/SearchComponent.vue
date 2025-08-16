@@ -19,7 +19,7 @@ const handleSearch = async () => {
     // 跳转到搜索结果页面，并传递搜索结果和关键词
     router.push({
       path: '/home/search',
-      query: { keyword: keyword.value },
+      query: { keyword: keyword.value }
     })
   } catch (error) {
     console.error('搜索失败:', error)

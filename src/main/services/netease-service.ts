@@ -4,7 +4,8 @@ import axios from 'axios'
 const axiosClient = axios.create({
   timeout: 10000,
   headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
   }
 })
 
@@ -14,7 +15,7 @@ const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
 // 字段选择器工具函数
 function fieldsSelector(obj: any, fields: string[]): any {
   const result: any = {}
-  fields.forEach(field => {
+  fields.forEach((field) => {
     if (obj[field] !== undefined) {
       result[field] = obj[field]
     }
@@ -33,7 +34,7 @@ export class NetEaseService {
           offset: offset ?? 0
         }
       })
-      
+
       const { data } = response
       if (data.code !== 200) {
         console.error(data)
@@ -50,7 +51,7 @@ export class NetEaseService {
     try {
       const response = await axiosClient.get(`${baseUrl}/api/song/detail?ids=[${ids.join(',')}]`)
       const { data } = response
-      
+
       if (data.code !== 200) {
         console.error(data)
         throw new Error(data.msg)
@@ -66,7 +67,7 @@ export class NetEaseService {
     try {
       const response = await axiosClient.get(`${baseTwoUrl}/music_resource/id/${id}`)
       const { data } = response
-      
+
       if (!data.status) {
         throw new Error('歌曲不存在')
       }
@@ -90,7 +91,7 @@ export class NetEaseService {
           ...optionalParams
         }
       })
-      
+
       const { data } = response
       if (data.code !== 200) {
         console.error(data)

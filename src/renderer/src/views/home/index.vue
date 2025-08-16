@@ -65,7 +65,6 @@ const handleSearch = async () => {
     })
   } catch (error) {
     console.error('搜索失败:', error)
-  } finally {
   }
 }
 
@@ -85,10 +84,7 @@ const handleKeyDown = () => {
             <i class="iconfont icon-music"></i>
           </div>
           <p class="app-title">
-              <span style="
-                color:#000;
-                font-weight: 800;
-              ">Ceru Music</span>
+            <span style="color: #000; font-weight: 800">Ceru Music</span>
           </p>
         </div>
 
@@ -256,7 +252,7 @@ const handleKeyDown = () => {
     }
   }
 }
-:deep(.t-layout__content){
+:deep(.t-layout__content) {
   height: 100%;
   display: flex;
 }

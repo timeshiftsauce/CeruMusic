@@ -5,14 +5,18 @@ const createIconComponent = (iconId: string) => {
   return defineComponent({
     name: `Icon${iconId}`,
     render() {
-      return h('svg', {
-        class: 'icon',
-        'aria-hidden': 'true'
-      }, [
-        h('use', {
-          'xlink:href': `#icon-${iconId}`
-        })
-      ])
+      return h(
+        'svg',
+        {
+          class: 'icon',
+          'aria-hidden': 'true'
+        },
+        [
+          h('use', {
+            'xlink:href': `#icon-${iconId}`
+          })
+        ]
+      )
     }
   })
 }

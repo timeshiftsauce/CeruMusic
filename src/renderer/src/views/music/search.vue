@@ -34,7 +34,11 @@ const calculateContainerHeight = () => {
     const listHeaderHeight = 40 // 表头高度
     const pageHeaderHeight = 52 // 表头高度
     const padding = 60 // 容器内边距
-    const availableHeight =( mainContent?.clientHeight || document.body.offsetHeight )- pageHeaderHeight - listHeaderHeight - padding
+    const availableHeight =
+      (mainContent?.clientHeight || document.body.offsetHeight) -
+      pageHeaderHeight -
+      listHeaderHeight -
+      padding
     virtualScrollConfig.value.containerHeight = Math.max(400, availableHeight)
   }
 }
@@ -84,13 +88,17 @@ const search = searchValue()
 
 onMounted(async () => {
   // 计算容器高度
-  watch(search,async () => {
-    keyword.value = search.getValue
-    await performSearch(true)
-    // 确保初始渲染显示内容
-    await nextTick()
-    updateVisibleItems()
-  },{ immediate: true })
+  watch(
+    search,
+    async () => {
+      keyword.value = search.getValue
+      await performSearch(true)
+      // 确保初始渲染显示内容
+      await nextTick()
+      updateVisibleItems()
+    },
+    { immediate: true }
+  )
   calculateContainerHeight()
   // 监听窗口大小变化
   window.addEventListener('resize', calculateContainerHeight)
@@ -286,7 +294,9 @@ const playSong = (song: any): void => {
               <!-- 时长和更多操作 -->
               <div class="col-duration">
                 <div class="duration-wrapper">
-                  <span v-if="hoveredSong !== song.id" class="duration">{{ formatDuration(song.duration) }}</span>
+                  <span v-if="hoveredSong !== song.id" class="duration">{{
+                    formatDuration(song.duration)
+                  }}</span>
                   <div v-else class="action-buttons">
                     <t-button
                       variant="text"

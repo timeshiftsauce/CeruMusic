@@ -125,59 +125,31 @@ const netEaseService = new NetEaseService()
 
 // 注册网易云音乐服务的IPC处理器
 ipcMain.handle('netease-search', async (_, args) => {
-  try {
-    return await netEaseService.search(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.search(args)
 })
 
 ipcMain.handle('netease-getSongDetail', async (_, args) => {
-  try {
-    return await netEaseService.getSongDetail(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.getSongDetail(args)
 })
 
 ipcMain.handle('netease-getSongUrl', async (_, args) => {
-  try {
-    return await netEaseService.getSongUrl(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.getSongUrl(args)
 })
 
 ipcMain.handle('netease-getLyric', async (_, args) => {
-  try {
-    return await netEaseService.getLyric(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.getLyric(args)
 })
 
 ipcMain.handle('netease-getToplist', async (_, args) => {
-  try {
-    return await netEaseService.getToplist(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.getToplist(args)
 })
 
 ipcMain.handle('netease-getToplistDetail', async (_, args) => {
-  try {
-    return await netEaseService.getToplistDetail(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.getToplistDetail(args)
 })
 
 ipcMain.handle('netease-getListSongs', async (_, args) => {
-  try {
-    return await netEaseService.getListSongs(args)
-  } catch (error) {
-    throw error
-  }
+  return await netEaseService.getListSongs(args)
 })
 
 // This method will be called when Electron has finished
