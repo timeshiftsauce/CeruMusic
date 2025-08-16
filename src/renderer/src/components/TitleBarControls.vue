@@ -9,11 +9,15 @@ type ControlStyle = 'traffic-light' | 'windows'
 interface Props {
   controlStyle?: ControlStyle
   showSettings?: boolean
+  showBack?: boolean
+  title?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   controlStyle: 'windows',
-  showSettings: true
+  showSettings: true,
+  showBack: false,
+  title: ''
 })
 
 // Mini 模式现在是直接隐藏到系统托盘，不需要状态跟踪
@@ -49,10 +53,34 @@ const handleSettings = (): void => {
   // 跳转到设置页面
   router.push('/settings')
 }
+
+const handleBack = (): void => {
+  // 返回上一页
+  router.back()
+}
 </script>
 
 <template>
   <div :class="controlsClass">
+    <div class="left">
+      <div class="back-box">
+        <t-button
+          v-if="showBack"
+          shape="circle"
+          theme="default"
+          variant="text"
+          class="control-btn back-btn"
+          title="返回"
+          @click="handleBack"
+        >
+          <i class="iconfont icon-xiangzuo"></i>
+        </t-button>
+      </div>
+      <div class="title-box">
+        <p>{{ title }}</p>
+      </div>
+    </div>
+
     <!-- 设置按钮 -->
     <t-button
       v-if="showSettings"
@@ -126,6 +154,7 @@ const handleSettings = (): void => {
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
+  width: 100%;
   gap: 0.25rem;
 
   .control-btn {
@@ -143,6 +172,27 @@ const handleSettings = (): void => {
 
     &:hover .iconfont {
       color: #111827;
+    }
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1;
+    .back-box {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      .back-btn {
+        margin-right: 0.5rem;
+        &:hover {
+          background-color: #f3f4f6;
+        }
+      }
+    }
+    .title-box {
+      flex: 1;
     }
   }
 
