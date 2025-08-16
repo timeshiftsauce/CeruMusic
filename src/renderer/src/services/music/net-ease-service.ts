@@ -11,13 +11,15 @@ import {
   GetToplistArgs
 } from './service-base'
 
+import { SongDetailResponse, SongResponse } from './service-base'
+
 import { fieldsSelector } from '@renderer/utils/object'
 
 const baseUrl: string = 'https://music.163.com'
 const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
 
 export const netEaseService: MusicServiceBase = {
-  async search({ type, keyword, offset, limit }: SearchArgs): Promise<any> {
+  async search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse> {
     return await axiosClient
       .get(`${baseUrl}/api/search/get/web`, {
         params: {
@@ -35,7 +37,7 @@ export const netEaseService: MusicServiceBase = {
         return data.result
       })
   },
-  async getSongDetail({ ids }: GetSongDetailArgs): Promise<any> {
+  async getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse> {
     return await axiosClient
       .get(`${baseUrl}/api/song/detail?ids=[${ids.join(',')}]`)
       .then(({ data }) => {

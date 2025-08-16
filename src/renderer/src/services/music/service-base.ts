@@ -116,7 +116,7 @@ interface Song {
   transNames?: string[]
 }
 
-export interface SongResponse {
+interface SongResponse {
   songs: Song[]
   songCount: number
 }
@@ -220,15 +220,15 @@ interface SongDetail {
   rtype: number
   rurl: null
 }
-export interface SongDetailResponse {
+interface SongDetailResponse {
   songs: SongDetail[]
   equalizers: Record<string, unknown>
   code: number
 }
 
 interface MusicServiceBase {
-  search({ type, keyword, offset, limit }: SearchArgs): Promise<any>
-  getSongDetail({ ids }: GetSongDetailArgs): Promise<any>
+  search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse>
+  getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse>
   getSongUrl({ id }: GetSongUrlArgs): Promise<any>
   getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
   getToplist({}: GetToplistArgs): Promise<any>
@@ -246,4 +246,6 @@ export type {
   GetToplistDetailArgs,
   GetListSongsArgs
 }
+export type { SongResponse, SongDetailResponse }
+
 export { mobileHeaders, axiosClient }
