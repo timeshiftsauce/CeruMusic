@@ -1,4 +1,4 @@
-import { axiosClient, mobileHeaders, MusicServiceBase } from './service-base'
+import { axiosClient, MusicServiceBase } from './service-base'
 import { fieldsSelector } from '@renderer/utils/object'
 
 const baseUrl: string = 'https://music.163.com'
