@@ -1,6 +1,4 @@
 let timer: any
-import type { Ref } from 'vue'
-// 当过渡完成时会返回Promise
 
 export function transitionVolume(
   audio: HTMLAudioElement,
@@ -9,7 +7,7 @@ export function transitionVolume(
   lengthen: boolean = false
 ): Promise<undefined> {
   clearInterval(timer)
-  const playVolume = lengthen ? 40 : 15
+  const playVolume = lengthen ? 40 : 20
   const pauseVolume = lengthen ? 20 : 10
   return new Promise((resolve) => {
     if (target) {

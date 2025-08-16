@@ -1,43 +1,56 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, provide, ref } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
-const Audio = ControlAudioStore()
-provide('setAudioEnd', setEndCallback)
-provide('setAudioSeeked', setSeekedCallback)
-const timeupdate = () => {}
-let endCallback: Function[] = []
-let seekedCallback: Function[] = []
+
+const audioStore = ControlAudioStore()
 const audioMeta = ref<HTMLAudioElement>()
 
+// 提供订阅方法给子组件使用
+provide('audioSubscribe', audioStore.subscribe)
+
 onMounted(() => {
-  Audio.init(audioMeta.value)
-  console.log('init', audioMeta, '1111')
+  audioStore.init(audioMeta.value)
+  console.log('音频组件初始化完成')
 })
 
-function setEndCallback(fn: Function): void {
-  if (typeof endCallback !== 'function') {
-    endCallback.push(fn)
-  } else {
-    throw new Error('Callback must be a function')
+// 音频事件处理函数
+const handleTimeUpdate = (): void => {
+  if (audioMeta.value) {
+    audioStore.setCurrentTime(audioMeta.value.currentTime)
+    audioStore.Audio.duration = audioMeta.value.duration || 0
   }
-}
-function setSeekedCallback(fn: Function): void {
-  if (typeof seekedCallback !== 'function') {
-    seekedCallback.push(fn)
-  } else {
-    throw new Error('Callback must be a function')
-  }
+  audioStore.publish('timeupdate')
 }
 
-const end = (): void => {
-  endCallback?.forEach((fn) => fn)
+const handleEnded = (): void => {
+  audioStore.Audio.isPlay = false
+  audioStore.publish('ended')
 }
-const seeked = (): void => {
-  seekedCallback?.forEach((fn) => fn)
+
+const handleSeeked = (): void => {
+  audioStore.publish('seeked')
 }
+
+const handlePlay = (): void => {
+  audioStore.Audio.isPlay = true
+  audioStore.publish('play')
+}
+
+const handlePause = (): void => {
+  audioStore.Audio.isPlay = false
+  audioStore.publish('pause')
+}
+
+const handleError = (event: Event): void => {
+  const target = event.target as HTMLAudioElement
+  console.error('音频加载错误:', target.error)
+  audioStore.Audio.isPlay = false
+  audioStore.publish('error')
+}
+
 onUnmounted(() => {
-  endCallback = []
-  seekedCallback = []
+  // 组件卸载时清空所有订阅者
+  audioStore.clearAllSubscribers()
 })
 </script>
 
@@ -46,10 +59,13 @@ onUnmounted(() => {
     <audio
       ref="audioMeta"
       preload="auto"
-      :src="Audio.Audio.url"
-      @timeupdate="timeupdate"
-      @ended="end"
-      @seeked="seeked"
+      :src="audioStore.Audio.url"
+      @timeupdate="handleTimeUpdate"
+      @ended="handleEnded"
+      @seeked="handleSeeked"
+      @play="handlePlay"
+      @pause="handlePause"
+      @error="handleError"
     />
   </div>
 </template>
