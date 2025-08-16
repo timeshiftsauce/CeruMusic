@@ -1,5 +1,8 @@
 @import './icon_font/iconfont.css';
+:root{
+    --play-bottom-height: 86px;
 
+}
 
 *,
 *::before,
@@ -19,6 +22,8 @@ html {
 }
 
 body {
+  user-select: none;
+  -webkit-user-drag: none;
   font-family:
     Inter,
     -apple-system,
@@ -37,7 +42,7 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --play-bottom-height: 86px;
+
 
 }
 

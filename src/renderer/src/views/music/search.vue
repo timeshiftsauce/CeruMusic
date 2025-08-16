@@ -11,6 +11,7 @@ const loading = ref(false)
 const hasMore = ref(true)
 const currentOffset = ref(0)
 const pageSize = 50
+const totalItems = ref(0)
 
 // 虚拟滚动配置
 const virtualScrollConfig = ref({
@@ -32,7 +33,7 @@ const calculateContainerHeight = () => {
     console.log(mainContent?.clientHeight)
     const listHeaderHeight = 40 // 表头高度
     const pageHeaderHeight = 52 // 表头高度
-    const padding = 80 // 容器内边距
+    const padding = 60 // 容器内边距
     const availableHeight =( mainContent?.clientHeight || document.body.offsetHeight )- pageHeaderHeight - listHeaderHeight - padding
     virtualScrollConfig.value.containerHeight = Math.max(400, availableHeight)
   }
@@ -122,7 +123,7 @@ const performSearch = async (reset = false) => {
       offset: currentOffset.value,
       limit: pageSize
     })
-
+    totalItems.value = result.songCount || 0
     // 获取歌曲详情
     if (result.songs && result.songs.length > 0) {
       const songIds = result.songs.map((song) => song.id.toString())
@@ -186,7 +187,7 @@ const playSong = (song: any): void => {
         搜索"<span class="keyword">{{ keyword }}</span
         >"
       </h2>
-      <div v-if="hasResults" class="result-info">找到 {{ searchResults.length }} 首单曲</div>
+      <div v-if="hasResults" class="result-info">找到 {{ totalItems }} 首单曲</div>
     </div>
 
     <!-- 歌曲列表 -->
@@ -335,7 +336,7 @@ const playSong = (song: any): void => {
   background: #fafafa;
   box-sizing: border-box;
   width: 100%;
-  padding: 30px;
+  padding: 20px;
   height: 100%;
 }
 

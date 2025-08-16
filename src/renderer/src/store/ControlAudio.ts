@@ -115,6 +115,13 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
     }
     throw new Error('时间必须是数字类型')
   }
+  const setDuration = (duration: number) => {
+    if (typeof duration === 'number') {
+      Audio.duration = duration
+      return
+    }
+    throw new Error('时间必须是数字类型')
+  }
   /**
    * 设置音量。
    * @param {number} volume - 音量（0-100）。
@@ -193,6 +200,7 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
     subscribe,
     publish,
     clearAllSubscribers,
-    clearEventSubscribers
+    clearEventSubscribers,
+    setDuration
   }
 })
