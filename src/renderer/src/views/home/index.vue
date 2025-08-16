@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// import PlayMusic from '@renderer/components/Play/PlayMusic.vue'
+import PlayMusic from '@renderer/components/Play/PlayMusic.vue'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { ref } from 'vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'

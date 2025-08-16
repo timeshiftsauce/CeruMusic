@@ -1,6 +1,6 @@
 import { LoadingPlugin, NotifyPlugin } from 'tdesign-vue-next'
 
-import { MusicServiceBase, ServiceNamesType, ServiceArgsType } from './service-base'
+import { MusicServiceBase, ServiceNamesType, ServiceArgsType, SongDetailResponse, SongResponse } from './service-base'
 
 import {
   GetToplistArgs,
@@ -12,7 +12,6 @@ import {
   GetListSongsArgs
 } from './service-base'
 
-import { SongDetailResponse, SongResponse } from './service-base'
 
 import { netEaseService } from './net-ease-service'
 import { AxiosError } from 'axios'

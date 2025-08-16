@@ -456,7 +456,7 @@ function skipWelcome() {
 
 ##### 界面UI参考
 
-![image-20250813180944752](D:\code\Ceru-Music\docs\assets\image-20250813180944752.png)
+![.\assets\image-20250813180944752.png)
 
 ## 页面动画设计
 

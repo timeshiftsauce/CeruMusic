@@ -47,6 +47,11 @@ const handleError = (event: Event): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('error')
 }
+const loaded = (): void => {
+  audioStore.setDuration(
+    audioMeta.value && (audioMeta.value.duration as number)||0
+  )
+}
 
 onUnmounted(() => {
   // 组件卸载时清空所有订阅者
@@ -66,6 +71,7 @@ onUnmounted(() => {
       @play="handlePlay"
       @pause="handlePause"
       @error="handleError"
+      @load="loaded"
     />
   </div>
 </template>
