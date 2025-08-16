@@ -102,4 +102,4 @@ async function request(
   }
 }
 
-export default request
+export { request }
