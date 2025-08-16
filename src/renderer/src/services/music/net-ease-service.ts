@@ -1,4 +1,16 @@
-import { axiosClient, mobileHeaders, MusicServiceBase } from './service-base'
+import NeteaseApi from 'NeteaseCloudMusicApi'
+
+import { axiosClient, MusicServiceBase } from './service-base'
+import {
+  SearchArgs,
+  GetSongDetailArgs,
+  GetSongUrlArgs,
+  GetToplistDetailArgs,
+  GetListSongsArgs,
+  GetLyricArgs,
+  GetToplistArgs
+} from './service-base'
+
 import { fieldsSelector } from '@renderer/utils/object'
 
 const baseUrl: string = 'https://music.163.com'

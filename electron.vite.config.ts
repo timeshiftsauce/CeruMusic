@@ -44,6 +44,29 @@ export default defineConfig({
       alias: {
         '@renderer': resolve('src/renderer/src')
       }
+    },
+    build: {
+      rollupOptions: {
+        external: [
+          'fs',
+          'path',
+          'os',
+          'http',
+          'https',
+          'url',
+          'net',
+          'tls',
+          'crypto',
+          'stream',
+          'util',
+          'child_process',
+          'assert',
+          'dns',
+          'querystring',
+          'async_hooks',
+          'zlib'
+        ]
+      }
     }
   }
 })

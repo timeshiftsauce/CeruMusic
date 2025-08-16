@@ -61,6 +61,171 @@ type ServiceArgsType =
   | GetToplistDetailArgs
   | GetListSongsArgs
 
+interface Artist {
+  id: number
+  name: string
+  picUrl: string | null
+  alias: string[]
+  albumSize: number
+  picId: number
+  fansGroup: null
+  img1v1Url: string
+  img1v1: number
+  trans: null
+}
+
+interface Album {
+  id: number
+  name: string
+  artist: {
+    id: number
+    name: string
+    picUrl: string | null
+    alias: string[]
+    albumSize: number
+    picId: number
+    fansGroup: null
+    img1v1Url: string
+    img1v1: number
+    trans: null
+  }
+  publishTime: number
+  size: number
+  copyrightId: number
+  status: number
+  picId: number
+  alia?: string[]
+  mark: number
+}
+
+interface Song {
+  id: number
+  name: string
+  artists: Artist[]
+  album: Album
+  duration: number
+  copyrightId: number
+  status: number
+  alias: string[]
+  rtype: number
+  ftype: number
+  mvid: number
+  fee: number
+  rUrl: null
+  mark: number
+  transNames?: string[]
+}
+
+export interface SongResponse {
+  songs: Song[]
+  songCount: number
+}
+interface AlbumDetail {
+  name: string
+  id: number
+  type: string
+  size: number
+  picId: number
+  blurPicUrl: string
+  companyId: number
+  pic: number
+  picUrl: string
+  publishTime: number
+  description: string
+  tags: string
+  company: string
+  briefDesc: string
+  artist: {
+    name: string
+    id: number
+    picId: number
+    img1v1Id: number
+    briefDesc: string
+    picUrl: string
+    img1v1Url: string
+    albumSize: number
+    alias: string[]
+    trans: string
+    musicSize: number
+    topicPerson: number
+  }
+  songs: any[]
+  alias: string[]
+  status: number
+  copyrightId: number
+  commentThreadId: string
+  artists: Artist[]
+  subType: string
+  transName: null
+  onSale: boolean
+  mark: number
+  gapless: number
+  dolbyMark: number
+}
+interface MusicQuality {
+  name: null
+  id: number
+  size: number
+  extension: string
+  sr: number
+  dfsId: number
+  bitrate: number
+  playTime: number
+  volumeDelta: number
+}
+interface SongDetail {
+  name: string
+  id: number
+  position: number
+  alias: string[]
+  status: number
+  fee: number
+  copyrightId: number
+  disc: string
+  no: number
+  artists: Artist[]
+  album: AlbumDetail
+  starred: boolean
+  popularity: number
+  score: number
+  starredNum: number
+  duration: number
+  playedNum: number
+  dayPlays: number
+  hearTime: number
+  sqMusic: MusicQuality
+  hrMusic: null
+  ringtone: null
+  crbt: null
+  audition: null
+  copyFrom: string
+  commentThreadId: string
+  rtUrl: null
+  ftype: number
+  rtUrls: any[]
+  copyright: number
+  transName: null
+  sign: null
+  mark: number
+  originCoverType: number
+  originSongSimpleData: null
+  single: number
+  noCopyrightRcmd: null
+  hMusic: MusicQuality
+  mMusic: MusicQuality
+  lMusic: MusicQuality
+  bMusic: MusicQuality
+  mvid: number
+  mp3Url: null
+  rtype: number
+  rurl: null
+}
+export interface SongDetailResponse {
+  songs: SongDetail[]
+  equalizers: Record<string, unknown>
+  code: number
+}
+
 interface MusicServiceBase {
   search({ type, keyword, offset, limit }: SearchArgs): Promise<any>
   getSongDetail({ ids }: GetSongDetailArgs): Promise<any>
