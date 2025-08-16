@@ -1,36 +1,20 @@
 import { LoadingPlugin, NotifyPlugin } from 'tdesign-vue-next'
 
-import { MusicServiceBase } from './service-base'
+import { MusicServiceBase, ServiceNamesType, ServiceArgsType } from './service-base'
+import {
+  GetToplistArgs,
+  SearchArgs,
+  GetLyricArgs,
+  GetSongDetailArgs,
+  GetSongUrlArgs,
+  GetToplistDetailArgs,
+  GetListSongsArgs
+} from './service-base'
 
 import { netEaseService } from './net-ease-service'
 import { AxiosError } from 'axios'
 
 const musicService: MusicServiceBase = netEaseService
-
-type ApiMethod = 'search' | 'getSongDetail' | 'getSongUrl' | 'getLyric'
-
-// 定义每个 API 方法对应的参数类型
-type SearchArgs = {
-  type: number
-  keyword: string
-  offset?: number
-  limit: number
-}
-
-type GetSongDetailArgs = {
-  ids: string[]
-}
-
-type GetSongUrlArgs = {
-  id: string
-}
-
-type GetLyricArgs = {
-  id: string
-  lv?: boolean
-  yv?: boolean
-  tv?: boolean
-}
 
 // 使用函数重载定义不同的调用方式
 async function request(
@@ -58,10 +42,28 @@ async function request(
   showError?: boolean
 ): Promise<any>
 async function request(
-  api: ApiMethod,
-  args: SearchArgs | GetSongDetailArgs | GetSongUrlArgs | GetLyricArgs,
-  isLoading = false,
-  showError = true
+  api: 'getToplist',
+  args: GetToplistArgs,
+  isLoading?: boolean,
+  showError?: boolean
+): Promise<any>
+async function request(
+  api: 'getToplistDetail',
+  args: GetToplistDetailArgs,
+  isLoading?: boolean,
+  showError?: boolean
+): Promise<any>
+async function request(
+  api: 'getListSongs',
+  args: GetListSongsArgs,
+  isLoading?: boolean,
+  showError?: boolean
+): Promise<any>
+async function request(
+  api: ServiceNamesType,
+  args: ServiceArgsType,
+  isLoading: boolean = false,
+  showError: boolean = true
 ): Promise<any> {
   if (isLoading) {
     LoadingPlugin({ fullscreen: true, attach: 'body', preventScrollThrough: true })
@@ -77,6 +79,12 @@ async function request(
         return await musicService.getSongUrl(args as GetSongUrlArgs)
       case 'getLyric':
         return await musicService.getLyric(args as GetLyricArgs)
+      case 'getToplist':
+        return await musicService.getToplist(args as GetToplistArgs)
+      case 'getToplistDetail':
+        return await musicService.getToplistDetail(args as GetToplistDetailArgs)
+      case 'getListSongs':
+        return await musicService.getListSongs(args as GetListSongsArgs)
       default:
         throw new Error(`未知的方法: ${api}`)
     }

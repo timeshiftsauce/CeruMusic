@@ -11,32 +11,74 @@ const axiosClient: AxiosInstance = axios.create({
   timeout: timeout
 })
 
-interface MusicServiceBase {
-  search({
-    type,
-    keyword,
-    offset,
-    limit
-  }: {
-    type: number
-    keyword: string
-    offset?: number
-    limit: number
-  }): Promise<any>
-  getSongDetail({ ids }: { ids: string[] }): Promise<any>
-  getSongUrl({ id }: { id: string }): Promise<any>
-  getLyric({
-    id,
-    lv,
-    yv,
-    tv
-  }: {
-    id: string
-    lv?: boolean
-    yv?: boolean
-    tv?: boolean
-  }): Promise<any>
+type SearchArgs = {
+  type: number
+  keyword: string
+  offset?: number
+  limit: number
 }
 
-export type { MusicServiceBase }
+type GetSongDetailArgs = {
+  ids: string[]
+}
+
+type GetSongUrlArgs = {
+  id: string
+}
+
+type GetLyricArgs = {
+  id: string
+  lv?: boolean
+  yv?: boolean // 获取逐字歌词
+  tv?: boolean // 获取歌词翻译
+}
+
+type GetToplistArgs = Record<string, never>
+
+type GetToplistDetailArgs = Record<string, never>
+
+type GetListSongsArgs = {
+  id: string
+  limit?: number
+  offset?: number
+}
+
+type ServiceNamesType =
+  | 'search'
+  | 'getSongDetail'
+  | 'getSongUrl'
+  | 'getLyric'
+  | 'getToplist'
+  | 'getToplistDetail'
+  | 'getListSongs'
+
+type ServiceArgsType =
+  | SearchArgs
+  | GetSongDetailArgs
+  | GetSongUrlArgs
+  | GetLyricArgs
+  | GetToplistArgs
+  | GetToplistDetailArgs
+  | GetListSongsArgs
+
+interface MusicServiceBase {
+  search({ type, keyword, offset, limit }: SearchArgs): Promise<any>
+  getSongDetail({ ids }: GetSongDetailArgs): Promise<any>
+  getSongUrl({ id }: GetSongUrlArgs): Promise<any>
+  getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
+  getToplist({}: GetToplistArgs): Promise<any>
+  getToplistDetail({}: GetToplistDetailArgs): Promise<any>
+  getListSongs({ id, limit, offset }: GetListSongsArgs): Promise<any>
+}
+
+export type { MusicServiceBase, ServiceNamesType, ServiceArgsType }
+export type {
+  SearchArgs,
+  GetSongDetailArgs,
+  GetSongUrlArgs,
+  GetLyricArgs,
+  GetToplistArgs,
+  GetToplistDetailArgs,
+  GetListSongsArgs
+}
 export { mobileHeaders, axiosClient }
