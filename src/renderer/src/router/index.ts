@@ -8,15 +8,39 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/home',
-    name: 'home',
+    redirect: '/home/find',
     component: () => import('@renderer/views/home/index.vue'),
     children: [
       {
         path: '',
-        name: 'music',
-        component: () => import('@renderer/views/music/list.vue')
+        redirect: '/home/find'
+      },
+      {
+        path: 'find',
+        name: 'find',
+        component: () => import('@renderer/views/music/find.vue')
+      },
+      {
+        path: 'local',
+        name: 'local',
+        component: () => import('@renderer/views/music/local.vue')
+      },
+      {
+        path: 'recent',
+        name: 'recent',
+        component: () => import('@renderer/views/music/recent.vue')
+      },
+      {
+        path: 'search',
+        name: 'search',
+        component: () => import('@renderer/views/music/search.vue')
       }
     ]
+  },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('@renderer/views/settings/index.vue')
   }
 ]
 const option: RouterOptions = {

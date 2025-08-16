@@ -7,5 +7,6 @@
   },
   "[json]": {
     "editor.defaultFormatter": "vscode.json-language-features"
-  }
+  },
+  "editor.fontSize": 14
 }
