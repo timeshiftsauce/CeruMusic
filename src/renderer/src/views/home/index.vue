@@ -132,7 +132,6 @@ const handleKeyDown = () => {
                 <t-input
                   v-model="keyword"
                   placeholder="搜索音乐、歌手"
-                  :loading="isSearching"
                   style="width: 100%"
                   @enter="handleKeyDown"
                 >
@@ -141,7 +140,6 @@ const handleKeyDown = () => {
                       theme="primary"
                       variant="text"
                       shape="circle"
-                      :disabled="isSearching"
                       style="display: flex; align-items: center; justify-content: center"
                       @click="handleSearch"
                     >
@@ -163,13 +161,14 @@ const handleKeyDown = () => {
       </t-content>
     </t-layout>
   </t-layout>
-  <!-- <PlayMusic /> -->
+  <PlayMusic />
 </template>
 
 <style lang="scss" scoped>
 .home-container {
-  height: 100vh;
+  height: calc(100vh - var(--play-bottom-height));
   overflow-y: hidden;
+  position: relative;
 }
 
 .icon {
@@ -257,12 +256,15 @@ const handleKeyDown = () => {
     }
   }
 }
-
+:deep(.t-layout__content){
+  height: 100%;
+  display: flex;
+}
 .content {
   padding: 0;
   background: #f6f6f6;
-  height: 100vh;
   display: flex;
+  flex: 1;
   flex-direction: column;
 
   .header {

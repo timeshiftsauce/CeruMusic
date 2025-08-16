@@ -25,14 +25,15 @@ const scrollTop = ref(0)
 const visibleStartIndex = ref(0)
 const visibleEndIndex = ref(0)
 const visibleItems = ref<any[]>([])
-
+const mainContent = document.querySelector('.mainContent')
 // 计算容器高度
 const calculateContainerHeight = () => {
   if (typeof window !== 'undefined') {
-    const headerHeight = 120 // 搜索标题区域高度
+    console.log(mainContent?.clientHeight)
     const listHeaderHeight = 40 // 表头高度
+    const pageHeaderHeight = 52 // 表头高度
     const padding = 80 // 容器内边距
-    const availableHeight = window.innerHeight - headerHeight - listHeaderHeight - padding
+    const availableHeight =( mainContent?.clientHeight || document.body.offsetHeight )- pageHeaderHeight - listHeaderHeight - padding
     virtualScrollConfig.value.containerHeight = Math.max(400, availableHeight)
   }
 }
