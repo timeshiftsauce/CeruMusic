@@ -7,7 +7,18 @@ const api = {
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
-  setMiniMode: (isMini: boolean) => ipcRenderer.send('window-mini-mode', isMini)
+  setMiniMode: (isMini: boolean) => ipcRenderer.send('window-mini-mode', isMini),
+  
+  // 网易云音乐服务API
+  netease: {
+    search: (args: any) => ipcRenderer.invoke('netease-search', args),
+    getSongDetail: (args: any) => ipcRenderer.invoke('netease-getSongDetail', args),
+    getSongUrl: (args: any) => ipcRenderer.invoke('netease-getSongUrl', args),
+    getLyric: (args: any) => ipcRenderer.invoke('netease-getLyric', args),
+    getToplist: (args: any) => ipcRenderer.invoke('netease-getToplist', args),
+    getToplistDetail: (args: any) => ipcRenderer.invoke('netease-getToplistDetail', args),
+    getListSongs: (args: any) => ipcRenderer.invoke('netease-getListSongs', args)
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

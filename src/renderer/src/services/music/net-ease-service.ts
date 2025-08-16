@@ -1,6 +1,4 @@
-import NeteaseApi from 'NeteaseCloudMusicApi'
-
-import { axiosClient, MusicServiceBase } from './service-base'
+import { MusicServiceBase } from './service-base'
 import {
   SearchArgs,
   GetSongDetailArgs,
@@ -13,119 +11,68 @@ import {
 
 import { SongDetailResponse, SongResponse } from './service-base'
 
-import { fieldsSelector } from '@renderer/utils/object'
-
-const baseUrl: string = 'https://music.163.com'
-const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
-
+// 通过IPC调用主进程的网易云音乐服务
 export const netEaseService: MusicServiceBase = {
   async search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse> {
-    return await axiosClient
-      .get(`${baseUrl}/api/search/get/web`, {
-        params: {
-          s: keyword,
-          type: type,
-          limit: limit,
-          offset: offset ?? 0
-        }
-      })
-      .then(({ data }) => {
-        if (data.code !== 200) {
-          console.error(data)
-          throw new Error(data.msg)
-        }
-        return data.result
-      })
+    try {
+      return await window.api.netease.search({ type, keyword, offset, limit })
+    } catch (error) {
+      console.error('Search error:', error)
+      throw error
+    }
   },
+
   async getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse> {
-    return await axiosClient
-      .get(`${baseUrl}/api/song/detail?ids=[${ids.join(',')}]`)
-      .then(({ data }) => {
-        if (data.code !== 200) {
-          console.error(data)
-          throw new Error(data.msg)
-        }
-
-        return data.songs
-      })
+    try {
+      return await window.api.netease.getSongDetail({ ids })
+    } catch (error) {
+      console.error('Get song detail error:', error)
+      throw error
+    }
   },
+
   async getSongUrl({ id }: GetSongUrlArgs): Promise<any> {
-    return await axiosClient.get(`${baseTwoUrl}/music_resource/id/${id}`).then(({ data }) => {
-      if (!data.status) {
-        throw new Error('歌曲不存在')
-      }
-
-      return data.song_data
-    })
+    try {
+      return await window.api.netease.getSongUrl({ id })
+    } catch (error) {
+      console.error('Get song URL error:', error)
+      throw error
+    }
   },
+
   async getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any> {
-    // 默认什么都不获取
-    const optionalParams: any = {}
-    if (lv) {
-      optionalParams.lv = -1
+    try {
+      return await window.api.netease.getLyric({ id, lv, yv, tv })
+    } catch (error) {
+      console.error('Get lyric error:', error)
+      throw error
     }
-    if (yv) {
-      optionalParams.yv = -1
-    }
-    if (tv) {
-      optionalParams.tv = -1
-    }
+  },
 
-    return await axiosClient
-      .get(`${baseUrl}/api/song/lyric`, {
-        params: {
-          id: id,
-          ...optionalParams
-        }
-      })
-      .then(({ data }) => {
-        if (data.code !== 200) {
-          console.error(data)
-          throw Error(data.msg)
-        }
+  async getToplist(args: GetToplistArgs): Promise<any> {
+    try {
+      return await window.api.netease.getToplist(args)
+    } catch (error) {
+      console.error('Get toplist error:', error)
+      throw error
+    }
+  },
 
-        const requiredFields = ['lyricUser', 'lrc', 'tlyric', 'yrc']
-        return fieldsSelector(data, requiredFields)
-      })
+  async getToplistDetail(args: GetToplistDetailArgs): Promise<any> {
+    try {
+      return await window.api.netease.getToplistDetail(args)
+    } catch (error) {
+      console.error('Get toplist detail error:', error)
+      throw error
+    }
   },
-  async getToplist({}: GetToplistArgs): Promise<any> {
-    return await NeteaseApi.toplist({})
-      .then(({ body: data }) => {
-        return data.list
-      })
-      .catch((err) => {
-        console.error({
-          code: err.body.code,
-          msg: err.body.msg.message
-        })
-        throw err.body.msg
-      })
-  },
-  async getToplistDetail({}: GetToplistDetailArgs): Promise<any> {
-    return await NeteaseApi.toplist_detail({})
-      .then(({ body: data }) => {
-        return data.list
-      })
-      .catch((err) => {
-        console.error({
-          code: err.body.code,
-          msg: err.body.msg.message
-        })
-        throw err.body.msg
-      })
-  },
+
   async getListSongs(args: GetListSongsArgs): Promise<any> {
-    return await NeteaseApi.playlist_track_all(args)
-      .then(({ body: data }) => {
-        const requiredFields = ['songs', 'privileges']
-        return fieldsSelector(data, requiredFields)
-      })
-      .catch((err) => {
-        console.error({
-          code: err.body.code,
-          msg: err.body.msg.message
-        })
-        throw err.body.msg
-      })
+    try {
+      return await window.api.netease.getListSongs(args)
+    } catch (error) {
+      console.error('Get list songs error:', error)
+      throw error
+    }
   }
 }

@@ -130,9 +130,9 @@ const performSearch = async (reset = false) => {
       const detailResult = await request('getSongDetail', {
         ids: songIds
       })
-      if (detailResult && detailResult.length > 0) {
+      if (detailResult && detailResult.songs && detailResult.songs.length > 0) {
         for (let i = 0; i < result.songs.length; i++) {
-          result.songs[i].detail = detailResult.find((song) => song.id === result.songs[i].id)
+          result.songs[i].detail = detailResult.songs.find((song) => song.id === result.songs[i].id)
         }
       }
     }
