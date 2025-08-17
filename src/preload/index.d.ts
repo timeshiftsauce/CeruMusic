@@ -15,6 +15,9 @@ interface CustomAPI {
     getToplistDetail: (args: any) => Promise<any>
     getListSongs: (args: any) => Promise<any>
   }
+  ai: {
+    ask: (args: any) => Promise<any>
+  }
 }
 
 declare global {
