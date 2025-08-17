@@ -5,6 +5,8 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
+import wasm from 'vite-plugin-wasm'
+import topLevelAwait from 'vite-plugin-top-level-await'
 
 export default defineConfig({
   main: {
@@ -27,6 +29,8 @@ export default defineConfig({
     plugins: [
       vue(),
       vueDevTools(),
+      wasm(),
+      topLevelAwait(),
       AutoImport({
         resolvers: [
           TDesignResolver({

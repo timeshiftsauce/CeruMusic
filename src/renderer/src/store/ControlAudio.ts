@@ -41,7 +41,8 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
     timeupdate: [],
     play: [],
     pause: [],
-    error: []
+    error: [],
+    canplay: []
   })
   // 生成唯一ID
   const generateId = (): string => {

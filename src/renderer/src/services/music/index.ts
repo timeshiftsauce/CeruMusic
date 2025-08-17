@@ -6,7 +6,8 @@ import {
   ServiceArgsType,
   SongDetailResponse,
   SongResponse,
-  SongUrlResponse
+  SongUrlResponse,
+  LyricResponse
 } from './service-base'
 
 import {
@@ -48,7 +49,7 @@ async function request(
   args: GetLyricArgs,
   isLoading?: boolean,
   showError?: boolean
-): Promise<any>
+): Promise<LyricResponse>
 async function request(
   api: 'getToplist',
   args: GetToplistArgs,
