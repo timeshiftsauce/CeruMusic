@@ -10,7 +10,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
-    PlaylistPanel: typeof import('./src/components/Play/PlaylistPanel.vue')['default']
     PlayMusic: typeof import('./src/components/Play/PlayMusic.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
@@ -19,6 +18,7 @@ declare module 'vue' {
     TAside: typeof import('tdesign-vue-next')['Aside']
     TButton: typeof import('tdesign-vue-next')['Button']
     TContent: typeof import('tdesign-vue-next')['Content']
+    TImage: typeof import('tdesign-vue-next')['Image']
     TInput: typeof import('tdesign-vue-next')['Input']
     TitleBarControls: typeof import('./src/components/TitleBarControls.vue')['default']
     TLayout: typeof import('tdesign-vue-next')['Layout']

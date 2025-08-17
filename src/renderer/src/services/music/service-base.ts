@@ -237,10 +237,40 @@ interface MusicServiceBase {
   search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse>
   getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse>
   getSongUrl({ id }: GetSongUrlArgs): Promise<SongUrlResponse>
-  getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
+  getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<LyricResponse>
   getToplist({}: GetToplistArgs): Promise<any>
   getToplistDetail({}: GetToplistDetailArgs): Promise<any>
   getListSongs({ id, limit, offset }: GetListSongsArgs): Promise<any>
+}
+
+interface LyricUser {
+  id: number
+  status: number
+  demand: number
+  userid: number
+  nickname: string
+  uptime: number
+}
+
+interface LyricContent {
+  version: number
+  lyric: string
+}
+
+interface YrcContent {
+  version: number
+  lyric: string
+}
+
+export interface LyricResponse {
+  sgc: boolean
+  sfy: boolean
+  qfy: boolean
+  lyricUser: LyricUser
+  lrc?: LyricContent
+  tlyric?: LyricContent
+  yrc?: YrcContent
+  code: number
 }
 
 export type { MusicServiceBase, ServiceNamesType, ServiceArgsType }
