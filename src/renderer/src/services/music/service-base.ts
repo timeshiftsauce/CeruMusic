@@ -225,11 +225,18 @@ interface SongDetailResponse {
   equalizers: Record<string, unknown>
   code: number
 }
+interface SongUrlResponse {
+  id: number
+  url: string // 歌曲地址
+  name: string
+  artist: string
+  pic: string //封面图片
+}
 
 interface MusicServiceBase {
   search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse>
   getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse>
-  getSongUrl({ id }: GetSongUrlArgs): Promise<any>
+  getSongUrl({ id }: GetSongUrlArgs): Promise<SongUrlResponse>
   getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
   getToplist({}: GetToplistArgs): Promise<any>
   getToplistDetail({}: GetToplistDetailArgs): Promise<any>
@@ -246,6 +253,6 @@ export type {
   GetToplistDetailArgs,
   GetListSongsArgs
 }
-export type { SongResponse, SongDetailResponse }
+export type { SongResponse, SongDetailResponse, SongUrlResponse }
 
 export { mobileHeaders, axiosClient }

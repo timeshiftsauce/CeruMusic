@@ -134,7 +134,8 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
         if (Audio.isPlay && transition) {
           transitionVolume(Audio.audio, volume / 100, Audio.volume <= volume)
         } else {
-          Audio.audio.volume = volume / 100
+          Audio.audio.volume = Number((volume / 100).toFixed(2))
+          console.log('vo', Audio.audio.volume)
         }
         Audio.volume = volume
       }
@@ -163,15 +164,15 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
   }
   const start = async () => {
     const volume = Audio.volume
-    console.log('开始播放音频')
+    console.log('开始播放音频111', volume)
     if (Audio.audio) {
       Audio.audio.volume = 0
       try {
         await Audio.audio.play()
         Audio.isPlay = true
-        return transitionVolume(Audio.audio, volume / 100, true)
+        return transitionVolume(Audio.audio, volume / 100, true, true)
       } catch (error) {
-        Audio.audio.volume = volume
+        Audio.audio.volume = volume / 100
         console.error('音频播放失败:', error)
         Audio.isPlay = false
         throw new Error('音频播放失败，请检查音频URL是否有效')
@@ -181,7 +182,7 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
   }
   const stop = () => {
     if (Audio.audio) {
-      return transitionVolume(Audio.audio, Audio.volume / 100, false).then(() => {
+      return transitionVolume(Audio.audio, Audio.volume / 100, false, true).then(() => {
         Audio.isPlay = false
         Audio.audio?.pause()
       })

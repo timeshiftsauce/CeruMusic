@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { storeToRefs } from 'pinia'
 
-// 定义窗口控制按钮风格类型
+const Store = LocalUserDetailStore()
+const { userInfo } = storeToRefs(Store)
+
 type ControlStyle = 'traffic-light' | 'windows'
 
 // 组件属性
 interface Props {
-  controlStyle?: ControlStyle
+  controlStyle?: ControlStyle | boolean
   showSettings?: boolean
   showBack?: boolean
   title?: string
@@ -15,18 +19,22 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  controlStyle: 'windows',
+  controlStyle: false,
   showSettings: true,
   showBack: false,
   title: '',
-  color: '#f3f4f6'
+  color: 'black'
 })
 
 // Mini 模式现在是直接隐藏到系统托盘，不需要状态跟踪
 
 // 计算样式类名
 const controlsClass = computed(() => {
-  return `title-controls ${props.controlStyle}`
+  if (props.controlStyle !== false) {
+    return `title-controls ${props.controlStyle}`
+  } else {
+    return userInfo.value.topBarStyle ? 'title-controls traffic-light' : 'title-controls windows'
+  }
 })
 
 // 窗口控制方法
@@ -118,7 +126,12 @@ const handleBack = (): void => {
         title="最小化"
         @click="handleMinimize"
       >
-        <i v-if="controlStyle === 'windows'" class="iconfont icon-zuixiaohua"></i>
+        <i
+          v-if="
+            controlStyle === false ? userInfo.topBarStyle === false : controlStyle === 'windows'
+          "
+          class="iconfont icon-zuixiaohua"
+        ></i>
         <div v-else class="traffic-light minimize"></div>
       </t-button>
 
@@ -131,7 +144,12 @@ const handleBack = (): void => {
         title="最大化"
         @click="handleMaximize"
       >
-        <i v-if="controlStyle === 'windows'" class="iconfont icon-a-tingzhiwukuang"></i>
+        <i
+          v-if="
+            controlStyle === false ? userInfo.topBarStyle === false : controlStyle === 'windows'
+          "
+          class="iconfont icon-a-tingzhiwukuang"
+        ></i>
         <div v-else class="traffic-light maximize"></div>
       </t-button>
 
@@ -144,7 +162,12 @@ const handleBack = (): void => {
         title="关闭"
         @click="handleClose"
       >
-        <i v-if="controlStyle === 'windows'" class="iconfont icon-a-quxiaoguanbi"></i>
+        <i
+          v-if="
+            controlStyle === false ? userInfo.topBarStyle === false : controlStyle === 'windows'
+          "
+          class="iconfont icon-a-quxiaoguanbi"
+        ></i>
         <div v-else class="traffic-light close"></div>
       </t-button>
     </div>

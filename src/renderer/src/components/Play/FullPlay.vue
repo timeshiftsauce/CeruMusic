@@ -1,7 +1,13 @@
 <!-- eslint-disable vue/require-toggle-inside-transition -->
 <script lang="ts" setup>
 import TitleBarControls from '../TitleBarControls.vue'
-import ShaderBackground from './ShaderBackground.vue'
+// import ShaderBackground from './ShaderBackground.vue'
+import {
+  BackgroundRender,
+  LyricPlayer,
+  type BackgroundRenderRef,
+  type LyricPlayerRef
+} from '@applemusic-like-lyrics/vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { shouldUseBlackText } from '@renderer/utils/contrastColor'
 
@@ -14,6 +20,9 @@ const props = withDefaults(defineProps<Props>(), {
   show: false,
   coverImage: '@assets/images/Default.jpg'
 })
+
+const bgRef = ref<BackgroundRenderRef | undefined>(undefined)
+// const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
 
 // 计算实际的封面图片路径
 const actualCoverImage = computed(() => {
@@ -36,15 +45,26 @@ async function updateTextColor() {
 }
 
 // 监听封面图片变化
-watch(() => actualCoverImage.value, updateTextColor)
+watch(() => actualCoverImage.value, updateTextColor, { immediate: true })
 
 // 组件挂载时初始化
-onMounted(updateTextColor)
+onMounted(() => {
+  updateTextColor()
+  console.log('组件挂载完成', bgRef.value)
+})
 </script>
 
 <template>
   <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
-    <ShaderBackground :cover-image="actualCoverImage" />
+    <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
+    <BackgroundRender
+      ref="bgRef"
+      :album="actualCoverImage"
+      :album-is-video="false"
+      :fps="60"
+      :flow-speed="13"
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
+    />
     <Transition name="fade-nav">
       <TitleBarControls
         v-if="props.show"
@@ -55,7 +75,7 @@ onMounted(updateTextColor)
     </Transition>
     <div class="playbox">
       <!-- 播放控件内容 -->
-      <div class="song-info" v-if="props.show">
+      <div v-if="props.show" class="song-info">
         <h1>当前播放</h1>
         <p>这里将显示歌曲信息</p>
       </div>
@@ -86,7 +106,7 @@ onMounted(updateTextColor)
   color: var(--text-color);
 
   &.use-black-text {
-    --text-color: rgba(0, 0, 0, 0.9);
+    --text-color: rgba(255, 255, 255, 0.9);
   }
 
   &.active {
@@ -103,7 +123,7 @@ onMounted(updateTextColor)
   .playbox {
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.256);
+    // background-color: rgba(0, 0, 0, 0.256);
     display: flex;
     flex-direction: column;
     justify-content: center;
