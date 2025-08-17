@@ -11,7 +11,6 @@ interface MenuItem {
   icon: string
   path: string
 }
-const osType = ref(1)
 const menuList: MenuItem[] = [
   {
     name: '发现',
@@ -144,9 +143,7 @@ const handleKeyDown = () => {
                   </template>
                 </t-input>
               </div>
-              <TitleBarControls
-                :control-style="osType === 0 ? 'windows' : 'traffic-light'"
-              ></TitleBarControls>
+              <TitleBarControls :color="'#000'"></TitleBarControls>
             </div>
           </div>
 

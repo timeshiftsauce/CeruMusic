@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
+    PlaylistPanel: typeof import('./src/components/Play/PlaylistPanel.vue')['default']
     PlayMusic: typeof import('./src/components/Play/PlayMusic.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

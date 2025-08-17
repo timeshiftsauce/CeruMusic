@@ -1,24 +1,27 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { ref } from 'vue'
-const osType = ref(1)
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { storeToRefs } from 'pinia'
+const Store = LocalUserDetailStore()
+const { userInfo } = storeToRefs(Store)
 // 当前选择的控制风格
-const currentStyle = ref<'windows' | 'traffic-light'>('windows')
+const currentStyle = ref<'windows' | 'traffic-light'>(
+  userInfo.value.topBarStyle ? 'traffic-light' : 'windows'
+)
 
 // 切换风格
 const switchStyle = (style: 'windows' | 'traffic-light'): void => {
   currentStyle.value = style
+  console.log(`设置成 ${style} 风格 ${style === 'windows'}`)
+  userInfo.value.topBarStyle = style === 'traffic-light' ? true : false
 }
 </script>
 
 <template>
   <div class="main-container">
     <div class="header">
-      <TitleBarControls
-        title="设置"
-        :control-style="osType === 0 ? 'windows' : 'traffic-light'"
-        :show-back="true"
-      />
+      <TitleBarControls title="设置" :show-back="true" />
     </div>
     <div class="settings-container">
       <div class="settings-content">

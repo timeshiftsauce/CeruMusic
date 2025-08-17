@@ -181,9 +181,46 @@ const formatDuration = (duration: number): string => {
 // 计算是否有搜索结果
 const hasResults = computed(() => searchResults.value && searchResults.value.length > 0)
 
-// 播放歌曲
+// 播放歌曲 - 点击背景时添加到播放列表第一项并播放
 const playSong = (song: any): void => {
   console.log('播放歌曲:', song.name)
+
+  // 转换为SongList格式
+  const songData = {
+    id: song.id,
+    name: song.name,
+    artist: song.artists ? song.artists.map((a: any) => a.name) : [],
+    artistName: song.artists ? song.artists.map((a: any) => a.name).join(' / ') : '',
+    coverUrl: (song.detail?.album?.blurPicUrl || song.detail?.album?.picUrl) + '?param=300y300',
+    duration: song.duration,
+    url: '' // 需要后续获取
+  }
+
+  // 触发添加到播放列表并播放的事件
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', songData)
+  }
+}
+
+// 添加到播放列表末尾
+const addToPlaylist = (song: any): void => {
+  console.log('添加到播放列表:', song.name)
+
+  // 转换为SongList格式
+  const songData = {
+    id: song.id,
+    name: song.name,
+    artist: song.artists ? song.artists.map((a: any) => a.name) : [],
+    artistName: song.artists ? song.artists.map((a: any) => a.name).join(' / ') : '',
+    coverUrl: (song.detail?.album?.blurPicUrl || song.detail?.album?.picUrl) + '?param=300y300',
+    duration: song.duration,
+    url: '' // 需要后续获取
+  }
+
+  // 触发添加到播放列表末尾的事件
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('addToPlaylistEnd', songData)
+  }
 }
 </script>
 
@@ -237,7 +274,8 @@ const playSong = (song: any): void => {
                   variant="text"
                   size="small"
                   class="play-btn"
-                  @click="playSong(song)"
+                  @click.stop="addToPlaylist(song)"
+                  title="添加到播放列表"
                 >
                   <play-icon size="30" />
                 </t-button>

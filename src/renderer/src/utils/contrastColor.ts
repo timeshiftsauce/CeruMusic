@@ -27,7 +27,9 @@ export async function shouldUseBlackText(imageSrc: string): Promise<boolean> {
     )
 
     // 返回应该使用的文本颜色: true为黑色，false为白色
-    return contrastWithWhite > contrastWithBlack
+    // 如果与黑色的对比度更高，说明背景较亮，应该使用黑色文字
+    // 如果与白色的对比度更高，说明背景较暗，应该使用白色文字
+    return contrastWithBlack > contrastWithWhite
   } catch (error) {
     console.error('计算对比色失败:', error)
     // 默认返回白色作为安全选择

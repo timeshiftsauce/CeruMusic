@@ -1,20 +1,435 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import icons from '../../assets/icon_font/icons'
-const { shunxubofangtubiao, liebiao, shengyin, shangyishou, xiayishou, bofang, zanting } = icons
+const { shunxubofangtubiao, liebiao, shengyin, suijibofang, bofangXunhuanbofang } = icons
 import { storeToRefs } from 'pinia'
-import { PlayIcon, PauseIcon } from 'tdesign-icons-vue-next'
 import FullPlay from './FullPlay.vue'
 import { extractDominantColor } from '@renderer/utils/colorExtractor'
 import { getBestContrastTextColorWithOpacity } from '@renderer/utils/contrastColor'
+import { PlayMode, type SongList } from '@renderer/types/audio'
+import { MessagePlugin } from 'tdesign-vue-next'
+import {
+  initPlaylistEventListeners,
+  destroyPlaylistEventListeners,
+  getSongRealUrl
+} from '@renderer/utils/playlistManager'
 
 const controlAudio = ControlAudioStore()
+const localUserStore = LocalUserDetailStore()
 const { Audio } = storeToRefs(controlAudio)
-const { setCurrentTime, start, stop } = controlAudio
+const { list, userInfo } = storeToRefs(localUserStore)
+const { setCurrentTime, start, stop, setVolume, setUrl } = controlAudio
 
-controlAudio.setUrl(
-  'http://www.yinsuge.com/d/file/p/2020/05-14/3c3653104476b164566c84184466d193.mp3'
+// 等待音频准备就绪
+const waitForAudioReady = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const audio = Audio.value.audio
+    if (!audio) {
+      reject(new Error('音频元素未初始化'))
+      return
+    }
+
+    // 如果音频已经准备就绪
+    if (audio.readyState >= 3) {
+      // HAVE_FUTURE_DATA
+      resolve()
+      return
+    }
+
+    // 设置超时
+    const timeout = setTimeout(() => {
+      audio.removeEventListener('canplay', onCanPlay)
+      audio.removeEventListener('error', onError)
+      reject(new Error('音频加载超时'))
+    }, 10000) // 10秒超时
+
+    const onCanPlay = () => {
+      clearTimeout(timeout)
+      audio.removeEventListener('canplay', onCanPlay)
+      audio.removeEventListener('error', onError)
+      resolve()
+    }
+
+    const onError = () => {
+      clearTimeout(timeout)
+      audio.removeEventListener('canplay', onCanPlay)
+      audio.removeEventListener('error', onError)
+      reject(new Error('音频加载失败'))
+    }
+
+    // 监听事件
+    audio.addEventListener('canplay', onCanPlay, { once: true })
+    audio.addEventListener('error', onError, { once: true })
+  })
+}
+
+// 存储待恢复的播放位置
+let pendingRestorePosition = 0
+let pendingRestoreSongId: number | null = null
+
+// 播放指定歌曲
+const playSong = async (song: SongList) => {
+  try {
+    // 检查是否需要恢复播放位置（历史播放）
+    const isHistoryPlay =
+      song.id === userInfo.value.lastPlaySongId && userInfo.value.currentTime > 0
+    if (isHistoryPlay) {
+      pendingRestorePosition = userInfo.value.currentTime
+      pendingRestoreSongId = song.id
+      console.log(`准备恢复播放位置: ${pendingRestorePosition}秒`)
+      // 清除历史位置，避免重复恢复
+      userInfo.value.currentTime = 0
+    } else {
+      pendingRestorePosition = 0
+      pendingRestoreSongId = null
+    }
+
+    // 更新当前播放歌曲ID
+    userInfo.value.lastPlaySongId = song.id
+
+    // 更新歌曲信息并触发主题色更新
+    songInfo.value = {
+      title: song.name,
+      artist: song.artistName,
+      cover: song.coverUrl
+    }
+
+    // 确保主题色更新
+    await setColor()
+
+    let urlToPlay = song.url
+
+    // 如果没有URL，需要获取URL
+    if (!urlToPlay) {
+      try {
+        urlToPlay = await getSongRealUrl(song)
+
+        // 同时更新播放列表中对应歌曲的URL
+        const playlistIndex = list.value.findIndex((item) => item.id === song.id)
+        if (playlistIndex !== -1) {
+          list.value[playlistIndex].url = urlToPlay
+        }
+      } catch (error) {
+        throw error
+      }
+    }
+
+    // 先停止当前播放
+    if (Audio.value.isPlay) {
+      const stopResult = stop()
+      if (stopResult && typeof stopResult.then === 'function') {
+        await stopResult
+      }
+    }
+
+    // 设置URL（这会触发音频重新加载）
+    setUrl(urlToPlay)
+
+    // 等待音频准备就绪
+    await waitForAudioReady()
+
+    // 短暂延迟确保音频状态稳定
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // 开始播放
+    try {
+      const startResult = start()
+      if (startResult && typeof startResult.then === 'function') {
+        await startResult
+      }
+    } catch (error) {
+      console.error('启动播放失败:', error)
+      // 如果是 AbortError，尝试重新播放
+      if (error.name === 'AbortError') {
+        console.log('检测到 AbortError，尝试重新播放...')
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        try {
+          const retryResult = start()
+          if (retryResult && typeof retryResult.then === 'function') {
+            await retryResult
+          }
+        } catch (retryError) {
+          console.error('重试播放也失败:', retryError)
+          throw retryError
+        }
+      } else {
+        throw error
+      }
+    }
+  } catch (error) {
+    console.error('播放歌曲失败:', error)
+    MessagePlugin.error('播放失败，请重试')
+  }
+}
+
+// 歌曲信息
+// const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
+const playMode = ref(PlayMode.SEQUENCE)
+
+// 更新播放模式
+const updatePlayMode = () => {
+  const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
+  const currentIndex = modes.indexOf(playMode.value)
+  const nextIndex = (currentIndex + 1) % modes.length
+  playMode.value = modes[nextIndex]
+
+  // 更新用户信息
+  userInfo.value.playMode = playMode.value
+}
+
+// 获取播放模式图标类名
+const playModeIconClass = computed(() => {
+  switch (playMode.value) {
+    case PlayMode.SEQUENCE:
+      return 'iconfont icon-shunxubofangtubiao'
+    case PlayMode.RANDOM:
+      return 'iconfont icon-suijibofang'
+    case PlayMode.SINGLE:
+      return 'iconfont icon-bofang-xunhuanbofang'
+    default:
+      return 'iconfont icon-shunxubofangtubiao'
+  }
+})
+
+// 音量控制相关
+const showVolumeSlider = ref(false)
+const volumeBarRef = ref<HTMLDivElement | null>(null)
+const isDraggingVolume = ref(false)
+
+const volumeValue = computed({
+  get: () => Audio.value.volume,
+  set: (val) => {
+    setVolume(val)
+    userInfo.value.volume = val
+  }
+})
+
+// 音量控制拖动处理
+const handleVolumeClick = (event: MouseEvent) => {
+  if (!volumeBarRef.value) return
+
+  const rect = volumeBarRef.value.getBoundingClientRect()
+  const offsetY = rect.bottom - event.clientY
+  const percentage = Math.max(0, Math.min(100, (offsetY / rect.height) * 100))
+
+  volumeValue.value = Math.round(percentage)
+}
+
+const handleVolumeDragStart = (event: MouseEvent) => {
+  event.preventDefault()
+  isDraggingVolume.value = true
+  window.addEventListener('mousemove', handleVolumeDragMove)
+  window.addEventListener('mouseup', handleVolumeDragEnd)
+}
+
+const handleVolumeDragMove = (event: MouseEvent) => {
+  if (!isDraggingVolume.value || !volumeBarRef.value) return
+
+  const rect = volumeBarRef.value.getBoundingClientRect()
+  const offsetY = rect.bottom - event.clientY
+  const percentage = Math.max(0, Math.min(100, (offsetY / rect.height) * 100))
+
+  volumeValue.value = Math.round(percentage)
+}
+
+const handleVolumeDragEnd = () => {
+  isDraggingVolume.value = false
+  window.removeEventListener('mousemove', handleVolumeDragMove)
+  window.removeEventListener('mouseup', handleVolumeDragEnd)
+}
+
+// 播放列表相关
+const showPlaylist = ref(false)
+const playlistContentRef = ref<HTMLDivElement | null>(null)
+
+const togglePlaylist = (e: MouseEvent) => {
+  e.stopPropagation()
+  showPlaylist.value = !showPlaylist.value
+
+  // 如果打开播放列表，滚动到当前播放歌曲
+  if (showPlaylist.value) {
+    scrollToCurrentSong()
+  }
+}
+
+// 滚动到当前播放歌曲
+const scrollToCurrentSong = () => {
+  if (!playlistContentRef.value || !currentSongId.value) return
+
+  // 使用 nextTick 确保 DOM 已更新
+  nextTick(() => {
+    const activeSong = playlistContentRef.value?.querySelector(
+      '.playlist-song.active'
+    ) as HTMLElement
+    if (activeSong) {
+      activeSong.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      })
+    }
+  })
+}
+
+// 播放列表中的歌曲
+const currentSongId = computed(() => userInfo.value.lastPlaySongId)
+
+// 播放上一首
+const playPrevious = async () => {
+  if (list.value.length === 0) return
+
+  try {
+    const currentIndex = list.value.findIndex((song) => song.id === currentSongId.value)
+    let prevIndex
+
+    if (playMode.value === PlayMode.RANDOM) {
+      // 随机模式
+      prevIndex = Math.floor(Math.random() * list.value.length)
+    } else {
+      // 顺序模式或单曲循环模式
+      prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
+    }
+
+    // 确保索引有效
+    if (prevIndex >= 0 && prevIndex < list.value.length) {
+      await playSong(list.value[prevIndex])
+    }
+  } catch (error) {
+    console.error('播放上一首失败:', error)
+    MessagePlugin.error('播放上一首失败')
+  }
+}
+
+// 播放下一首
+const playNext = async () => {
+  if (list.value.length === 0) return
+
+  try {
+    // 单曲循环模式下，重新播放当前歌曲
+    if (playMode.value === PlayMode.SINGLE && currentSongId.value) {
+      const currentSong = list.value.find((song) => song.id === currentSongId.value)
+      if (currentSong) {
+        // 重新设置播放位置到开头
+        setCurrentTime(0)
+        if (Audio.value.audio) {
+          Audio.value.audio.currentTime = 0
+        }
+
+        // 如果当前正在播放，继续播放；如果暂停，保持暂停
+        if (Audio.value.isPlay) {
+          const startResult = start()
+          if (startResult && typeof startResult.then === 'function') {
+            await startResult
+          }
+        }
+        return
+      }
+    }
+
+    const currentIndex = list.value.findIndex((song) => song.id === currentSongId.value)
+    let nextIndex
+
+    if (playMode.value === PlayMode.RANDOM) {
+      // 随机模式
+      nextIndex = Math.floor(Math.random() * list.value.length)
+    } else {
+      // 顺序模式
+      nextIndex = (currentIndex + 1) % list.value.length
+    }
+
+    // 确保索引有效
+    if (nextIndex >= 0 && nextIndex < list.value.length) {
+      await playSong(list.value[nextIndex])
+    }
+  } catch (error) {
+    console.error('播放下一首失败:', error)
+    MessagePlugin.error('播放下一首失败')
+  }
+}
+
+// 定期保存当前播放位置
+let savePositionInterval: number | null = null
+
+// 初始化播放器
+onMounted(async () => {
+  // 初始化store
+  if (!localUserStore.initialization) {
+    localUserStore.init()
+  }
+
+  // 初始化播放列表事件监听器
+  initPlaylistEventListeners(localUserStore, playSong)
+
+  // 监听音频结束事件，根据播放模式播放下一首
+  controlAudio.subscribe('ended', () => {
+    playNext()
+  })
+
+  // 检查是否有上次播放的歌曲
+  if (userInfo.value.lastPlaySongId && list.value.length > 0) {
+    const lastPlayedSong = list.value.find((song) => song.id === userInfo.value.lastPlaySongId)
+    if (lastPlayedSong) {
+      songInfo.value = {
+        title: lastPlayedSong.name,
+        artist: lastPlayedSong.artistName,
+        cover: lastPlayedSong.coverUrl
+      }
+
+      // 如果有历史播放位置，设置为待恢复状态
+      if (userInfo.value.currentTime > 0) {
+        pendingRestorePosition = userInfo.value.currentTime
+        pendingRestoreSongId = lastPlayedSong.id
+        console.log(`初始化时设置待恢复位置: ${pendingRestorePosition}秒`)
+
+        // 设置当前播放时间以显示进度条位置，但不清除历史记录
+        setCurrentTime(userInfo.value.currentTime)
+        if (Audio.value.audio) {
+          Audio.value.audio.currentTime = userInfo.value.currentTime
+        }
+      }
+
+      // 如果有URL直接设置，否则需要获取URL
+      if (lastPlayedSong.url) {
+        setUrl(lastPlayedSong.url)
+      } else {
+        // 通过工具函数获取歌曲URL
+        try {
+          const url = await getSongRealUrl(lastPlayedSong)
+          setUrl(url)
+        } catch (error) {
+          console.error('获取上次播放歌曲URL失败:', error)
+        }
+      }
+    }
+  }
+
+  // 定期保存当前播放位置
+  savePositionInterval = window.setInterval(() => {
+    if (Audio.value.isPlay) {
+      userInfo.value.currentTime = Audio.value.currentTime
+    }
+  }, 5000) // 每5秒保存一次
+})
+
+// 组件卸载时清理
+onUnmounted(() => {
+  destroyPlaylistEventListeners()
+
+  if (savePositionInterval !== null) {
+    clearInterval(savePositionInterval)
+  }
+})
+
+// 监听用户信息变化，更新音量
+watch(
+  () => userInfo.value.volume,
+  (newVolume) => {
+    if (newVolume !== undefined) {
+      setVolume(newVolume)
+    }
+  },
+  { immediate: true }
 )
 
 const showFullPlay = ref(false)
@@ -48,10 +463,48 @@ const durationFormatted = computed(() => formatTime(Audio.value.duration))
 
 // 播放/暂停切换
 const togglePlayPause = async () => {
-  if (Audio.value.isPlay) {
-    await stop()
+  if (Audio.value.url) {
+    if (Audio.value.isPlay) {
+      const stopResult = stop()
+      if (stopResult && typeof stopResult.then === 'function') {
+        await stopResult
+      }
+    } else {
+      try {
+        // 检查是否需要恢复历史播放位置
+        if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
+          console.log(`恢复播放位置: ${pendingRestorePosition}秒`)
+
+          // 等待音频准备就绪
+          await waitForAudioReady()
+
+          // 设置播放位置
+          setCurrentTime(pendingRestorePosition)
+          if (Audio.value.audio) {
+            Audio.value.audio.currentTime = pendingRestorePosition
+          }
+
+          // 清除待恢复的位置
+          pendingRestorePosition = 0
+          pendingRestoreSongId = null
+        }
+
+        const startResult = start()
+        if (startResult && typeof startResult.then === 'function') {
+          await startResult
+        }
+      } catch (error) {
+        console.error('播放失败:', error)
+        MessagePlugin.error('播放失败，请重试')
+      }
+    }
   } else {
-    await start()
+    // 如果没有URL但有播放列表，尝试播放第一首歌
+    if (list.value.length > 0) {
+      await playSong(list.value[0])
+    } else {
+      MessagePlugin.warning('播放列表为空，请先添加歌曲')
+    }
   }
 }
 
@@ -120,23 +573,26 @@ const handleProgressDragStart = (event: MouseEvent) => {
 
 // 歌曲信息
 const songInfo = ref({
-  title: '别让我担心 (Acoustic Ver.)',
-  artist: 'ChillChill',
+  title: '未知歌曲名',
+  artist: 'CeruMusic',
   cover:
     'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg'
 })
 const maincolor = ref('rgba(0, 0, 0, 1)')
 const startmaincolor = ref('rgba(0, 0, 0, 1)')
-const contrastTextColor  = ref('rgba(0, 0, 0, .8)')
-const hoverColor = ref('rgba(0,0,0,1)');
-onMounted(async () => {
+const contrastTextColor = ref('rgba(0, 0, 0, .8)')
+const hoverColor = ref('rgba(0,0,0,1)')
+async function setColor() {
+  console.log('主题色刷新')
   const color = await extractDominantColor(songInfo.value.cover)
   console.log(color)
   maincolor.value = `rgba(${color.r},${color.g},${color.b},1)`
   startmaincolor.value = `rgba(${color.r},${color.g},${color.b},.2)`
-  contrastTextColor.value=await getBestContrastTextColorWithOpacity(songInfo.value.cover,.6)
-  hoverColor.value=await getBestContrastTextColorWithOpacity(`rgba(${color.r},${color.g},${color.b},1)`,1)
-})
+  contrastTextColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.cover, 0.6)
+  hoverColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.cover, 1)
+}
+watch(songInfo, setColor, { deep: true, immediate: true })
+// onMounted(setColor)
 </script>
 
 <template>
@@ -170,17 +626,16 @@ onMounted(async () => {
 
       <!-- 中间：播放控制 -->
       <div class="center-controls">
-        <button class="control-btn" @click="">
+        <button class="control-btn" @click.stop="playPrevious">
           <span class="iconfont icon-shangyishou"></span>
         </button>
         <button class="control-btn play-btn" @click.stop="togglePlayPause">
-          <!-- <component :is="Audio.isPlay ? PauseIcon : PlayIcon " class="icon play-icon" /> -->
           <transition name="fade" mode="out-in">
             <span v-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
             <span v-else key="pause" class="iconfont icon-bofang"></span>
           </transition>
         </button>
-        <button class="control-btn" @click="">
+        <button class="control-btn" @click.stop="playNext">
           <span class="iconfont icon-xiayishou"></span>
         </button>
       </div>
@@ -190,13 +645,43 @@ onMounted(async () => {
         <div class="time-display">{{ currentTimeFormatted }} / {{ durationFormatted }}</div>
 
         <div class="extra-controls">
-          <button class="control-btn">
-            <shunxubofangtubiao style="width: 1.5em; height: 1.5em" />
+          <!-- 播放模式按钮 -->
+          <button class="control-btn" @click.stop="updatePlayMode">
+            <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.5em"></i>
           </button>
-          <button class="control-btn">
-            <shengyin style="width: 1.5em; height: 1.5em" />
-          </button>
-          <button class="control-btn">
+
+          <!-- 音量控制 -->
+          <div
+            class="volume-control"
+            @mouseenter="showVolumeSlider = true"
+            @mouseleave="showVolumeSlider = false"
+          >
+            <button class="control-btn">
+              <shengyin style="width: 1.5em; height: 1.5em" />
+            </button>
+
+            <!-- 音量滑块 -->
+            <transition name="volume-popup">
+              <div class="volume-slider-container" v-show="showVolumeSlider" @click.stop>
+                <div class="volume-slider">
+                  <div
+                    ref="volumeBarRef"
+                    class="volume-bar"
+                    @click="handleVolumeClick"
+                    @mousedown="handleVolumeDragStart"
+                  >
+                    <div class="volume-background"></div>
+                    <div class="volume-filled" :style="{ height: `${volumeValue}%` }"></div>
+                    <div class="volume-handle" :style="{ bottom: `${volumeValue}%` }"></div>
+                  </div>
+                  <div class="volume-value">{{ volumeValue }}%</div>
+                </div>
+              </div>
+            </transition>
+          </div>
+
+          <!-- 播放列表按钮 -->
+          <button class="control-btn" @click.stop="togglePlaylist">
             <liebiao style="width: 1.5em; height: 1.5em" />
           </button>
         </div>
@@ -206,19 +691,66 @@ onMounted(async () => {
   <div class="fullbox">
     <FullPlay :show="showFullPlay" :cover-image="songInfo.cover" />
   </div>
+
+  <!-- 播放列表 -->
+  <div v-if="showPlaylist" class="cover" @click="showPlaylist = false"></div>
+  <transition name="playlist-drawer">
+    <div
+      class="playlist-container"
+      v-show="showPlaylist"
+      :class="{ 'full-screen-mode': showFullPlay }"
+      @click.stop
+    >
+      <div class="playlist-header">
+        <div class="playlist-title">播放列表 ({{ list.length }})</div>
+        <button class="playlist-close" @click.stop="showPlaylist = false">
+          <span class="iconfont icon-guanbi"></span>
+        </button>
+      </div>
+
+      <div class="playlist-content">
+        <div v-if="list.length === 0" class="playlist-empty">
+          <p>播放列表为空</p>
+          <p>请添加歌曲到播放列表</p>
+        </div>
+
+        <div v-else class="playlist-songs">
+          <div
+            v-for="song in list"
+            :key="song.id"
+            class="playlist-song"
+            :class="{ active: song.id === currentSongId }"
+            @click="playSong(song)"
+          >
+            <div class="song-info">
+              <div class="song-name">{{ song.name }}</div>
+              <div class="song-artist">{{ song.artistName }}</div>
+            </div>
+            <div class="song-duration">{{ formatTime(song.duration / 1000) }}</div>
+            <button class="song-remove" @click.stop="localUserStore.removeSong(song.id)">
+              <span class="iconfont icon-xuanxiangshanchu"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
 </template>
 
 <style lang="scss" scoped>
 .fade-leave-active {
   transition: all 0.2s ease-in-out;
 }
+
 .fade-enter-active {
   transition: all 0.1s ease-in-out;
 }
+
 .fade-leave-to {
   opacity: 0;
   transform: rotate(180deg);
 }
+
 .fade-enter-from {
   opacity: 0;
   transform: rotate(-180deg);
@@ -246,10 +778,12 @@ onMounted(async () => {
   // padding-top: 2px;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
+
   &:has(.progress-handle.dragging, *:hover) {
     // margin-bottom: 0;
     height: 4px;
   }
+
   .progress-bar {
     width: 100%;
     height: 100%;
@@ -385,11 +919,13 @@ onMounted(async () => {
       transition: background-color 0.2s ease;
 
       border-radius: 50%;
+
       span {
         font-size: 28px;
         font-weight: 800;
         color: v-bind(hoverColor);
       }
+
       .play-icon {
         width: 24px;
         height: 24px;
@@ -443,6 +979,294 @@ onMounted(async () => {
   }
 }
 
+/* 音量控制 */
+.volume-control {
+  position: relative;
+}
+
+.volume-slider-container {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  /* 向上偏移，留出间距 */
+  right: -10px;
+  /* 位置微调 */
+  background: rgba(0, 0, 0, 0.5);
+  /* 黑色毛玻璃背景 */
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  padding: 15px 10px;
+  width: 40px;
+  height: 150px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: bottom center;
+  /* 设置变换原点，使弹出效果更自然 */
+}
+
+.volume-slider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  width: 100%;
+  gap: 8px;
+}
+
+.volume-value {
+  font-size: 12px;
+  color: v-bind(contrastTextColor);
+  margin-top: 8px;
+}
+
+.volume-bar {
+  width: 4px;
+  height: 100px;
+  position: relative;
+  cursor: pointer;
+}
+
+.volume-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff71;
+  border-radius: 2px;
+}
+
+.volume-filled {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: v-bind(maincolor);
+  border-radius: 2px;
+}
+
+.volume-handle {
+  position: absolute;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  background: v-bind(maincolor);
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.volume-bar:hover .volume-handle {
+  opacity: 1;
+}
+
+/* 音量条弹出过渡 */
+.volume-popup-enter-active,
+.volume-popup-leave-active {
+  transition:
+    opacity 0.2s cubic-bezier(0.8, 0, 0.8, 0.43),
+    transform 0.2s cubic-bezier(0.8, 0, 0.8, 0.43);
+}
+
+.volume-popup-enter-from,
+.volume-popup-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+}
+
+/* 播放列表 */
+.playlist-container {
+  position: fixed;
+  border-radius: 16px 0 0 16px;
+  top: 72px;
+  right: 0;
+  width: 380px;
+  height: calc(100vh - var(--play-bottom-height) - 80px);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+  background: rgba(255, 255, 255, 0.6);
+  /* 默认白色毛玻璃 */
+  backdrop-filter: blur(20px);
+  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.15);
+  z-index: 9001;
+  display: flex;
+  flex-direction: column;
+  color: #333;
+  transform: translateX(0);
+  /* 初始位置 */
+}
+
+.cover {
+  position: fixed;
+  background-color: transparent;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9000;
+  bottom: 0px;
+  right: 0;
+}
+
+/* 全屏模式下的样式 */
+.playlist-container.full-screen-mode {
+  background: rgba(0, 0, 0, 0.2);
+  /* 黑色毛玻璃 */
+  color: #fff;
+  /* 白色文字 */
+}
+
+.playlist-container.full-screen-mode .song-artist,
+.playlist-container.full-screen-mode .song-duration,
+.playlist-container.full-screen-mode .playlist-close,
+.playlist-container.full-screen-mode .song-remove {
+  color: #ccc;
+}
+
+.playlist-container.full-screen-mode .playlist-song:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.playlist-container.full-screen-mode .playlist-song.active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.playlist-container.full-screen-mode .playlist-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.playlist-container.full-screen-mode .playlist-empty {
+  color: v-bind(contrastTextColor);
+}
+
+.playlist-header {
+  -webkit-app-region: no-drag;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.playlist-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.playlist-close {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playlist-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  max-height: 350px;
+}
+
+.playlist-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  color: #333;
+  font-size: 14px;
+  text-align: center;
+}
+
+.playlist-songs {
+  display: flex;
+  flex-direction: column;
+}
+
+.playlist-song {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.playlist-song:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.playlist-song.active {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.playlist-song .song-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlist-song .song-name {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-container.full-screen-mode .playlist-song .song-name {
+  color: #fff;
+}
+
+.playlist-song .song-artist {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-song .song-duration {
+  font-size: 12px;
+  color: #888;
+  margin: 0 12px;
+}
+
+.playlist-song .song-remove {
+  background: transparent;
+  border: none;
+  color: #999;
+  opacity: 0;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+}
+
+.playlist-song:hover .song-remove {
+  opacity: 1;
+}
+
+/* 播放列表抽屉过渡 */
+.playlist-drawer-enter-active,
+.playlist-drawer-leave-active {
+  transition: transform 0.2s cubic-bezier(0.8, 0, 0.8, 0.43);
+}
+
+.playlist-drawer-enter-from,
+.playlist-drawer-leave-to {
+  transform: translateX(100%);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .right-section .time-display {
@@ -456,6 +1280,12 @@ onMounted(async () => {
   .right-section .extra-controls {
     gap: 8px;
   }
+
+  .playlist-container {
+    width: 100%;
+    right: 0;
+    border-radius: 8px 8px 0 0;
+  }
 }
 
 @media (max-width: 576px) {
@@ -463,8 +1293,7 @@ onMounted(async () => {
     max-width: 120px;
   }
 
-  .right-section .extra-controls .control-btn:nth-child(1),
-  .right-section .extra-controls .control-btn:nth-child(2) {
+  .right-section .extra-controls .control-btn:nth-child(1) {
     display: none;
   }
 }

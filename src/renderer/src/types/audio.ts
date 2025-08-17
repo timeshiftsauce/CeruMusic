@@ -21,6 +21,13 @@ export type AudioSubscribeMethod = (
   callback: AudioEventCallback
 ) => UnsubscribeFunction
 
+// 播放模式枚举
+export enum PlayMode {
+  SEQUENCE = 'sequence', // 顺序播放
+  RANDOM = 'random', // 随机播放
+  SINGLE = 'single' // 单曲循环
+}
+
 export type ControlAudioState = {
   audio: HTMLAudioElement | null | undefined
   isPlay: boolean
@@ -28,4 +35,14 @@ export type ControlAudioState = {
   duration: number
   volume: number
   url: string
+}
+
+export type SongList = {
+  id: number
+  coverUrl: string
+  name: string
+  artist: string[]
+  duration: number
+  artistName: string
+  url?: string // 音频URL
 }

@@ -5,7 +5,8 @@ import {
   ServiceNamesType,
   ServiceArgsType,
   SongDetailResponse,
-  SongResponse
+  SongResponse,
+  SongUrlResponse
 } from './service-base'
 
 import {
@@ -41,7 +42,7 @@ async function request(
   args: GetSongUrlArgs,
   isLoading?: boolean,
   showError?: boolean
-): Promise<any>
+): Promise<SongUrlResponse>
 async function request(
   api: 'getLyric',
   args: GetLyricArgs,
