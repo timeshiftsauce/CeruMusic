@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
 import { NetEaseService } from './services/netease-service'
+import { AIService } from './services/ai-service'
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
@@ -150,6 +151,14 @@ ipcMain.handle('netease-getToplistDetail', async (_, args) => {
 
 ipcMain.handle('netease-getListSongs', async (_, args) => {
   return await netEaseService.getListSongs(args)
+})
+
+// 创建AI服务实例
+const aiService = new AIService()
+
+// 注册AI服务的IPC处理器
+ipcMain.handle('ai-ask', async (_, prompt) => {
+  return await aiService.askChat(prompt)
 })
 
 // This method will be called when Electron has finished

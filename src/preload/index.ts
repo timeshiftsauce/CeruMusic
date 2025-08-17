@@ -18,6 +18,10 @@ const api = {
     getToplist: (args: any) => ipcRenderer.invoke('netease-getToplist', args),
     getToplistDetail: (args: any) => ipcRenderer.invoke('netease-getToplistDetail', args),
     getListSongs: (args: any) => ipcRenderer.invoke('netease-getListSongs', args)
+  },
+  // AI服务API
+  ai: {
+    ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt)
   }
 }
 
