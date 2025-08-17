@@ -21,8 +21,26 @@ const api = {
   },
   // AI服务API
   ai: {
-    ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt)
-  }
+    ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt),
+    askStream: (prompt: string, streamId: string) =>
+      ipcRenderer.invoke('ai-ask-stream', prompt, streamId),
+    onStreamChunk: (callback: (data: { streamId: string; chunk: string }) => void) => {
+      ipcRenderer.on('ai-stream-chunk', (_, data) => callback(data))
+    },
+    onStreamEnd: (callback: (data: { streamId: string }) => void) => {
+      ipcRenderer.on('ai-stream-end', (_, data) => callback(data))
+    },
+    onStreamError: (callback: (data: { streamId: string; error: string }) => void) => {
+      ipcRenderer.on('ai-stream-error', (_, data) => callback(data))
+    },
+    removeStreamListeners: () => {
+      ipcRenderer.removeAllListeners('ai-stream-chunk')
+      ipcRenderer.removeAllListeners('ai-stream-end')
+      ipcRenderer.removeAllListeners('ai-stream-error')
+    }
+  },
+  // 用户配置API
+  getUserConfig: () => ipcRenderer.invoke('get-user-config')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

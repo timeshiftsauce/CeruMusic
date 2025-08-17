@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { Loading as TLoading } from 'tdesign-vue-next'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { storeToRefs } from 'pinia'
+
+const userStore = LocalUserDetailStore()
+const { userInfo } = storeToRefs(userStore)
 
 const ball = ref<HTMLElement | null>(null)
 const ballClass = ref('hidden-right') // 默认半隐藏
 const showAskWindow = ref(false) // 控制ask窗口显示
 const inputText = ref('')
-const messages = ref<Array<{ type: 'user' | 'ai' | 'loading' | 'error'; content: string; html?: string }>>([])
+const messages = ref<
+  Array<{ type: 'user' | 'ai' | 'loading' | 'error'; content: string; html?: string }>
+>([])
 const isLoading = ref(false) // 控制发送按钮的加载状态
 const messagesContainer = ref<HTMLElement | null>(null)
 let timer: number | null = null
@@ -33,13 +41,41 @@ const clearTimer = () => {
   }
 }
 
+// 检查API Key是否已配置
+const checkAPIKey = (): boolean => {
+  if (!userInfo.value.deepseekAPIkey) {
+    const errorMessage = '请先配置 DeepSeek API Key 才能使用 AI 功能。\n\n请前往 设置 → DeepSeek API Key 配置 进行设置。'
+    messages.value.push({
+      type: 'error',
+      content: errorMessage,
+      html: DOMPurify.sanitize(marked(errorMessage))
+    })
+    return false
+  }
+  // 如果API Key已配置，清除之前的错误消息
+  clearErrorMessages()
+  return true
+}
+
+// 清除错误消息
+const clearErrorMessages = () => {
+  messages.value = messages.value.filter(msg => msg.type !== 'error')
+}
+
 // 点击悬浮球处理
 const handleBallClick = () => {
   clearTimer()
   showAskWindow.value = true
+  
+  // 检查API Key是否已配置
+  if (!checkAPIKey()) {
+    return
+  }
+  
   // 添加欢迎消息
   if (messages.value.length === 0) {
-    const welcomeContent = '您好！我是AI助手，有什么可以帮助您的吗？ 您可以向我咨询音乐相关问题，我会尽力回答您的问题。'
+    const welcomeContent =
+      '您好！我是AI助手，有什么可以帮助您的吗？ 您可以向我咨询音乐相关问题，我会尽力回答您的问题。'
     messages.value.push({
       type: 'ai',
       content: welcomeContent,
@@ -55,9 +91,19 @@ const closeAskWindow = () => {
   startAutoHide()
 }
 
-// 发送消息
+// 生成唯一的流ID
+const generateStreamId = () => {
+  return 'stream_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
+}
+
+// 发送消息（流式版本）
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
+  
+  // 检查API Key是否已配置
+  if (!checkAPIKey()) {
+    return
+  }
 
   const userMessage = inputText.value
   inputText.value = ''
@@ -71,64 +117,78 @@ const sendMessage = async () => {
   })
   scrollToBottom()
 
-  // 添加加载状态
+  // 添加AI消息占位符（loading状态）
+  const aiMessageIndex = messages.value.length
   messages.value.push({
     type: 'loading',
-    content: 'AI正在思考中...',
-    html: 'AI正在思考中...'
+    content: '正在思考中...',
+    html: ''
   })
   scrollToBottom()
 
+  const streamId = generateStreamId()
+  let aiContent = ''
+
   try {
-    // 调用真实的AI API
-    const response = await window.api.ai.ask(userMessage)
-
-    // 移除加载消息
-    messages.value = messages.value.filter((msg) => msg.type !== 'loading')
-
-    // 从响应中提取content字段的文本数据
-    let aiContent = '抱歉，我暂时无法回答您的问题。'
-
-    if (response) {
-      // 处理不同的响应数据结构
-      if (typeof response === 'string') {
-        aiContent = response
-      } else if (response.content && typeof response.content === 'string') {
-        aiContent = response.content
-      } else if (
-        response.data &&
-        response.data.content &&
-        typeof response.data.content === 'string'
-      ) {
-        aiContent = response.data.content
-      } else if (response.message && typeof response.message === 'string') {
-        aiContent = response.message
-      } else {
-        console.warn('AI API响应格式异常:', response)
-        aiContent = '抱歉，AI回复格式异常，请稍后再试。'
+    // 设置流式事件监听器
+    const handleStreamChunk = (data: { streamId: string; chunk: string }) => {
+      if (data.streamId === streamId) {
+        aiContent += data.chunk
+        // 实时更新AI消息内容（从loading状态切换到ai状态）
+        messages.value[aiMessageIndex] = {
+          type: 'ai',
+          content: aiContent,
+          html: DOMPurify.sanitize(marked(aiContent))
+        }
+        scrollToBottom()
       }
     }
 
-    // 添加AI回复
-    messages.value.push({
-      type: 'ai',
-      content: aiContent,
-      html: DOMPurify.sanitize(marked(aiContent))
-    })
-  } catch (error) {
-    // 移除加载消息
-    messages.value = messages.value.filter((msg) => msg.type !== 'loading')
+    const handleStreamEnd = (data: { streamId: string }) => {
+      if (data.streamId === streamId) {
+        isLoading.value = false
+        // 清理事件监听器
+        window.api.ai.removeStreamListeners()
+      }
+    }
 
-    // 添加错误消息
-    const errorContent = `发送失败: ${error.message || '未知错误'}`
-    messages.value.push({
-      type: 'error',
-      content: errorContent,
-      html: DOMPurify.sanitize(marked(errorContent))
-    })
-    console.error('AI API调用失败:', error)
-  } finally {
-    isLoading.value = false // 重置加载状态
+    const handleStreamError = (data: { streamId: string; error: string }) => {
+      if (data.streamId === streamId) {
+        console.error('AI流式响应错误:', data.error)
+        // 如果没有收到任何内容，显示错误消息
+        if (!aiContent) {
+          messages.value[aiMessageIndex] = {
+            type: 'error',
+            content: `发送失败: ${data.error}`,
+            html: DOMPurify.sanitize(marked(`发送失败: ${data.error}`))
+          }
+        }
+        isLoading.value = false
+        // 清理事件监听器
+        window.api.ai.removeStreamListeners()
+      }
+    }
+
+    // 注册事件监听器
+    window.api.ai.onStreamChunk(handleStreamChunk)
+    window.api.ai.onStreamEnd(handleStreamEnd)
+    window.api.ai.onStreamError(handleStreamError)
+
+    // 调用流式AI API
+    await window.api.ai.askStream(userMessage, streamId)
+  } catch (error) {
+    console.error('AI流式API调用失败:', error)
+    // 如果没有收到任何内容，显示错误消息
+    if (!aiContent) {
+      messages.value[aiMessageIndex] = {
+        type: 'error',
+        content: `发送失败: ${error.message || '未知错误'}`,
+        html: DOMPurify.sanitize(marked(`发送失败: ${error.message || '未知错误'}`))
+      }
+    }
+    isLoading.value = false
+    // 清理事件监听器
+    window.api.ai.removeStreamListeners()
   }
 
   scrollToBottom()
@@ -142,6 +202,29 @@ const scrollToBottom = () => {
     }
   })
 }
+
+// 监听API Key配置状态变化
+watch(
+  () => userInfo.value.deepseekAPIkey,
+  (newKey, oldKey) => {
+    // 当API Key从未配置变为已配置时，清除错误消息
+    if (!oldKey && newKey) {
+      clearErrorMessages()
+      // 如果聊天窗口已打开且没有欢迎消息，添加欢迎消息
+      if (showAskWindow.value && messages.value.length === 0) {
+        const welcomeContent =
+          '您好！我是AI助手，有什么可以帮助您的吗？ 您可以向我咨询音乐相关问题，我会尽力回答您的问题。'
+        messages.value.push({
+          type: 'ai',
+          content: welcomeContent,
+          html: DOMPurify.sanitize(marked(welcomeContent))
+        })
+        scrollToBottom()
+      }
+    }
+  },
+  { immediate: false }
+)
 
 // 初始化时就开启定时隐藏
 onMounted(() => {
@@ -186,7 +269,11 @@ onBeforeUnmount(() => {
               class="message"
               :class="message.type"
             >
-              <div class="message-content" v-html="message.html || message.content"></div>
+              <div v-if="message.type === 'loading'" class="message-content loading-content">
+                <t-loading size="small" />
+                <span class="loading-text">{{ message.content }}</span>
+              </div>
+              <div v-else class="message-content" v-html="message.html || message.content"></div>
             </div>
           </div>
         </div>
@@ -344,6 +431,17 @@ video {
   border: 1px solid #ddd;
 }
 
+.loading-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-text {
+  font-size: 14px;
+  color: #666;
+}
+
 .message.error .message-content {
   background: #fee;
   color: #d63031;
@@ -432,7 +530,8 @@ video {
 
 /* Markdown 渲染样式 - 现代化设计 */
 .message-content {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   color: #2c3e50;
   line-height: 1.7;
 }

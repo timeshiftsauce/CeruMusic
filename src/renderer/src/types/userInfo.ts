@@ -7,4 +7,5 @@ export interface UserInfo {
   topBarStyle?: boolean
   mainColor?: string
   playMode?: PlayMode
+  deepseekAPIkey?: string
 }
