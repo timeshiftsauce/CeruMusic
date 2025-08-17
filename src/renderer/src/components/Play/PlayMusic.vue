@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import icons from '../../assets/icon_font/icons'
-const { shunxubofangtubiao, liebiao, shengyin, suijibofang, bofangXunhuanbofang } = icons
+const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import { extractDominantColor } from '@renderer/utils/colorExtractor'
@@ -74,8 +74,10 @@ const playSong = async (song: SongList) => {
   try {
     // 检查是否需要恢复播放位置（历史播放）
     const isHistoryPlay =
-      song.id === userInfo.value.lastPlaySongId && userInfo.value.currentTime > 0
-    if (isHistoryPlay) {
+      song.id === userInfo.value.lastPlaySongId &&
+      userInfo.value.currentTime !== undefined &&
+      userInfo.value.currentTime > 0
+    if (isHistoryPlay && userInfo.value.currentTime !== undefined) {
       pendingRestorePosition = userInfo.value.currentTime
       pendingRestoreSongId = song.id
       console.log(`准备恢复播放位置: ${pendingRestorePosition}秒`)
@@ -89,11 +91,17 @@ const playSong = async (song: SongList) => {
     // 更新当前播放歌曲ID
     userInfo.value.lastPlaySongId = song.id
 
+    // 如果播放列表是打开的，滚动到当前播放歌曲
+    if (showPlaylist.value) {
+      scrollToCurrentSong()
+    }
+
     // 更新歌曲信息并触发主题色更新
     songInfo.value = {
       title: song.name,
       artist: song.artistName,
-      cover: song.coverUrl
+      cover: song.coverUrl,
+      id: song.id.toString()
     }
 
     // 确保主题色更新
@@ -103,6 +111,7 @@ const playSong = async (song: SongList) => {
 
     // 如果没有URL，需要获取URL
     if (!urlToPlay) {
+      // eslint-disable-next-line no-useless-catch
       try {
         urlToPlay = await getSongRealUrl(song)
 
@@ -142,7 +151,7 @@ const playSong = async (song: SongList) => {
     } catch (error) {
       console.error('启动播放失败:', error)
       // 如果是 AbortError，尝试重新播放
-      if (error.name === 'AbortError') {
+      if ((error as { name: string }).name === 'AbortError') {
         console.log('检测到 AbortError，尝试重新播放...')
         await new Promise((resolve) => setTimeout(resolve, 200))
         try {
@@ -373,11 +382,12 @@ onMounted(async () => {
       songInfo.value = {
         title: lastPlayedSong.name,
         artist: lastPlayedSong.artistName,
-        cover: lastPlayedSong.coverUrl
+        cover: lastPlayedSong.coverUrl,
+        id: lastPlayedSong.id.toString()
       }
 
       // 如果有历史播放位置，设置为待恢复状态
-      if (userInfo.value.currentTime > 0) {
+      if (userInfo.value.currentTime && userInfo.value.currentTime > 0) {
         pendingRestorePosition = userInfo.value.currentTime
         pendingRestoreSongId = lastPlayedSong.id
         console.log(`初始化时设置待恢复位置: ${pendingRestorePosition}秒`)
@@ -576,7 +586,8 @@ const songInfo = ref({
   title: '未知歌曲名',
   artist: 'CeruMusic',
   cover:
-    'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg'
+    'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg',
+  id: ''
 })
 const maincolor = ref('rgba(0, 0, 0, 1)')
 const startmaincolor = ref('rgba(0, 0, 0, 1)')
@@ -689,7 +700,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
     </div>
   </div>
   <div class="fullbox">
-    <FullPlay :show="showFullPlay" :cover-image="songInfo.cover" />
+    <FullPlay :songId="songInfo.id" :show="showFullPlay" :cover-image="songInfo.cover" />
   </div>
 
   <!-- 播放列表 -->
@@ -812,7 +823,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
       top: 50%;
       width: 12px;
       height: 12px;
-      background: #2374ce;
+      background: v-bind(hoverColor);
       border-radius: 50%;
       transform: translate(-50%, -50%);
       opacity: 0;
@@ -990,9 +1001,9 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   /* 向上偏移，留出间距 */
   right: -10px;
   /* 位置微调 */
-  background: rgba(0, 0, 0, 0.5);
-  /* 黑色毛玻璃背景 */
-  backdrop-filter: blur(10px);
+  background: v-bind(contrastTextColor);
+  /* 毛玻璃背景 */
+  backdrop-filter: blur(60px);
   border-radius: 8px;
   padding: 15px 10px;
   width: 40px;
@@ -1018,7 +1029,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
 .volume-value {
   font-size: 12px;
-  color: v-bind(contrastTextColor);
+  color: v-bind(maincolor);
   margin-top: 8px;
 }
 
@@ -1056,13 +1067,13 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   background: v-bind(maincolor);
   border-radius: 50%;
   transform: translate(-50%, 50%);
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.2s ease;
 }
 
-.volume-bar:hover .volume-handle {
-  opacity: 1;
-}
+// .volume-bar:hover .volume-handle {
+//   opacity: 1;
+// }
 
 /* 音量条弹出过渡 */
 .volume-popup-enter-active,
@@ -1131,7 +1142,14 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 }
 
 .playlist-container.full-screen-mode .playlist-song.active {
+  border-left: #2373ce5d 4px solid;
+
   background-color: rgba(255, 255, 255, 0.2);
+}
+.playlist-container .playlist-song.active {
+  border-left: #2373ce93 4px solid;
+
+  background-color: rgba(114, 231, 255, 0.183);
 }
 
 .playlist-container.full-screen-mode .playlist-header {
@@ -1173,8 +1191,9 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 .playlist-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
-  max-height: 350px;
+  scrollbar-width: none;
+  margin: 10px 0;
+  padding: 0 8px;
 }
 
 .playlist-empty {
@@ -1198,11 +1217,13 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   align-items: center;
   padding: 8px 16px;
   cursor: pointer;
+  border-radius: 10px;
+  margin: 5px 0;
   transition: background-color 0.2s ease;
 }
 
 .playlist-song:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(123, 123, 123, 0.384);
 }
 
 .playlist-song.active {

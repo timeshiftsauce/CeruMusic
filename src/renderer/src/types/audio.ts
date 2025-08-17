@@ -4,7 +4,14 @@
 export type AudioEventCallback = () => void
 
 // 音频事件类型
-export type AudioEventType = 'ended' | 'seeked' | 'timeupdate' | 'play' | 'pause' | 'error'
+export type AudioEventType =
+  | 'ended'
+  | 'seeked'
+  | 'timeupdate'
+  | 'play'
+  | 'pause'
+  | 'error'
+  | 'canplay'
 
 // 订阅者接口
 export interface AudioSubscriber {

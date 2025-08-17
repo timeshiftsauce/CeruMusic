@@ -21,6 +21,7 @@ declare module 'vue' {
     TAside: typeof import('tdesign-vue-next')['Aside']
     TButton: typeof import('tdesign-vue-next')['Button']
     TContent: typeof import('tdesign-vue-next')['Content']
+    TImage: typeof import('tdesign-vue-next')['Image']
     TInput: typeof import('tdesign-vue-next')['Input']
     TitleBarControls: typeof import('./src/components/TitleBarControls.vue')['default']
     TLayout: typeof import('tdesign-vue-next')['Layout']

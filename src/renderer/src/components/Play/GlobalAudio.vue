@@ -61,9 +61,6 @@ const handleError = (event: Event): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('error')
 }
-const loaded = (): void => {
-  audioStore.setDuration((audioMeta.value && (audioMeta.value.duration as number)) || 0)
-}
 
 const handleLoadedData = (): void => {
   if (audioMeta.value) {
