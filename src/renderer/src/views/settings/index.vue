@@ -63,11 +63,16 @@ const clearAPIKey = (): void => {
         <div class="demo-section">
           <h3>风格选择</h3>
           <div class="style-buttons">
-            <t-button :theme="currentStyle === 'windows' ? 'primary' : 'default'" @click="switchStyle('windows')">
+            <t-button
+              :theme="currentStyle === 'windows' ? 'primary' : 'default'"
+              @click="switchStyle('windows')"
+            >
               Windows 风格
             </t-button>
-            <t-button :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
-              @click="switchStyle('traffic-light')">
+            <t-button
+              :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
+              @click="switchStyle('traffic-light')"
+            >
               红绿灯风格
             </t-button>
           </div>
@@ -115,23 +120,24 @@ const clearAPIKey = (): void => {
               <div class="api-key-input-group">
                 <label for="deepseek-api-key">API Key:</label>
                 <div class="input-container">
-                  <t-input id="deepseek-api-key" v-model="deepseekAPIkey" :type="isEditingAPIKey ? 'text' : 'password'"
+                  <t-input
+                    id="deepseek-api-key"
+                    v-model="deepseekAPIkey"
+                    :type="isEditingAPIKey ? 'text' : 'password'"
                     :readonly="!isEditingAPIKey"
-                    :placeholder="isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'" class="api-key-input" />
+                    :placeholder="
+                      isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'
+                    "
+                    class="api-key-input"
+                  />
                   <div class="input-actions">
                     <t-button v-if="!isEditingAPIKey" theme="primary" @click="startEditAPIKey">
                       {{ userInfo.deepseekAPIkey ? '编辑' : '配置' }}
                     </t-button>
                     <template v-else>
-                      <t-button theme="primary" @click="saveAPIKey">
-                        保存
-                      </t-button>
-                      <t-button theme="default" @click="cancelEditAPIKey">
-                        取消
-                      </t-button>
-                      <t-button theme="danger" @click="clearAPIKey">
-                        清空
-                      </t-button>
+                      <t-button theme="primary" @click="saveAPIKey"> 保存 </t-button>
+                      <t-button theme="default" @click="cancelEditAPIKey"> 取消 </t-button>
+                      <t-button theme="danger" @click="clearAPIKey"> 清空 </t-button>
                     </template>
                   </div>
                 </div>
@@ -139,7 +145,12 @@ const clearAPIKey = (): void => {
 
               <div class="api-key-status">
                 <div class="status-indicator">
-                  <span :class="['status-dot', userInfo.deepseekAPIkey ? 'configured' : 'not-configured']"></span>
+                  <span
+                    :class="[
+                      'status-dot',
+                      userInfo.deepseekAPIkey ? 'configured' : 'not-configured'
+                    ]"
+                  ></span>
                   <span class="status-text">
                     {{ userInfo.deepseekAPIkey ? 'API Key 已配置' : 'API Key 未配置' }}
                   </span>
@@ -149,7 +160,11 @@ const clearAPIKey = (): void => {
               <div class="api-key-tips">
                 <h4>使用说明：</h4>
                 <ul>
-                  <li>请前往 <a href="https://platform.deepseek.com/" target="_blank">DeepSeek 官网</a> 获取您的 API Key</li>
+                  <li>
+                    请前往
+                    <a href="https://platform.deepseek.com/" target="_blank">DeepSeek 官网</a>
+                    获取您的 API Key
+                  </li>
                   <li>API Key 将安全存储在本地，不会上传到服务器</li>
                   <li>配置后即可使用 AI 相关功能</li>
                 </ul>

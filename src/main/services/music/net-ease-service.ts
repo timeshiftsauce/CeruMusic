@@ -18,8 +18,8 @@ import { fieldsSelector } from '../../utils/object'
 const baseUrl: string = 'https://music.163.com'
 const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
 
-export const netEaseService : MusicServiceBase = {
-   async search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse> {
+export const netEaseService: MusicServiceBase = {
+  async search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse> {
     return await axiosClient
       .get(`${baseUrl}/api/search/get/web`, {
         params: {

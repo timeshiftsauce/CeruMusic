@@ -22,11 +22,6 @@ const emitter = mitt<PlaylistEvents>()
  */
 export async function getSongRealUrl(song: SongList): Promise<string> {
   try {
-    // 如果歌曲已经有URL，直接返回
-    if (song.url) {
-      return song.url
-    }
-
     // 通过统一的request方法获取真实的播放URL
     const urlData = await musicService.request(
       'getSongUrl',

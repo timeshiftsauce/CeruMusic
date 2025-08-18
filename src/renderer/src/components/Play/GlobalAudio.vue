@@ -23,7 +23,7 @@ onActivated(() => {
   if (audioMeta.value) {
     // 重新初始化音频元素
     audioStore.init(audioMeta.value)
-    
+
     // 如果之前正在播放，恢复播放
     if (wasPlaying && audioStore.Audio.url) {
       // 恢复播放位置
@@ -31,9 +31,9 @@ onActivated(() => {
         audioMeta.value.currentTime = playbackPosition
         audioStore.setCurrentTime(playbackPosition)
       }
-      
+
       // 恢复播放
-      audioStore.start().catch(error => {
+      audioStore.start().catch((error) => {
         console.error('恢复播放失败:', error)
       })
     }

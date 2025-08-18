@@ -6,6 +6,7 @@ interface CustomAPI {
   maximize: () => void
   close: () => void
   setMiniMode: (isMini: boolean) => void
+  toggleFullscreen: () => void
   music: {
     request: (api: string, args: any) => Promise<any>
   }
