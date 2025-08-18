@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, onActivated, onDeactivated } from 'vue'
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  onActivated,
+  onDeactivated
+} from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import icons from '../../assets/icon_font/icons'
@@ -255,7 +264,6 @@ const handleVolumeDragEnd = () => {
 
 // 播放列表相关
 const showPlaylist = ref(false)
-const playlistContentRef = ref<HTMLDivElement | null>(null)
 
 const togglePlaylist = (e: MouseEvent) => {
   e.stopPropagation()
@@ -269,13 +277,11 @@ const togglePlaylist = (e: MouseEvent) => {
 
 // 滚动到当前播放歌曲
 const scrollToCurrentSong = () => {
-  if (!playlistContentRef.value || !currentSongId.value) return
+  if (!currentSongId.value) return
 
   // 使用 nextTick 确保 DOM 已更新
   nextTick(() => {
-    const activeSong = playlistContentRef.value?.querySelector(
-      '.playlist-song.active'
-    ) as HTMLElement
+    const activeSong = window.document.querySelector('.playlist-song.active') as HTMLElement
     if (activeSong) {
       activeSong.scrollIntoView({
         behavior: 'smooth',
@@ -438,7 +444,7 @@ onUnmounted(() => {
 // 组件被激活时（从缓存中恢复）
 onActivated(async () => {
   console.log('PlayMusic组件被激活')
-  
+
   // 如果之前正在播放，恢复播放
   if (wasPlaying && Audio.value.url) {
     // 恢复播放位置
@@ -446,7 +452,7 @@ onActivated(async () => {
       setCurrentTime(playbackPosition)
       Audio.value.audio.currentTime = playbackPosition
     }
-    
+
     // 恢复播放
     try {
       const startResult = start()
@@ -465,7 +471,7 @@ onDeactivated(() => {
   console.log('PlayMusic组件被停用')
   // 保存当前播放状态
   wasPlaying = Audio.value.isPlay
-  playbackPosition = Audio.value.currentTime  
+  playbackPosition = Audio.value.currentTime
   // 如果正在播放，暂停播放但不改变状态标志
   if (wasPlaying && Audio.value.audio) {
     Audio.value.audio.pause()
@@ -742,7 +748,12 @@ watch(songInfo, setColor, { deep: true, immediate: true })
     </div>
   </div>
   <div class="fullbox">
-    <FullPlay :songId="songInfo.id" :show="showFullPlay" :cover-image="songInfo.cover" />
+    <FullPlay
+      :song-id="songInfo.id"
+      :show="showFullPlay"
+      :cover-image="songInfo.cover"
+      @toggle-fullscreen="toggleFullPlay"
+    />
   </div>
 
   <!-- 播放列表 -->

@@ -8,6 +8,7 @@ const api = {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   setMiniMode: (isMini: boolean) => ipcRenderer.send('window-mini-mode', isMini),
+  toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
 
   music: {
     request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args)

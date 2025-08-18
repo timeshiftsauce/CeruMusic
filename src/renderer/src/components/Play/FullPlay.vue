@@ -12,6 +12,7 @@ import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount } from 'vue'
 import { shouldUseBlackText } from '@renderer/utils/contrastColor'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import { Fullscreen1Icon, FullscreenExit1Icon, ChevronDownIcon } from 'tdesign-icons-vue-next'
 // 导入歌词请求函数
 import musicService from '@renderer/services/music'
 // 直接从包路径导入，避免 WebAssembly 导入问题
@@ -30,6 +31,51 @@ const props = withDefaults(defineProps<Props>(), {
   coverImage: '@assets/images/Default.jpg',
   songId: ''
 })
+
+// 定义事件
+const emit = defineEmits(['toggle-fullscreen'])
+
+// 跟踪全屏状态
+const isFullscreen = ref(false)
+
+// 切换全屏模式
+const toggleFullscreen = () => {
+  // 切换全屏状态
+  isFullscreen.value = !isFullscreen.value
+
+  // 调用 Electron API 切换全屏
+  window.api.toggleFullscreen()
+}
+
+// 监听 ESC 键退出全屏
+onMounted(() => {
+  // 添加事件监听器检测全屏状态变化
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange)
+  document.addEventListener('MSFullscreenChange', handleFullscreenChange)
+})
+
+onBeforeUnmount(() => {
+  // 移除事件监听器
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('mozfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('MSFullscreenChange', handleFullscreenChange)
+})
+
+// 处理全屏状态变化
+const handleFullscreenChange = () => {
+  // 检查当前是否处于全屏状态
+  const fullscreenElement =
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement
+
+  // 更新状态
+  isFullscreen.value = !!fullscreenElement
+}
 
 // 获取音频控制状态
 const controlAudio = ControlAudioStore()
@@ -164,6 +210,22 @@ watch(
       :low-freq-volume="1"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
     />
+    <!-- 全屏按钮 -->
+    <button
+      class="fullscreen-btn"
+      :class="{ 'black-text': useBlackText }"
+      @click="toggleFullscreen"
+    >
+      <Fullscreen1Icon v-if="isFullscreen" class="icon" />
+      <FullscreenExit1Icon v-else class="icon" />
+    </button>
+    <button
+      class="putawayscreen-btn"
+      :class="{ 'black-text': useBlackText }"
+      @click="emit('toggle-fullscreen')"
+    >
+      <ChevronDownIcon class="icon"/>
+    </button>
     <Transition name="fade-nav">
       <TitleBarControls
         v-if="props.show"
@@ -182,8 +244,9 @@ watch(
         <div class="box" :style="!Audio.isPlay && 'animation-play-state: paused;'">
           <t-image
             :src="coverImage"
-            :style="{ width: 'min(18vw,300px)', height: 'min(18vw,300px)' }"
+            :style="{ width: 'min(20vw,380px)', height: 'min(20vw,380px)' }"
             shape="circle"
+            class="cover"
           />
         </div>
       </div>
@@ -219,6 +282,58 @@ watch(
   opacity: 0;
 }
 
+.fullscreen-btn,
+.putawayscreen-btn {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  // border: 1px solid rgba(255, 255, 255, 0.3);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  color: white;
+  font-size: 18px;
+  transition: all 0.3s ease;
+  // box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  .icon {
+    color: rgba(255, 255, 255, 0.6);
+    width: 25px;
+    height: 25px;
+  }
+
+  &.black-text {
+    background: rgba(0, 0, 0, 0.1);
+
+    .icon {
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.2);
+    }
+  }
+}
+.putawayscreen-btn {
+  left: 100px;
+}
 .full-play {
   --height: calc(100vh - var(--play-bottom-height));
   --text-color: rgba(255, 255, 255, 0.9);
@@ -241,8 +356,8 @@ watch(
 
   .top {
     position: absolute;
-    width: 100%;
-
+    width: calc(100% - 200px);
+    margin-left: 200px;
     z-index: 1;
     padding: 30px 30px;
     padding-bottom: 10px;
@@ -254,29 +369,11 @@ watch(
     // background-color: rgba(0, 0, 0, 0.256);
     display: flex;
     position: relative;
-    :deep(.lyric-player) > div {
-      // padding: 0;
-      // margin: 0;
-      [class^='lyricLine'] {
-        // padding: 0.5em;
-      }
-      [class^='lyricMainLine-'] {
-        // padding: 0.5em;
-      }
-    }
     :deep(.lyric-player) {
       --amll-lyric-player-font-size: max(2.2vw, 38px);
       box-sizing: border-box;
       width: 100%;
       height: 100%;
-      // & {
-      //   padding: 0;
-
-      // }
-      * {
-        // box-sizing: border-box;
-        // font-size: 2.2vw;
-      }
     }
     .left,
     .right {
@@ -296,6 +393,10 @@ watch(
         justify-content: center;
         border-radius: 1000%;
         animation: rotateRecord 10s linear infinite;
+        :deep(.cover) img {
+          user-select: none;
+          -webkit-user-drag: none;
+        }
       }
     }
     .right {

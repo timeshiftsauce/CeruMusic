@@ -70,8 +70,7 @@ function createWindow(): void {
     center: true,
     autoHideMenuBar: true,
     // alwaysOnTop: true,
-    maxWidth: screen.getPrimaryDisplay()?.workAreaSize.width,
-    maxHeight: screen.getPrimaryDisplay()?.workAreaSize.height,
+    // 移除最大宽高限制，以便全屏模式能够铺满整个屏幕
     titleBarStyle: 'hidden',
     ...(process.platform === 'linux' ? { icon } : {}),
     // ...(process.platform !== 'darwin' ? { titleBarOverlay: true } : {}),
@@ -254,6 +253,14 @@ app.whenReady().then(() => {
         mainWindow.show()
         mainWindow.focus()
       }
+    }
+  })
+
+  // 全屏模式 IPC 处理
+  ipcMain.on('window-toggle-fullscreen', () => {
+    if (mainWindow) {
+      const isFullScreen = mainWindow.isFullScreen()
+      mainWindow.setFullScreen(!isFullScreen)
     }
   })
 
