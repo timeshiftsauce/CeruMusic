@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, onActivated, onDeactivated } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import icons from '../../assets/icon_font/icons'
@@ -68,6 +68,10 @@ const waitForAudioReady = (): Promise<void> => {
 // 存储待恢复的播放位置
 let pendingRestorePosition = 0
 let pendingRestoreSongId: number | null = null
+
+// 记录组件被停用前的播放状态
+let wasPlaying = false
+let playbackPosition = 0
 
 // 播放指定歌曲
 const playSong = async (song: SongList) => {
@@ -428,6 +432,44 @@ onUnmounted(() => {
 
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)
+  }
+})
+
+// 组件被激活时（从缓存中恢复）
+onActivated(async () => {
+  console.log('PlayMusic组件被激活')
+  
+  // 如果之前正在播放，恢复播放
+  if (wasPlaying && Audio.value.url) {
+    // 恢复播放位置
+    if (Audio.value.audio && playbackPosition > 0) {
+      setCurrentTime(playbackPosition)
+      Audio.value.audio.currentTime = playbackPosition
+    }
+    
+    // 恢复播放
+    try {
+      const startResult = start()
+      if (startResult && typeof startResult.then === 'function') {
+        await startResult
+      }
+      console.log('恢复播放成功')
+    } catch (error) {
+      console.error('恢复播放失败:', error)
+    }
+  }
+})
+
+// 组件被停用时（缓存但不销毁）
+onDeactivated(() => {
+  console.log('PlayMusic组件被停用')
+  // 保存当前播放状态
+  wasPlaying = Audio.value.isPlay
+  playbackPosition = Audio.value.currentTime  
+  // 如果正在播放，暂停播放但不改变状态标志
+  if (wasPlaying && Audio.value.audio) {
+    Audio.value.audio.pause()
+    console.log('暂时暂停播放，状态已保存')
   }
 })
 

@@ -2,6 +2,7 @@ appId: com.cerumusic.app
 productName: ceru-music
 directories:
   buildResources: build
+asar: true
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -23,6 +24,9 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

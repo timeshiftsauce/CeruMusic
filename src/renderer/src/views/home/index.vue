@@ -148,7 +148,9 @@ const handleKeyDown = () => {
           </div>
 
           <div class="mainContent">
-            <router-view v-if="true" />
+            <keep-alive>
+              <router-view />
+            </keep-alive>
           </div>
         </div>
       </t-content>

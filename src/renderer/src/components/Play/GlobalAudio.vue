@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, provide, ref } from 'vue'
+import { onMounted, onUnmounted, provide, ref, onActivated, onDeactivated } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 
 const audioStore = ControlAudioStore()
@@ -8,9 +8,44 @@ const audioMeta = ref<HTMLAudioElement>()
 // 提供订阅方法给子组件使用
 provide('audioSubscribe', audioStore.subscribe)
 
+// 记录组件被停用前的播放状态
+let wasPlaying = false
+let playbackPosition = 0
+
 onMounted(() => {
   audioStore.init(audioMeta.value)
   console.log('音频组件初始化完成')
+})
+
+// 组件被激活时（从缓存中恢复）
+onActivated(() => {
+  console.log('音频组件被激活')
+  if (audioMeta.value) {
+    // 重新初始化音频元素
+    audioStore.init(audioMeta.value)
+    
+    // 如果之前正在播放，恢复播放
+    if (wasPlaying && audioStore.Audio.url) {
+      // 恢复播放位置
+      if (audioMeta.value && playbackPosition > 0) {
+        audioMeta.value.currentTime = playbackPosition
+        audioStore.setCurrentTime(playbackPosition)
+      }
+      
+      // 恢复播放
+      audioStore.start().catch(error => {
+        console.error('恢复播放失败:', error)
+      })
+    }
+  }
+})
+
+// 组件被停用时（缓存但不销毁）
+onDeactivated(() => {
+  console.log('音频组件被停用')
+  // 保存当前播放状态
+  wasPlaying = audioStore.Audio.isPlay
+  playbackPosition = audioStore.Audio.currentTime
 })
 
 // 音频事件处理函数
