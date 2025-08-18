@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, onUnmounted, watch } from 'vue'
-import request from '@renderer/services/music'
+import musicService from '@renderer/services/music'
 import { PlayIcon, HeartIcon, DownloadIcon, MoreIcon } from 'tdesign-icons-vue-next'
 import { searchValue } from '@renderer/store/search'
 
@@ -125,7 +125,7 @@ const performSearch = async (reset = false) => {
 
   loading.value = true
   try {
-    const result: Record<string, any> = await request('search', {
+    const result: Record<string, any> = await musicService.request('search', {
       type: 1,
       keyword: keyword.value,
       offset: currentOffset.value,
@@ -135,7 +135,7 @@ const performSearch = async (reset = false) => {
     // 获取歌曲详情
     if (result.songs && result.songs.length > 0) {
       const songIds = result.songs.map((song) => song.id.toString())
-      const detailResult = await request('getSongDetail', {
+      const detailResult = await musicService.request('getSongDetail', {
         ids: songIds
       })
       if (detailResult && detailResult.length > 0) {

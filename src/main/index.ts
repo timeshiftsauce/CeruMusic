@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
-import { NetEaseService } from './services/netease-service'
+import musicService from './services/music'
 import { AIService } from './services/ai-service'
 
 let tray: Tray | null = null
@@ -121,36 +121,8 @@ function createWindow(): void {
   }
 }
 
-// 创建网易云音乐服务实例
-const netEaseService = new NetEaseService()
-
-// 注册网易云音乐服务的IPC处理器
-ipcMain.handle('netease-search', async (_, args) => {
-  return await netEaseService.search(args)
-})
-
-ipcMain.handle('netease-getSongDetail', async (_, args) => {
-  return await netEaseService.getSongDetail(args)
-})
-
-ipcMain.handle('netease-getSongUrl', async (_, args) => {
-  return await netEaseService.getSongUrl(args)
-})
-
-ipcMain.handle('netease-getLyric', async (_, args) => {
-  return await netEaseService.getLyric(args)
-})
-
-ipcMain.handle('netease-getToplist', async (_, args) => {
-  return await netEaseService.getToplist(args)
-})
-
-ipcMain.handle('netease-getToplistDetail', async (_, args) => {
-  return await netEaseService.getToplistDetail(args)
-})
-
-ipcMain.handle('netease-getListSongs', async (_, args) => {
-  return await netEaseService.getListSongs(args)
+ipcMain.handle('service-music-request', async (_, api, args) => {
+  return await musicService.request(api, args)
 })
 
 // 创建AI服务实例
@@ -160,7 +132,7 @@ const aiService = new AIService()
 ipcMain.handle('ai-ask', async (_, prompt) => {
   try {
     return await aiService.askChat(prompt)
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI对话失败:', error)
     // 返回错误信息给渲染进程
     throw {
@@ -183,12 +155,12 @@ ipcMain.handle('ai-ask-stream', async (event, prompt, streamId) => {
     // 发送流结束信号
     event.sender.send('ai-stream-end', { streamId })
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI流式对话失败:', error)
     // 发送错误信号，包含更详细的错误信息
     const errorMessage = error.message || 'AI服务暂时不可用'
-    event.sender.send('ai-stream-error', { 
-      streamId, 
+    event.sender.send('ai-stream-error', {
+      streamId,
       error: errorMessage,
       code: 'AI_SERVICE_ERROR'
     })

@@ -1,13 +1,11 @@
 import { LoadingPlugin, NotifyPlugin } from 'tdesign-vue-next'
 
 import {
-  MusicServiceBase,
   ServiceNamesType,
   ServiceArgsType,
   SongDetailResponse,
   SongResponse,
-  SongUrlResponse,
-  LyricResponse
+  SongUrlResponse
 } from './service-base'
 
 import {
@@ -20,12 +18,12 @@ import {
   GetListSongsArgs
 } from './service-base'
 
-import { netEaseService } from './net-ease-service'
-import { AxiosError } from 'axios'
+type Response = {
+  success: boolean
+  data?: any
+  error?: any
+}
 
-const musicService: MusicServiceBase = netEaseService
-
-// 使用函数重载定义不同的调用方式
 async function request(
   api: 'search',
   args: SearchArgs,
@@ -49,7 +47,7 @@ async function request(
   args: GetLyricArgs,
   isLoading?: boolean,
   showError?: boolean
-): Promise<LyricResponse>
+): Promise<any>
 async function request(
   api: 'getToplist',
   args: GetToplistArgs,
@@ -78,39 +76,21 @@ async function request(
     LoadingPlugin({ fullscreen: true, attach: 'body', preventScrollThrough: true })
   }
 
-  try {
-    switch (api) {
-      case 'search':
-        return await musicService.search(args as SearchArgs)
-      case 'getSongDetail':
-        return await musicService.getSongDetail(args as GetSongDetailArgs)
-      case 'getSongUrl':
-        return await musicService.getSongUrl(args as GetSongUrlArgs)
-      case 'getLyric':
-        return await musicService.getLyric(args as GetLyricArgs)
-      case 'getToplist':
-        return await musicService.getToplist(args as GetToplistArgs)
-      case 'getToplistDetail':
-        return await musicService.getToplistDetail(args as GetToplistDetailArgs)
-      case 'getListSongs':
-        return await musicService.getListSongs(args as GetListSongsArgs)
-      default:
-        throw new Error(`未知的方法: ${api}`)
-    }
-  } catch (error: any) {
-    if (error instanceof AxiosError) {
-      error.message = '网络错误'
-    }
+  // ipc request music service
+  const musicServiceRes: Response = await window.api.music.request(api, args)
+  if (musicServiceRes.success) {
+    return musicServiceRes.data
+  } else {
+    const musicServiceError: any = musicServiceRes.error
 
     if (showError) {
-      await NotifyPlugin.error({ title: 'error', content: error.message })
+      await NotifyPlugin.error({ title: 'error', content: musicServiceError.message })
     }
 
-    console.error('请求失败: ', error)
-    throw new Error(error.message)
+    console.error('请求失败: ', musicServiceError)
+    throw new Error(musicServiceError.message)
   }
 }
 
-export { request }
-export default request
+export default { request }
 export type { SongResponse, SongDetailResponse }
