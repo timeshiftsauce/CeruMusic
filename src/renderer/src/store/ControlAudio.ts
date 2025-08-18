@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import { transitionVolume } from '@renderer/utils/volume'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+
 import type {
   AudioEventCallback,
   AudioEventType,
@@ -18,7 +20,7 @@ import type {
  * @property {number} volume - 音量（0-100）。
  * @property {string} url - 音频URL。
  */
-
+let userInfo: any
 export const ControlAudioStore = defineStore('controlAudio', () => {
   const Audio = reactive<ControlAudioState>({
     audio: null,
@@ -100,6 +102,7 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
 
   // 初始化
   const init = (el: ControlAudioState['audio']) => {
+    userInfo = LocalUserDetailStore().userInfo
     console.log(el, '全局音频挂载初始化success')
     Audio.audio = el
   }
@@ -139,9 +142,22 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
           console.log('vo', Audio.audio.volume)
         }
         Audio.volume = volume
+        userInfo.volume = volume
       }
     } else {
-      throw new Error('音量必须是0-100之间的数字')
+      if (typeof volume === 'number' && Audio.audio) {
+        if (volume <= 0) {
+          Audio.volume = 0
+          Audio.audio.volume = 0
+          userInfo.volume = 0
+        } else {
+          Audio.volume = 100
+          Audio.audio.volume = 100
+          userInfo.volume = 100
+        }
+      } else {
+        throw new Error('音量必须是0-100之间的数字')
+      }
     }
   }
 

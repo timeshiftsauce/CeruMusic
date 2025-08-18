@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, screen, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, ipcRenderer } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -30,7 +30,7 @@ function createTray(): void {
       label: '播放/暂停',
       click: () => {
         // 这里可以添加播放控制逻辑
-        console.log('播放/暂停')
+        mainWindow?.webContents.send('music-control')
       }
     },
     { type: 'separator' },

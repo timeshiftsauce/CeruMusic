@@ -31,6 +31,48 @@ const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { setCurrentTime, start, stop, setVolume, setUrl } = controlAudio
 
+// 处理最小化右键的事件
+window.api.onMusicCtrl(() => {
+  togglePlayPause()
+})
+let timer: any = null
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+function throttle(callback: Function, delay: number) {
+  if (timer) return
+  timer = setTimeout(() => {
+    callback()
+    timer = null
+  }, delay)
+}
+
+function KeyEvent(e: KeyboardEvent) {
+  throttle(() => {
+    if (e.code == 'Space') {
+      e.preventDefault()
+      togglePlayPause()
+    } else if (e.code == 'ArrowUp') {
+      e.preventDefault()
+      console.log('up')
+      controlAudio.setVolume(Audio.value.volume + 5)
+    } else if (e.code == 'ArrowDown') {
+      e.preventDefault()
+      console.log('down')
+      controlAudio.setVolume(Audio.value.volume - 5)
+    } else if (e.code == 'ArrowLeft' && Audio.value.audio && Audio.value.audio.currentTime >= 0) {
+      Audio.value.audio.currentTime -= 5
+    } else if (
+      e.code == 'ArrowRight' &&
+      Audio.value.audio &&
+      Audio.value.audio.currentTime <= Audio.value.audio.duration
+    ) {
+      console.log('right')
+      Audio.value.audio.currentTime += 5
+    }
+  }, 100)
+}
+
+document.addEventListener('keydown', KeyEvent)
+
 // 等待音频准备就绪
 const waitForAudioReady = (): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -80,7 +122,9 @@ let pendingRestoreSongId: number | null = null
 
 // 记录组件被停用前的播放状态
 let wasPlaying = false
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let playbackPosition = 0
+let isFull = false
 
 // 播放指定歌曲
 const playSong = async (song: SongList) => {
@@ -202,13 +246,17 @@ const updatePlayMode = () => {
 }
 
 // 获取播放模式图标类名
+let playModeTip = ''
 const playModeIconClass = computed(() => {
   switch (playMode.value) {
     case PlayMode.SEQUENCE:
+      playModeTip = '顺序播放'
       return 'iconfont icon-shunxubofangtubiao'
     case PlayMode.RANDOM:
+      playModeTip = '随机播放'
       return 'iconfont icon-suijibofang'
     case PlayMode.SINGLE:
+      playModeTip = '单曲循环'
       return 'iconfont icon-bofang-xunhuanbofang'
     default:
       return 'iconfont icon-shunxubofangtubiao'
@@ -224,7 +272,6 @@ const volumeValue = computed({
   get: () => Audio.value.volume,
   set: (val) => {
     setVolume(val)
-    userInfo.value.volume = val
   }
 })
 
@@ -330,7 +377,6 @@ const playNext = async () => {
       const currentSong = list.value.find((song) => song.id === currentSongId.value)
       if (currentSong) {
         // 重新设置播放位置到开头
-        setCurrentTime(0)
         if (Audio.value.audio) {
           Audio.value.audio.currentTime = 0
         }
@@ -372,11 +418,7 @@ let savePositionInterval: number | null = null
 
 // 初始化播放器
 onMounted(async () => {
-  // 初始化store
-  if (!localUserStore.initialization) {
-    localUserStore.init()
-  }
-
+  console.log('加载')
   // 初始化播放列表事件监听器
   initPlaylistEventListeners(localUserStore, playSong)
 
@@ -397,25 +439,25 @@ onMounted(async () => {
       }
 
       // 如果有历史播放位置，设置为待恢复状态
-      if (userInfo.value.currentTime && userInfo.value.currentTime > 0) {
-        pendingRestorePosition = userInfo.value.currentTime
-        pendingRestoreSongId = lastPlayedSong.id
-        console.log(`初始化时设置待恢复位置: ${pendingRestorePosition}秒`)
+      if (!Audio.value.isPlay) {
+        if (userInfo.value.currentTime && userInfo.value.currentTime > 0) {
+          pendingRestorePosition = userInfo.value.currentTime
+          pendingRestoreSongId = lastPlayedSong.id
+          console.log(`初始化时设置待恢复位置: ${pendingRestorePosition}秒`)
 
-        // 设置当前播放时间以显示进度条位置，但不清除历史记录
-        setCurrentTime(userInfo.value.currentTime)
-        if (Audio.value.audio) {
-          Audio.value.audio.currentTime = userInfo.value.currentTime
+          // 设置当前播放时间以显示进度条位置，但不清除历史记录
+          if (Audio.value.audio) {
+            Audio.value.audio.currentTime = userInfo.value.currentTime
+          }
+        }
+        // 通过工具函数获取歌曲URL
+        try {
+          const url = await getSongRealUrl(lastPlayedSong)
+          setUrl(url)
+        } catch (error) {
+          console.error('获取上次播放歌曲URL失败:', error)
         }
       }
-      // 通过工具函数获取歌曲URL
-      try {
-        const url = await getSongRealUrl(lastPlayedSong)
-        setUrl(url)
-      } catch (error) {
-        console.error('获取上次播放歌曲URL失败:', error)
-      }
-
     }
   }
 
@@ -430,7 +472,7 @@ onMounted(async () => {
 // 组件卸载时清理
 onUnmounted(() => {
   destroyPlaylistEventListeners()
-
+  document.removeEventListener('keydown', KeyEvent)
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)
   }
@@ -439,26 +481,28 @@ onUnmounted(() => {
 // 组件被激活时（从缓存中恢复）
 onActivated(async () => {
   console.log('PlayMusic组件被激活')
-
-  // 如果之前正在播放，恢复播放
-  if (wasPlaying && Audio.value.url) {
-    // 恢复播放位置
-    if (Audio.value.audio && playbackPosition > 0) {
-      setCurrentTime(playbackPosition)
-      Audio.value.audio.currentTime = playbackPosition
-    }
-
-    // 恢复播放
-    try {
-      const startResult = start()
-      if (startResult && typeof startResult.then === 'function') {
-        await startResult
-      }
-      console.log('恢复播放成功')
-    } catch (error) {
-      console.error('恢复播放失败:', error)
-    }
+  if (isFull) {
+    showFullPlay.value = true
   }
+  // 如果之前正在播放，恢复播放
+  // if (wasPlaying && Audio.value.url) {
+  //   // 恢复播放位置
+  //   if (Audio.value.audio && playbackPosition > 0) {
+  //     setCurrentTime(playbackPosition)
+  //     Audio.value.audio.currentTime = playbackPosition
+  //   }
+
+  //   // 恢复播放
+  //   try {
+  //     const startResult = start()
+  //     if (startResult && typeof startResult.then === 'function') {
+  //       await startResult
+  //     }
+  //     console.log('恢复播放成功')
+  //   } catch (error) {
+  //     console.error('恢复播放失败:', error)
+  //   }
+  // }
 })
 
 // 组件被停用时（缓存但不销毁）
@@ -467,6 +511,7 @@ onDeactivated(() => {
   // 保存当前播放状态
   wasPlaying = Audio.value.isPlay
   playbackPosition = Audio.value.currentTime
+  isFull = showFullPlay.value
   // 如果正在播放，暂停播放但不改变状态标志
   if (wasPlaying && Audio.value.audio) {
     Audio.value.audio.pause()
@@ -653,8 +698,12 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   <div class="player-container" @click.stop="toggleFullPlay">
     <!-- 进度条 -->
     <div class="progress-bar-container">
-      <div ref="progressRef" class="progress-bar" @mousedown="handleProgressDragStart($event)"
-        @click.stop="handleProgressClick">
+      <div
+        ref="progressRef"
+        class="progress-bar"
+        @mousedown="handleProgressDragStart($event)"
+        @click.stop="handleProgressClick"
+      >
         <div class="progress-background"></div>
         <div class="progress-filled" :style="{ width: `${progressPercentage}%` }"></div>
         <div class="progress-handle" :style="{ left: `${progressPercentage}%` }"></div>
@@ -676,18 +725,18 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
       <!-- 中间：播放控制 -->
       <div class="center-controls">
-        <button class="control-btn" @click.stop="playPrevious">
+        <t-button class="control-btn" variant="text" shape="circle" @click.stop="playPrevious">
           <span class="iconfont icon-shangyishou"></span>
-        </button>
+        </t-button>
         <button class="control-btn play-btn" @click.stop="togglePlayPause">
           <transition name="fade" mode="out-in">
             <span v-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
             <span v-else key="pause" class="iconfont icon-bofang"></span>
           </transition>
         </button>
-        <button class="control-btn" @click.stop="playNext">
+        <t-button class="control-btn" shape="circle" variant="text" @click.stop="playNext">
           <span class="iconfont icon-xiayishou"></span>
-        </button>
+        </t-button>
       </div>
 
       <!-- 右侧：时间和其他控制 -->
@@ -696,12 +745,23 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
         <div class="extra-controls">
           <!-- 播放模式按钮 -->
-          <button class="control-btn" @click.stop="updatePlayMode">
-            <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.5em"></i>
-          </button>
+          <t-tooltip :content="playModeTip">
+            <t-button
+              class="control-btn"
+              shape="circle"
+              variant="text"
+              @click.stop="updatePlayMode"
+            >
+              <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.5em"></i>
+            </t-button>
+          </t-tooltip>
 
           <!-- 音量控制 -->
-          <div class="volume-control" @mouseenter="showVolumeSlider = true" @mouseleave="showVolumeSlider = false">
+          <div
+            class="volume-control"
+            @mouseenter="showVolumeSlider = true"
+            @mouseleave="showVolumeSlider = false"
+          >
             <button class="control-btn">
               <shengyin style="width: 1.5em; height: 1.5em" />
             </button>
@@ -710,8 +770,12 @@ watch(songInfo, setColor, { deep: true, immediate: true })
             <transition name="volume-popup">
               <div class="volume-slider-container" v-show="showVolumeSlider" @click.stop>
                 <div class="volume-slider">
-                  <div ref="volumeBarRef" class="volume-bar" @click="handleVolumeClick"
-                    @mousedown="handleVolumeDragStart">
+                  <div
+                    ref="volumeBarRef"
+                    class="volume-bar"
+                    @click="handleVolumeClick"
+                    @mousedown="handleVolumeDragStart"
+                  >
                     <div class="volume-background"></div>
                     <div class="volume-filled" :style="{ height: `${volumeValue}%` }"></div>
                     <div class="volume-handle" :style="{ bottom: `${volumeValue}%` }"></div>
@@ -723,22 +787,38 @@ watch(songInfo, setColor, { deep: true, immediate: true })
           </div>
 
           <!-- 播放列表按钮 -->
-          <button class="control-btn" @click.stop="togglePlaylist">
-            <liebiao style="width: 1.5em; height: 1.5em" />
-          </button>
+          <t-tooltip content="播放列表">
+            <t-button
+              class="control-btn"
+              shape="circle"
+              variant="text"
+              @click.stop="togglePlaylist"
+            >
+              <liebiao style="width: 1.5em; height: 1.5em" />
+            </t-button>
+          </t-tooltip>
         </div>
       </div>
     </div>
   </div>
   <div class="fullbox">
-    <FullPlay :song-id="songInfo.id" :show="showFullPlay" :cover-image="songInfo.cover"
-      @toggle-fullscreen="toggleFullPlay" />
+    <FullPlay
+      :song-id="songInfo.id"
+      :show="showFullPlay"
+      :cover-image="songInfo.cover"
+      @toggle-fullscreen="toggleFullPlay"
+    />
   </div>
 
   <!-- 播放列表 -->
-  <div v-if="showPlaylist" class="cover" @click="showPlaylist = false"></div>
+  <div v-show="showPlaylist" class="cover" @click="showPlaylist = false"></div>
   <transition name="playlist-drawer">
-    <div class="playlist-container" v-show="showPlaylist" :class="{ 'full-screen-mode': showFullPlay }" @click.stop>
+    <div
+      v-show="showPlaylist"
+      class="playlist-container"
+      :class="{ 'full-screen-mode': showFullPlay }"
+      @click.stop
+    >
       <div class="playlist-header">
         <div class="playlist-title">播放列表 ({{ list.length }})</div>
         <button class="playlist-close" @click.stop="showPlaylist = false">
@@ -753,8 +833,13 @@ watch(songInfo, setColor, { deep: true, immediate: true })
         </div>
 
         <div v-else class="playlist-songs">
-          <div v-for="song in list" :key="song.id" class="playlist-song" :class="{ active: song.id === currentSongId }"
-            @click="playSong(song)">
+          <div
+            v-for="song in list"
+            :key="song.id"
+            class="playlist-song"
+            :class="{ active: song.id === currentSongId }"
+            @click="playSong(song)"
+          >
             <div class="song-info">
               <div class="song-name">{{ song.name }}</div>
               <div class="song-artist">{{ song.artistName }}</div>

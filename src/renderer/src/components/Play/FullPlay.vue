@@ -224,7 +224,7 @@ watch(
       :class="{ 'black-text': useBlackText }"
       @click="emit('toggle-fullscreen')"
     >
-      <ChevronDownIcon class="icon"/>
+      <ChevronDownIcon class="icon" />
     </button>
     <Transition name="fade-nav">
       <TitleBarControls
