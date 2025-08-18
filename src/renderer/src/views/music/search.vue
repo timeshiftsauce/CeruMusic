@@ -3,6 +3,7 @@ import { ref, onMounted, computed, nextTick, onUnmounted, watch } from 'vue'
 import musicService from '@renderer/services/music'
 import { PlayIcon, HeartIcon, DownloadIcon, MoreIcon } from 'tdesign-icons-vue-next'
 import { searchValue } from '@renderer/store/search'
+import { downloadSingleSong } from '@renderer/utils/download'
 
 const keyword = ref('')
 const searchResults = ref<any>([])
@@ -274,8 +275,8 @@ const addToPlaylist = (song: any): void => {
                   variant="text"
                   size="small"
                   class="play-btn"
-                  @click.stop="addToPlaylist(song)"
                   title="添加到播放列表"
+                  @click.stop="addToPlaylist(song)"
                 >
                   <play-icon size="30" />
                 </t-button>
@@ -341,7 +342,7 @@ const addToPlaylist = (song: any): void => {
                       size="small"
                       class="action-btn"
                       title="下载"
-                      @click.stop
+                      @click.stop="downloadSingleSong(song.id)"
                     >
                       <download-icon size="16" />
                     </t-button>
