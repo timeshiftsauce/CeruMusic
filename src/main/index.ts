@@ -164,7 +164,7 @@ ipcMain.handle('ai-ask', async (_, prompt) => {
     console.error('AI对话失败:', error)
     // 返回错误信息给渲染进程
     throw {
-      message: error.message || 'AI服务暂时不可用',
+      message: (error as Error).message || 'AI服务暂时不可用',
       code: 'AI_SERVICE_ERROR'
     }
   }
@@ -186,7 +186,7 @@ ipcMain.handle('ai-ask-stream', async (event, prompt, streamId) => {
   } catch (error) {
     console.error('AI流式对话失败:', error)
     // 发送错误信号，包含更详细的错误信息
-    const errorMessage = error.message || 'AI服务暂时不可用'
+    const errorMessage = (error as Error).message || 'AI服务暂时不可用'
     event.sender.send('ai-stream-error', { 
       streamId, 
       error: errorMessage,

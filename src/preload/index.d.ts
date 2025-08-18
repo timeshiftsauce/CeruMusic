@@ -17,13 +17,15 @@ interface CustomAPI {
   }
   // AI服务API
   ai: {
-    ask: (args: any) => Promise<any>
-    askStream: (args: any) => Promise<any>
-    onStreamChunk: (args: any) => Promise<any>
-    onStreamEnd: (args: any) => Promise<any>
-    onStreamError: (args: any) => Promise<any>
-    removeStreamListeners: () => Promise<any>
+    ask: (prompt: string) => Promise<any>
+    askStream: (prompt: string, streamId: string) => Promise<any>
+    onStreamChunk: (callback: (data: { streamId: string; chunk: string }) => void) => void
+    onStreamEnd: (callback: (data: { streamId: string }) => void) => void
+    onStreamError: (callback: (data: { streamId: string; error: string }) => void) => void
+    removeStreamListeners: () => void
   }
+  // 用户配置API
+  getUserConfig: () => Promise<any>
 }
 
 declare global {
