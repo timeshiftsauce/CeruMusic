@@ -20,10 +20,40 @@ const isLoading = ref(false) // 控制发送按钮的加载状态
 const messagesContainer = ref<HTMLElement | null>(null)
 let timer: number | null = null
 
+// 拖拽相关状态
+const isDragging = ref(false)
+const hasDragged = ref(false) // 是否拖动过
+const ballPosition = ref({ x: 0, y: 0 }) // 悬浮球位置
+const isOnLeft = ref(false) // 是否在左侧
+const dragOffset = ref({ x: 0, y: 0 }) // 拖拽偏移量
+const windowSize = ref({ width: 0, height: 0 }) // 窗口尺寸
+
 // 显示悬浮球
+// 悬浮球可见性控制
+const isFloatBallVisible = ref(true)
+const isHovering = ref(false)
+
 const showBall = () => {
   ballClass.value = ''
   clearTimer()
+}
+
+// 关闭悬浮球
+const closeBall = (e: MouseEvent) => {
+  e.stopPropagation() // 阻止事件冒泡
+  isFloatBallVisible.value = false
+}
+
+// 鼠标进入悬浮球
+const handleMouseEnter = () => {
+  isHovering.value = true
+  showBall()
+}
+
+// 鼠标离开悬浮球
+const handleMouseLeave = () => {
+  isHovering.value = false
+  startAutoHide()
 }
 
 // 开启自动隐藏
@@ -41,45 +71,118 @@ const clearTimer = () => {
   }
 }
 
+// 拖拽开始
+const handleMouseDown = (e: MouseEvent) => {
+  if (showAskWindow.value) return // 聊天窗口打开时不允许拖拽
+
+  isDragging.value = true
+  hasDragged.value = false
+  clearTimer()
+
+  const rect = ball.value?.getBoundingClientRect()
+  if (rect) {
+    dragOffset.value = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    }
+  }
+
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+  e.preventDefault()
+}
+
+// 拖拽过程中
+const handleMouseMove = (e: MouseEvent) => {
+  if (!isDragging.value) return
+  hasDragged.value = true // 鼠标移动过就算拖拽
+
+  const x = e.clientX - dragOffset.value.x
+  const y = e.clientY - dragOffset.value.y
+
+  // 限制在屏幕范围内，底部边界为 height - 196，考虑外层容器尺寸120px
+  const maxX = windowSize.value.width - 120
+  const maxY = windowSize.value.height - 196
+
+  ballPosition.value = {
+    x: Math.max(0, Math.min(x, maxX)),
+    y: Math.max(0, Math.min(y, maxY))
+  }
+}
+
+// 拖拽结束
+const handleMouseUp = () => {
+  if (!isDragging.value) return
+
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleMouseMove)
+  document.removeEventListener('mouseup', handleMouseUp)
+
+  if (hasDragged.value) {
+    // 自动吸边逻辑，考虑外层容器尺寸120px
+    const centerX = ballPosition.value.x + 60 // 外层容器中心点
+    const screenCenter = windowSize.value.width / 2
+
+    if (centerX < screenCenter) {
+      // 吸附到左边
+      ballPosition.value.x = 6
+      isOnLeft.value = true
+      ballClass.value = 'hidden-left'
+    } else {
+      // 吸附到右边
+      ballPosition.value.x = windowSize.value.width - 126
+      isOnLeft.value = false
+      ballClass.value = 'hidden-right'
+    }
+
+    // 重新开启自动隐藏
+    startAutoHide()
+  }
+}
+
 // 检查API Key是否已配置
-const checkAPIKey = (): boolean => {
+const checkAPIKey = async (): Promise<boolean> => {
   if (!userInfo.value.deepseekAPIkey) {
-    const errorMessage = '请先配置 DeepSeek API Key 才能使用 AI 功能。\n\n请前往 设置 → DeepSeek API Key 配置 进行设置。'
+    const errorMessage =
+      '请先配置 DeepSeek API Key 才能使用 AI 功能。\n\n请前往 设置 → DeepSeek API Key 配置 进行设置。'
     messages.value.push({
       type: 'error',
       content: errorMessage,
-      html: DOMPurify.sanitize(marked(errorMessage))
+      html: DOMPurify.sanitize(await marked(errorMessage))
     })
     return false
   }
-  // 如果API Key已配置，清除之前的错误消息
   clearErrorMessages()
   return true
 }
 
 // 清除错误消息
 const clearErrorMessages = () => {
-  messages.value = messages.value.filter(msg => msg.type !== 'error')
+  messages.value = messages.value.filter((msg) => msg.type !== 'error')
 }
 
 // 点击悬浮球处理
-const handleBallClick = () => {
-  clearTimer()
-  showAskWindow.value = true
-  
-  // 检查API Key是否已配置
-  if (!checkAPIKey()) {
+const handleBallClick = async () => {
+  // 如果刚刚拖拽过，不触发点击事件
+  if (hasDragged.value) {
+    hasDragged.value = false
     return
   }
-  
-  // 添加欢迎消息
+
+  clearTimer()
+  showAskWindow.value = true
+
+  if (!(await checkAPIKey())) {
+    return
+  }
+
   if (messages.value.length === 0) {
     const welcomeContent =
       '您好！我是AI助手，有什么可以帮助您的吗？ 您可以向我咨询音乐相关问题，我会尽力回答您的问题。'
     messages.value.push({
       type: 'ai',
       content: welcomeContent,
-      html: DOMPurify.sanitize(marked(welcomeContent))
+      html: DOMPurify.sanitize(await marked(welcomeContent))
     })
   }
 }
@@ -87,7 +190,6 @@ const handleBallClick = () => {
 // 关闭ask窗口
 const closeAskWindow = () => {
   showAskWindow.value = false
-  // 重新开启悬浮球的自动隐藏
   startAutoHide()
 }
 
@@ -99,25 +201,22 @@ const generateStreamId = () => {
 // 发送消息（流式版本）
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
-  
-  // 检查API Key是否已配置
-  if (!checkAPIKey()) {
+
+  if (!(await checkAPIKey())) {
     return
   }
 
   const userMessage = inputText.value
   inputText.value = ''
-  isLoading.value = true // 设置加载状态
+  isLoading.value = true
 
-  // 添加用户消息
   messages.value.push({
     type: 'user',
     content: userMessage,
-    html: DOMPurify.sanitize(marked(userMessage))
+    html: DOMPurify.sanitize(await marked(userMessage))
   })
   scrollToBottom()
 
-  // 添加AI消息占位符（loading状态）
   const aiMessageIndex = messages.value.length
   messages.value.push({
     type: 'loading',
@@ -130,15 +229,13 @@ const sendMessage = async () => {
   let aiContent = ''
 
   try {
-    // 设置流式事件监听器
-    const handleStreamChunk = (data: { streamId: string; chunk: string }) => {
+    const handleStreamChunk = async (data: { streamId: string; chunk: string }) => {
       if (data.streamId === streamId) {
         aiContent += data.chunk
-        // 实时更新AI消息内容（从loading状态切换到ai状态）
         messages.value[aiMessageIndex] = {
           type: 'ai',
           content: aiContent,
-          html: DOMPurify.sanitize(marked(aiContent))
+          html: DOMPurify.sanitize(await marked(aiContent))
         }
         scrollToBottom()
       }
@@ -147,47 +244,40 @@ const sendMessage = async () => {
     const handleStreamEnd = (data: { streamId: string }) => {
       if (data.streamId === streamId) {
         isLoading.value = false
-        // 清理事件监听器
         window.api.ai.removeStreamListeners()
       }
     }
 
-    const handleStreamError = (data: { streamId: string; error: string }) => {
+    const handleStreamError = async (data: { streamId: string; error: string }) => {
       if (data.streamId === streamId) {
         console.error('AI流式响应错误:', data.error)
-        // 如果没有收到任何内容，显示错误消息
         if (!aiContent) {
           messages.value[aiMessageIndex] = {
             type: 'error',
             content: `发送失败: ${data.error}`,
-            html: DOMPurify.sanitize(marked(`发送失败: ${data.error}`))
+            html: DOMPurify.sanitize(await marked(`发送失败: ${data.error}`))
           }
         }
         isLoading.value = false
-        // 清理事件监听器
         window.api.ai.removeStreamListeners()
       }
     }
 
-    // 注册事件监听器
     window.api.ai.onStreamChunk(handleStreamChunk)
     window.api.ai.onStreamEnd(handleStreamEnd)
     window.api.ai.onStreamError(handleStreamError)
 
-    // 调用流式AI API
     await window.api.ai.askStream(userMessage, streamId)
   } catch (error) {
     console.error('AI流式API调用失败:', error)
-    // 如果没有收到任何内容，显示错误消息
     if (!aiContent) {
       messages.value[aiMessageIndex] = {
         type: 'error',
-        content: `发送失败: ${error.message || '未知错误'}`,
-        html: DOMPurify.sanitize(marked(`发送失败: ${error.message || '未知错误'}`))
+        content: `发送失败: ${(error as Error).message || '未知错误'}`,
+        html: DOMPurify.sanitize(await marked(`发送失败: ${(error as Error).message || '未知错误'}`))
       }
     }
     isLoading.value = false
-    // 清理事件监听器
     window.api.ai.removeStreamListeners()
   }
 
@@ -206,18 +296,16 @@ const scrollToBottom = () => {
 // 监听API Key配置状态变化
 watch(
   () => userInfo.value.deepseekAPIkey,
-  (newKey, oldKey) => {
-    // 当API Key从未配置变为已配置时，清除错误消息
+  async (newKey, oldKey) => {
     if (!oldKey && newKey) {
       clearErrorMessages()
-      // 如果聊天窗口已打开且没有欢迎消息，添加欢迎消息
       if (showAskWindow.value && messages.value.length === 0) {
         const welcomeContent =
           '您好！我是AI助手，有什么可以帮助您的吗？ 您可以向我咨询音乐相关问题，我会尽力回答您的问题。'
         messages.value.push({
           type: 'ai',
           content: welcomeContent,
-          html: DOMPurify.sanitize(marked(welcomeContent))
+          html: DOMPurify.sanitize(await marked(welcomeContent))
         })
         scrollToBottom()
       }
@@ -226,37 +314,91 @@ watch(
   { immediate: false }
 )
 
-// 初始化时就开启定时隐藏
+// 更新窗口尺寸
+const updateWindowSize = () => {
+  windowSize.value = {
+    width: window.innerWidth,
+    height: window.innerHeight
+  }
+}
+
+// 初始化悬浮球位置
+const initBallPosition = () => {
+  updateWindowSize()
+  ballPosition.value = {
+    x: windowSize.value.width - 126, // 考虑外层容器尺寸120px
+    y: windowSize.value.height - 196
+  }
+  isOnLeft.value = false
+}
+
+// 定义 handleResize 函数
+const handleResize = () => {
+  updateWindowSize()
+  initBallPosition()
+}
+
 onMounted(() => {
+  initBallPosition()
   startAutoHide()
+  window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
   clearTimer()
+  document.removeEventListener('mousemove', handleMouseMove)
+  document.removeEventListener('mouseup', handleMouseUp)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
+<!-- 下面 template + style 原封不动保持 -->
 <template>
   <div>
-    <!-- 悬浮球 -->
+    <!-- 悬浮球容器 -->
     <transition name="ball-fade" appear>
       <div
-        v-show="!showAskWindow"
+        v-show="!showAskWindow && isFloatBallVisible"
         ref="ball"
-        class="float-ball"
-        :class="ballClass"
-        @mouseenter="showBall"
-        @mouseleave="startAutoHide"
-        @click="handleBallClick"
+        class="float-ball-container"
+        :class="{ dragging: isDragging }"
+        :style="{
+          left: ballPosition.x - 10 + 'px',
+          top: ballPosition.y - 10 + 'px',
+          right: 'auto',
+          bottom: 'auto'
+        }"
+        @mouseenter="handleMouseEnter"
+        @mouseleave="handleMouseLeave"
+        @mousedown="handleMouseDown"
       >
-        <!-- <slot>悬浮</slot> -->
-        <video autoplay muted loop src="../../assets/videos/AI.mp4" />
+        <!-- 悬浮球 -->
+        <div
+          class="float-ball"
+          :class="[ballClass, { hovering: isHovering }]"
+          @click="handleBallClick"
+        >
+          <video autoplay muted loop src="../../assets/videos/AI.mp4" />
+        </div>
+        <!-- 关闭按钮 -->
+        <div v-show="isHovering" class="close-ball-btn" @click="closeBall" @mousedown.stop>
+          <i class="iconfont icon-guanbi"></i>
+        </div>
       </div>
     </transition>
 
     <!-- Ask窗口 -->
     <transition name="window-scale" appear>
-      <div v-show="showAskWindow" class="ask-window">
+      <div
+        v-show="showAskWindow"
+        class="ask-window"
+        :class="{ 'on-left': isOnLeft }"
+        :style="{
+          left: isOnLeft ? ballPosition.x + 120 + 'px' : 'auto',
+          right: isOnLeft ? 'auto' : windowSize.width - ballPosition.x + 20 + 'px',
+          bottom: Math.max(20, 196) + 'px'
+        }"
+      >
         <div class="ask-header">
           <h3>AI助手</h3>
           <button class="close-btn" @click="closeAskWindow">×</button>
@@ -294,8 +436,20 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.float-ball {
+/* 悬浮球外层容器 */
+.float-ball-container {
   position: fixed;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  transition: all 0.3s;
+  user-select: none;
+}
+
+.float-ball {
   width: 100px;
   height: 100px;
   border-radius: 50%;
@@ -307,18 +461,28 @@ onBeforeUnmount(() => {
   font-size: 14px;
   cursor: pointer;
   overflow: hidden;
-  right: 16px; /* 固定右边 16px */
-  bottom: calc(86px + 16px); /* 固定底部 86px */
   transition: all 0.3s;
-  user-select: none;
-  z-index: 10000;
   padding: 2px;
   background-image: linear-gradient(45deg, #409eff, #ff6600);
+}
+
+/* 拖拽状态 */
+.float-ball-container.dragging {
+  transition: none;
+  z-index: 10001;
+}
+
+.float-ball-container.dragging .float-ball {
+  cursor: grabbing;
 }
 
 /* 半隐藏，用 transform 偏移一半宽度 */
 .float-ball.hidden-right {
   transform: translateX(calc(66px));
+}
+
+.float-ball.hidden-left {
+  transform: translateX(calc(-66px));
 }
 
 video {
@@ -328,11 +492,44 @@ video {
   overflow: hidden;
 }
 
+/* 关闭按钮样式 */
+.close-ball-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: #ff4757;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10002;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.3);
+}
+
+.close-ball-btn:hover {
+  background: #ff3742;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(255, 71, 87, 0.4);
+}
+
+.close-ball-btn .iconfont {
+  font-size: 16px;
+  color: #fff;
+  line-height: 1;
+}
+
+/* 悬浮球hover状态 */
+.float-ball.hovering {
+  transform: scale(1.05);
+}
+
 /* Ask窗口样式 */
 .ask-window {
   position: fixed;
-  right: 20px;
-  bottom: 102px;
   width: 400px;
   height: auto;
   background: #fff;
@@ -342,6 +539,16 @@ video {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* 当悬浮球在左侧时的窗口样式 */
+.ask-window.on-left {
+  transform-origin: left center;
+}
+
+.ask-window:not(.on-left) {
+  transform-origin: right center;
 }
 
 .ask-header {
@@ -778,11 +985,24 @@ video {
 /* 响应式设计 */
 @media (max-width: 480px) {
   .ask-window {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-    width: auto;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    width: auto !important;
     height: 60vh;
+  }
+
+  .float-ball {
+    width: 80px;
+    height: 80px;
+  }
+
+  .float-ball.hidden-right {
+    transform: translateX(calc(50px));
+  }
+
+  .float-ball.hidden-left {
+    transform: translateX(calc(-50px));
   }
 }
 </style>
