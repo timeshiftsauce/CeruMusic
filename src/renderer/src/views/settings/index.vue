@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
+import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue'
 import { ref } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
@@ -171,6 +172,13 @@ const clearAPIKey = (): void => {
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- 播放列表管理部分 -->
+        <div class="demo-section">
+          <h3>播放列表管理</h3>
+          <PlaylistSettings />
+          <!-- <PlaylistActions></PlaylistActions> -->
         </div>
 
         <div class="demo-section">

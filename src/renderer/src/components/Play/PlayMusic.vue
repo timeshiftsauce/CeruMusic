@@ -123,7 +123,7 @@ let pendingRestoreSongId: number | null = null
 // 记录组件被停用前的播放状态
 let wasPlaying = false
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-let playbackPosition = 0
+// let playbackPosition = 0
 let isFull = false
 
 // 播放指定歌曲
@@ -510,7 +510,7 @@ onDeactivated(() => {
   console.log('PlayMusic组件被停用')
   // 保存当前播放状态
   wasPlaying = Audio.value.isPlay
-  playbackPosition = Audio.value.currentTime
+  // playbackPosition = Audio.value.currentTime
   isFull = showFullPlay.value
   // 如果正在播放，暂停播放但不改变状态标志
   if (wasPlaying && Audio.value.audio) {
@@ -829,9 +829,8 @@ watch(songInfo, setColor, { deep: true, immediate: true })
       <div class="playlist-content">
         <div v-if="list.length === 0" class="playlist-empty">
           <p>播放列表为空</p>
-          <p>请添加歌曲到播放列表</p>
+          <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
         </div>
-
         <div v-else class="playlist-songs">
           <div
             v-for="song in list"

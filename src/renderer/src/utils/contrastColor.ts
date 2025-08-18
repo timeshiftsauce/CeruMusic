@@ -40,7 +40,7 @@ export async function shouldUseBlackText(imageSrc: string): Promise<boolean> {
     // 如果与黑色的对比度更高，说明背景较亮，应该使用黑色文字
     // 如果与白色的对比度更高，说明背景较暗，应该使用白色文字
     // 但对于中等亮度的颜色，我们需要更精细的判断
-    
+
     // 对于中等亮度的颜色(0.3-0.6)，我们更倾向于使用黑色文本，因为黑色文本通常更易读
     if (luminance > 0.3) {
       return true // 使用黑色文本

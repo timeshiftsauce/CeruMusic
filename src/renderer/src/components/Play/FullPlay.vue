@@ -51,27 +51,17 @@ const toggleFullscreen = () => {
 onMounted(() => {
   // 添加事件监听器检测全屏状态变化
   document.addEventListener('fullscreenchange', handleFullscreenChange)
-  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
-  document.addEventListener('mozfullscreenchange', handleFullscreenChange)
-  document.addEventListener('MSFullscreenChange', handleFullscreenChange)
 })
 
 onBeforeUnmount(() => {
   // 移除事件监听器
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
-  document.removeEventListener('mozfullscreenchange', handleFullscreenChange)
-  document.removeEventListener('MSFullscreenChange', handleFullscreenChange)
 })
 
 // 处理全屏状态变化
 const handleFullscreenChange = () => {
   // 检查当前是否处于全屏状态
-  const fullscreenElement =
-    document.fullscreenElement ||
-    document.webkitFullscreenElement ||
-    document.mozFullScreenElement ||
-    document.msFullscreenElement
+  const fullscreenElement = document.fullscreenElement
 
   // 更新状态
   isFullscreen.value = !!fullscreenElement

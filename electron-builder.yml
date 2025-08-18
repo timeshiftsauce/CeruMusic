@@ -1,5 +1,5 @@
 appId: com.cerumusic.app
-productName: ceru-music
+productName: 澜音
 directories:
   buildResources: build
 asar: true
@@ -14,6 +14,7 @@ asarUnpack:
   - resources/**
 win:
   executableName: ceru-music
+  icon: 'resources/icons/icon.ico'
   # 如果有证书文件，取消注释以下配置
   # certificateFile: path/to/certificate.p12
   # certificatePassword: your-password
@@ -24,6 +25,8 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  installerIcon: 'resources/icons/icon.ico'
+  uninstallerIcon: 'resources/icons/icon.ico'
   oneClick: false
   allowToChangeInstallationDirectory: true
   allowElevation: true

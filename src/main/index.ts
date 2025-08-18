@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, ipcRenderer } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -74,7 +74,7 @@ function createWindow(): void {
     titleBarStyle: 'hidden',
     ...(process.platform === 'linux' ? { icon } : {}),
     // ...(process.platform !== 'darwin' ? { titleBarOverlay: true } : {}),
-    icon: path.join(__dirname, '../../resources/logo.png'),
+    icon: path.join(__dirname, '../../resources/logo.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
