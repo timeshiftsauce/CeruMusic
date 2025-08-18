@@ -16,7 +16,7 @@ ul {
 }
 
 html {
-  font-size: 14px;
+  font-size: min(1.4vw, 18px);
 }
 
 .icon {

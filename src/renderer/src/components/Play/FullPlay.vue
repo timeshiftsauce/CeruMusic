@@ -205,7 +205,7 @@ watch(
       :album="actualCoverImage"
       :album-is-video="false"
       :fps="60"
-      :flow-speed="2"
+      :flow-speed="4"
       :has-lyric="true"
       :low-freq-volume="1"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
@@ -216,7 +216,7 @@ watch(
       :class="{ 'black-text': useBlackText }"
       @click="toggleFullscreen"
     >
-      <Fullscreen1Icon v-if="isFullscreen" class="icon" />
+      <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
       <FullscreenExit1Icon v-else class="icon" />
     </button>
     <button
