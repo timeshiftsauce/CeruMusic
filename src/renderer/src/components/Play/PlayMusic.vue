@@ -120,7 +120,7 @@ const playSong = async (song: SongList) => {
     // 确保主题色更新
     await setColor()
 
-    let urlToPlay = song.url
+    let urlToPlay = ''
 
     // 如果没有URL，需要获取URL
     if (!urlToPlay) {
@@ -408,19 +408,14 @@ onMounted(async () => {
           Audio.value.audio.currentTime = userInfo.value.currentTime
         }
       }
-
-      // 如果有URL直接设置，否则需要获取URL
-      if (lastPlayedSong.url) {
-        setUrl(lastPlayedSong.url)
-      } else {
-        // 通过工具函数获取歌曲URL
-        try {
-          const url = await getSongRealUrl(lastPlayedSong)
-          setUrl(url)
-        } catch (error) {
-          console.error('获取上次播放歌曲URL失败:', error)
-        }
+      // 通过工具函数获取歌曲URL
+      try {
+        const url = await getSongRealUrl(lastPlayedSong)
+        setUrl(url)
+      } catch (error) {
+        console.error('获取上次播放歌曲URL失败:', error)
       }
+
     }
   }
 
@@ -429,7 +424,7 @@ onMounted(async () => {
     if (Audio.value.isPlay) {
       userInfo.value.currentTime = Audio.value.currentTime
     }
-  }, 5000) // 每5秒保存一次
+  }, 1000) // 每1秒保存一次
 })
 
 // 组件卸载时清理
@@ -658,12 +653,8 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   <div class="player-container" @click.stop="toggleFullPlay">
     <!-- 进度条 -->
     <div class="progress-bar-container">
-      <div
-        ref="progressRef"
-        class="progress-bar"
-        @mousedown="handleProgressDragStart($event)"
-        @click.stop="handleProgressClick"
-      >
+      <div ref="progressRef" class="progress-bar" @mousedown="handleProgressDragStart($event)"
+        @click.stop="handleProgressClick">
         <div class="progress-background"></div>
         <div class="progress-filled" :style="{ width: `${progressPercentage}%` }"></div>
         <div class="progress-handle" :style="{ left: `${progressPercentage}%` }"></div>
@@ -710,11 +701,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
           </button>
 
           <!-- 音量控制 -->
-          <div
-            class="volume-control"
-            @mouseenter="showVolumeSlider = true"
-            @mouseleave="showVolumeSlider = false"
-          >
+          <div class="volume-control" @mouseenter="showVolumeSlider = true" @mouseleave="showVolumeSlider = false">
             <button class="control-btn">
               <shengyin style="width: 1.5em; height: 1.5em" />
             </button>
@@ -723,12 +710,8 @@ watch(songInfo, setColor, { deep: true, immediate: true })
             <transition name="volume-popup">
               <div class="volume-slider-container" v-show="showVolumeSlider" @click.stop>
                 <div class="volume-slider">
-                  <div
-                    ref="volumeBarRef"
-                    class="volume-bar"
-                    @click="handleVolumeClick"
-                    @mousedown="handleVolumeDragStart"
-                  >
+                  <div ref="volumeBarRef" class="volume-bar" @click="handleVolumeClick"
+                    @mousedown="handleVolumeDragStart">
                     <div class="volume-background"></div>
                     <div class="volume-filled" :style="{ height: `${volumeValue}%` }"></div>
                     <div class="volume-handle" :style="{ bottom: `${volumeValue}%` }"></div>
@@ -748,23 +731,14 @@ watch(songInfo, setColor, { deep: true, immediate: true })
     </div>
   </div>
   <div class="fullbox">
-    <FullPlay
-      :song-id="songInfo.id"
-      :show="showFullPlay"
-      :cover-image="songInfo.cover"
-      @toggle-fullscreen="toggleFullPlay"
-    />
+    <FullPlay :song-id="songInfo.id" :show="showFullPlay" :cover-image="songInfo.cover"
+      @toggle-fullscreen="toggleFullPlay" />
   </div>
 
   <!-- 播放列表 -->
   <div v-if="showPlaylist" class="cover" @click="showPlaylist = false"></div>
   <transition name="playlist-drawer">
-    <div
-      class="playlist-container"
-      v-show="showPlaylist"
-      :class="{ 'full-screen-mode': showFullPlay }"
-      @click.stop
-    >
+    <div class="playlist-container" v-show="showPlaylist" :class="{ 'full-screen-mode': showFullPlay }" @click.stop>
       <div class="playlist-header">
         <div class="playlist-title">播放列表 ({{ list.length }})</div>
         <button class="playlist-close" @click.stop="showPlaylist = false">
@@ -779,13 +753,8 @@ watch(songInfo, setColor, { deep: true, immediate: true })
         </div>
 
         <div v-else class="playlist-songs">
-          <div
-            v-for="song in list"
-            :key="song.id"
-            class="playlist-song"
-            :class="{ active: song.id === currentSongId }"
-            @click="playSong(song)"
-          >
+          <div v-for="song in list" :key="song.id" class="playlist-song" :class="{ active: song.id === currentSongId }"
+            @click="playSong(song)">
             <div class="song-info">
               <div class="song-name">{{ song.name }}</div>
               <div class="song-artist">{{ song.artistName }}</div>
@@ -1199,6 +1168,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
   background-color: rgba(255, 255, 255, 0.2);
 }
+
 .playlist-container .playlist-song.active {
   border-left: #2373ce93 4px solid;
 
