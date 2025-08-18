@@ -15,6 +15,15 @@ interface CustomAPI {
     getToplistDetail: (args: any) => Promise<any>
     getListSongs: (args: any) => Promise<any>
   }
+  // AI服务API
+  ai: {
+    ask: (args: any) => Promise<any>
+    askStream: (args: any) => Promise<any>
+    onStreamChunk: (args: any) => Promise<any>
+    onStreamEnd: (args: any) => Promise<any>
+    onStreamError: (args: any) => Promise<any>
+    removeStreamListeners: () => Promise<any>
+  }
 }
 
 declare global {
