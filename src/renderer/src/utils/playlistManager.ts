@@ -1,7 +1,7 @@
 import mitt from 'mitt'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
-import { request } from '@renderer/services/music/index'
+import musicService from '@renderer/services/music/index'
 
 // 事件类型定义
 type PlaylistEvents = {
@@ -28,7 +28,12 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     }
 
     // 通过统一的request方法获取真实的播放URL
-    const urlData = await request('getSongUrl', { id: song.id.toString() }, false, false)
+    const urlData = await musicService.request(
+      'getSongUrl',
+      { id: song.id.toString() },
+      false,
+      false
+    )
 
     if (urlData && urlData.url) {
       // 更新歌曲对象的URL
@@ -67,10 +72,10 @@ export async function addToPlaylistAndPlay(
       await playResult
     }
 
-    MessagePlugin.success('已添加到播放列表并开始播放')
+    await MessagePlugin.success('已添加到播放列表并开始播放')
   } catch (error) {
     console.error('添加到播放列表并播放失败:', error)
-    MessagePlugin.error('播放失败，请重试')
+    await MessagePlugin.error('播放失败，请重试')
   }
 }
 
@@ -85,7 +90,7 @@ export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
     const existingIndex = localUserStore.list.findIndex((item: SongList) => item.id === song.id)
 
     if (existingIndex !== -1) {
-      MessagePlugin.warning('歌曲已在播放列表中')
+      await MessagePlugin.warning('歌曲已在播放列表中')
       return
     }
 
@@ -100,10 +105,10 @@ export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
       // 预加载失败不影响添加到播放列表
     }
 
-    MessagePlugin.success('已添加到播放列表')
+    await MessagePlugin.success('已添加到播放列表')
   } catch (error) {
     console.error('添加到播放列表失败:', error)
-    MessagePlugin.error('添加失败，请重试')
+    await MessagePlugin.error('添加失败，请重试')
   }
 }
 
@@ -117,13 +122,13 @@ export function initPlaylistEventListeners(
   playSongCallback: (song: SongList) => Promise<void>
 ) {
   // 监听添加到播放列表并播放的事件
-  emitter.on('addToPlaylistAndPlay', (song: SongList) => {
-    addToPlaylistAndPlay(song, localUserStore, playSongCallback)
+  emitter.on('addToPlaylistAndPlay', async (song: SongList) => {
+    await addToPlaylistAndPlay(song, localUserStore, playSongCallback)
   })
 
   // 监听添加到播放列表末尾的事件
-  emitter.on('addToPlaylistEnd', (song: SongList) => {
-    addToPlaylistEnd(song, localUserStore)
+  emitter.on('addToPlaylistEnd', async (song: SongList) => {
+    await addToPlaylistEnd(song, localUserStore)
   })
 }
 

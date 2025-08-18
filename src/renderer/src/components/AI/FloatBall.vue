@@ -44,11 +44,12 @@ const clearTimer = () => {
 // 检查API Key是否已配置
 const checkAPIKey = (): boolean => {
   if (!userInfo.value.deepseekAPIkey) {
-    const errorMessage = '请先配置 DeepSeek API Key 才能使用 AI 功能。\n\n请前往 设置 → DeepSeek API Key 配置 进行设置。'
+    const errorMessage =
+      '请先配置 DeepSeek API Key 才能使用 AI 功能。\n\n请前往 设置 → DeepSeek API Key 配置 进行设置。'
     messages.value.push({
       type: 'error',
       content: errorMessage,
-      html: DOMPurify.sanitize(marked(errorMessage))
+      html: DOMPurify.sanitize(marked(errorMessage) as string | Node)
     })
     return false
   }
@@ -59,19 +60,19 @@ const checkAPIKey = (): boolean => {
 
 // 清除错误消息
 const clearErrorMessages = () => {
-  messages.value = messages.value.filter(msg => msg.type !== 'error')
+  messages.value = messages.value.filter((msg) => msg.type !== 'error')
 }
 
 // 点击悬浮球处理
 const handleBallClick = () => {
   clearTimer()
   showAskWindow.value = true
-  
+
   // 检查API Key是否已配置
   if (!checkAPIKey()) {
     return
   }
-  
+
   // 添加欢迎消息
   if (messages.value.length === 0) {
     const welcomeContent =
@@ -79,7 +80,7 @@ const handleBallClick = () => {
     messages.value.push({
       type: 'ai',
       content: welcomeContent,
-      html: DOMPurify.sanitize(marked(welcomeContent))
+      html: DOMPurify.sanitize(marked(welcomeContent) as string | Node)
     })
   }
 }
@@ -99,7 +100,7 @@ const generateStreamId = () => {
 // 发送消息（流式版本）
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
-  
+
   // 检查API Key是否已配置
   if (!checkAPIKey()) {
     return
@@ -113,7 +114,7 @@ const sendMessage = async () => {
   messages.value.push({
     type: 'user',
     content: userMessage,
-    html: DOMPurify.sanitize(marked(userMessage))
+    html: DOMPurify.sanitize(marked(userMessage) as string | Node)
   })
   scrollToBottom()
 
@@ -138,7 +139,7 @@ const sendMessage = async () => {
         messages.value[aiMessageIndex] = {
           type: 'ai',
           content: aiContent,
-          html: DOMPurify.sanitize(marked(aiContent))
+          html: DOMPurify.sanitize(marked(aiContent) as string | Node)
         }
         scrollToBottom()
       }
@@ -160,7 +161,7 @@ const sendMessage = async () => {
           messages.value[aiMessageIndex] = {
             type: 'error',
             content: `发送失败: ${data.error}`,
-            html: DOMPurify.sanitize(marked(`发送失败: ${data.error}`))
+            html: DOMPurify.sanitize(marked(`发送失败: ${data.error}`) as string | Node)
           }
         }
         isLoading.value = false
@@ -176,14 +177,16 @@ const sendMessage = async () => {
 
     // 调用流式AI API
     await window.api.ai.askStream(userMessage, streamId)
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI流式API调用失败:', error)
     // 如果没有收到任何内容，显示错误消息
     if (!aiContent) {
       messages.value[aiMessageIndex] = {
         type: 'error',
         content: `发送失败: ${error.message || '未知错误'}`,
-        html: DOMPurify.sanitize(marked(`发送失败: ${error.message || '未知错误'}`))
+        html: DOMPurify.sanitize(
+          marked(`发送失败: ${error.message || '未知错误'}`) as string | Node
+        )
       }
     }
     isLoading.value = false
@@ -217,7 +220,7 @@ watch(
         messages.value.push({
           type: 'ai',
           content: welcomeContent,
-          html: DOMPurify.sanitize(marked(welcomeContent))
+          html: DOMPurify.sanitize(marked(welcomeContent) as string | Node)
         })
         scrollToBottom()
       }
