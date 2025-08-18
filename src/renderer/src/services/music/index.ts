@@ -15,7 +15,8 @@ import {
   GetSongDetailArgs,
   GetSongUrlArgs,
   GetToplistDetailArgs,
-  GetListSongsArgs
+  GetListSongsArgs,
+  DownloadSingleSongArgs
 } from './service-base'
 
 type Response = {
@@ -63,6 +64,12 @@ async function request(
 async function request(
   api: 'getListSongs',
   args: GetListSongsArgs,
+  isLoading?: boolean,
+  showError?: boolean
+): Promise<any>
+async function request(
+  api: 'downloadSingleSong',
+  args: DownloadSingleSongArgs,
   isLoading?: boolean,
   showError?: boolean
 ): Promise<any>

@@ -7,7 +7,8 @@ import {
   GetSongDetailArgs,
   GetSongUrlArgs,
   GetToplistDetailArgs,
-  GetListSongsArgs
+  GetListSongsArgs,
+  DownloadSingleSongArgs
 } from './service-base'
 
 import { netEaseService } from './net-ease-service'
@@ -45,6 +46,9 @@ async function request(api: ServiceNamesType, args: ServiceArgsType): Promise<an
         break
       case 'getListSongs':
         res.data = await musicService.getListSongs(args as GetListSongsArgs)
+        break
+      case 'downloadSingleSong':
+        res.data = await musicService.downloadSingleSong(args as DownloadSingleSongArgs)
         break
       default:
         throw new Error(`未知的方法: ${api}`)
