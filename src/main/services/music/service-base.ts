@@ -43,6 +43,10 @@ type GetListSongsArgs = {
   offset?: number
 }
 
+type DownloadSingleSongArgs = {
+  id: string
+}
+
 type ServiceNamesType =
   | 'search'
   | 'getSongDetail'
@@ -51,6 +55,7 @@ type ServiceNamesType =
   | 'getToplist'
   | 'getToplistDetail'
   | 'getListSongs'
+  | 'downloadSingleSong'
 
 type ServiceArgsType =
   | SearchArgs
@@ -60,6 +65,7 @@ type ServiceArgsType =
   | GetToplistArgs
   | GetToplistDetailArgs
   | GetListSongsArgs
+  | DownloadSingleSongArgs
 
 interface Artist {
   id: number
@@ -220,6 +226,7 @@ interface SongDetail {
   rtype: number
   rurl: null
 }
+
 interface SongDetailResponse {
   songs: SongDetail[]
   equalizers: Record<string, unknown>
@@ -241,6 +248,7 @@ interface MusicServiceBase {
   getToplist({}: GetToplistArgs): Promise<any>
   getToplistDetail({}: GetToplistDetailArgs): Promise<any>
   getListSongs({ id, limit, offset }: GetListSongsArgs): Promise<any>
+  downloadSingleSong({ id }: DownloadSingleSongArgs): Promise<any>
 }
 
 export type { MusicServiceBase, ServiceNamesType, ServiceArgsType }
@@ -251,7 +259,8 @@ export type {
   GetLyricArgs,
   GetToplistArgs,
   GetToplistDetailArgs,
-  GetListSongsArgs
+  GetListSongsArgs,
+  DownloadSingleSongArgs
 }
 export type { SongResponse, SongDetailResponse, SongUrlResponse }
 

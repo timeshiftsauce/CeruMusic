@@ -1,5 +1,10 @@
+import path from 'path'
+import fs from 'fs'
+import fsPromise from 'fs/promises'
+
 import NeteaseCloudMusicApi from 'NeteaseCloudMusicApi'
 import { axiosClient, MusicServiceBase } from './service-base'
+import { pipeline } from 'node:stream/promises'
 
 import {
   SearchArgs,
@@ -8,15 +13,19 @@ import {
   GetToplistDetailArgs,
   GetListSongsArgs,
   GetLyricArgs,
-  GetToplistArgs
+  GetToplistArgs,
+  DownloadSingleSongArgs
 } from './service-base'
 
 import { SongDetailResponse, SongResponse } from './service-base'
 
 import { fieldsSelector } from '../../utils/object'
+import * as electron from 'electron'
 
 const baseUrl: string = 'https://music.163.com'
 const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
+
+const fileLock: Record<string, boolean> = {}
 
 export const netEaseService: MusicServiceBase = {
   async search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse> {
@@ -127,5 +136,55 @@ export const netEaseService: MusicServiceBase = {
         })
         throw err.body?.msg ?? err
       })
+  },
+  async downloadSingleSong({ id }: DownloadSingleSongArgs) {
+    const songDownloadDetail = await this.getSongUrl({ id })
+
+    let basePath: string = electron.app.getAppPath()
+    if (basePath.endsWith('.asar')) {
+      basePath = path.join(path.dirname(basePath), '../')
+    }
+
+    const songPath = path.join(
+      basePath,
+      'download',
+      'songs',
+      `${songDownloadDetail.name}-${songDownloadDetail.artist}-${songDownloadDetail.id}.mp3`
+        .replace(/[/\\:*?"<>|]/g, '')
+        .replace(/^\.+/, '')
+        .replace(/\.+$/, '')
+        .trim()
+    )
+
+    if (fileLock[songPath]) {
+      throw new Error('歌曲正在下载中')
+    } else {
+      fileLock[songPath] = true
+    }
+
+    try {
+      if (fs.existsSync(songPath)) {
+        return {
+          message: '歌曲已存在'
+        }
+      }
+
+      await fsPromise.mkdir(path.dirname(songPath), { recursive: true })
+
+      const songDataRes = await axiosClient({
+        method: 'GET',
+        url: songDownloadDetail.url,
+        responseType: 'stream'
+      })
+
+      await pipeline(songDataRes.data, fs.createWriteStream(songPath))
+    } finally {
+      delete fileLock[songPath]
+    }
+
+    return {
+      message: '下载成功',
+      path: songPath
+    }
   }
 }

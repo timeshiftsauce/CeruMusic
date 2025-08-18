@@ -1,3 +1,16 @@
+import axios, { AxiosInstance } from 'axios'
+
+const timeout: number = 5000
+
+const mobileHeaders = {
+  'User-Agent':
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148'
+}
+
+const axiosClient: AxiosInstance = axios.create({
+  timeout: timeout
+})
+
 type SearchArgs = {
   type: number
   keyword: string
@@ -30,6 +43,10 @@ type GetListSongsArgs = {
   offset?: number
 }
 
+type DownloadSingleSongArgs = {
+  id: string
+}
+
 type ServiceNamesType =
   | 'search'
   | 'getSongDetail'
@@ -38,6 +55,7 @@ type ServiceNamesType =
   | 'getToplist'
   | 'getToplistDetail'
   | 'getListSongs'
+  | 'downloadSingleSong'
 
 type ServiceArgsType =
   | SearchArgs
@@ -47,6 +65,7 @@ type ServiceArgsType =
   | GetToplistArgs
   | GetToplistDetailArgs
   | GetListSongsArgs
+  | DownloadSingleSongArgs
 
 interface Artist {
   id: number
@@ -207,6 +226,7 @@ interface SongDetail {
   rtype: number
   rurl: null
 }
+
 interface SongDetailResponse {
   songs: SongDetail[]
   equalizers: Record<string, unknown>
@@ -228,6 +248,7 @@ interface MusicServiceBase {
   getToplist({}: GetToplistArgs): Promise<any>
   getToplistDetail({}: GetToplistDetailArgs): Promise<any>
   getListSongs({ id, limit, offset }: GetListSongsArgs): Promise<any>
+  downloadSingleSong({ id }: DownloadSingleSongArgs): Promise<any>
 }
 
 export type { MusicServiceBase, ServiceNamesType, ServiceArgsType }
@@ -238,6 +259,9 @@ export type {
   GetLyricArgs,
   GetToplistArgs,
   GetToplistDetailArgs,
-  GetListSongsArgs
+  GetListSongsArgs,
+  DownloadSingleSongArgs
 }
 export type { SongResponse, SongDetailResponse, SongUrlResponse }
+
+export { mobileHeaders, axiosClient }
