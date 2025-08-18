@@ -13,7 +13,7 @@ import { ref, computed, onMounted, watch, reactive, onBeforeUnmount } from 'vue'
 import { shouldUseBlackText } from '@renderer/utils/contrastColor'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 // 导入歌词请求函数
-import request from '@renderer/services/music'
+import musicService from '@renderer/services/music'
 // 直接从包路径导入，避免 WebAssembly 导入问题
 import { parseYrc, parseLrc } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
 
@@ -52,7 +52,12 @@ watch(
 
     try {
       // 请求歌词数据，设置yv=true获取逐字歌词
-      const lyricData = await request('getLyric', { id: newId, yv: true, lv: true, tv: true })
+      const lyricData = await musicService.request('getLyric', {
+        id: newId,
+        yv: true,
+        lv: true,
+        tv: true
+      })
       console.log(lyricData)
       // 优先使用逐字歌词(yrc)，如果没有则回退到普通歌词(lrc)
       let lyricText = ''

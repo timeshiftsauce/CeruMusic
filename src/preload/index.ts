@@ -9,17 +9,10 @@ const api = {
   close: () => ipcRenderer.send('window-close'),
   setMiniMode: (isMini: boolean) => ipcRenderer.send('window-mini-mode', isMini),
 
-  // 网易云音乐服务API
-  netease: {
-    search: (args: any) => ipcRenderer.invoke('netease-search', args),
-    getSongDetail: (args: any) => ipcRenderer.invoke('netease-getSongDetail', args),
-    getSongUrl: (args: any) => ipcRenderer.invoke('netease-getSongUrl', args),
-    getLyric: (args: any) => ipcRenderer.invoke('netease-getLyric', args),
-    getToplist: (args: any) => ipcRenderer.invoke('netease-getToplist', args),
-    getToplistDetail: (args: any) => ipcRenderer.invoke('netease-getToplistDetail', args),
-    getListSongs: (args: any) => ipcRenderer.invoke('netease-getListSongs', args)
+  music: {
+    request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args)
   },
-  // AI服务API
+
   ai: {
     ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt),
     askStream: (prompt: string, streamId: string) =>
@@ -39,7 +32,6 @@ const api = {
       ipcRenderer.removeAllListeners('ai-stream-error')
     }
   },
-  // 用户配置API
   getUserConfig: () => ipcRenderer.invoke('get-user-config')
 }
 

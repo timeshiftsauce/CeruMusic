@@ -268,13 +268,15 @@ const sendMessage = async () => {
     window.api.ai.onStreamError(handleStreamError)
 
     await window.api.ai.askStream(userMessage, streamId)
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI流式API调用失败:', error)
     if (!aiContent) {
       messages.value[aiMessageIndex] = {
         type: 'error',
         content: `发送失败: ${(error as Error).message || '未知错误'}`,
-        html: DOMPurify.sanitize(await marked(`发送失败: ${(error as Error).message || '未知错误'}`))
+        html: DOMPurify.sanitize(
+          await marked(`发送失败: ${(error as Error).message || '未知错误'}`)
+        )
       }
     }
     isLoading.value = false

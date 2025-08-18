@@ -6,16 +6,10 @@ interface CustomAPI {
   maximize: () => void
   close: () => void
   setMiniMode: (isMini: boolean) => void
-  netease: {
-    search: (args: any) => Promise<any>
-    getSongDetail: (args: any) => Promise<any>
-    getSongUrl: (args: any) => Promise<any>
-    getLyric: (args: any) => Promise<any>
-    getToplist: (args: any) => Promise<any>
-    getToplistDetail: (args: any) => Promise<any>
-    getListSongs: (args: any) => Promise<any>
+  music: {
+    request: (api: string, args: any) => Promise<any>
   }
-  // AI服务API
+
   ai: {
     ask: (prompt: string) => Promise<any>
     askStream: (prompt: string, streamId: string) => Promise<any>
