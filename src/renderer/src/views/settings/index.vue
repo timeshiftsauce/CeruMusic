@@ -63,16 +63,11 @@ const clearAPIKey = (): void => {
         <div class="demo-section">
           <h3>风格选择</h3>
           <div class="style-buttons">
-            <t-button
-              :theme="currentStyle === 'windows' ? 'primary' : 'default'"
-              @click="switchStyle('windows')"
-            >
+            <t-button :theme="currentStyle === 'windows' ? 'primary' : 'default'" @click="switchStyle('windows')">
               Windows 风格
             </t-button>
-            <t-button
-              :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
-              @click="switchStyle('traffic-light')"
-            >
+            <t-button :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
+              @click="switchStyle('traffic-light')">
               红绿灯风格
             </t-button>
           </div>
@@ -115,55 +110,33 @@ const clearAPIKey = (): void => {
             <div class="api-config-header">
               <p>配置您的 DeepSeek API Key 以使用 AI 功能</p>
             </div>
-            
+
             <div class="api-key-section">
               <div class="api-key-input-group">
                 <label for="deepseek-api-key">API Key:</label>
                 <div class="input-container">
-                  <t-input
-                    id="deepseek-api-key"
-                    v-model="deepseekAPIkey"
-                    :type="isEditingAPIKey ? 'text' : 'password'"
+                  <t-input id="deepseek-api-key" v-model="deepseekAPIkey" :type="isEditingAPIKey ? 'text' : 'password'"
                     :readonly="!isEditingAPIKey"
-                    :placeholder="isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'"
-                    class="api-key-input"
-                  />
+                    :placeholder="isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'" class="api-key-input" />
                   <div class="input-actions">
-                    <t-button
-                      v-if="!isEditingAPIKey"
-                      size="small"
-                      theme="primary"
-                      @click="startEditAPIKey"
-                    >
+                    <t-button v-if="!isEditingAPIKey" theme="primary" @click="startEditAPIKey">
                       {{ userInfo.deepseekAPIkey ? '编辑' : '配置' }}
                     </t-button>
                     <template v-else>
-                      <t-button
-                        size="small"
-                        theme="primary"
-                        @click="saveAPIKey"
-                      >
+                      <t-button theme="primary" @click="saveAPIKey">
                         保存
                       </t-button>
-                      <t-button
-                        size="small"
-                        theme="default"
-                        @click="cancelEditAPIKey"
-                      >
+                      <t-button theme="default" @click="cancelEditAPIKey">
                         取消
                       </t-button>
-                      <t-button
-                        size="small"
-                        theme="danger"
-                        @click="clearAPIKey"
-                      >
+                      <t-button theme="danger" @click="clearAPIKey">
                         清空
                       </t-button>
                     </template>
                   </div>
                 </div>
               </div>
-              
+
               <div class="api-key-status">
                 <div class="status-indicator">
                   <span :class="['status-dot', userInfo.deepseekAPIkey ? 'configured' : 'not-configured']"></span>
@@ -172,7 +145,7 @@ const clearAPIKey = (): void => {
                   </span>
                 </div>
               </div>
-              
+
               <div class="api-key-tips">
                 <h4>使用说明：</h4>
                 <ul>
@@ -239,6 +212,7 @@ const clearAPIKey = (): void => {
   height: 100vh;
   overflow: hidden;
 }
+
 .header {
   -webkit-app-region: drag;
   display: flex;
@@ -379,33 +353,33 @@ const clearAPIKey = (): void => {
 .api-config-container {
   .api-config-header {
     margin-bottom: 1.5rem;
-    
+
     p {
       color: #6b7280;
       margin: 0;
     }
   }
-  
+
   .api-key-section {
     .api-key-input-group {
       margin-bottom: 1rem;
-      
+
       label {
         display: block;
         font-weight: 500;
         color: #374151;
         margin-bottom: 0.5rem;
       }
-      
+
       .input-container {
         display: flex;
         gap: 0.75rem;
         align-items: flex-start;
-        
+
         .api-key-input {
           flex: 1;
         }
-        
+
         .input-actions {
           display: flex;
           gap: 0.5rem;
@@ -413,66 +387,66 @@ const clearAPIKey = (): void => {
         }
       }
     }
-    
+
     .api-key-status {
       margin-bottom: 1.5rem;
-      
+
       .status-indicator {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        
+
         .status-dot {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          
+
           &.configured {
             background-color: #10b981;
           }
-          
+
           &.not-configured {
             background-color: #ef4444;
           }
         }
-        
+
         .status-text {
           font-size: 0.875rem;
           color: #6b7280;
         }
       }
     }
-    
+
     .api-key-tips {
       background: #f9fafb;
       padding: 1rem;
       border-radius: 0.375rem;
       border: 1px solid #e5e7eb;
-      
+
       h4 {
         color: #374151;
         margin: 0 0 0.75rem 0;
         font-size: 0.875rem;
         font-weight: 600;
       }
-      
+
       ul {
         margin: 0;
         padding-left: 1.25rem;
-        
+
         li {
           color: #6b7280;
           font-size: 0.875rem;
           margin-bottom: 0.5rem;
-          
+
           &:last-child {
             margin-bottom: 0;
           }
-          
+
           a {
             color: #3b82f6;
             text-decoration: none;
-            
+
             &:hover {
               text-decoration: underline;
             }
