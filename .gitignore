@@ -6,3 +6,4 @@ out
 *.log*
 .idea
 .kiro
+build
