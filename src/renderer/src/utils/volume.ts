@@ -22,7 +22,7 @@ export function transitionVolume(
     }
     timer = setInterval(() => {
       audio.volume = Math.max(audio.volume - volume / pauseVolume, 0)
-      if (audio.volume <= 0) {
+      if (audio.volume <= 20) {
         clearInterval(timer)
         audio.volume = volume
         resolve(undefined)

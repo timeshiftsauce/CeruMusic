@@ -302,7 +302,8 @@ export async function extractDominantColor(imageSrc: string): Promise<Color> {
         }
 
         // 设置canvas大小为图片的缩略图大小以提高性能
-        const size = 50
+        // 增加采样尺寸以获取更准确的颜色
+        const size = 100
         canvas.width = size
         canvas.height = size
 
@@ -312,45 +313,50 @@ export async function extractDominantColor(imageSrc: string): Promise<Color> {
         // 获取像素数据
         const imageData = ctx.getImageData(0, 0, size, size).data
 
-        // 使用简单的颜色量化算法
-        const colorBuckets: Record<string, { count: number; r: number; g: number; b: number }> = {}
-
-        // 采样像素并分组
+        // 使用改进的颜色提取算法
+        // 1. 收集所有非透明像素的颜色
+        const colors: Color[] = []
         for (let i = 0; i < imageData.length; i += 4) {
           // 忽略透明像素
           if (imageData[i + 3] < 128) continue
 
-          // 量化颜色 (减少颜色空间)
-          const r = Math.floor(imageData[i] / 32) * 32
-          const g = Math.floor(imageData[i + 1] / 32) * 32
-          const b = Math.floor(imageData[i + 2] / 32) * 32
-
-          const key = `${r},${g},${b}`
-
-          if (!colorBuckets[key]) {
-            colorBuckets[key] = { count: 0, r, g, b }
-          }
-
-          colorBuckets[key].count++
+          colors.push({
+            r: imageData[i],
+            g: imageData[i + 1],
+            b: imageData[i + 2]
+          })
         }
 
-        // 找出出现最多的颜色
-        let maxCount = 0
-        let dominantColor = { r: 0, g: 0, b: 0 }
+        // 2. 使用K-means聚类算法找出主要颜色
+        const k = 5 // 聚类数量
+        const dominantColors = kMeansCluster(colors, k)
 
-        for (const key in colorBuckets) {
-          if (colorBuckets[key].count > maxCount) {
-            maxCount = colorBuckets[key].count
-            dominantColor = {
-              r: colorBuckets[key].r,
-              g: colorBuckets[key].g,
-              b: colorBuckets[key].b
-            }
-          }
+        // 3. 过滤掉接近黑色和白色的颜色
+        const filteredColors = dominantColors.filter((color) => {
+          // 排除接近黑色的颜色
+          if (color.r < 30 && color.g < 30 && color.b < 30) return false
+
+          // 排除接近白色的颜色
+          if (color.r > 225 && color.g > 225 && color.b > 225) return false
+
+          return true
+        })
+
+        // 4. 如果过滤后没有颜色，使用最大的聚类
+        let dominantColor: Color
+        if (filteredColors.length > 0) {
+          // 选择饱和度最高的颜色
+          dominantColor = getMostSaturatedColor(filteredColors)
+        } else {
+          // 如果所有颜色都被过滤掉了，使用最大的聚类
+          dominantColor = dominantColors[0]
         }
 
-        // 返回主要颜色
-        resolve(dominantColor)
+        // 5. 增强颜色的饱和度和亮度，使其更加鲜明
+        const enhancedColor = enhanceColor(dominantColor)
+
+        // 返回增强后的主要颜色
+        resolve(enhancedColor)
       } catch (error) {
         console.error('提取颜色时出错:', error)
         // 出错时使用默认颜色
@@ -372,4 +378,156 @@ export async function extractDominantColor(imageSrc: string): Promise<Color> {
       img.onload!(new Event('load'))
     }
   })
+}
+
+/**
+ * 使用K-means聚类算法对颜色进行聚类
+ * @param colors 颜色数组
+ * @param k 聚类数量
+ * @returns 按大小排序的聚类中心
+ */
+function kMeansCluster(colors: Color[], k: number): Color[] {
+  // 如果颜色数量少于k，直接返回所有颜色
+  if (colors.length <= k) return colors
+
+  // 随机选择k个初始中心点
+  const centroids: Color[] = []
+  const usedIndices = new Set<number>()
+
+  while (centroids.length < k) {
+    const randomIndex = Math.floor(Math.random() * colors.length)
+    if (!usedIndices.has(randomIndex)) {
+      usedIndices.add(randomIndex)
+      centroids.push({ ...colors[randomIndex] })
+    }
+  }
+
+  // 最大迭代次数
+  const maxIterations = 10
+  // 聚类
+  const clusters: Color[][] = Array(k)
+    .fill(0)
+    .map(() => [])
+
+  // 迭代优化聚类
+  for (let iter = 0; iter < maxIterations; iter++) {
+    // 清空聚类
+    clusters.forEach((cluster) => (cluster.length = 0))
+
+    // 将每个颜色分配到最近的中心点
+    for (const color of colors) {
+      let minDistance = Infinity
+      let closestCentroidIndex = 0
+
+      for (let i = 0; i < centroids.length; i++) {
+        const distance = colorDistance(color, centroids[i])
+        if (distance < minDistance) {
+          minDistance = distance
+          closestCentroidIndex = i
+        }
+      }
+
+      clusters[closestCentroidIndex].push(color)
+    }
+
+    // 更新中心点
+    let changed = false
+    for (let i = 0; i < k; i++) {
+      if (clusters[i].length === 0) continue
+
+      const newCentroid = calculateCentroid(clusters[i])
+      if (!colorEquals(newCentroid, centroids[i])) {
+        centroids[i] = newCentroid
+        changed = true
+      }
+    }
+
+    // 如果中心点不再变化，提前结束迭代
+    if (!changed) break
+  }
+
+  // 计算每个聚类的大小
+  const clusterSizes = clusters.map((cluster) => cluster.length)
+
+  // 按聚类大小排序中心点
+  return centroids
+    .map((centroid, i) => ({ centroid, size: clusterSizes[i] }))
+    .sort((a, b) => b.size - a.size)
+    .map((item) => item.centroid)
+}
+
+/**
+ * 计算两个颜色之间的欧几里得距离
+ */
+function colorDistance(color1: Color, color2: Color): number {
+  return Math.sqrt(
+    Math.pow(color1.r - color2.r, 2) +
+      Math.pow(color1.g - color2.g, 2) +
+      Math.pow(color1.b - color2.b, 2)
+  )
+}
+
+/**
+ * 判断两个颜色是否相等
+ */
+function colorEquals(color1: Color, color2: Color): boolean {
+  return color1.r === color2.r && color1.g === color2.g && color1.b === color2.b
+}
+
+/**
+ * 计算一组颜色的中心点
+ */
+function calculateCentroid(colors: Color[]): Color {
+  if (colors.length === 0) return { r: 0, g: 0, b: 0 }
+
+  let sumR = 0,
+    sumG = 0,
+    sumB = 0
+  for (const color of colors) {
+    sumR += color.r
+    sumG += color.g
+    sumB += color.b
+  }
+
+  return {
+    r: Math.round(sumR / colors.length),
+    g: Math.round(sumG / colors.length),
+    b: Math.round(sumB / colors.length)
+  }
+}
+
+/**
+ * 获取一组颜色中饱和度最高的颜色
+ */
+function getMostSaturatedColor(colors: Color[]): Color {
+  let maxSaturation = -1
+  let mostSaturatedColor = colors[0]
+
+  for (const color of colors) {
+    const { s } = rgbToHsl(color.r, color.g, color.b)
+    if (s > maxSaturation) {
+      maxSaturation = s
+      mostSaturatedColor = color
+    }
+  }
+
+  return mostSaturatedColor
+}
+
+/**
+ * 增强颜色的饱和度和亮度
+ */
+function enhanceColor(color: Color): Color {
+  // 转换为HSL
+  const { h, s, l } = rgbToHsl(color.r, color.g, color.b)
+
+  // 增强饱和度，但保持在合理范围内
+  const enhancedS = Math.min(s * 1.2, 0.9)
+
+  // 调整亮度，使其不会太暗或太亮
+  const enhancedL = l < 0.3 ? Math.min(l * 1.5, 0.5) : l > 0.7 ? Math.max(l * 0.8, 0.5) : l
+
+  // 转回RGB
+  const rgb = hslToRgb(h, enhancedS, enhancedL)
+  return { r: rgb[0], g: rgb[1], b: rgb[2] }
 }
