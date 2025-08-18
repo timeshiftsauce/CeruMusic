@@ -1,5 +1,5 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin, bytecodePlugin } from 'electron-vite'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -10,20 +10,10 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 
 export default defineConfig({
   main: {
-    plugins: [
-      externalizeDepsPlugin({
-        exclude: ['@electron-toolkit/utils']
-      }),
-      bytecodePlugin()
-    ]
+    plugins: [externalizeDepsPlugin()]
   },
   preload: {
-    plugins: [
-      externalizeDepsPlugin({
-        exclude: ['@electron-toolkit/preload']
-      }),
-      bytecodePlugin()
-    ]
+    plugins: [externalizeDepsPlugin()]
   },
   renderer: {
     plugins: [
@@ -46,6 +36,7 @@ export default defineConfig({
         ]
       })
     ],
+    base: './',
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
@@ -54,29 +45,6 @@ export default defineConfig({
         '@services': resolve('src/renderer/src/services'),
         '@types': resolve('src/renderer/src/types'),
         '@store': resolve('src/renderer/src/store')
-      }
-    },
-    build: {
-      rollupOptions: {
-        external: [
-          'fs',
-          'path',
-          'os',
-          'http',
-          'https',
-          'url',
-          'net',
-          'tls',
-          'crypto',
-          'stream',
-          'util',
-          'child_process',
-          'assert',
-          'dns',
-          'querystring',
-          'async_hooks',
-          'zlib'
-        ]
       }
     }
   }
