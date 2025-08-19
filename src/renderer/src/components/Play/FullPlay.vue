@@ -16,7 +16,7 @@ import { Fullscreen1Icon, FullscreenExit1Icon, ChevronDownIcon } from 'tdesign-i
 // 导入歌词请求函数
 import musicService from '@renderer/services/music'
 // 直接从包路径导入，避免 WebAssembly 导入问题
-import { parseYrc, parseLrc } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
+import { parseYrc, parseLrc, parseTTML } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
 
 import { storeToRefs } from 'pinia'
 
@@ -85,28 +85,33 @@ watch(
   () => props.songId,
   async (newId) => {
     if (!newId) return
-
+    let lyricText = ''
+    let parsedLyrics: LyricLine[] = []
     try {
       // 请求歌词数据，设置yv=true获取逐字歌词
-      const lyricData = await musicService.request('getLyric', {
-        id: newId,
-        yv: true,
-        lv: true,
-        tv: true
-      })
-      console.log(lyricData)
-      // 优先使用逐字歌词(yrc)，如果没有则回退到普通歌词(lrc)
-      let lyricText = ''
-      let parsedLyrics: LyricLine[] = []
+      const res = await (await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)).text()
+      if (res) {
+        console.log('搜索到ttml歌词')
+        parsedLyrics = parseTTML(res).lines
+      } else {
+        const lyricData = await musicService.request('getLyric', {
+          id: newId,
+          yv: true,
+          lv: true,
+          tv: true
+        })
+        console.log(lyricData)
+        // 优先使用逐字歌词(yrc)，如果没有则回退到普通歌词(lrc)
 
-      if (lyricData.yrc?.lyric) {
-        console.log('使用逐字歌词')
-        lyricText = lyricData.yrc.lyric
-        parsedLyrics = parseYrc(lyricText)
-      } else if (lyricData.lrc?.lyric) {
-        console.log('使用普通歌词')
-        lyricText = lyricData.lrc.lyric
-        parsedLyrics = parseLrc(lyricText)
+        if (lyricData.yrc?.lyric) {
+          console.log('使用逐字歌词')
+          lyricText = lyricData.yrc.lyric
+          parsedLyrics = parseYrc(lyricText)
+        } else if (lyricData.lrc?.lyric) {
+          console.log('使用普通歌词')
+          lyricText = lyricData.lrc.lyric
+          parsedLyrics = parseLrc(lyricText)
+        }
       }
 
       if (parsedLyrics.length > 0) {
@@ -182,7 +187,7 @@ watch(
 watch(
   () => Audio.value.currentTime,
   (newTime) => {
-    state.currentTime = newTime * 1000
+    state.currentTime = Math.round(newTime * 1000)
   }
 )
 </script>
