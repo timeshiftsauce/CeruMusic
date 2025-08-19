@@ -2,6 +2,8 @@
 const vm = require('vm');
 const fetch = require('node-fetch');
 
+import { convertEventDrivenPlugin } from "./converter-event-driven"
+
 /**
  * CeruMusic 插件引擎
  * 负责加载和执行单个插件，并提供一个简洁的API。
@@ -15,7 +17,14 @@ class CeruMusicPluginHost {
     this.pluginCode = pluginCode;
     this.plugin = null; // 存储插件导出的对象
     if (pluginCode) {
+      this._checkConvertCode();
       this._initialize(logger);
+    }
+  }
+
+  _checkConvertCode() {
+    if (this.pluginCode.includes('globalThis.lx')) {
+      this.pluginCode = convertEventDrivenPlugin(this.pluginCode);
     }
   }
 
@@ -27,6 +36,7 @@ class CeruMusicPluginHost {
   async loadPlugin(pluginPath, logger=console) {
     const fs = require('fs');
     this.pluginCode = fs.readFileSync(pluginPath, 'utf-8');
+    this._checkConvertCode();
     this._initialize(logger);
     return this.plugin;
   }
@@ -167,6 +177,13 @@ class CeruMusicPluginHost {
    */
   getPluginInfo() {
     return this.plugin.pluginInfo;
+  }
+
+  /**
+   * 获取插件代码
+   */
+  getPluginCode() {
+    return this.pluginCode;
   }
 
   /**

@@ -1,4 +1,3 @@
-/* eslint-disable */
 import fs from 'fs'
 import path from 'path'
 import fsPromise from 'fs/promises'
@@ -24,7 +23,7 @@ const pluginService = {
     await fsPromise.mkdir(path.dirname(filePath), { recursive: true })
     await fsPromise.writeFile(
       path.join(getAppDirPath(), 'plugins', `${pluginId}-${pluginName}`),
-      pluginCode
+      ceruPluginManager.getPluginCode()
     )
 
     return {
