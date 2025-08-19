@@ -406,7 +406,7 @@ onBeforeUnmount(() => {
           <button class="close-btn" @click="closeAskWindow">×</button>
         </div>
         <div class="ask-content">
-          <div class="chat-messages" ref="messagesContainer">
+          <div ref="messagesContainer" class="chat-messages">
             <div
               v-for="(message, index) in messages"
               :key="index"
@@ -424,11 +424,11 @@ onBeforeUnmount(() => {
         <div class="input-area">
           <input
             v-model="inputText"
-            @keyup.enter="sendMessage"
             placeholder="请输入您的问题..."
             class="message-input"
+            @keyup.enter="sendMessage"
           />
-          <button @click="sendMessage" class="send-btn" :disabled="!inputText.trim() || isLoading">
+          <button class="send-btn" :disabled="!inputText.trim() || isLoading" @click="sendMessage">
             {{ isLoading ? '发送中...' : '发送' }}
           </button>
         </div>

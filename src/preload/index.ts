@@ -34,6 +34,7 @@ const api = {
       ipcRenderer.removeAllListeners('ai-stream-error')
     }
   },
+
   getUserConfig: () => ipcRenderer.invoke('get-user-config')
 }
 

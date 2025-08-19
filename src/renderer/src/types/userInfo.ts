@@ -8,4 +8,5 @@ export interface UserInfo {
   mainColor?: string
   playMode?: PlayMode
   deepseekAPIkey?: string
+  musicSource?: string
 }

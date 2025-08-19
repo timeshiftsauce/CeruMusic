@@ -121,7 +121,7 @@ let pendingRestoreSongId: number | null = null
 
 // 记录组件被停用前的播放状态
 let wasPlaying = false
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 // let playbackPosition = 0
 let isFull = false
 
@@ -174,7 +174,7 @@ const playSong = async (song: SongList) => {
         // 同时更新播放列表中对应歌曲的URL
         const playlistIndex = list.value.findIndex((item) => item.id === song.id)
         if (playlistIndex !== -1) {
-          list.value[playlistIndex].url = urlToPlay
+          ;(list.value[playlistIndex] as any).url = urlToPlay
         }
       } catch (error) {
         throw error
@@ -766,7 +766,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
             <!-- 音量滑块 -->
             <transition name="volume-popup">
-              <div class="volume-slider-container" v-show="showVolumeSlider" @click.stop>
+              <div v-show="showVolumeSlider" class="volume-slider-container" @click.stop>
                 <div class="volume-slider">
                   <div
                     ref="volumeBarRef"

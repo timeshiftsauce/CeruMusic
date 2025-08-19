@@ -41,6 +41,11 @@ const routes: RouteRecordRaw[] = [
     path: '/settings',
     name: 'settings',
     component: () => import('@renderer/views/settings/index.vue')
+  },
+  {
+    path: '/plugins',
+    name: 'plugins',
+    component: () => import('@renderer/views/settings/plugins.vue')
   }
 ]
 const option: RouterOptions = {
