@@ -18,7 +18,7 @@ stages:
       - step: build@nodejs
         name: build_nodejs
         displayName: Nodejs 构建
-        nodeVersion: 21.5.0
+        nodeVersion: 23.11.1
         commands:
           - npm install && rm -rf ./dist && npm run build:win
         artifacts:
