@@ -30,7 +30,8 @@ const localUserStore = LocalUserDetailStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { setCurrentTime, start, stop, setVolume, setUrl } = controlAudio
-
+const showFullPlay = ref(false)
+document.addEventListener('keydown', KeyEvent)
 // 处理最小化右键的事件
 window.api.onMusicCtrl(() => {
   togglePlayPause()
@@ -47,7 +48,7 @@ function throttle(callback: Function, delay: number) {
 
 function KeyEvent(e: KeyboardEvent) {
   throttle(() => {
-    if (e.code == 'Space') {
+    if (e.code == 'Space' && showFullPlay.value) {
       e.preventDefault()
       togglePlayPause()
     } else if (e.code == 'ArrowUp') {
@@ -70,8 +71,6 @@ function KeyEvent(e: KeyboardEvent) {
     }
   }, 100)
 }
-
-document.addEventListener('keydown', KeyEvent)
 
 // 等待音频准备就绪
 const waitForAudioReady = (): Promise<void> => {
@@ -530,7 +529,6 @@ watch(
   { immediate: true }
 )
 
-const showFullPlay = ref(false)
 // 全屏展示相关
 const toggleFullPlay = () => {
   showFullPlay.value = !showFullPlay.value
