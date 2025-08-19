@@ -95,7 +95,6 @@ ipcMain.handle('service-music-request', async (_, api, args) => {
 
 aiEvents(mainWindow)
 
-// 应用退出前的清理
 app.on('before-quit', () => {
   isQuittingState.value = true
 })
