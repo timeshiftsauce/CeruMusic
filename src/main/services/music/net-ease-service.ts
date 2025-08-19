@@ -2,7 +2,6 @@ import path from 'path'
 import fs from 'fs'
 import fsPromise from 'fs/promises'
 
-import { app } from 'electron'
 import NeteaseCloudMusicApi from 'NeteaseCloudMusicApi'
 import { axiosClient, MusicServiceBase } from './service-base'
 import { pipeline } from 'node:stream/promises'
@@ -21,6 +20,7 @@ import {
 import { SongDetailResponse, SongResponse } from './service-base'
 
 import { fieldsSelector } from '../../utils/object'
+import * as electron from 'electron'
 
 const baseUrl: string = 'https://music.163.com'
 const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
@@ -140,8 +140,13 @@ export const netEaseService: MusicServiceBase = {
   async downloadSingleSong({ id }: DownloadSingleSongArgs) {
     const songDownloadDetail = await this.getSongUrl({ id })
 
+    let basePath: string = electron.app.getAppPath()
+    if (basePath.endsWith('.asar')) {
+      basePath = path.join(path.dirname(basePath), '../')
+    }
+
     const songPath = path.join(
-      app.getAppPath(),
+      basePath,
       'download',
       'songs',
       `${songDownloadDetail.name}-${songDownloadDetail.artist}-${songDownloadDetail.id}.mp3`
