@@ -65,7 +65,7 @@
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.16.5",
     "@vitejs/plugin-vue": "^6.0.0",
-    "electron": "^37.2.3",
+    "electron": "^37.3.1",
     "electron-builder": "^25.1.8",
     "electron-icon-builder": "^2.0.1",
     "electron-vite": "^4.0.0",
