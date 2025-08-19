@@ -1,0 +1,47 @@
+version: '1.0'
+name: master-pipeline
+displayName: MasterPipeline
+triggers:
+  trigger: auto
+  push:
+    branches:
+      include:
+        - master
+stages:
+  - name: compile
+    displayName: 编译
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: build@nodejs
+        name: build_nodejs
+        displayName: Nodejs 构建
+        nodeVersion: 21.5.0
+        commands:
+          - npm install && rm -rf ./dist && npm run build:win
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./dist
+        strategy: {}
+      - step: publish@general_artifacts
+        name: publish_general_artifacts
+        displayName: 上传制品
+        dependArtifact: BUILD_ARTIFACT
+        artifactName: cerumusic
+        strategy: {}
+        dependsOn: build_nodejs
+  - name: release
+    displayName: 发布
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: publish@release_artifacts
+        name: publish_release_artifacts
+        displayName: 发布
+        dependArtifact: cerumusic
+        version: 1.0.0.0
+        autoIncrement: true
+        strategy: {}
+strategy:
+  blocking: true

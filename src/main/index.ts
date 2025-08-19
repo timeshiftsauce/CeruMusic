@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
 import musicService from './services/music'
+import pluginService from './services/plugin'
 import { AIService } from './services/ai-service'
 
 let tray: Tray | null = null
@@ -107,18 +108,31 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    shell.openExternal(details.url).then()
     return { action: 'deny' }
   })
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']).then()
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html')).then()
   }
 }
+
+ipcMain.handle('service-plugin-addPlugin', async (_, pluginCode, pluginName): Promise<any> => {
+  return await (pluginService as any).addPlugin(pluginCode, pluginName)
+})
+
+ipcMain.handle('service-plugin-getPluginById', async (_, id): Promise<any> => {
+  return await (pluginService as any).getPluginById(id)
+})
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ipcMain.handle('service-plugin-loadAllPlugins', async (_): Promise<any> => {
+  return await (pluginService as any).getPluginById()
+})
 
 ipcMain.handle('service-music-request', async (_, api, args) => {
   return await musicService.request(api, args)

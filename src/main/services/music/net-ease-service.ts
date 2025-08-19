@@ -20,7 +20,7 @@ import {
 import { SongDetailResponse, SongResponse } from './service-base'
 
 import { fieldsSelector } from '../../utils/object'
-import * as electron from 'electron'
+import { getAppDirPath } from '../../utils/path'
 
 const baseUrl: string = 'https://music.163.com'
 const baseTwoUrl: string = 'https://www.lihouse.xyz/coco_widget'
@@ -140,13 +140,8 @@ export const netEaseService: MusicServiceBase = {
   async downloadSingleSong({ id }: DownloadSingleSongArgs) {
     const songDownloadDetail = await this.getSongUrl({ id })
 
-    let basePath: string = electron.app.getAppPath()
-    if (basePath.endsWith('.asar')) {
-      basePath = path.join(path.dirname(basePath), '../')
-    }
-
     const songPath = path.join(
-      basePath,
+      getAppDirPath(),
       'download',
       'songs',
       `${songDownloadDetail.name}-${songDownloadDetail.artist}-${songDownloadDetail.id}.mp3`
