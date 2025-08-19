@@ -9,6 +9,4 @@ function getAppDirPath() {
   return dirPath
 }
 
-export {
-  getAppDirPath
-}
+export { getAppDirPath }

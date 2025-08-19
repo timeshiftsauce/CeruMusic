@@ -4,10 +4,22 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Custom APIs for renderer
 const api = {
   // 窗口控制方法
-  minimize: () => ipcRenderer.send('window-minimize'),
-  maximize: () => ipcRenderer.send('window-maximize'),
-  close: () => ipcRenderer.send('window-close'),
-  setMiniMode: (isMini: boolean) => ipcRenderer.send('window-mini-mode', isMini),
+  minimize: () => {
+    console.log('preload: 发送 window-minimize 事件')
+    ipcRenderer.send('window-minimize')
+  },
+  maximize: () => {
+    console.log('preload: 发送 window-maximize 事件')
+    ipcRenderer.send('window-maximize')
+  },
+  close: () => {
+    console.log('preload: 发送 window-close 事件')
+    ipcRenderer.send('window-close')
+  },
+  setMiniMode: (isMini: boolean) => {
+    console.log('preload: 发送 window-mini-mode 事件，isMini:', isMini)
+    ipcRenderer.send('window-mini-mode', isMini)
+  },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
   onMusicCtrl: (callback) => ipcRenderer.on('music-control', callback),
 

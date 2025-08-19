@@ -23,7 +23,7 @@ npm install node-fetch
 ### 基本使用
 
 ```javascript
-const CeruMusicPluginHost = require('./CeruMusicPluginHost');
+const CeruMusicPluginHost = require('./CeruMusicPluginHost')
 
 // 方式1: 从代码字符串创建
 const pluginCode = `
@@ -48,26 +48,26 @@ async function musicUrl(source, musicInfo, quality) {
 }
 
 module.exports = { pluginInfo, sources, musicUrl };
-`;
+`
 
-const host = new CeruMusicPluginHost(pluginCode);
+const host = new CeruMusicPluginHost(pluginCode)
 
 // 方式2: 从文件加载
-const host2 = new CeruMusicPluginHost();
-await host2.loadPlugin('./my-plugin.js');
+const host2 = new CeruMusicPluginHost()
+await host2.loadPlugin('./my-plugin.js')
 ```
 
 ### 获取插件信息
 
 ```javascript
 // 获取插件基本信息
-const info = host.getPluginInfo();
-console.log(info);
+const info = host.getPluginInfo()
+console.log(info)
 // 输出: { name: "示例插件", version: "1.0.0", ... }
 
 // 获取支持的音源
-const sources = host.getSupportedSources();
-console.log(sources);
+const sources = host.getSupportedSources()
+console.log(sources)
 // 输出: { demo: { name: "示例音源", type: "music", ... } }
 ```
 
@@ -77,31 +77,31 @@ console.log(sources);
 // 获取音乐URL
 try {
   const musicInfo = {
-    songmid: "123456",
-    hash: "abcdef",
-    title: "歌曲名"
-  };
-  
-  const url = await host.getMusicUrl("demo", musicInfo, "320k");
-  console.log("音乐URL:", url);
+    songmid: '123456',
+    hash: 'abcdef',
+    title: '歌曲名'
+  }
+
+  const url = await host.getMusicUrl('demo', musicInfo, '320k')
+  console.log('音乐URL:', url)
 } catch (error) {
-  console.error("获取失败:", error.message);
+  console.error('获取失败:', error.message)
 }
 
 // 获取歌曲封面（如果插件支持）
 try {
-  const picUrl = await host.getPic("demo", musicInfo);
-  console.log("封面URL:", picUrl);
+  const picUrl = await host.getPic('demo', musicInfo)
+  console.log('封面URL:', picUrl)
 } catch (error) {
-  console.error("获取封面失败:", error.message);
+  console.error('获取封面失败:', error.message)
 }
 
 // 获取歌词（如果插件支持）
 try {
-  const lyric = await host.getLyric("demo", musicInfo);
-  console.log("歌词:", lyric);
+  const lyric = await host.getLyric('demo', musicInfo)
+  console.log('歌词:', lyric)
 } catch (error) {
-  console.error("获取歌词失败:", error.message);
+  console.error('获取歌词失败:', error.message)
 }
 ```
 
@@ -114,6 +114,7 @@ new CeruMusicPluginHost(pluginCode?)
 ```
 
 **参数:**
+
 - `pluginCode` (string, 可选): 插件的 JavaScript 代码字符串
 
 ### 方法
@@ -123,6 +124,7 @@ new CeruMusicPluginHost(pluginCode?)
 从文件加载插件。
 
 **参数:**
+
 - `pluginPath` (string): 插件文件路径
 
 **返回:** Promise<Object> - 插件导出的对象
@@ -144,6 +146,7 @@ new CeruMusicPluginHost(pluginCode?)
 获取音乐播放链接。
 
 **参数:**
+
 - `source` (string): 音源标识
 - `musicInfo` (Object): 歌曲信息对象
 - `quality` (string): 音质标识
@@ -155,6 +158,7 @@ new CeruMusicPluginHost(pluginCode?)
 获取歌曲封面链接。
 
 **参数:**
+
 - `source` (string): 音源标识
 - `musicInfo` (Object): 歌曲信息对象
 
@@ -165,6 +169,7 @@ new CeruMusicPluginHost(pluginCode?)
 获取歌曲歌词。
 
 **参数:**
+
 - `source` (string): 音源标识
 - `musicInfo` (Object): 歌曲信息对象
 
@@ -178,19 +183,19 @@ new CeruMusicPluginHost(pluginCode?)
 
 ```javascript
 // CeruMusic API
-cerumusic.env          // 运行环境标识
-cerumusic.version      // 版本号
-cerumusic.request      // HTTP 请求函数
-cerumusic.utils        // 工具函数集合
+cerumusic.env // 运行环境标识
+cerumusic.version // 版本号
+cerumusic.request // HTTP 请求函数
+cerumusic.utils // 工具函数集合
 
 // 标准 JavaScript 对象
-console                // 控制台输出
-setTimeout             // 定时器
+console // 控制台输出
+setTimeout // 定时器
 clearTimeout
 setInterval
 clearInterval
-Buffer                 // Node.js Buffer
-JSON                   // JSON 处理
+Buffer // Node.js Buffer
+JSON // JSON 处理
 ```
 
 ### HTTP 请求
@@ -201,16 +206,16 @@ JSON                   // JSON 处理
 // 支持 callback 模式
 cerumusic.request(url, options, (error, response) => {
   if (error) {
-    console.error('请求失败:', error);
-    return;
+    console.error('请求失败:', error)
+    return
   }
-  
-  console.log('响应状态:', response.statusCode);
-  console.log('响应内容:', response.body);
-});
+
+  console.log('响应状态:', response.statusCode)
+  console.log('响应内容:', response.body)
+})
 
 // 也支持 Promise 模式
-const response = await cerumusic.request(url, options);
+const response = await cerumusic.request(url, options)
 ```
 
 ## 错误处理
@@ -218,20 +223,22 @@ const response = await cerumusic.request(url, options);
 ### 常见错误类型
 
 1. **插件加载错误**
+
    ```javascript
    try {
-     const host = new CeruMusicPluginHost(invalidCode);
+     const host = new CeruMusicPluginHost(invalidCode)
    } catch (error) {
-     console.error('插件加载失败:', error.message);
+     console.error('插件加载失败:', error.message)
    }
    ```
 
 2. **方法调用错误**
+
    ```javascript
    try {
-     const url = await host.getMusicUrl("invalid_source", {}, "320k");
+     const url = await host.getMusicUrl('invalid_source', {}, '320k')
    } catch (error) {
-     console.error('方法调用失败:', error.message);
+     console.error('方法调用失败:', error.message)
    }
    ```
 
@@ -249,6 +256,7 @@ const response = await cerumusic.request(url, options);
 ## 示例项目
 
 查看项目中的示例文件：
+
 - `example-plugin.js` - 标准插件示例
 - `test-converted-plugin.js` - 插件测试示例
 

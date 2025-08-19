@@ -1,20 +1,20 @@
-const fs = require('fs');
+const fs = require('fs')
 
 function convertEventDrivenPlugin(inputFile) {
-    console.log('检测到事件驱动插件，使用事件包装器转换...');
-    
-    const originalCode = fs.readFileSync(inputFile, 'utf-8');
-    
-    // 提取插件信息
-    const nameMatch = originalCode.match(/@name\s+(.+)/);
-    const versionMatch = originalCode.match(/@version\s+(.+)/);
-    const descMatch = originalCode.match(/@description\s+(.+)/);
-    
-    const pluginName = nameMatch ? nameMatch[1].trim() : "未知插件";
-    const pluginVersion = versionMatch ? versionMatch[1].trim() : "1.0.0";
-    const pluginDesc = descMatch ? descMatch[1].trim() : "从事件驱动插件转换而来";
-    
-    return `/**
+  console.log('检测到事件驱动插件，使用事件包装器转换...')
+
+  const originalCode = fs.readFileSync(inputFile, 'utf-8')
+
+  // 提取插件信息
+  const nameMatch = originalCode.match(/@name\s+(.+)/)
+  const versionMatch = originalCode.match(/@version\s+(.+)/)
+  const descMatch = originalCode.match(/@description\s+(.+)/)
+
+  const pluginName = nameMatch ? nameMatch[1].trim() : '未知插件'
+  const pluginVersion = versionMatch ? versionMatch[1].trim() : '1.0.0'
+  const pluginDesc = descMatch ? descMatch[1].trim() : '从事件驱动插件转换而来'
+
+  return `/**
  * 由 CeruMusic 插件转换器转换 - @author sqj
  * @name ${pluginName}
  * @version ${pluginVersion}
@@ -49,16 +49,16 @@ function initializePlugin() {
       updateAlert: 'updateAlert'
     },
     on: (event, handler) => {
-      console.log(\`[${ pluginName + ' by Ceru插件'  || 'ceru插件' }] 注册事件监听器: \${event}\`);
+      console.log(\`[${pluginName + ' by Ceru插件' || 'ceru插件'}] 注册事件监听器: \${event}\`);
       if (event === 'request') {
         requestHandler = handler;
       }
     },
     send: (event, data) => {
-      console.log(\`[${ pluginName + ' by Ceru插件'  || 'ceru插件' }] 发送事件: \${event}\`, data);
+      console.log(\`[${pluginName + ' by Ceru插件' || 'ceru插件'}] 发送事件: \${event}\`, data);
       if (event === 'inited' && data.sources) {
         pluginSources = data.sources;
-        console.log('[${ pluginName + ' by Ceru插件'  || 'ceru插件' }] 音源注册完成:', Object.keys(pluginSources));
+        console.log('[${pluginName + ' by Ceru插件' || 'ceru插件'}] 音源注册完成:', Object.keys(pluginSources));
       }
     },
     request: request,
@@ -233,31 +233,31 @@ module.exports = {
   pluginInfo,
   sources,
   musicUrl
-};`;
+};`
 }
 
 // 主函数
 function main() {
-    const inputFile = process.argv[2];
-    const outputFile = process.argv[3] || 'event-driven-plugin.js';
+  const inputFile = process.argv[2]
+  const outputFile = process.argv[3] || 'event-driven-plugin.js'
 
-    if (!inputFile) {
-        console.error('使用方法: node converter-event-driven.js <输入文件> [输出文件]');
-        process.exit(1);
-    }
+  if (!inputFile) {
+    console.error('使用方法: node converter-event-driven.js <输入文件> [输出文件]')
+    process.exit(1)
+  }
 
-    try {
-        const result = convertEventDrivenPlugin(inputFile);
-        fs.writeFileSync(outputFile, result);
-        
-        console.log('\\n🎉 事件驱动插件转换成功!');
-        console.log(`   新插件已保存至: ${outputFile}`);
-    } catch (error) {
-        console.error('❌ 转换失败:', error.message);
-        process.exit(1);
-    }
+  try {
+    const result = convertEventDrivenPlugin(inputFile)
+    fs.writeFileSync(outputFile, result)
+
+    console.log('\\n🎉 事件驱动插件转换成功!')
+    console.log(`   新插件已保存至: ${outputFile}`)
+  } catch (error) {
+    console.error('❌ 转换失败:', error.message)
+    process.exit(1)
+  }
 }
 
 if (require.main === module) {
-    main();
+  main()
 }

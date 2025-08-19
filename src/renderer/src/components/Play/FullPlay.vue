@@ -20,7 +20,6 @@ import { parseYrc, parseLrc, parseTTML } from '@applemusic-like-lyrics/lyric/pkg
 
 import { storeToRefs } from 'pinia'
 
-
 interface Props {
   show?: boolean
   coverImage?: string
@@ -120,7 +119,7 @@ watch(
           const translatedline = parseLrc(lyricData.tlyric.lyric)
           console.log(translatedline)
           for (let i = 0; i < parsedLyrics.length; i++) {
-             parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
+            parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
           }
           console.log('使用翻译歌词', translatedline)
         }
@@ -274,7 +273,7 @@ watch(
       <div v-show="state.lyricLines.length > 0" class="right">
         <LyricPlayer
           ref="lyricPlayerRef"
-          :lyric-lines="props.show? state.lyricLines : []"
+          :lyric-lines="props.show ? state.lyricLines : []"
           :current-time="state.currentTime"
           :align-position="0.38"
           style="mix-blend-mode: plus-lighter"

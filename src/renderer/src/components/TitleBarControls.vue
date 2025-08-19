@@ -52,7 +52,13 @@ const handleClose = (): void => {
 
 const handleMiniMode = (): void => {
   // 直接最小化到系统托盘
-  window.api?.setMiniMode(true)
+  console.log('TitleBarControls: 点击了最小化到系统托盘按钮')
+  if (window.api) {
+    console.log('TitleBarControls: window.api 存在，调用 setMiniMode(true)')
+    window.api.setMiniMode(true)
+  } else {
+    console.error('TitleBarControls: window.api 不存在！')
+  }
   console.log('最小化到系统托盘')
 }
 

@@ -12,10 +12,10 @@
 
 ```javascript
 module.exports = {
-  pluginInfo,    // 插件信息
-  sources,       // 支持的音源
-  musicUrl       // 获取音乐链接的函数
-};
+  pluginInfo, // 插件信息
+  sources, // 支持的音源
+  musicUrl // 获取音乐链接的函数
+}
 ```
 
 # 完整示例
@@ -32,70 +32,70 @@ const pluginInfo = {
   name: '示例音源插件',
   version: '1.0.0',
   author: '开发者名称',
-  description: '这是一个示例音乐源插件',
-};
+  description: '这是一个示例音乐源插件'
+}
 
 // 2. 支持的音源配置
 const sources = {
   demo: {
     name: '示例音源',
     type: 'music',
-    qualitys: ['128k', '320k', 'flac'],
+    qualitys: ['128k', '320k', 'flac']
   },
   demo2: {
     name: '示例音源2',
-    type: 'music', 
-    qualitys: ['128k', '320k'],
+    type: 'music',
+    qualitys: ['128k', '320k']
   }
-};
+}
 
 // 3. 获取音乐URL的核心函数
 async function musicUrl(source, musicInfo, quality) {
   // 从 cerumusic 对象获取 API
-  const { request, env, version } = cerumusic;
-  
+  const { request, env, version } = cerumusic
+
   // 构建请求参数
-  const songId = musicInfo.hash ?? musicInfo.songmid;
-  const apiUrl = `https://api.example.com/music/${source}/${songId}/${quality}`;
-  
-  console.log(`[${pluginInfo.name}] 请求音乐链接: ${apiUrl}`);
-  
+  const songId = musicInfo.hash ?? musicInfo.songmid
+  const apiUrl = `https://api.example.com/music/${source}/${songId}/${quality}`
+
+  console.log(`[${pluginInfo.name}] 请求音乐链接: ${apiUrl}`)
+
   // 发起网络请求
   const { body, statusCode } = await request(apiUrl, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      'User-Agent': `cerumusic-${env}/${version}`,
-    },
-  });
-  
+      'User-Agent': `cerumusic-${env}/${version}`
+    }
+  })
+
   // 处理响应
   if (statusCode !== 200 || body.code !== 200) {
-    const errorMessage = body.msg || `接口错误 (HTTP: ${statusCode})`;
-    console.error(`[${pluginInfo.name}] Error: ${errorMessage}`);
-    throw new Error(errorMessage);
+    const errorMessage = body.msg || `接口错误 (HTTP: ${statusCode})`
+    console.error(`[${pluginInfo.name}] Error: ${errorMessage}`)
+    throw new Error(errorMessage)
   }
-  
-  console.log(`[${pluginInfo.name}] 获取成功: ${body.url}`);
-  return body.url;
+
+  console.log(`[${pluginInfo.name}] 获取成功: ${body.url}`)
+  return body.url
 }
 
 // 4. 可选：获取封面图片
 async function getPic(source, musicInfo) {
-  const { request } = cerumusic;
-  const songId = musicInfo.hash ?? musicInfo.songmid;
-  
-  const { body } = await request(`https://api.example.com/pic/${source}/${songId}`);
-  return body.picUrl;
+  const { request } = cerumusic
+  const songId = musicInfo.hash ?? musicInfo.songmid
+
+  const { body } = await request(`https://api.example.com/pic/${source}/${songId}`)
+  return body.picUrl
 }
 
 // 5. 可选：获取歌词
 async function getLyric(source, musicInfo) {
-  const { request } = cerumusic;
-  const songId = musicInfo.hash ?? musicInfo.songmid;
-  
-  const { body } = await request(`https://api.example.com/lyric/${source}/${songId}`);
-  return body.lyric;
+  const { request } = cerumusic
+  const songId = musicInfo.hash ?? musicInfo.songmid
+
+  const { body } = await request(`https://api.example.com/lyric/${source}/${songId}`)
+  return body.lyric
 }
 
 // 导出插件
@@ -103,9 +103,9 @@ module.exports = {
   pluginInfo,
   sources,
   musicUrl,
-  getPic,    // 可选
-  getLyric,  // 可选
-};
+  getPic, // 可选
+  getLyric // 可选
+}
 ```
 
 ## 详细说明
@@ -116,11 +116,11 @@ module.exports = {
 
 ```javascript
 const pluginInfo = {
-  name: '插件名称',           // 必需：插件显示名称
-  version: '1.0.0',          // 必需：版本号
-  author: '作者名',          // 必需：作者信息
-  description: '插件描述',    // 必需：功能描述
-};
+  name: '插件名称', // 必需：插件显示名称
+  version: '1.0.0', // 必需：版本号
+  author: '作者名', // 必需：作者信息
+  description: '插件描述' // 必需：功能描述
+}
 ```
 
 ### 2. sources 对象
@@ -130,18 +130,19 @@ const pluginInfo = {
 ```javascript
 const sources = {
   // 音源标识（用于API调用）
-  'source_id': {
-    name: '音源显示名称',      // 必需：用户看到的名称
-    type: 'music',           // 必需：固定为 'music'
-    qualitys: [              // 必需：支持的音质列表
-      '128k',                // 标准音质
-      '320k',                // 高音质
-      'flac',                // 无损音质
-      'flac24bit',           // 24位无损
-      'hires'                // 高解析度
-    ],
+  source_id: {
+    name: '音源显示名称', // 必需：用户看到的名称
+    type: 'music', // 必需：固定为 'music'
+    qualitys: [
+      // 必需：支持的音质列表
+      '128k', // 标准音质
+      '320k', // 高音质
+      'flac', // 无损音质
+      'flac24bit', // 24位无损
+      'hires' // 高解析度
+    ]
   }
-};
+}
 ```
 
 ### 3. musicUrl 函数
@@ -153,7 +154,6 @@ async function musicUrl(source, musicInfo, quality) {
   // source: 音源标识（sources 对象的键）
   // musicInfo: 歌曲信息对象
   // quality: 请求的音质
-  
   // 返回: Promise<string> - 音乐播放链接
 }
 ```
@@ -162,13 +162,13 @@ async function musicUrl(source, musicInfo, quality) {
 
 ```javascript
 const musicInfo = {
-  songmid: '歌曲ID',         // 歌曲标识符
-  hash: '歌曲哈希',          // 备用标识符
-  title: '歌曲标题',         // 歌曲名称
-  artist: '艺术家',          // 演唱者
-  album: '专辑名',           // 专辑信息
+  songmid: '歌曲ID', // 歌曲标识符
+  hash: '歌曲哈希', // 备用标识符
+  title: '歌曲标题', // 歌曲名称
+  artist: '艺术家', // 演唱者
+  album: '专辑名' // 专辑信息
   // ... 其他可能的字段
-};
+}
 ```
 
 ## 可用 API
@@ -178,7 +178,7 @@ const musicInfo = {
 插件运行时可以访问 `cerumusic` 全局对象：
 
 ```javascript
-const { request, env, version, utils } = cerumusic;
+const { request, env, version, utils } = cerumusic
 ```
 
 #### request 函数
@@ -187,19 +187,20 @@ const { request, env, version, utils } = cerumusic;
 
 ```javascript
 // Promise 模式
-const response = await request(url, options);
+const response = await request(url, options)
 
-// Callback 模式  
+// Callback 模式
 request(url, options, (error, response) => {
   if (error) {
-    console.error('请求失败:', error);
-    return;
+    console.error('请求失败:', error)
+    return
   }
-  console.log('响应:', response);
-});
+  console.log('响应:', response)
+})
 ```
 
 **参数说明:**
+
 - `url` (string): 请求地址
 - `options` (Object): 请求选项
   - `method`: HTTP 方法 ('GET', 'POST', 等)
@@ -207,6 +208,7 @@ request(url, options, (error, response) => {
   - `body`: 请求体（POST 请求时）
 
 **响应格式:**
+
 ```javascript
 {
   body: {},              // 解析后的响应体
@@ -220,11 +222,11 @@ request(url, options, (error, response) => {
 提供实用工具函数：
 
 ```javascript
-const { utils } = cerumusic;
+const { utils } = cerumusic
 
 // Buffer 操作
-const buffer = utils.buffer.from('hello', 'utf8');
-const string = utils.buffer.bufToString(buffer, 'utf8');
+const buffer = utils.buffer.from('hello', 'utf8')
+const string = utils.buffer.bufToString(buffer, 'utf8')
 ```
 
 ## 错误处理
@@ -232,26 +234,28 @@ const string = utils.buffer.bufToString(buffer, 'utf8');
 ### 最佳实践
 
 1. **总是检查 API 响应状态**
+
    ```javascript
    if (statusCode !== 200 || body.code !== 200) {
-     throw new Error(`请求失败: ${body.msg || '未知错误'}`);
+     throw new Error(`请求失败: ${body.msg || '未知错误'}`)
    }
    ```
 
 2. **提供有意义的错误信息**
+
    ```javascript
-   console.error(`[${pluginInfo.name}] Error: ${errorMessage}`);
-   throw new Error(errorMessage);
+   console.error(`[${pluginInfo.name}] Error: ${errorMessage}`)
+   throw new Error(errorMessage)
    ```
 
 3. **处理网络异常**
    ```javascript
    try {
-     const response = await request(url, options);
+     const response = await request(url, options)
      // 处理响应
    } catch (error) {
-     console.error(`[${pluginInfo.name}] 网络请求失败:`, error.message);
-     throw new Error(`网络错误: ${error.message}`);
+     console.error(`[${pluginInfo.name}] 网络请求失败:`, error.message)
+     throw new Error(`网络错误: ${error.message}`)
    }
    ```
 
@@ -279,17 +283,17 @@ node converter-event-driven.js input-plugin.js output-plugin.js
 ### 1. 使用 console.log
 
 ```javascript
-console.log(`[${pluginInfo.name}] 调试信息:`, data);
-console.error(`[${pluginInfo.name}] 错误:`, error);
+console.log(`[${pluginInfo.name}] 调试信息:`, data)
+console.error(`[${pluginInfo.name}] 错误:`, error)
 ```
 
 ### 2. 检查请求和响应
 
 ```javascript
-console.log('请求URL:', url);
-console.log('请求选项:', options);
-console.log('响应状态:', statusCode);
-console.log('响应内容:', body);
+console.log('请求URL:', url)
+console.log('请求选项:', options)
+console.log('响应状态:', statusCode)
+console.log('响应内容:', body)
 ```
 
 ### 3. 测试插件
@@ -297,26 +301,26 @@ console.log('响应内容:', body);
 创建测试文件：
 
 ```javascript
-const CeruMusicPluginHost = require('./CeruMusicPluginHost');
+const CeruMusicPluginHost = require('./CeruMusicPluginHost')
 
 async function testPlugin() {
-  const host = new CeruMusicPluginHost();
-  await host.loadPlugin('./my-plugin.js');
-  
+  const host = new CeruMusicPluginHost()
+  await host.loadPlugin('./my-plugin.js')
+
   const musicInfo = {
     songmid: 'test123',
     title: '测试歌曲'
-  };
-  
+  }
+
   try {
-    const url = await host.getMusicUrl('demo', musicInfo, '320k');
-    console.log('成功获取URL:', url);
+    const url = await host.getMusicUrl('demo', musicInfo, '320k')
+    console.log('成功获取URL:', url)
   } catch (error) {
-    console.error('测试失败:', error.message);
+    console.error('测试失败:', error.message)
   }
 }
 
-testPlugin();
+testPlugin()
 ```
 
 ## 发布和分发
@@ -334,6 +338,7 @@ my-plugin/
 ### 版本管理
 
 遵循语义化版本规范：
+
 - `1.0.0` - 主版本.次版本.修订版本
 - 主版本：不兼容的 API 修改
 - 次版本：向下兼容的功能性新增
@@ -342,6 +347,7 @@ my-plugin/
 ## 示例插件
 
 查看项目中的示例：
+
 - `example-plugin.js` - 基础插件示例
 - `plugin.js` - 事件驱动插件示例
 - `fm.js` - 复杂插件示例
