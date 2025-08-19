@@ -1,6 +1,8 @@
 /* eslint-disable */
-const vm = require('vm')
-const fetch = require('node-fetch')
+const vm = require('vm');
+const fetch = require('node-fetch');
+
+import { convertEventDrivenPlugin } from "./converter-event-driven"
 
 /**
  * CeruMusic 插件引擎
@@ -15,7 +17,14 @@ class CeruMusicPluginHost {
     this.pluginCode = pluginCode
     this.plugin = null // 存储插件导出的对象
     if (pluginCode) {
-      this._initialize(logger)
+      this._checkConvertCode();
+      this._initialize(logger);
+    }
+  }
+
+  _checkConvertCode() {
+    if (this.pluginCode.includes('globalThis.lx')) {
+      this.pluginCode = convertEventDrivenPlugin(this.pluginCode);
     }
   }
 
@@ -24,11 +33,12 @@ class CeruMusicPluginHost {
    * @param {string} pluginPath 插件文件路径
    * @param {any} logger
    */
-  async loadPlugin(pluginPath, logger = console) {
-    const fs = require('fs')
-    this.pluginCode = fs.readFileSync(pluginPath, 'utf-8')
-    this._initialize(logger)
-    return this.plugin
+  async loadPlugin(pluginPath, logger=console) {
+    const fs = require('fs');
+    this.pluginCode = fs.readFileSync(pluginPath, 'utf-8');
+    this._checkConvertCode();
+    this._initialize(logger);
+    return this.plugin;
   }
 
   /**
@@ -165,7 +175,14 @@ class CeruMusicPluginHost {
    * 获取插件信息
    */
   getPluginInfo() {
-    return this.plugin.pluginInfo
+    return this.plugin.pluginInfo;
+  }
+
+  /**
+   * 获取插件代码
+   */
+  getPluginCode() {
+    return this.pluginCode;
   }
 
   /**
