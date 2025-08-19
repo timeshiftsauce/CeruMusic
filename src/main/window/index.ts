@@ -3,9 +3,9 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import path from 'node:path'
 // 使用传入的 tray 对象
 export default function useWindow(
-  createWindow,
-  ipcMain,
-  app,
+  createWindow: { (): void; (): void },
+  ipcMain: Electron.IpcMain,
+  app: Electron.App,
   mainWindow: BrowserWindow | null,
   isQuitting: { value: boolean },
   trayObj: { value: Tray | null }
@@ -173,6 +173,4 @@ export default function useWindow(
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   })
-  // 不需要返回 tray，因为我们已经通过引用修改了外部传入的 trayObj
-  return {}
 }
