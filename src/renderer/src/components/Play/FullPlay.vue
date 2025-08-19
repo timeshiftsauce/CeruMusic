@@ -20,6 +20,7 @@ import { parseYrc, parseLrc, parseTTML } from '@applemusic-like-lyrics/lyric/pkg
 
 import { storeToRefs } from 'pinia'
 
+
 interface Props {
   show?: boolean
   coverImage?: string
@@ -89,11 +90,14 @@ watch(
     let parsedLyrics: LyricLine[] = []
     try {
       // 请求歌词数据，设置yv=true获取逐字歌词
-      const res = await (await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)).text()
-      if (res) {
-        console.log('搜索到ttml歌词')
+      try {
+        const res = (await (
+          await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)
+        ).text()) as any
+        if (!res || res.length < 100) throw new Error('ttml 无歌词')
         parsedLyrics = parseTTML(res).lines
-      } else {
+        console.log('搜索到ttml歌词', parsedLyrics)
+      } catch {
         const lyricData = await musicService.request('getLyric', {
           id: newId,
           yv: true,
@@ -104,13 +108,21 @@ watch(
         // 优先使用逐字歌词(yrc)，如果没有则回退到普通歌词(lrc)
 
         if (lyricData.yrc?.lyric) {
-          console.log('使用逐字歌词')
           lyricText = lyricData.yrc.lyric
           parsedLyrics = parseYrc(lyricText)
+          console.log('使用逐字歌词', parsedLyrics)
         } else if (lyricData.lrc?.lyric) {
-          console.log('使用普通歌词')
           lyricText = lyricData.lrc.lyric
           parsedLyrics = parseLrc(lyricText)
+          console.log('使用普通歌词', parsedLyrics)
+        }
+        if (lyricData.tlyric && lyricData.tlyric.lyric) {
+          const translatedline = parseLrc(lyricData.tlyric.lyric)
+          console.log(translatedline)
+          for (let i = 0; i < parsedLyrics.length; i++) {
+             parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
+          }
+          console.log('使用翻译歌词', translatedline)
         }
       }
 
@@ -199,10 +211,10 @@ watch(
       ref="bgRef"
       :album="actualCoverImage"
       :album-is-video="false"
-      :fps="60"
+      :fps="30"
       :flow-speed="4"
-      :has-lyric="true"
       :low-freq-volume="1"
+      :has-lyric="state.lyricLines.length > 10"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
     />
     <!-- 全屏按钮 -->
@@ -235,20 +247,34 @@ watch(
         <h1>当前播放</h1>
         <p>这里将显示歌曲信息</p>
       </div> -->
-      <div class="left">
-        <div class="box" :style="!Audio.isPlay && 'animation-play-state: paused;'">
+      <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
+        <div
+          class="box"
+          :style="
+            !Audio.isPlay
+              ? 'animation-play-state: paused;'
+              : '' +
+                (state.lyricLines.length <= 0
+                  ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
+                  : '')
+          "
+        >
           <t-image
             :src="coverImage"
-            :style="{ width: 'min(20vw,380px)', height: 'min(20vw,380px)' }"
+            :style="
+              state.lyricLines.length > 0
+                ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
+                : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
+            "
             shape="circle"
             class="cover"
           />
         </div>
       </div>
-      <div class="right">
+      <div v-show="state.lyricLines.length > 0" class="right">
         <LyricPlayer
           ref="lyricPlayerRef"
-          :lyric-lines="state.lyricLines"
+          :lyric-lines="props.show? state.lyricLines : []"
           :current-time="state.currentTime"
           :align-position="0.38"
           style="mix-blend-mode: plus-lighter"
@@ -365,14 +391,17 @@ watch(
     display: flex;
     position: relative;
     :deep(.lyric-player) {
-      --amll-lyric-player-font-size: max(2.2vw, 38px);
+      --amll-lyric-player-font-size: max(2vw, 38px);
       box-sizing: border-box;
       width: 100%;
       height: 100%;
     }
-    .left,
+    .left {
+      width: 40%;
+      transition: all 0.3s ease;
+    }
     .right {
-      width: 50%;
+      width: 60%;
     }
     .left {
       display: flex;

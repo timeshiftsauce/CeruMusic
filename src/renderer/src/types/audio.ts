@@ -51,5 +51,5 @@ export type SongList = {
   artist: string[]
   duration: number
   artistName: string
-  url?: string // 音频URL
+  musicSource: string
 }

@@ -31,8 +31,6 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     )
 
     if (urlData && urlData.url) {
-      // 更新歌曲对象的URL
-      song.url = urlData.url
       return urlData.url
     } else {
       throw new Error('无法获取歌曲播放链接')
@@ -175,6 +173,6 @@ export function convertSearchResultToSongList(searchResult: any): SongList {
       (searchResult.detail?.album?.blurPicUrl || searchResult.detail?.album?.picUrl) +
       '?param=300y300',
     duration: searchResult.duration,
-    url: '' // 需要后续获取
+    musicSource: 'default' //这里先写死到时候根据用户的源切换
   }
 }

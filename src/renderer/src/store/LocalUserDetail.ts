@@ -50,7 +50,6 @@ export const LocalUserDetailStore = defineStore('Local', () => {
     watch(
       userInfo,
       (newVal) => {
-        console.log(newVal, 'watch')
         localStorage.setItem('userInfo', JSON.stringify(newVal))
       },
       {

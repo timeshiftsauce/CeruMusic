@@ -47,6 +47,11 @@ const clearAPIKey = (): void => {
   isEditingAPIKey.value = false
   console.log('DeepSeek API Key 已清空')
 }
+import { useRouter } from 'vue-router'
+const router = useRouter()
+const goPlugin = () => {
+  router.push('/plugins')
+}
 </script>
 
 <template>
@@ -179,6 +184,17 @@ const clearAPIKey = (): void => {
           <h3>播放列表管理</h3>
           <PlaylistSettings />
           <!-- <PlaylistActions></PlaylistActions> -->
+        </div>
+
+        <!-- 插件管理部分 -->
+        <div class="demo-section">
+          <h3>插件管理</h3>
+          <div class="plugin-management">
+            <p>管理和配置应用插件，扩展音乐播放器功能</p>
+            <t-button theme="primary" @click="goPlugin">
+              <i class="iconfont icon-plugin"></i> 打开插件管理
+            </t-button>
+          </div>
         </div>
 
         <div class="demo-section">
