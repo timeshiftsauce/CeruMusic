@@ -50,6 +50,7 @@
     "marked": "^16.1.2",
     "mitt": "^3.0.1",
     "NeteaseCloudMusicApi": "^4.27.0",
+    "node-fetch": "^3.3.2",
     "pinia": "^3.0.3",
     "tdesign-vue-next": "^1.15.2",
     "vue-router": "^4.5.1"
