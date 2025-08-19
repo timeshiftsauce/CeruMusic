@@ -367,4 +367,4 @@ class CeruMusicPluginHost {
   }
 }
 
-module.exports = CeruMusicPluginHost;
+export default CeruMusicPluginHost

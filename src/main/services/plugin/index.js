@@ -5,7 +5,7 @@ import fsPromise from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { getAppDirPath } from '../../utils/path'
 
-const CeruMusicPluginHost = require('./manager/CeruMusicPluginHost')
+import CeruMusicPluginHost from './manager/CeruMusicPluginHost.js'
 import Logger from './logger'
 
 const loadedPlugins = {}
