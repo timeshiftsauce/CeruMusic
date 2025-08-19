@@ -1,19 +1,18 @@
+/* eslint-disable */
 const fs = require('fs');
 
-function convertEventDrivenPlugin(inputFile) {
+function convertEventDrivenPlugin(originalCode) {
     console.log('检测到事件驱动插件，使用事件包装器转换...');
-    
-    const originalCode = fs.readFileSync(inputFile, 'utf-8');
-    
+
     // 提取插件信息
     const nameMatch = originalCode.match(/@name\s+(.+)/);
     const versionMatch = originalCode.match(/@version\s+(.+)/);
     const descMatch = originalCode.match(/@description\s+(.+)/);
-    
+
     const pluginName = nameMatch ? nameMatch[1].trim() : "未知插件";
     const pluginVersion = versionMatch ? versionMatch[1].trim() : "1.0.0";
     const pluginDesc = descMatch ? descMatch[1].trim() : "从事件驱动插件转换而来";
-    
+
     return `/**
  * 由 CeruMusic 插件转换器转换 - @author sqj
  * @name ${pluginName}
@@ -38,9 +37,9 @@ let requestHandler = null;
 
 function initializePlugin() {
   if (isInitialized) return;
-  
+
   const { request, utils } = cerumusic;
-  
+
   // 创建完整的 lx 模拟环境
   const mockLx = {
     EVENT_NAMES: {
@@ -103,12 +102,12 @@ function initializePlugin() {
     },
     env: 'nodejs' // 添加环境信息
   };
-  
+
   // 创建全局环境
   const globalThis = {
     lx: mockLx
   };
-  
+
   // 创建沙箱环境
   const sandbox = {
     globalThis: globalThis,
@@ -125,22 +124,22 @@ function initializePlugin() {
     exports: {},
     process: { env: { NODE_ENV: 'production' } }
   };
-  
+
   try {
     // 使用 Function 构造器执行插件代码
     const pluginFunction = new Function(
-      'globalThis', 'lx', 'console', 'setTimeout', 'clearTimeout', 
-      'setInterval', 'clearInterval', 'Buffer', 'JSON', 'require', 
+      'globalThis', 'lx', 'console', 'setTimeout', 'clearTimeout',
+      'setInterval', 'clearInterval', 'Buffer', 'JSON', 'require',
       'module', 'exports', 'process',
       originalPluginCode
     );
-    
+
     pluginFunction(
       globalThis, mockLx, console, setTimeout, clearTimeout,
       setInterval, clearInterval, Buffer, JSON, () => ({}),
       { exports: {} }, {}, { env: { NODE_ENV: 'production' } }
     );
-    
+
     isInitialized = true;
     console.log(\`[CeruMusic] 事件驱动插件初始化成功\`);
   } catch (error) {
@@ -175,18 +174,18 @@ if (sourceMatches) {
 async function musicUrl(source, musicInfo, quality) {
   // 确保插件已初始化
   initializePlugin();
-  
+
   // 等待一小段时间让插件完全初始化
   await new Promise(resolve => setTimeout(resolve, 100));
-  
+
   if (!requestHandler) {
     const errorMessage = '插件请求处理器未初始化';
     console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
     throw new Error(errorMessage);
   }
-  
+
   console.log(\`[\${pluginInfo.name}] 使用事件驱动方式获取 \${source} 音源链接\`);
-  
+
   try {
     // 调用插件的请求处理器
     const result = await requestHandler({
@@ -197,28 +196,28 @@ async function musicUrl(source, musicInfo, quality) {
         type: quality
       }
     });
-    
+
     // 检查结果是否有效
     if (!result) {
       const errorMessage = \`获取 \${source} 音源链接失败: 返回结果为空\`;
       console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
       throw new Error(errorMessage);
     }
-    
+
     // 如果结果是对象且包含错误信息
     if (typeof result === 'object' && result.error) {
       const errorMessage = result.error || \`获取 \${source} 音源链接失败\`;
       console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
       throw new Error(errorMessage);
     }
-    
+
     // 如果结果是对象且包含状态码
     if (typeof result === 'object' && result.code && result.code !== 200) {
       const errorMessage = result.msg || \`接口错误 (Code: \${result.code})\`;
       console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
       throw new Error(errorMessage);
     }
-    
+
     console.log(\`[\${pluginInfo.name}] Got URL: \${typeof result === 'string' ? result : result.url || result}\`);
     return result;
   } catch (error) {
@@ -247,9 +246,10 @@ function main() {
     }
 
     try {
-        const result = convertEventDrivenPlugin(inputFile);
+        const inputCode = fs.readFileSync(inputFile, 'utf8');
+        const result = convertEventDrivenPlugin(inputCode);
         fs.writeFileSync(outputFile, result);
-        
+
         console.log('\\n🎉 事件驱动插件转换成功!');
         console.log(`   新插件已保存至: ${outputFile}`);
     } catch (error) {
@@ -261,3 +261,5 @@ function main() {
 if (require.main === module) {
     main();
 }
+
+export { convertEventDrivenPlugin }
