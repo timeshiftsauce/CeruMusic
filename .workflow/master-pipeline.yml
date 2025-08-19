@@ -6,7 +6,7 @@ triggers:
   push:
     branches:
       include:
-        - main
+        - master
 stages:
   - name: compile
     displayName: 编译
