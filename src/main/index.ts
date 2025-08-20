@@ -120,6 +120,15 @@ function createWindow(): void {
   }
 }
 
+ipcMain.handle('service-plugin-selectAndAddPlugin', async (_, type): Promise<any> => {
+  try {
+    return await pluginService.selectAndAddPlugin(type)
+  } catch (error: any) {
+    console.error('Error selecting and adding plugin:', error)
+    return { error: error.message }
+  }
+})
+
 ipcMain.handle('service-plugin-addPlugin', async (_, pluginCode, pluginName): Promise<any> => {
   try {
     return await pluginService.addPlugin(pluginCode, pluginName)
@@ -140,9 +149,19 @@ ipcMain.handle('service-plugin-getPluginById', async (_, id): Promise<any> => {
 
 ipcMain.handle('service-plugin-loadAllPlugins', async (): Promise<any> => {
   try {
-    return await pluginService.loadAllPlugins()
+    // 使用新的 getPluginsList 方法，但保持 API 兼容性
+    return await pluginService.getPluginsList()
   } catch (error: any) {
     console.error('Error loading all plugins:', error)
+    return { error: error.message }
+  }
+})
+
+ipcMain.handle('service-plugin-uninstallPlugin', async (_, pluginId): Promise<any> => {
+  try {
+    return await pluginService.uninstallPlugin(pluginId)
+  } catch (error: any) {
+    console.error('Error uninstalling plugin:', error)
     return { error: error.message }
   }
 })
@@ -156,9 +175,17 @@ aiEvents(mainWindow)
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.cerulean.music')
+
+  // 初始化插件系统
+  try {
+    await pluginService.initializePlugins()
+    console.log('插件系统初始化完成')
+  } catch (error) {
+    console.error('插件系统初始化失败:', error)
+  }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

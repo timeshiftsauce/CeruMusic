@@ -24,6 +24,8 @@ interface CustomAPI {
 
   // 插件管理API
   plugins: {
+    selectAndAddPlugin: (type: 'lx' | 'cr') => Promise<any>
+    uninstallPlugin(pluginId: string): ApiResult | PromiseLike<ApiResult>
     addPlugin: (pluginCode: string, pluginName: string) => Promise<any>
     getPluginById: (id: string) => Promise<any>
     loadAllPlugins: () => Promise<any>

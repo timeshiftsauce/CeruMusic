@@ -1,0 +1,81 @@
+/**
+ * ikun 音源插件 for CeruMusic
+ * @author ikunshare
+ * @version v1.0
+ */
+
+// 插件元信息
+const pluginInfo = {
+  name: 'ikun音源',
+  version: '1.0.0',
+  author: 'ikunshare',
+  description: '基于 ikunshare API 的音源插件',
+};
+
+// API 配置
+const API_URL = "https://api.ikunshare.com";
+const API_KEY = ``; // 如果需要，请填入你的API Key
+
+// 支持的音源和音质
+const sources = {
+  kw: {
+    name: '酷我音乐',
+    type: 'music',
+    qualitys: ["128k", "320k", "flac", "flac24bit", "hires"],
+  },
+  wy: {
+    name: '网易云音乐',
+    type: 'music',
+    qualitys: ["128k", "320k", "flac", "flac24bit", "hires", "atmos", "master"],
+  },
+  mg: {
+    name: '咪咕音乐',
+    type: 'music',
+    qualitys: ["128k", "320k", "flac", "flac24bit", "hires"],
+  },
+};
+
+/**
+ * 获取音乐URL的核心函数
+ * @param {string} source - 音源标识 (e.g., "kw", "wy")
+ * @param {object} musicInfo - 歌曲信息
+ * @param {string} quality - 音质
+ * @returns {Promise<string>} 歌曲的URL
+ */
+async function musicUrl(source, musicInfo, quality) {
+  // cerumusic 对象由插件宿主提供
+  const { request, env, version } = cerumusic;
+  
+  const songId = musicInfo.hash ?? musicInfo.songmid;
+  const url = `${API_URL}/url?source=${source}&songId=${songId}&quality=${quality}`;
+
+  console.log(`[${pluginInfo.name}] Requesting URL: ${url}`);
+
+  const { body, statusCode } = await request(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': `cerumusic-${env}/${version}`,
+      'X-Request-Key': API_KEY,
+    },
+  });
+
+  if (statusCode !== 200 || body.code !== 200) {
+    const errorMessage = body.msg || `接口错误 (HTTP: ${statusCode}, Body: ${body.code})`;
+    console.error(`[${pluginInfo.name}] Error: ${errorMessage}`);
+    throw new Error(errorMessage);
+  }
+
+  console.log(`[${pluginInfo.name}] Got URL: ${body.url}`);
+  return body.url;
+}
+
+// 导出插件模块
+module.exports = {
+  pluginInfo,
+  sources,
+  musicUrl,
+  // 如果需要，可以继续实现 getPic, getLyric 等方法
+  // getPic: async function(source, musicInfo) { ... },
+  // getLyric: async function(source, musicInfo) { ... },
+};

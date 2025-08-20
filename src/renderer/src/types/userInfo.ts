@@ -1,4 +1,5 @@
 import { PlayMode } from './audio'
+import { Sources } from './Sources'
 
 export interface UserInfo {
   lastPlaySongId?: number | null
@@ -8,5 +9,8 @@ export interface UserInfo {
   mainColor?: string
   playMode?: PlayMode
   deepseekAPIkey?: string
-  musicSource?: string
+  pluginId?: string
+  supportedSources?: Sources['supportedSources']
+  selectSources?: string
+  selectQuality?: string
 }
