@@ -7,7 +7,7 @@ import { getAppDirPath } from '../../utils/path'
 
 import CeruMusicPluginHost from './manager/CeruMusicPluginHost'
 import convertEventDrivenPlugin from './manager/converter-event-driven'
-import Logger from './logger'
+import Logger, { getLog } from './logger'
 
 // 导出类型以解决TypeScript错误
 
@@ -84,7 +84,7 @@ const pluginService = {
 
       // 重新加载插件以确保正确初始化
       const ceruPluginManager = new CeruMusicPluginHost()
-      await ceruPluginManager.loadPlugin(filePath, new Logger('log/' + pluginId))
+      await ceruPluginManager.loadPlugin(filePath, new Logger(pluginId))
 
       // 将插件添加到已加载插件列表
       loadedPlugins[pluginId] = ceruPluginManager
@@ -221,6 +221,10 @@ const pluginService = {
         supportedSources: ceruPluginManager.getSupportedSources()
       }
     })
+  },
+
+  async getPluginLog(pluginId: string) {
+    return await getLog(pluginId)
   }
 }
 
