@@ -35,7 +35,8 @@ const api = {
     getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),
     loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins'),
     uninstallPlugin: (pluginId: string) =>
-      ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId)
+      ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId),
+    getPluginLog: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPluginLog', pluginId)
   },
 
   ai: {

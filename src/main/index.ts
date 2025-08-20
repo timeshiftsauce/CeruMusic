@@ -157,6 +157,15 @@ ipcMain.handle('service-plugin-loadAllPlugins', async (): Promise<any> => {
   }
 })
 
+ipcMain.handle('service-plugin-getPluginLog', async (_, pluginId): Promise<any> => {
+  try {
+    return await pluginService.getPluginLog(pluginId)
+  } catch (error: any) {
+    console.error('Error getting plugin log:', error)
+    return { error: error.message }
+  }
+})
+
 ipcMain.handle('service-plugin-uninstallPlugin', async (_, pluginId): Promise<any> => {
   try {
     return await pluginService.uninstallPlugin(pluginId)
