@@ -60,9 +60,9 @@ const loading = ref(true)
 async function getPlugins() {
   loading.value = true
   try {
-    const result = await window.api.plugins.getPlugins()
+    const result = await window.api.plugins.loadAllPlugins()
     plugins.value = result
-    console.log('插件列表加载完成')
+    console.log('插件列表加载完成', result)
   } catch (error) {
     console.error('获取插件列表失败:', error)
   } finally {
@@ -73,12 +73,7 @@ async function getPlugins() {
 // 打开文件选择器安装插件
 async function openPluginFile() {
   try {
-    const result = await window.api.plugins.openPluginFile()
-    if (result.success) {
-      await getPlugins()
-    } else {
-      console.error('安装插件失败:', result.message)
-    }
+    console.log(111)
   } catch (error) {
     console.error('安装插件失败:', error)
   }
@@ -88,17 +83,6 @@ async function openPluginFile() {
 async function uninstallPlugin(pluginName: string) {
   if (!confirm(`确定要卸载插件 "${pluginName}" 吗？`)) {
     return
-  }
-
-  try {
-    const result = await window.api.plugins.uninstall(pluginName)
-    if (result.success) {
-      await getPlugins()
-    } else {
-      console.error('卸载插件失败:', result.message)
-    }
-  } catch (error) {
-    console.error('卸载插件失败:', error)
   }
 }
 

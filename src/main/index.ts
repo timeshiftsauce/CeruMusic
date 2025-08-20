@@ -6,7 +6,6 @@ import path from 'node:path'
 import musicService from './services/music'
 import pluginService from './services/plugin'
 import aiEvents from './events/ai'
-
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -122,16 +121,30 @@ function createWindow(): void {
 }
 
 ipcMain.handle('service-plugin-addPlugin', async (_, pluginCode, pluginName): Promise<any> => {
-  return await (pluginService as any).addPlugin(pluginCode, pluginName)
+  try {
+    return await pluginService.addPlugin(pluginCode, pluginName)
+  } catch (error: any) {
+    console.error('Error adding plugin:', error)
+    return { error: error.message }
+  }
 })
 
 ipcMain.handle('service-plugin-getPluginById', async (_, id): Promise<any> => {
-  return await (pluginService as any).getPluginById(id)
+  try {
+    return pluginService.getPluginById(id)
+  } catch (error: any) {
+    console.error('Error getting plugin by id:', error)
+    return { error: error.message }
+  }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-ipcMain.handle('service-plugin-loadAllPlugins', async (_): Promise<any> => {
-  return await (pluginService as any).getPluginById()
+ipcMain.handle('service-plugin-loadAllPlugins', async (): Promise<any> => {
+  try {
+    return await pluginService.loadAllPlugins()
+  } catch (error: any) {
+    console.error('Error loading all plugins:', error)
+    return { error: error.message }
+  }
 })
 
 ipcMain.handle('service-music-request', async (_, api, args) => {

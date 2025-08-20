@@ -15,6 +15,15 @@ asarUnpack:
 win:
   executableName: ceru-music
   icon: 'resources/icons/icon.ico'
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # 简化版本信息设置，避免rcedit错误
+  fileAssociations:
+    - ext: cerumusic
+      name: CeruMusic File
+      description: CeruMusic playlist file
   # 如果有证书文件，取消注释以下配置
   # certificateFile: path/to/certificate.p12
   # certificatePassword: your-password

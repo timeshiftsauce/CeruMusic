@@ -24,22 +24,9 @@ interface CustomAPI {
 
   // 插件管理API
   plugins: {
-    getPlugins: () => Promise<
-      Array<{
-        name: string
-        version: string
-        author: string
-        description?: string
-      }>
-    >
-    openPluginFile: () => Promise<{
-      success: boolean
-      message: string
-    }>
-    uninstall: (pluginName: string) => Promise<{
-      success: boolean
-      message: string
-    }>
+    addPlugin: (pluginCode: string, pluginName: string) => Promise<any>
+    getPluginById: (id: string) => Promise<any>
+    loadAllPlugins: () => Promise<any>
   }
 
   // 用户配置API

@@ -1,19 +1,16 @@
-/* eslint-disable */
-const fs = require('fs');
+function convertEventDrivenPlugin(originalCode: string): string {
+  console.log('检测到事件驱动插件，使用事件包装器转换...')
 
-function convertEventDrivenPlugin(originalCode) {
-    console.log('检测到事件驱动插件，使用事件包装器转换...');
+  // 提取插件信息
+  const nameMatch = originalCode.match(/@name\s+(.+)/)
+  const versionMatch = originalCode.match(/@version\s+(.+)/)
+  const descMatch = originalCode.match(/@description\s+(.+)/)
 
-    // 提取插件信息
-    const nameMatch = originalCode.match(/@name\s+(.+)/);
-    const versionMatch = originalCode.match(/@version\s+(.+)/);
-    const descMatch = originalCode.match(/@description\s+(.+)/);
+  const pluginName = nameMatch ? nameMatch[1].trim() : '未知插件'
+  const pluginVersion = versionMatch ? versionMatch[1].trim() : '1.0.0'
+  const pluginDesc = descMatch ? descMatch[1].trim() : '从事件驱动插件转换而来'
 
-    const pluginName = nameMatch ? nameMatch[1].trim() : "未知插件";
-    const pluginVersion = versionMatch ? versionMatch[1].trim() : "1.0.0";
-    const pluginDesc = descMatch ? descMatch[1].trim() : "从事件驱动插件转换而来";
-
-    return `/**
+  return `/**
  * 由 CeruMusic 插件转换器转换 - @author sqj
  * @name ${pluginName}
  * @version ${pluginVersion}
@@ -234,32 +231,4 @@ module.exports = {
   musicUrl
 };`
 }
-
-// 主函数
-function main() {
-  const inputFile = process.argv[2]
-  const outputFile = process.argv[3] || 'event-driven-plugin.js'
-
-  if (!inputFile) {
-    console.error('使用方法: node converter-event-driven.js <输入文件> [输出文件]')
-    process.exit(1)
-  }
-
-    try {
-        const inputCode = fs.readFileSync(inputFile, 'utf8');
-        const result = convertEventDrivenPlugin(inputCode);
-        fs.writeFileSync(outputFile, result);
-
-        console.log('\\n🎉 事件驱动插件转换成功!');
-        console.log(`   新插件已保存至: ${outputFile}`);
-    } catch (error) {
-        console.error('❌ 转换失败:', error.message);
-        process.exit(1);
-    }
-}
-
-if (require.main === module) {
-  main()
-}
-
 export { convertEventDrivenPlugin }
