@@ -1,69 +1,140 @@
-/* eslint-disable */
-const vm = require('vm');
-const fetch = require('node-fetch');
+import * as vm from 'vm'
+import fetch from 'node-fetch'
+import * as fs from 'fs'
 
-import { convertEventDrivenPlugin } from "./converter-event-driven"
+// 定义插件结构接口
+export interface PluginInfo {
+  name: string
+  version: string
+  author: string
+  description?: string
+  [key: string]: any
+}
+
+export interface PluginSource {
+  name: string
+  qualities: string[]
+  [key: string]: any
+}
+
+interface CeruMusicPlugin {
+  pluginInfo: PluginInfo
+  sources: PluginSource[]
+  musicUrl: (source: string, musicInfo: MusicInfo, quality: string) => Promise<string>
+  getPic?: (source: string, musicInfo: MusicInfo) => Promise<string>
+  getLyric?: (source: string, musicInfo: MusicInfo) => Promise<string>
+}
+
+interface MusicInfo {
+  id: string
+  [key: string]: any
+}
+
+interface RequestResult {
+  body: any
+  statusCode: number
+  headers: Record<string, string[]>
+}
+
+interface CeruMusicApiUtils {
+  buffer: {
+    from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => Buffer
+    bufToString: (buffer: Buffer, encoding?: BufferEncoding) => string
+  }
+}
+
+interface CeruMusicApi {
+  env: string
+  version: string
+  utils: CeruMusicApiUtils
+  request: (
+    url: string,
+    options?: RequestOptions | RequestCallback,
+    callback?: RequestCallback
+  ) => Promise<RequestResult> | void
+}
+
+type RequestOptions = {
+  method?: string
+  headers?: Record<string, string>
+  body?: any
+  [key: string]: any
+}
+
+type RequestCallback = (error: Error | null, result: RequestResult | null) => void
+
+type Logger = {
+  log: (...args: any[]) => void
+  error: (...args: any[]) => void
+  warn?: (...args: any[]) => void
+  info?: (...args: any[]) => void
+}
 
 /**
  * CeruMusic 插件引擎
  * 负责加载和执行单个插件，并提供一个简洁的API。
  */
 class CeruMusicPluginHost {
+  private pluginCode: string | null
+  private plugin: CeruMusicPlugin | null
+
   /**
-   * @param {string | null} pluginCode 插件的 JavaScript 代码字符串（可选）
-   * @param {any} logger
+   * 创建一个新的插件主机实例
+   * @param pluginCode 插件的 JavaScript 代码字符串（可选）
+   * @param logger 日志记录器
    */
-  constructor(pluginCode = null, logger = console) {
+  constructor(pluginCode: string | null = null, logger: Logger = console) {
     this.pluginCode = pluginCode
     this.plugin = null // 存储插件导出的对象
     if (pluginCode) {
-      this._checkConvertCode();
-      this._initialize(logger);
-    }
-  }
-
-  _checkConvertCode() {
-    if (this.pluginCode.includes('globalThis.lx')) {
-      this.pluginCode = convertEventDrivenPlugin(this.pluginCode);
+      this._initialize(logger)
     }
   }
 
   /**
    * 从文件加载插件
-   * @param {string} pluginPath 插件文件路径
-   * @param {any} logger
+   * @param pluginPath 插件文件路径
+   * @param logger 日志记录器
    */
-  async loadPlugin(pluginPath, logger=console) {
-    const fs = require('fs');
-    this.pluginCode = fs.readFileSync(pluginPath, 'utf-8');
-    this._checkConvertCode();
-    this._initialize(logger);
-    return this.plugin;
+  async loadPlugin(pluginPath: string, logger: Logger = console): Promise<CeruMusicPlugin> {
+    this.pluginCode = fs.readFileSync(pluginPath, 'utf-8')
+    this._initialize(logger)
+    return this.plugin as CeruMusicPlugin
   }
 
   /**
    * 初始化沙箱环境，加载并验证插件
    * @private
    */
-  _initialize(console) {
+  _initialize(console: Logger): void {
     // 提供给插件的API
-    const cerumusicApi = {
+    const cerumusicApi: CeruMusicApi = {
       env: 'nodejs',
       version: '1.0.0',
       utils: {
         buffer: {
-          from: (data, encoding) => Buffer.from(data, encoding),
-          bufToString: (buffer, encoding) => buffer.toString(encoding)
+          from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
+            if (typeof data === 'string') {
+              return Buffer.from(data, encoding)
+            } else if (data instanceof Buffer) {
+              return data
+            } else if (data instanceof ArrayBuffer) {
+              return Buffer.from(new Uint8Array(data))
+            } else {
+              return Buffer.from(data as any)
+            }
+          },
+          bufToString: (buffer: Buffer, encoding?: BufferEncoding) => buffer.toString(encoding)
         }
       },
       request: (url, options, callback) => {
         // 支持 Promise 和 callback 两种调用方式
         if (typeof options === 'function') {
-          callback = options
+          callback = options as RequestCallback
           options = { method: 'GET' }
         }
 
-        const makeRequest = async () => {
+        const makeRequest = async (): Promise<RequestResult> => {
           try {
             console.log(`[CeruMusic] 发起请求: ${url}`)
 
@@ -73,7 +144,7 @@ class CeruMusicPluginHost {
 
             const requestOptions = {
               method: 'GET',
-              ...options,
+              ...(options as RequestOptions),
               signal: controller.signal
             }
 
@@ -83,7 +154,7 @@ class CeruMusicPluginHost {
             console.log(`[CeruMusic] 请求响应状态: ${response.status}`)
 
             // 尝试解析JSON，如果失败则返回文本
-            let body
+            let body: any
             const contentType = response.headers.get('content-type')
 
             try {
@@ -99,7 +170,7 @@ class CeruMusicPluginHost {
                   data: text
                 }
               }
-            } catch (parseError) {
+            } catch (parseError: any) {
               console.error(`[CeruMusic] 解析响应失败: ${parseError.message}`)
               // 解析失败时创建错误body
               body = {
@@ -110,7 +181,7 @@ class CeruMusicPluginHost {
 
             console.log(`[CeruMusic] 请求响应内容:`, body)
 
-            const result = {
+            const result: RequestResult = {
               body,
               statusCode: response.status,
               headers: response.headers.raw()
@@ -120,12 +191,18 @@ class CeruMusicPluginHost {
               callback(null, result)
             }
             return result
-          } catch (error) {
+          } catch (error: any) {
             console.error(`[CeruMusic] Request failed: ${error.message}`)
 
             if (callback) {
               // 网络错误时，调用 callback(error, null)
               callback(error, null)
+              // 需要返回一个值以满足 Promise<RequestResult> 类型
+              return {
+                body: { error: error.message },
+                statusCode: 500,
+                headers: {}
+              }
             } else {
               throw error
             }
@@ -134,6 +211,7 @@ class CeruMusicPluginHost {
 
         if (callback) {
           makeRequest().catch(() => {}) // 错误已在makeRequest中处理
+          return undefined
         } else {
           return makeRequest()
         }
@@ -157,16 +235,20 @@ class CeruMusicPluginHost {
 
     try {
       // 在沙箱中执行插件代码
-      vm.runInNewContext(this.pluginCode, sandbox)
-      this.plugin = sandbox.module.exports
-      console.log(`[CeruMusic] Plugin "${this.plugin.pluginInfo.name}" loaded successfully.`)
-    } catch (e) {
+      if (this.pluginCode) {
+        vm.runInNewContext(this.pluginCode, sandbox)
+        this.plugin = sandbox.module.exports as CeruMusicPlugin
+        console.log(`[CeruMusic] Plugin "${this.plugin.pluginInfo.name}" loaded successfully.`)
+      } else {
+        throw new Error('No plugin code provided.')
+      }
+    } catch (e: any) {
       console.error('[CeruMusic] Error executing plugin code:', e)
       throw new Error('Failed to initialize plugin.')
     }
 
     // 验证插件结构
-    if (!this.plugin.pluginInfo || !this.plugin.sources || !this.plugin.musicUrl) {
+    if (!this.plugin?.pluginInfo || !this.plugin.sources || !this.plugin.musicUrl) {
       throw new Error('Invalid plugin structure. Required fields: pluginInfo, sources, musicUrl.')
     }
   }
@@ -174,33 +256,39 @@ class CeruMusicPluginHost {
   /**
    * 获取插件信息
    */
-  getPluginInfo() {
-    return this.plugin.pluginInfo;
+  getPluginInfo(): PluginInfo {
+    if (!this.plugin) {
+      throw new Error('Plugin not initialized')
+    }
+    return this.plugin.pluginInfo
   }
 
   /**
    * 获取插件代码
    */
-  getPluginCode() {
-    return this.pluginCode;
+  getPluginCode(): string | null {
+    return this.pluginCode
   }
 
   /**
    * 获取支持的音源和音质信息
    */
-  getSupportedSources() {
+  getSupportedSources(): PluginSource[] {
+    if (!this.plugin) {
+      throw new Error('Plugin not initialized')
+    }
     return this.plugin.sources
   }
 
   /**
    * 调用插件的 getMusicUrl 方法
-   * @param {string} source 音源标识
-   * @param {object} musicInfo 音乐信息
-   * @param {string} quality 音质
+   * @param source 音源标识
+   * @param musicInfo 音乐信息
+   * @param quality 音质
    */
-  async getMusicUrl(source, musicInfo, quality) {
+  async getMusicUrl(source: string, musicInfo: MusicInfo, quality: string): Promise<string> {
     try {
-      if (typeof this.plugin.musicUrl !== 'function') {
+      if (!this.plugin || typeof this.plugin.musicUrl !== 'function') {
         throw new Error(`Action "musicUrl" is not implemented in plugin.`)
       }
 
@@ -216,7 +304,7 @@ class CeruMusicPluginHost {
 
       console.log(`[CeruMusic] 插件 musicUrl 方法调用成功`)
       return result
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[CeruMusic] getMusicUrl 方法执行失败:`, error.message)
       console.error(`[CeruMusic] 错误堆栈:`, error.stack)
 
@@ -229,24 +317,34 @@ class CeruMusicPluginHost {
    * 获取 cerumusic API 对象
    * @private
    */
-  _getCerumusicApi() {
+  _getCerumusicApi(): CeruMusicApi {
     return {
       env: 'nodejs',
       version: '1.0.0',
       utils: {
         buffer: {
-          from: (data, encoding) => Buffer.from(data, encoding),
-          bufToString: (buffer, encoding) => buffer.toString(encoding)
+          from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
+            if (typeof data === 'string') {
+              return Buffer.from(data, encoding)
+            } else if (data instanceof Buffer) {
+              return data
+            } else if (data instanceof ArrayBuffer) {
+              return Buffer.from(new Uint8Array(data))
+            } else {
+              return Buffer.from(data as any)
+            }
+          },
+          bufToString: (buffer: Buffer, encoding?: BufferEncoding) => buffer.toString(encoding)
         }
       },
       request: (url, options, callback) => {
         // 支持 Promise 和 callback 两种调用方式
         if (typeof options === 'function') {
-          callback = options
+          callback = options as RequestCallback
           options = { method: 'GET' }
         }
 
-        const makeRequest = async () => {
+        const makeRequest = async (): Promise<RequestResult> => {
           try {
             console.log(`[CeruMusic] 发起请求: ${url}`)
 
@@ -256,7 +354,7 @@ class CeruMusicPluginHost {
 
             const requestOptions = {
               method: 'GET',
-              ...options,
+              ...(options as RequestOptions),
               signal: controller.signal
             }
 
@@ -266,7 +364,7 @@ class CeruMusicPluginHost {
             console.log(`[CeruMusic] 请求响应状态: ${response.status}`)
 
             // 尝试解析JSON，如果失败则返回文本
-            let body
+            let body: any
             const contentType = response.headers.get('content-type')
 
             try {
@@ -282,7 +380,7 @@ class CeruMusicPluginHost {
                   data: text
                 }
               }
-            } catch (parseError) {
+            } catch (parseError: any) {
               console.error(`[CeruMusic] 解析响应失败: ${parseError.message}`)
               // 解析失败时创建错误body
               body = {
@@ -293,7 +391,7 @@ class CeruMusicPluginHost {
 
             console.log(`[CeruMusic] 请求响应内容:`, body)
 
-            const result = {
+            const result: RequestResult = {
               body,
               statusCode: response.status,
               headers: response.headers.raw()
@@ -303,12 +401,18 @@ class CeruMusicPluginHost {
               callback(null, result)
             }
             return result
-          } catch (error) {
+          } catch (error: any) {
             console.error(`[CeruMusic] Request failed: ${error.message}`)
 
             if (callback) {
               // 网络错误时，调用 callback(error, null)
               callback(error, null)
+              // 需要返回一个值以满足 Promise<RequestResult> 类型
+              return {
+                body: { error: error.message },
+                statusCode: 500,
+                headers: {}
+              }
             } else {
               throw error
             }
@@ -317,6 +421,7 @@ class CeruMusicPluginHost {
 
         if (callback) {
           makeRequest().catch(() => {}) // 错误已在makeRequest中处理
+          return undefined
         } else {
           return makeRequest()
         }
@@ -326,12 +431,12 @@ class CeruMusicPluginHost {
 
   /**
    * 调用插件的 getPic 方法
-   * @param {string} source 音源标识
-   * @param {object} musicInfo 音乐信息
+   * @param source 音源标识
+   * @param musicInfo 音乐信息
    */
-  async getPic(source, musicInfo) {
+  async getPic(source: string, musicInfo: MusicInfo): Promise<string> {
     try {
-      if (typeof this.plugin.getPic !== 'function') {
+      if (!this.plugin || typeof this.plugin.getPic !== 'function') {
         throw new Error(`Action "getPic" is not implemented in plugin.`)
       }
 
@@ -345,7 +450,7 @@ class CeruMusicPluginHost {
 
       console.log(`[CeruMusic] 插件 getPic 方法调用成功`)
       return result
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[CeruMusic] getPic 方法执行失败:`, error.message)
       throw new Error(`Plugin getPic failed: ${error.message}`)
     }
@@ -353,12 +458,12 @@ class CeruMusicPluginHost {
 
   /**
    * 调用插件的 getLyric 方法
-   * @param {string} source 音源标识
-   * @param {object} musicInfo 音乐信息
+   * @param source 音源标识
+   * @param musicInfo 音乐信息
    */
-  async getLyric(source, musicInfo) {
+  async getLyric(source: string, musicInfo: MusicInfo): Promise<string> {
     try {
-      if (typeof this.plugin.getLyric !== 'function') {
+      if (!this.plugin || typeof this.plugin.getLyric !== 'function') {
         throw new Error(`Action "getLyric" is not implemented in plugin.`)
       }
 
@@ -372,7 +477,7 @@ class CeruMusicPluginHost {
 
       console.log(`[CeruMusic] 插件 getLyric 方法调用成功`)
       return result
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[CeruMusic] getLyric 方法执行失败:`, error.message)
       throw new Error(`Plugin getLyric failed: ${error.message}`)
     }

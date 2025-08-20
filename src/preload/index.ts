@@ -21,10 +21,17 @@ const api = {
     ipcRenderer.send('window-mini-mode', isMini)
   },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
-  onMusicCtrl: (callback) => ipcRenderer.on('music-control', callback),
+  onMusicCtrl: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) =>
+    ipcRenderer.on('music-control', callback),
 
   music: {
     request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args)
+  },
+  plugins: {
+    addPlugin: (pluginCode: string, pluginName: string) =>
+      ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName),
+    getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),
+    loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins')
   },
 
   ai: {

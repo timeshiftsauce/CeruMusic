@@ -64,6 +64,7 @@
     "@tdesign-vue-next/auto-import-resolver": "^0.1.1",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.16.5",
+    "@types/node-fetch": "^2.6.13",
     "@vitejs/plugin-vue": "^6.0.0",
     "electron": "^37.3.1",
     "electron-builder": "^25.1.8",

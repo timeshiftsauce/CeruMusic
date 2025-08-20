@@ -11,6 +11,10 @@ class Logger {
     fsPromise.mkdir(path.dirname(this.logFilePath), { recursive: true }).then()
   }
 
+  log(...args: any[]) {
+    this.write(`log ${args.join(' ')}`)
+  }
+
   info(...args: any[]) {
     this.write(`info ${args.join(' ')}`)
   }
