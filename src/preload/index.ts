@@ -28,10 +28,14 @@ const api = {
     request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args)
   },
   plugins: {
+    selectAndAddPlugin: (type: 'lx' | 'cr') =>
+      ipcRenderer.invoke('service-plugin-selectAndAddPlugin', type),
     addPlugin: (pluginCode: string, pluginName: string) =>
       ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName),
     getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),
-    loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins')
+    loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins'),
+    uninstallPlugin: (pluginId: string) =>
+      ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId)
   },
 
   ai: {
