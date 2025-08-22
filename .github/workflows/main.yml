@@ -1,76 +1,63 @@
-name: AutoBuild
+name: AutoBuild  # 工作流的名称
 
 permissions:
-  contents: write
+  contents: write  # 给予写入仓库内容的权限
 
 on:
   push:
     tags:
-      - 'v*'  # 确保引号包裹模式
-  workflow_dispatch:  # 添加手动触发选项用于测试
+      - v*  # 当推送以v开头的标签时触发此工作流
+  workflow_dispatch:
 
 jobs:
   release:
-    name: Build and Release Electron App
-    runs-on: ${{ matrix.os }}
-
+    name: build and release electron app  # 任务名称
+    runs-on: ${{ matrix.os }}  # 在matrix.os定义的操作系统上运行
     strategy:
-      fail-fast: false
+      fail-fast: false  # 如果一个任务失败,其他任务继续运行
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]  # 在Windows和macOS上运行任务
 
     steps:
       - name: Check out git repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # 获取所有历史记录和标签
-
-      - name: Debug - Print context information
-        run: |
-          echo "GitHub Ref: ${{ github.ref }}"
-          echo "GitHub Event Name: ${{ github.event_name }}"
-          echo "Tag: ${GITHUB_REF#refs/tags/}"
+        uses: actions/checkout@v4  # 检出代码仓库
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18  # 安装Node.js 18 （这里node环境是能够运行代码的环境）
 
       - name: Install Dependencies
         run: |
           npm i -g yarn
-          yarn install --frozen-lockfile
+          yarn install  # 安装项目依赖
 
-      - name: Build Electron App for Windows
-        if: matrix.os == 'windows-latest'
-        run: yarn build:win
+      - name: Build Electron App for windows
+        if: matrix.os == 'windows-latest'  # 只在Windows上运行
+        run: yarn run build:win  # 构建Windows版应用
 
-      - name: Build Electron App for macOS
-        if: matrix.os == 'macos-latest'
+      - name: Build Electron App for macos
+        if: matrix.os == 'macos-latest'  # 只在macOS上运行
         run: |
           yarn run build:mac
-
-      - name: List dist directory contents
-        run: ls -la dist/ || echo "dist directory does not exist"
 
       - name: Cleanup Artifacts for Windows
         if: matrix.os == 'windows-latest'
         run: |
-          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml" || echo "Cleanup failed"
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"  # 清理Windows构建产物,只保留特定文件
 
       - name: Cleanup Artifacts for MacOS
         if: matrix.os == 'macos-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)" || echo "Cleanup failed"
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"  # 清理macOS构建产物,只保留特定文件
 
-      - name: Upload artifacts
+      - name: upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electron-build-${{ matrix.os }}
-          path: dist/
+          name: ${{ matrix.os }}
+          path: dist  # 上传构建产物作为工作流artifact
 
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/**/*
+          files: 'dist/**'  # 将dist目录下所有文件添加到release
