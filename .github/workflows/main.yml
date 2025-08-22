@@ -6,7 +6,7 @@ permissions:
 on:
   push:
     tags:
-      - v*  # 当推送以v开头的标签时触发此工作流
+      - 'v*'  # 当推送以v开头的标签时触发此工作流
   workflow_dispatch:
 
 jobs:
