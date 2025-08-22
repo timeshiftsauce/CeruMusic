@@ -1,0 +1,76 @@
+name: AutoBuild
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'  # 确保引号包裹模式
+  workflow_dispatch:  # 添加手动触发选项用于测试
+
+jobs:
+  release:
+    name: Build and Release Electron App
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取所有历史记录和标签
+
+      - name: Debug - Print context information
+        run: |
+          echo "GitHub Ref: ${{ github.ref }}"
+          echo "GitHub Event Name: ${{ github.event_name }}"
+          echo "Tag: ${GITHUB_REF#refs/tags/}"
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: |
+          npm i -g yarn
+          yarn install --frozen-lockfile
+
+      - name: Build Electron App for Windows
+        if: matrix.os == 'windows-latest'
+        run: yarn build:win
+
+      - name: Build Electron App for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          yarn run build:mac
+
+      - name: List dist directory contents
+        run: ls -la dist/ || echo "dist directory does not exist"
+
+      - name: Cleanup Artifacts for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml" || echo "Cleanup failed"
+
+      - name: Cleanup Artifacts for MacOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)" || echo "Cleanup failed"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-build-${{ matrix.os }}
+          path: dist/
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/**/*
