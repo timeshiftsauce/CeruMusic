@@ -1,9 +1,16 @@
 import { NotifyPlugin } from 'tdesign-vue-next'
 import musicService from '@renderer/services/music'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
-async function downloadSingleSong(songId: string): Promise<void> {
+async function downloadSingleSong(songId: string, name: string, artist: string): Promise<void> {
   try {
-    const result = await musicService.request('downloadSingleSong', { id: songId }, false, false)
+    const LocalUserDetail = LocalUserDetailStore()
+    const result = await musicService.request(
+      'downloadSingleSong',
+      { id: songId, name, artist, ...LocalUserDetail.userSource },
+      false,
+      false
+    )
 
     if (!Object.hasOwn(result, 'path')) {
       await NotifyPlugin.info({

@@ -128,12 +128,12 @@ const handleImportFromClipboard = async () => {
 // 合并播放列表，避免重复
 const mergePlaylist = (currentList: SongList[], importedList: SongList[]): SongList[] => {
   const result = [...currentList]
-  const existingIds = new Set(currentList.map((song) => song.id))
+  const existingIds = new Set(currentList.map((song) => song.songmid))
 
   for (const song of importedList) {
-    if (!existingIds.has(song.id)) {
+    if (!existingIds.has(song.songmid)) {
       result.push(song)
-      existingIds.add(song.id)
+      existingIds.add(song.songmid)
     }
   }
 

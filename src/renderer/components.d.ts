@@ -31,6 +31,7 @@ declare module 'vue' {
     TLoading: typeof import('tdesign-vue-next')['Loading']
     TRadioButton: typeof import('tdesign-vue-next')['RadioButton']
     TRadioGroup: typeof import('tdesign-vue-next')['RadioGroup']
+    TSlider: typeof import('tdesign-vue-next')['Slider']
     TTooltip: typeof import('tdesign-vue-next')['Tooltip']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }

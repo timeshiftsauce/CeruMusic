@@ -7,7 +7,8 @@ import {
   watch,
   nextTick,
   onActivated,
-  onDeactivated
+  onDeactivated,
+  toRaw
 } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -130,12 +131,12 @@ const playSong = async (song: SongList) => {
   try {
     // 检查是否需要恢复播放位置（历史播放）
     const isHistoryPlay =
-      song.id === userInfo.value.lastPlaySongId &&
+      song.songmid === userInfo.value.lastPlaySongId &&
       userInfo.value.currentTime !== undefined &&
       userInfo.value.currentTime > 0
     if (isHistoryPlay && userInfo.value.currentTime !== undefined) {
       pendingRestorePosition = userInfo.value.currentTime
-      pendingRestoreSongId = song.id
+      pendingRestoreSongId = song.songmid
       console.log(`准备恢复播放位置: ${pendingRestorePosition}秒`)
       // 清除历史位置，避免重复恢复
       userInfo.value.currentTime = 0
@@ -145,7 +146,7 @@ const playSong = async (song: SongList) => {
     }
 
     // 更新当前播放歌曲ID
-    userInfo.value.lastPlaySongId = song.id
+    userInfo.value.lastPlaySongId = song.songmid
 
     // 如果播放列表是打开的，滚动到当前播放歌曲
     if (showPlaylist.value) {
@@ -154,10 +155,7 @@ const playSong = async (song: SongList) => {
 
     // 更新歌曲信息并触发主题色更新
     songInfo.value = {
-      title: song.name,
-      artist: song.artistName,
-      cover: song.coverUrl,
-      id: song.id.toString()
+      ...song
     }
 
     // 确保主题色更新
@@ -169,10 +167,10 @@ const playSong = async (song: SongList) => {
     if (!urlToPlay) {
       // eslint-disable-next-line no-useless-catch
       try {
-        urlToPlay = await getSongRealUrl(song)
+        urlToPlay = await getSongRealUrl(toRaw(song))
 
         // 同时更新播放列表中对应歌曲的URL
-        const playlistIndex = list.value.findIndex((item) => item.id === song.id)
+        const playlistIndex = list.value.findIndex((item) => item.songmid === song.songmid)
         if (playlistIndex !== -1) {
           ;(list.value[playlistIndex] as any).url = urlToPlay
         }
@@ -223,9 +221,9 @@ const playSong = async (song: SongList) => {
         throw error
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('播放歌曲失败:', error)
-    MessagePlugin.error('播放失败，请重试')
+    MessagePlugin.error('播放失败，原因：'+error.message)
   }
 }
 
@@ -345,7 +343,7 @@ const playPrevious = async () => {
   if (list.value.length === 0) return
 
   try {
-    const currentIndex = list.value.findIndex((song) => song.id === currentSongId.value)
+    const currentIndex = list.value.findIndex((song) => song.songmid === currentSongId.value)
     let prevIndex
 
     if (playMode.value === PlayMode.RANDOM) {
@@ -373,7 +371,7 @@ const playNext = async () => {
   try {
     // 单曲循环模式下，重新播放当前歌曲
     if (playMode.value === PlayMode.SINGLE && currentSongId.value) {
-      const currentSong = list.value.find((song) => song.id === currentSongId.value)
+      const currentSong = list.value.find((song) => song.songmid === currentSongId.value)
       if (currentSong) {
         // 重新设置播放位置到开头
         if (Audio.value.audio) {
@@ -391,7 +389,7 @@ const playNext = async () => {
       }
     }
 
-    const currentIndex = list.value.findIndex((song) => song.id === currentSongId.value)
+    const currentIndex = list.value.findIndex((song) => song.songmid === currentSongId.value)
     let nextIndex
 
     if (playMode.value === PlayMode.RANDOM) {
@@ -427,21 +425,19 @@ onMounted(async () => {
   })
 
   // 检查是否有上次播放的歌曲
+  // 检查是否有上次播放的歌曲
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
-    const lastPlayedSong = list.value.find((song) => song.id === userInfo.value.lastPlaySongId)
+    const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
     if (lastPlayedSong) {
       songInfo.value = {
-        title: lastPlayedSong.name,
-        artist: lastPlayedSong.artistName,
-        cover: lastPlayedSong.coverUrl,
-        id: lastPlayedSong.id.toString()
+        ...lastPlayedSong
       }
 
       // 如果有历史播放位置，设置为待恢复状态
       if (!Audio.value.isPlay) {
         if (userInfo.value.currentTime && userInfo.value.currentTime > 0) {
           pendingRestorePosition = userInfo.value.currentTime
-          pendingRestoreSongId = lastPlayedSong.id
+          pendingRestoreSongId = lastPlayedSong.songmid
           console.log(`初始化时设置待恢复位置: ${pendingRestorePosition}秒`)
 
           // 设置当前播放时间以显示进度条位置，但不清除历史记录
@@ -451,7 +447,7 @@ onMounted(async () => {
         }
         // 通过工具函数获取歌曲URL
         try {
-          const url = await getSongRealUrl(lastPlayedSong)
+          const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
         } catch (error) {
           console.error('获取上次播放歌曲URL失败:', error)
@@ -668,12 +664,20 @@ const handleProgressDragStart = (event: MouseEvent) => {
 }
 
 // 歌曲信息
-const songInfo = ref({
-  title: '未知歌曲名',
-  artist: 'CeruMusic',
-  cover:
-    'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg',
-  id: ''
+const songInfo = ref<Omit<SongList,'songmid'>&{songmid:null|number}>({
+  songmid: null,
+  hash: '',
+  singer: 'CeruMusic',
+  name: '未知歌曲名',
+  albumName: '',
+  albumId: 0,
+  source: '',
+  interval: '00:00',
+  img: 'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg',
+  lrc: null,
+  types: [],
+  _types: {},
+  typeUrl: {}
 })
 const maincolor = ref('rgba(0, 0, 0, 1)')
 const startmaincolor = ref('rgba(0, 0, 0, 1)')
@@ -681,12 +685,12 @@ const contrastTextColor = ref('rgba(0, 0, 0, .8)')
 const hoverColor = ref('rgba(0,0,0,1)')
 async function setColor() {
   console.log('主题色刷新')
-  const color = await extractDominantColor(songInfo.value.cover)
+  const color = await extractDominantColor(songInfo.value.img)
   console.log(color)
   maincolor.value = `rgba(${color.r},${color.g},${color.b},1)`
   startmaincolor.value = `rgba(${color.r},${color.g},${color.b},.2)`
-  contrastTextColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.cover, 0.6)
-  hoverColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.cover, 1)
+  contrastTextColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.img, 0.6)
+  hoverColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.img, 1)
 }
 watch(songInfo, setColor, { deep: true, immediate: true })
 // onMounted(setColor)
@@ -712,12 +716,12 @@ watch(songInfo, setColor, { deep: true, immediate: true })
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
         <div class="album-cover">
-          <img :src="songInfo.cover" alt="专辑封面" />
+          <img :src="songInfo.img" alt="专辑封面" />
         </div>
 
         <div class="song-info">
-          <div class="song-name">{{ songInfo.title }}</div>
-          <div class="artist-name">{{ songInfo.artist }}</div>
+          <div class="song-name">{{ songInfo.name }}</div>
+          <div class="artist-name">{{ songInfo.singer }}</div>
         </div>
       </div>
 
@@ -801,10 +805,11 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   </div>
   <div class="fullbox">
     <FullPlay
-      :song-id="songInfo.id"
+      :song-id="songInfo.songmid?songInfo.songmid.toString():null"
       :show="showFullPlay"
-      :cover-image="songInfo.cover"
+      :cover-image="songInfo.img"
       @toggle-fullscreen="toggleFullPlay"
+      :song-info="songInfo"
     />
   </div>
 
@@ -832,17 +837,17 @@ watch(songInfo, setColor, { deep: true, immediate: true })
         <div v-else class="playlist-songs">
           <div
             v-for="song in list"
-            :key="song.id"
+            :key="song.songmid"
             class="playlist-song"
-            :class="{ active: song.id === currentSongId }"
+            :class="{ active: song.songmid === currentSongId }"
             @click="playSong(song)"
           >
             <div class="song-info">
               <div class="song-name">{{ song.name }}</div>
-              <div class="song-artist">{{ song.artistName }}</div>
+              <div class="song-artist">{{ song.singer }}</div>
             </div>
-            <div class="song-duration">{{ formatTime(song.duration / 1000) }}</div>
-            <button class="song-remove" @click.stop="localUserStore.removeSong(song.id)">
+            <div class="song-duration">{{ song.interval.includes(':') ? song.interval : formatTime(parseInt(song.interval) / 1000) }}</div>
+            <button class="song-remove" @click.stop="localUserStore.removeSong(song.songmid)">
               <span class="iconfont icon-xuanxiangshanchu"></span>
             </button>
           </div>

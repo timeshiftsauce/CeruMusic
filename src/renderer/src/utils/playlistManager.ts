@@ -1,7 +1,7 @@
 import mitt from 'mitt'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
-import musicService from '@renderer/services/music/index'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
 // 事件类型定义
 type PlaylistEvents = {
@@ -22,22 +22,24 @@ const emitter = mitt<PlaylistEvents>()
  */
 export async function getSongRealUrl(song: SongList): Promise<string> {
   try {
+    // 获取当前用户的信息
+    const LocalUserDetail = LocalUserDetailStore()
     // 通过统一的request方法获取真实的播放URL
-    const urlData = await musicService.request(
-      'getSongUrl',
-      { id: song.id.toString() },
-      false,
-      false
-    )
-
-    if (urlData && urlData.url) {
-      return urlData.url
-    } else {
-      throw new Error('无法获取歌曲播放链接')
+    const urlData = await window.api.music.requestSdk('getMusicUrl',{
+      pluginId:(LocalUserDetail.userSource.pluginId as unknown as string),
+      source: song.source,
+      songInfo:song,
+      quality: LocalUserDetail.userSource.quality as string
+    })
+    console.log(urlData)
+    if (typeof urlData === 'object'&&urlData.error) {
+      throw new Error(urlData.error)
+    }else{
+      return urlData as string
     }
-  } catch (error) {
+  } catch (error:any) {
     console.error('获取歌曲URL失败:', error)
-    throw new Error('获取歌曲播放链接失败')
+    throw new Error('获取歌曲播放链接失败' + error.message)
   }
 }
 
@@ -80,7 +82,7 @@ export async function addToPlaylistAndPlay(
 export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
   try {
     // 检查歌曲是否已在播放列表中
-    const existingIndex = localUserStore.list.findIndex((item: SongList) => item.id === song.id)
+    const existingIndex = localUserStore.list.findIndex((item: SongList) => item.songmid === song.songmid)
 
     if (existingIndex !== -1) {
       await MessagePlugin.warning('歌曲已在播放列表中')
@@ -162,17 +164,5 @@ export function getPlaylistEmitter() {
  * @returns 转换后的SongList对象
  */
 export function convertSearchResultToSongList(searchResult: any): SongList {
-  return {
-    id: searchResult.id,
-    name: searchResult.name,
-    artist: searchResult.artists ? searchResult.artists.map((a: any) => a.name) : [],
-    artistName: searchResult.artists
-      ? searchResult.artists.map((a: any) => a.name).join(' / ')
-      : '',
-    coverUrl:
-      (searchResult.detail?.album?.blurPicUrl || searchResult.detail?.album?.picUrl) +
-      '?param=300y300',
-    duration: searchResult.duration,
-    musicSource: 'default' //这里先写死到时候根据用户的源切换
-  }
+  return searchResult
 }

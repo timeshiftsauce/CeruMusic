@@ -75,6 +75,14 @@
         </div>
         <div class="plugin-actions">
           <t-button
+            theme="default"
+            size="small"
+            @click.stop="viewPluginLogs(plugin.pluginId, plugin.pluginInfo.name)"
+            :disabled="loading"
+          >
+            <template #icon><t-icon name="view-list" /></template> 日志
+          </t-button>
+          <t-button
             v-if="!isPluginSelected(plugin.pluginId)"
             theme="primary"
             size="small"
@@ -92,12 +100,85 @@
         </div>
       </div>
     </div>
+
+    <!-- 插件日志弹窗 -->
+    <t-dialog
+      v-model:visible="logDialogVisible"
+      top="10vh"
+      :close-btn="false"
+      :footer="false"
+      width="80%"
+      :style="{ maxWidth: '900px', maxHeight: '80vh' }"
+      class="log-dialog"
+    >
+      <template #header>
+        <div class="log-dialog-header">
+          <div class="log-title">
+            <i class="iconfont icon-terminal"></i>
+            {{ currentLogPluginName }} - 插件日志
+          </div>
+          <div class="log-actions">
+            <t-button
+              size="small"
+              variant="outline"
+              theme="default"
+              ghost
+              :disabled="logsLoading"
+              @click.stop="refreshLogs"
+            >
+              刷新
+            </t-button>
+          </div>
+          <div class="mac-controls">
+            <div class="mac-button close" @click="logDialogVisible = false"></div>
+            <div class="mac-button minimize"></div>
+            <div class="mac-button maximize"></div>
+          </div>
+        </div>
+      </template>
+      <template #body>
+        <div class="console-container">
+          <div class="console-header">
+            <div class="console-info">
+              <span class="console-prompt">$</span>
+              <span class="console-path">~/plugins/{{ currentLogPluginName }}</span>
+              <span class="console-time">{{ formatTime(new Date()) }}</span>
+            </div>
+          </div>
+          <div ref="logContentRef" class="console-content" :class="{ loading: logsLoading }">
+            <div v-if="logsLoading" class="console-loading">
+              <div class="loading-spinner"></div>
+              <span>正在加载日志...</span>
+            </div>
+            <div v-else-if="logsError" class="console-error">
+              <span class="error-icon">❌</span>
+              <span>加载日志失败: {{ logsError }}</span>
+            </div>
+            <div v-else-if="logs.length === 0" class="console-empty">
+              <span class="empty-icon">📝</span>
+              <span>暂无日志记录</span>
+            </div>
+            <div v-else class="log-entries">
+              <div
+                v-for="(log, index) in logs"
+                :key="index"
+                class="log-entry"
+                :class="getLogLevel(log)"
+              >
+                <span class="log-timestamp">{{ formatLogTime(index) }}</span>
+                <span class="log-content">{{ log }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
@@ -133,6 +214,15 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const plugTypeDialog = ref(false)
 let type = ref<'lx' | 'cr'>('cr')
+
+// 日志相关状态
+const logDialogVisible = ref(false)
+const currentLogPluginId = ref('')
+const currentLogPluginName = ref('')
+const logs = ref<string[]>([])
+const logsLoading = ref(false)
+const logsError = ref<string | null>(null)
+const logContentRef = ref<HTMLElement | null>(null)
 
 // 获取store实例
 const localUserStore = LocalUserDetailStore()
@@ -267,7 +357,6 @@ async function addPlug() {
   }
 }
 
-
 // 卸载插件
 async function uninstallPlugin(pluginId: string, pluginName: string) {
   try {
@@ -317,6 +406,97 @@ async function refreshPlugins() {
   await getPlugins()
 }
 
+// 查看插件日志
+async function viewPluginLogs(pluginId: string, pluginName: string) {
+  try {
+    currentLogPluginId.value = pluginId
+    currentLogPluginName.value = pluginName
+    logDialogVisible.value = true
+    await loadPluginLogs()
+  } catch (err: any) {
+    console.error('打开日志弹窗失败:', err)
+    MessagePlugin.error(`打开日志弹窗失败: ${err.message || '未知错误'}`)
+  }
+}
+
+// 加载插件日志
+async function loadPluginLogs() {
+  if (!currentLogPluginId.value) return
+
+  logsLoading.value = true
+  logsError.value = null
+
+  try {
+    const result = await window.api.plugins.getPluginLog(currentLogPluginId.value)
+    console.log(result)
+    if (result && Array.isArray(result)) {
+      logs.value = result
+      // 滚动到底部显示最新日志
+      await nextTick()
+      setTimeout(() => {
+        if (logContentRef.value) {
+          logContentRef.value.scrollTop = logContentRef.value.scrollHeight
+        }
+      }, 100)
+    } else {
+      logs.value = []
+    }
+  } catch (err: any) {
+    console.error('加载插件日志失败:', err)
+    logsError.value = err.message || '加载日志失败'
+    logs.value = []
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+// 刷新日志
+async function refreshLogs() {
+  try {
+    await loadPluginLogs()
+  } catch (err: any) {
+    console.error('刷新日志失败:', err)
+    MessagePlugin.error(`刷新日志失败: ${err.message || '未知错误'}`)
+  }
+}
+
+// 格式化时间
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString('zh-CN', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+// 格式化日志时间
+function formatLogTime(index: number): string {
+  const now = new Date()
+  const logTime = new Date(now.getTime() - (logs.value.length - index - 1) * 1000)
+  return logTime.toLocaleTimeString('zh-CN', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+// 获取日志级别样式
+function getLogLevel(log: string): string {
+  const logLower = log.toLowerCase()
+  if (logLower.includes('error') || logLower.includes('错误')) {
+    return 'log-error'
+  } else if (logLower.includes('warn') || logLower.includes('警告')) {
+    return 'log-warn'
+  } else if (logLower.includes('info') || logLower.includes('信息')) {
+    return 'log-info'
+  } else if (logLower.includes('debug') || logLower.includes('调试')) {
+    return 'log-debug'
+  }
+  return 'log-default'
+}
+
 onMounted(async () => {
   // 确保store已初始化
   if (!localUserStore.initialization) {
@@ -327,7 +507,7 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .header {
   -webkit-app-region: drag;
   display: flex;
@@ -421,6 +601,7 @@ onMounted(async () => {
   background-color: var(--color-background-soft, #f8f9fa);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
+  border: 2px solid transparent;
 }
 
 .plugin-item.selected {
@@ -490,5 +671,374 @@ onMounted(async () => {
 .plugin-actions {
   display: flex;
   gap: 8px;
+}
+
+/* 日志弹窗样式 */
+:deep(.log-dialog) {
+  height: 80vh;
+  .t-dialog {
+    background: #1e1e1e;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+  }
+
+  .t-dialog__header {
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    padding: 0;
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
+  }
+
+  .t-dialog__body {
+    padding: 0;
+    background: #1e1e1e;
+    border-left: 2px solid #272727;
+    border-right: 2px solid #272727;
+    border-bottom: 2px solid #272727;
+    border-radius: 0 0 12px 12px;
+    // max-height: 600px;
+    overflow: hidden;
+  }
+}
+
+.log-dialog-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);
+  min-height: 48px;
+  width: 100%;
+  .log-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 14px;
+    flex: 1;
+
+    .iconfont {
+      font-size: 16px;
+      color: #00d4aa;
+    }
+  }
+
+  .log-actions {
+    display: flex;
+    gap: 8px;
+    margin-right: 12px;
+
+    :deep(.t-button) {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      font-size: 12px;
+      padding: 4px 12px;
+      height: auto;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.2) !important;
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+
+      .t-icon {
+        font-size: 12px;
+      }
+    }
+  }
+
+  .mac-controls {
+    display: flex;
+    gap: 8px;
+    flex-direction: row-reverse;
+    .mac-button {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &.close {
+        background: #ff5f57;
+        &:hover {
+          background: #ff3b30;
+        }
+      }
+
+      &.minimize {
+        background: #ffbd2e;
+        &:hover {
+          background: #ff9500;
+        }
+      }
+
+      &.maximize {
+        background: #28ca42;
+        &:hover {
+          background: #30d158;
+        }
+      }
+    }
+  }
+}
+
+.console-container {
+  background: #1e1e1e;
+  color: #ffffff;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  height: calc(80vh - 64px - 48px);
+  // max-height: 500px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-header {
+  background: #2d2d2d;
+  border-bottom: 1px solid #404040;
+  padding: 8px 16px;
+  flex-shrink: 0;
+
+  .console-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+
+    .console-prompt {
+      color: #00d4aa;
+      font-weight: bold;
+    }
+
+    .console-path {
+      color: #8a8a8a;
+    }
+
+    .console-time {
+      color: #666666;
+      margin-left: auto;
+    }
+  }
+}
+
+.console-content {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-color: #555555 #2d2d2d;
+  padding: 16px;
+  background: #1e1e1e;
+  position: relative;
+
+  &.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 自定义滚动条 */
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #2d2d2d;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #555555;
+    border-radius: 4px;
+
+    &:hover {
+      background: #666666;
+    }
+  }
+}
+
+.console-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #8a8a8a;
+
+  .loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #404040;
+    border-top: 2px solid #00d4aa;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+}
+
+.console-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ff6b6b;
+  padding: 12px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+  border-left: 4px solid #ff6b6b;
+
+  .error-icon {
+    font-size: 16px;
+  }
+}
+
+.console-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #8a8a8a;
+  height: 200px;
+
+  .empty-icon {
+    font-size: 24px;
+    opacity: 0.6;
+  }
+}
+
+.log-entries {
+  .log-entry {
+    display: flex;
+    margin-bottom: 4px;
+    padding: 2px 0;
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .log-timestamp {
+      color: #666666;
+      font-size: 11px;
+      width: 80px;
+      text-align: center;
+      flex-shrink: 0;
+      margin-right: 12px;
+      font-weight: 500;
+    }
+
+    .log-content {
+      flex: 1;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    /* 不同日志级别的颜色 */
+    &.log-error {
+      .log-content {
+        color: #ff6b6b;
+      }
+      .log-timestamp {
+        color: #ff6b6b;
+      }
+    }
+
+    &.log-warn {
+      .log-content {
+        color: #ffd93d;
+      }
+      .log-timestamp {
+        color: #ffd93d;
+      }
+    }
+
+    &.log-info {
+      .log-content {
+        color: #74b9ff;
+      }
+      .log-timestamp {
+        color: #74b9ff;
+      }
+    }
+
+    &.log-debug {
+      .log-content {
+        color: #a29bfe;
+      }
+      .log-timestamp {
+        color: #a29bfe;
+      }
+    }
+
+    &.log-default {
+      .log-content {
+        color: #ffffff;
+      }
+    }
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  :deep(.log-dialog) {
+    .t-dialog {
+      width: 95% !important;
+      max-width: none !important;
+      max-height: 90vh !important;
+    }
+  }
+
+  .console-container {
+    height: 50vh;
+    max-height: 400px;
+    min-height: 250px;
+  }
+
+  .log-dialog-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 16px;
+
+    .log-title {
+      order: 1;
+      flex: 1 1 100%;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .log-actions {
+      order: 2;
+      margin-right: 0;
+
+      .t-button {
+        padding: 2px 8px;
+        font-size: 11px;
+      }
+    }
+
+    .mac-controls {
+      order: 3;
+    }
+  }
+
+  .console-content {
+    font-size: 12px;
+  }
+
+  .log-entries .log-entry {
+    .log-timestamp {
+      width: 60px;
+      font-size: 10px;
+    }
+  }
 }
 </style>

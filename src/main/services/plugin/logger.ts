@@ -66,24 +66,42 @@ class Logger {
   }
 
   log(...args: any[]): void {
-    this.write(`log ${args.join(' ')}`)
+    this.write(`log ${parseArgs(args)}\n`)
   }
 
   info(...args: any[]): void {
-    this.write(`info ${args.join(' ')}`)
+    this.write(`info ${parseArgs(args)}\n`)
   }
 
   warn(...args: any[]): void {
-    this.write(`warn ${args.join(' ')}`)
+    this.write(`warn ${parseArgs(args)}\n`)
   }
 
   error(...args: any[]): void {
-    this.write(`error ${args.join(' ')}`)
+    this.write(`error ${parseArgs(args)}\n`)
   }
-
+  
+  group(...args: any[]): void {
+    args.unshift('groupStart---------')
+    this.write(`start ${parseArgs(args)}\n`)
+  }
+  groupEnd(...args: any[]): void {
+    this.write(`end ${parseArgs(args)}\n`)
+  }
+  
   private write(msg: string): void {
     writeLog(this.logFilePath, msg, WriteMode.APPEND).then()
   }
+}
+
+function parseArgs(args){
+  return args.map(arg=>{
+    if(typeof arg==='object'){
+      return JSON.stringify(arg)
+    }
+
+    return arg
+  }).join(' ')
 }
 
 async function getLog(pluginId: string) {

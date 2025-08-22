@@ -6,6 +6,16 @@ import path from 'node:path'
 import musicService from './services/music'
 import pluginService from './services/plugin'
 import aiEvents from './events/ai'
+import './services/musicSdk/index'
+
+// import wy from './utils/musicSdk/wy/index'
+// import kg from './utils/musicSdk/kg/index'
+// wy.hotSearch.getList().then((res) => {
+//   console.log(res)
+// })
+// kg.hotSearch.getList().then((res) => {
+//   console.log(res)
+// })
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -60,6 +70,7 @@ function createTray(): void {
 }
 
 function createWindow(): void {
+  // return
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1100,
@@ -179,6 +190,7 @@ ipcMain.handle('service-music-request', async (_, api, args) => {
   return await musicService.request(api, args)
 })
 
+
 aiEvents(mainWindow)
 
 // This method will be called when Electron has finished
@@ -186,6 +198,7 @@ aiEvents(mainWindow)
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   // Set app user model id for windows
+
   electronApp.setAppUserModelId('com.cerulean.music')
 
   // 初始化插件系统

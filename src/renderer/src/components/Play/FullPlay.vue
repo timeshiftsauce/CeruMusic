@@ -8,6 +8,7 @@ import {
   type BackgroundRenderRef,
   type LyricPlayerRef
 } from '@applemusic-like-lyrics/vue'
+import type { SongList } from '@renderer/types/audio'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount } from 'vue'
 import { shouldUseBlackText } from '@renderer/utils/contrastColor'
@@ -20,10 +21,12 @@ import { parseYrc, parseLrc, parseTTML } from '@applemusic-like-lyrics/lyric/pkg
 
 import { storeToRefs } from 'pinia'
 
+
 interface Props {
   show?: boolean
   coverImage?: string
-  songId?: string
+  songId?: string|null
+  songInfo: SongList|{songmid:number|null}
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -31,7 +34,6 @@ const props = withDefaults(defineProps<Props>(), {
   coverImage: '@assets/images/Default.jpg',
   songId: ''
 })
-
 // 定义事件
 const emit = defineEmits(['toggle-fullscreen'])
 
@@ -48,9 +50,11 @@ const toggleFullscreen = () => {
 }
 
 // 监听 ESC 键退出全屏
-onMounted(() => {
+onMounted(async () => {
   // 添加事件监听器检测全屏状态变化
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+
+
 })
 
 onBeforeUnmount(() => {
@@ -87,6 +91,8 @@ watch(
     if (!newId) return
     let lyricText = ''
     let parsedLyrics: LyricLine[] = []
+    // 创建一个符合 MusicItem 接口的对象，只包含必要的基本属性
+
     try {
       // 请求歌词数据，设置yv=true获取逐字歌词
       try {
@@ -206,39 +212,20 @@ watch(
 <template>
   <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
-    <BackgroundRender
-      ref="bgRef"
-      :album="actualCoverImage"
-      :album-is-video="false"
-      :fps="30"
-      :flow-speed="4"
-      :low-freq-volume="1"
-      :has-lyric="state.lyricLines.length > 10"
-      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
-    />
+    <BackgroundRender ref="bgRef" :album="actualCoverImage" :album-is-video="false" :fps="30" :flow-speed="4"
+      :low-freq-volume="1" :has-lyric="state.lyricLines.length > 10"
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1" />
     <!-- 全屏按钮 -->
-    <button
-      class="fullscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="toggleFullscreen"
-    >
+    <button class="fullscreen-btn" :class="{ 'black-text': useBlackText }" @click="toggleFullscreen">
       <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
       <FullscreenExit1Icon v-else class="icon" />
     </button>
-    <button
-      class="putawayscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="emit('toggle-fullscreen')"
-    >
+    <button class="putawayscreen-btn" :class="{ 'black-text': useBlackText }" @click="emit('toggle-fullscreen')">
       <ChevronDownIcon class="icon" />
     </button>
     <Transition name="fade-nav">
-      <TitleBarControls
-        v-if="props.show"
-        class="top"
-        style="-webkit-app-region: drag"
-        :color="useBlackText ? 'black' : 'white'"
-      />
+      <TitleBarControls v-if="props.show" class="top" style="-webkit-app-region: drag"
+        :color="useBlackText ? 'black' : 'white'" />
     </Transition>
     <div class="playbox">
       <!-- 播放控件内容
@@ -247,43 +234,27 @@ watch(
         <p>这里将显示歌曲信息</p>
       </div> -->
       <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
-        <div
-          class="box"
-          :style="
-            !Audio.isPlay
-              ? 'animation-play-state: paused;'
-              : '' +
-                (state.lyricLines.length <= 0
-                  ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
-                  : '')
-          "
-        >
-          <t-image
-            :src="coverImage"
-            :style="
-              state.lyricLines.length > 0
-                ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
-                : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
-            "
-            shape="circle"
-            class="cover"
-          />
+        <div class="box" :style="!Audio.isPlay
+          ? 'animation-play-state: paused;'
+          : '' +
+          (state.lyricLines.length <= 0
+            ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
+            : '')
+          ">
+          <t-image :src="coverImage" :style="state.lyricLines.length > 0
+            ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
+            : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
+            " shape="circle" class="cover" />
         </div>
       </div>
       <div v-show="state.lyricLines.length > 0" class="right">
-        <LyricPlayer
-          ref="lyricPlayerRef"
-          :lyric-lines="props.show ? state.lyricLines : []"
-          :current-time="state.currentTime"
-          :align-position="0.38"
-          style="mix-blend-mode: plus-lighter"
-          class="lyric-player"
-          @line-click="
+        <LyricPlayer ref="lyricPlayerRef" :lyric-lines="props.show ? state.lyricLines : []"
+          :current-time="state.currentTime" :align-position="0.38" style="mix-blend-mode: plus-lighter"
+          class="lyric-player" @line-click="
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
             }
-          "
-        >
+          ">
           <template #bottom-line> Test Bottom Line </template>
         </LyricPlayer>
       </div>
@@ -351,9 +322,11 @@ watch(
     }
   }
 }
+
 .putawayscreen-btn {
   left: 100px;
 }
+
 .full-play {
   --height: calc(100vh - var(--play-bottom-height));
   --text-color: rgba(255, 255, 255, 0.9);
@@ -389,24 +362,29 @@ watch(
     // background-color: rgba(0, 0, 0, 0.256);
     display: flex;
     position: relative;
+
     :deep(.lyric-player) {
       --amll-lyric-player-font-size: max(2vw, 38px);
       box-sizing: border-box;
       width: 100%;
       height: 100%;
     }
+
     .left {
       width: 40%;
       transition: all 0.3s ease;
     }
+
     .right {
       width: 60%;
     }
+
     .left {
       display: flex;
       justify-content: center;
       align-items: center;
       margin: 0 0 var(--play-bottom-height) 0;
+
       .box {
         width: min(30vw, 700px);
         height: min(30vw, 700px);
@@ -416,18 +394,21 @@ watch(
         justify-content: center;
         border-radius: 1000%;
         animation: rotateRecord 10s linear infinite;
+
         :deep(.cover) img {
           user-select: none;
           -webkit-user-drag: none;
         }
       }
     }
+
     .right {
       padding: 0 20px;
       padding-top: 90px;
     }
   }
 }
+
 @keyframes rotateRecord {
   to {
     transform: rotate(360deg);

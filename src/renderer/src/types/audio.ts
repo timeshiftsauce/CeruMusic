@@ -45,11 +45,17 @@ export type ControlAudioState = {
 }
 
 export type SongList = {
-  id: number
-  coverUrl: string
+  songmid: number
+  hash?: string
+  singer: string
   name: string
-  artist: string[]
-  duration: number
-  artistName: string
-  musicSource: string
+  albumName: string
+  albumId: number
+  source: string
+  interval: string
+  img: string
+  lrc: null | string
+  types: string[]
+  _types: Record<string, any>
+  typeUrl: Record<string, any>
 }
