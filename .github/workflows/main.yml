@@ -25,7 +25,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18  # 安装Node.js 18 （这里node环境是能够运行代码的环境）
+          node-version: 22  # 安装Node.js 22 （这里node环境是能够运行代码的环境）
 
       - name: Install Dependencies
         run: |
