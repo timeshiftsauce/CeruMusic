@@ -6,6 +6,41 @@
   "description": "",
   "glyphs": [
     {
+      "icon_id": "8032933",
+      "name": "咪咕音乐",
+      "font_class": "mg",
+      "unicode": "ea19",
+      "unicode_decimal": 59929
+    },
+    {
+      "icon_id": "12385755",
+      "name": "QQ音乐",
+      "font_class": "tx",
+      "unicode": "e602",
+      "unicode_decimal": 58882
+    },
+    {
+      "icon_id": "34064856",
+      "name": "网易云音乐",
+      "font_class": "wy",
+      "unicode": "e60b",
+      "unicode_decimal": 58891
+    },
+    {
+      "icon_id": "37870308",
+      "name": "酷狗音乐",
+      "font_class": "kg",
+      "unicode": "eb7d",
+      "unicode_decimal": 60285
+    },
+    {
+      "icon_id": "42713468",
+      "name": "酷我音乐",
+      "font_class": "kw",
+      "unicode": "e601",
+      "unicode_decimal": 58881
+    },
+    {
       "icon_id": "5029",
       "name": "列表",
       "font_class": "liebiao",

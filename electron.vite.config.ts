@@ -10,10 +10,20 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        '@common': resolve('src/common')
+      }
+    }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        '@common': resolve('src/common')
+      }
+    }
   },
   renderer: {
     plugins: [
@@ -44,7 +54,8 @@ export default defineConfig({
         '@components': resolve('src/renderer/src/components'),
         '@services': resolve('src/renderer/src/services'),
         '@types': resolve('src/renderer/src/types'),
-        '@store': resolve('src/renderer/src/store')
+        '@store': resolve('src/renderer/src/store'),
+        '@common': resolve('src/common')
       }
     }
   }

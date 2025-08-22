@@ -24,6 +24,9 @@ type GetSongDetailArgs = {
 
 type GetSongUrlArgs = {
   id: string
+  pluginId?: string // 插件ID
+  quality?: string // 音质
+  source?: string // 音乐源（wy, tx等）
 }
 
 type GetLyricArgs = {
@@ -45,6 +48,11 @@ type GetListSongsArgs = {
 
 type DownloadSingleSongArgs = {
   id: string
+  name: string
+  artist: string
+  pluginId?: string
+  quality?: string
+  source?: string
 }
 
 type ServiceNamesType =

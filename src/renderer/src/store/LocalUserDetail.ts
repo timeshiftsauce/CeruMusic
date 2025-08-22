@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 
 import type { SongList } from '@renderer/types/audio'
@@ -59,14 +59,14 @@ export const LocalUserDetailStore = defineStore('Local', () => {
   }
 
   function addSong(song: SongList) {
-    if (!list.value.find((item) => item.id === song.id)) {
+    if (!list.value.find((item) => item.songmid === song.songmid)) {
       list.value.push(song)
     }
     return list.value
   }
 
   function addSongToFirst(song: SongList) {
-    const existingIndex = list.value.findIndex((item) => item.id === song.id)
+    const existingIndex = list.value.findIndex((item) => item.songmid === song.songmid)
     if (existingIndex !== -1) {
       // 如果歌曲已存在，将其移动到第一位
       const existingSong = list.value.splice(existingIndex, 1)[0]
@@ -79,11 +79,18 @@ export const LocalUserDetailStore = defineStore('Local', () => {
   }
 
   function removeSong(songId: number) {
-    const index = list.value.findIndex((item) => item.id === songId)
+    const index = list.value.findIndex((item) => item.songmid === songId)
     if (index !== -1) {
       list.value.splice(index, 1)
     }
   }
+  const userSource = computed(() => {
+    return {
+      pluginId: userInfo.value.pluginId,
+      source: userInfo.value.selectSources,
+      quality: userInfo.value.selectQuality
+    }
+  })
   return {
     list,
     userInfo,
@@ -91,6 +98,7 @@ export const LocalUserDetailStore = defineStore('Local', () => {
     init,
     addSong,
     addSongToFirst,
-    removeSong
+    removeSong,
+    userSource
   }
 })

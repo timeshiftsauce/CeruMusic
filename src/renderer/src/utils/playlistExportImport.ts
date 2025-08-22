@@ -169,11 +169,12 @@ export function validateImportedPlaylist(playlist: any[]): boolean {
   return playlist.every(
     (song) =>
       typeof song === 'object' &&
-      typeof song.id === 'number' &&
+      typeof song.songmid === 'number' &&
       typeof song.name === 'string' &&
-      typeof song.coverUrl === 'string' &&
-      Array.isArray(song.artist) &&
-      typeof song.duration === 'number' &&
-      typeof song.artistName === 'string'
+      typeof song.img === 'string' &&
+      typeof song.singer === 'string' &&
+      typeof song.interval === 'string' &&
+      typeof song.albumName === 'string' &&
+      typeof song.source === 'string'
   )
 }

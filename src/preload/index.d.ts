@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-
+import {MainApi,MethodParams} from '../main/services/musicSdk/index'
 // 自定义 API 接口
 interface CustomAPI {
   minimize: () => void
@@ -11,6 +11,9 @@ interface CustomAPI {
 
   music: {
     request: (api: string, args: any) => Promise<any>
+    requestSdk:<T extends keyof MainApi>(method: T,  args: {
+    source: any;
+  } & (MethodParams<T> extends object ? MethodParams<T> : { [key: string]: any })) => ReturnType<MainApi[T]>
   }
 
   ai: {
@@ -29,6 +32,7 @@ interface CustomAPI {
     addPlugin: (pluginCode: string, pluginName: string) => Promise<any>
     getPluginById: (id: string) => Promise<any>
     loadAllPlugins: () => Promise<any>
+    getPluginLog: (pluginId: string) => Promise<any>
   }
 
   // 用户配置API

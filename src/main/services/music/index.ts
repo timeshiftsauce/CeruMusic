@@ -1,5 +1,4 @@
 import { MusicServiceBase, ServiceNamesType, ServiceArgsType } from './service-base'
-
 import {
   GetToplistArgs,
   SearchArgs,
@@ -10,7 +9,6 @@ import {
   GetListSongsArgs,
   DownloadSingleSongArgs
 } from './service-base'
-
 import { netEaseService } from './net-ease-service'
 import { AxiosError } from 'axios'
 
@@ -68,3 +66,12 @@ async function request(api: ServiceNamesType, args: ServiceArgsType): Promise<an
 }
 
 export default { request }
+// netEaseService
+//   .search({
+//     keyword: '稻香',
+//     type: 1,
+//     limit: 25
+//   })
+//   .then((res) => {
+//     console.log(res)
+//   })

@@ -25,7 +25,8 @@ const api = {
     ipcRenderer.on('music-control', callback),
 
   music: {
-    request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args)
+    request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args),
+    requestSdk:(api: string, args: any) => ipcRenderer.invoke('service-music-sdk-request', api, args)
   },
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') =>

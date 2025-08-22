@@ -127,12 +127,12 @@ const handleImportFromClipboard = async () => {
 // 合并播放列表，避免重复
 const mergePlaylist = (currentList: SongList[], importedList: SongList[]): SongList[] => {
   const result = [...currentList]
-  const existingIds = new Set(currentList.map((song) => song.id))
+  const existingIds = new Set(currentList.map((song) => song.songmid))
 
   for (const song of importedList) {
-    if (!existingIds.has(song.id)) {
+    if (!existingIds.has(song.songmid)) {
       result.push(song)
-      existingIds.add(song.id)
+      existingIds.add(song.songmid)
     }
   }
 
@@ -175,9 +175,24 @@ const updatePlaylistStats = () => {
 
   if (list.value && list.value.length > 0) {
     list.value.forEach((song) => {
-      stats.totalDuration += song.duration / 1000 // 转换为秒
-      if (song.artist && Array.isArray(song.artist)) {
-        song.artist.forEach((artist) => stats.artists.add(artist))
+      // 处理新的 interval 字段格式
+      if (typeof song.interval === 'string' && song.interval.includes(':')) {
+        // 如果是 "05:41" 格式，转换为秒数
+        const [minutes, seconds] = song.interval.split(':').map(Number)
+        stats.totalDuration += minutes * 60 + seconds
+      } else {
+        // 如果是数字字符串，转换为秒数
+        const duration = parseInt(song.interval)
+        if (!isNaN(duration)) {
+          stats.totalDuration += duration / 1000
+        }
+      }
+      
+      // 处理歌手信息
+      if (song.singer) {
+        // 如果歌手名包含分隔符，分割处理
+        const singers = song.singer.split(/[\/、&]/).map(s => s.trim()).filter(s => s)
+        singers.forEach((singer) => stats.artists.add(singer))
       }
     })
   }

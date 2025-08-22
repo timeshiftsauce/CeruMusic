@@ -1,6 +1,7 @@
 import * as vm from 'vm'
 import fetch from 'node-fetch'
 import * as fs from 'fs'
+import {MusicItem} from '../../musicSdk/type'
 
 // 定义插件结构接口
 export interface PluginInfo {
@@ -25,9 +26,8 @@ interface CeruMusicPlugin {
   getLyric?: (source: string, musicInfo: MusicInfo) => Promise<string>
 }
 
-interface MusicInfo {
-  id: string
-  [key: string]: any
+interface MusicInfo extends MusicItem{
+  id?: string
 }
 
 interface RequestResult {
@@ -155,21 +155,8 @@ class CeruMusicPluginHost {
 
             // 尝试解析JSON，如果失败则返回文本
             let body: any
-            const contentType = response.headers.get('content-type')
-
             try {
-              if (contentType && contentType.includes('application/json')) {
-                body = await response.json()
-              } else {
-                const text = await response.text()
-                console.log(`[CeruMusic] 响应不是JSON格式，内容: ${text.substring(0, 200)}...`)
-                // 对于非JSON响应，创建一个错误状态的body
-                body = {
-                  code: response.status,
-                  msg: `Expected JSON response but got: ${contentType || 'unknown content type'}`,
-                  data: text
-                }
-              }
+              body = await response.json()
             } catch (parseError: any) {
               console.error(`[CeruMusic] 解析响应失败: ${parseError.message}`)
               // 解析失败时创建错误body

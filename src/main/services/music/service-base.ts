@@ -16,6 +16,7 @@ type SearchArgs = {
   keyword: string
   offset?: number
   limit: number
+  source?: string
 }
 
 type GetSongDetailArgs = {
@@ -24,6 +25,9 @@ type GetSongDetailArgs = {
 
 type GetSongUrlArgs = {
   id: string
+  pluginId?: string // 插件ID
+  quality?: string // 音质
+  source?: string // 音乐源（wy, tx等）
 }
 
 type GetLyricArgs = {
@@ -45,6 +49,11 @@ type GetListSongsArgs = {
 
 type DownloadSingleSongArgs = {
   id: string
+  name: string
+  artist: string
+  pluginId?: string
+  quality?: string
+  source?: string
 }
 
 type ServiceNamesType =
@@ -243,7 +252,7 @@ interface SongUrlResponse {
 interface MusicServiceBase {
   search({ type, keyword, offset, limit }: SearchArgs): Promise<SongResponse>
   getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse>
-  getSongUrl({ id }: GetSongUrlArgs): Promise<SongUrlResponse>
+  getSongUrl({ id, pluginId, quality, source }: GetSongUrlArgs): Promise<SongUrlResponse>
   getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
   getToplist({}: GetToplistArgs): Promise<any>
   getToplistDetail({}: GetToplistDetailArgs): Promise<any>
