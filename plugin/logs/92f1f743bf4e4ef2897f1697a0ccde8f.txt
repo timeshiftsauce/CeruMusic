@@ -1470,3 +1470,9 @@ log [聚合API接口 (by lerd) by Ceru插件] 音源注册完成: ["tx","wy","kg
 log [CeruMusic] Plugin "聚合API接口 (by lerd)" loaded successfully.
 log [聚合API接口 (by lerd) by Ceru插件] 动态音源信息已更新: {"kw":{"name":"酷我音乐","type":"music","qualitys":["128k","320k","flac"]},"kg":{"name":"酷狗音乐","type":"music","qualitys":["128k","320k","flac","flac24bit"]},"tx":{"name":"QQ音乐","type":"music","qualitys":["128k","320k","flac","flac24bit"]},"wy":{"name":"网易云音乐","type":"music","qualitys":["128k","320k","flac","flac24bit"]},"mg":{"name":"咪咕音乐","type":"music","qualitys":["320k","flac"]}}
 log [CeruMusic] 事件驱动插件初始化成功
+log [聚合API接口 (by lerd) by Ceru插件] 注册事件监听器: request
+log [聚合API接口 (by lerd) by Ceru插件] 发送事件: inited {"status":true,"openDevTools":false,"sources":{"tx":{"name":"tx","type":"music","actions":["musicUrl"],"qualitys":["128k","320k","flac","flac24bit"]},"wy":{"name":"wy","type":"music","actions":["musicUrl"],"qualitys":["128k","320k","flac","flac24bit"]},"kg":{"name":"kg","type":"music","actions":["musicUrl"],"qualitys":["128k","320k","flac","flac24bit"]},"kw":{"name":"kw","type":"music","actions":["musicUrl"],"qualitys":["128k","320k","flac"]},"mg":{"name":"mg","type":"music","actions":["musicUrl"],"qualitys":["320k","flac"]}}}
+log [聚合API接口 (by lerd) by Ceru插件] 动态音源信息已更新: {"kw":{"name":"酷我音乐","type":"music","qualitys":["128k","320k","flac"]},"kg":{"name":"酷狗音乐","type":"music","qualitys":["128k","320k","flac","flac24bit"]},"tx":{"name":"QQ音乐","type":"music","qualitys":["128k","320k","flac","flac24bit"]},"wy":{"name":"网易云音乐","type":"music","qualitys":["128k","320k","flac","flac24bit"]},"mg":{"name":"咪咕音乐","type":"music","qualitys":["320k","flac"]}}
+log [CeruMusic] 事件驱动插件初始化成功
+log [聚合API接口 (by lerd) by Ceru插件] 音源注册完成: ["tx","wy","kg","kw","mg"]
+log [CeruMusic] Plugin "聚合API接口 (by lerd)" loaded successfully.

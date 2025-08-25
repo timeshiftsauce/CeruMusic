@@ -82,6 +82,7 @@ const handleImportFromFile = async () => {
     const importedPlaylist = await importPlaylistFromFile(uploadedFile.value)
 
     if (!validateImportedPlaylist(importedPlaylist)) {
+      console.log(importedPlaylist)
       throw new Error('导入的播放列表格式不正确')
     }
 
