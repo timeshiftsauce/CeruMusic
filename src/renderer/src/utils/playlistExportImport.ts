@@ -168,13 +168,11 @@ export function validateImportedPlaylist(playlist: any[]): boolean {
   // 验证每个歌曲对象是否包含必要的字段
   return playlist.every(
     (song) =>
-      typeof song === 'object' &&
-      typeof song.songmid === 'number' &&
-      typeof song.name === 'string' &&
+      song.songmid &&
+      song.name &&
       typeof song.img === 'string' &&
       typeof song.singer === 'string' &&
       typeof song.interval === 'string' &&
-      typeof song.albumName === 'string' &&
       typeof song.source === 'string'
   )
 }
