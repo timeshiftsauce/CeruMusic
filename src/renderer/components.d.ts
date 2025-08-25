@@ -18,13 +18,13 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SearchComponent: typeof import('./src/components/Search/SearchComponent.vue')['default']
     ShaderBackground: typeof import('./src/components/Play/ShaderBackground.vue')['default']
+    SongVirtualList: typeof import('./src/components/Music/SongVirtualList.vue')['default']
+    TAlert: typeof import('tdesign-vue-next')['Alert']
     TAside: typeof import('tdesign-vue-next')['Aside']
     TButton: typeof import('tdesign-vue-next')['Button']
-    TCard: typeof import('tdesign-vue-next')['Card']
     TContent: typeof import('tdesign-vue-next')['Content']
     TDialog: typeof import('tdesign-vue-next')['Dialog']
     TIcon: typeof import('tdesign-vue-next')['Icon']
-    TImage: typeof import('tdesign-vue-next')['Image']
     TInput: typeof import('tdesign-vue-next')['Input']
     TitleBarControls: typeof import('./src/components/TitleBarControls.vue')['default']
     TLayout: typeof import('tdesign-vue-next')['Layout']
@@ -32,7 +32,6 @@ declare module 'vue' {
     TRadioButton: typeof import('tdesign-vue-next')['RadioButton']
     TRadioGroup: typeof import('tdesign-vue-next')['RadioGroup']
     TSlider: typeof import('tdesign-vue-next')['Slider']
-    TTooltip: typeof import('tdesign-vue-next')['Tooltip']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }

@@ -187,11 +187,14 @@ const updatePlaylistStats = () => {
           stats.totalDuration += duration / 1000
         }
       }
-      
+
       // 处理歌手信息
       if (song.singer) {
         // 如果歌手名包含分隔符，分割处理
-        const singers = song.singer.split(/[\/、&]/).map(s => s.trim()).filter(s => s)
+        const singers = song.singer
+          .split(/[\/、&]/)
+          .map((s) => s.trim())
+          .filter((s) => s)
         singers.forEach((singer) => stats.artists.add(singer))
       }
     })

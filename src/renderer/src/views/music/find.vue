@@ -1,54 +1,76 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+// 路由实例
+const router = useRouter()
 
 // 推荐歌单数据
-const recommendPlaylists = ref([
-  {
-    id: 1,
-    title: '热门流行',
-    description: '最新最热的流行音乐',
-    cover: 'https://via.placeholder.com/200x200/f97316/ffffff?text=热门流行',
-    playCount: '1.2万'
-  },
-  {
-    id: 2,
-    title: '经典老歌',
-    description: '怀旧经典，永恒旋律',
-    cover: 'https://via.placeholder.com/200x200/3b82f6/ffffff?text=经典老歌',
-    playCount: '8.5万'
-  },
-  {
-    id: 3,
-    title: '轻音乐',
-    description: '放松心情的轻柔音乐',
-    cover: 'https://via.placeholder.com/200x200/10b981/ffffff?text=轻音乐',
-    playCount: '3.7万'
-  },
-  {
-    id: 4,
-    title: '摇滚精选',
-    description: '激情澎湃的摇滚乐',
-    cover: 'https://via.placeholder.com/200x200/ef4444/ffffff?text=摇滚精选',
-    playCount: '2.1万'
-  }
-])
+const recommendPlaylists: any = ref([])
+const loading = ref(true)
+const error = ref('')
 
 // 热门歌曲数据
-const hotSongs = ref([
-  { id: 1, title: '夜曲', artist: '周杰伦', album: '十一月的萧邦', duration: '3:37' },
-  { id: 2, title: '青花瓷', artist: '周杰伦', album: '我很忙', duration: '3:58' },
-  { id: 3, title: '稻香', artist: '周杰伦', album: '魔杰座', duration: '3:43' },
-  { id: 4, title: '告白气球', artist: '周杰伦', album: '周杰伦的床边故事', duration: '3:34' },
-  { id: 5, title: '七里香', artist: '周杰伦', album: '七里香', duration: '4:05' }
-])
+const hotSongs:any = ref([])
+
+// 获取热门歌单数据
+const fetchHotSonglist = async () => {
+  const LocalUserDetail = LocalUserDetailStore()
+  try {
+    loading.value = true
+    error.value = ''
+
+    // 调用真实 API 获取热门歌单
+    const result = await window.api.music.requestSdk('getHotSonglist', {
+      source: LocalUserDetail.userSource.source
+    })
+
+    if (result && result.list) {
+      recommendPlaylists.value = result.list.map((item: any) => ({
+        id: item.id,
+        title: item.name,
+        description: item.desc || '精选歌单',
+        cover: item.img || 'https://via.placeholder.com/200x200/f97316/ffffff?text=歌单',
+        playCount: item.play_count, // 直接使用返回的格式化字符串
+        author: item.author,
+        total: item.total,
+        time: item.time,
+        source: item.source
+      }))
+    }
+  } catch (err) {
+    console.error('获取热门歌单失败:', err)
+    error.value = '获取数据失败，请稍后重试'
+    // 使用备用数据
+    recommendPlaylists.value = []
+  } finally {
+    loading.value = false
+  }
+}
 
 const playPlaylist = (playlist: any): void => {
-  console.log('播放歌单:', playlist.title)
+  // 跳转到歌曲列表页面，传递歌单ID和其他必要信息
+  router.push({
+    name: 'list',
+    params: { id: playlist.id },
+    query: {
+      title: playlist.title,
+      source: playlist.source,
+      author: playlist.author,
+      cover: playlist.cover,
+      total: playlist.total
+    }
+  })
 }
 
 const playSong = (song: any): void => {
   console.log('播放歌曲:', song.title)
 }
+
+// 组件挂载时获取数据
+onMounted(() => {
+  fetchHotSonglist()
+})
 </script>
 
 <template>
@@ -61,8 +83,23 @@ const playSong = (song: any): void => {
 
     <!-- 推荐歌单 -->
     <div class="section">
-      <h3 class="section-title">推荐歌单</h3>
-      <div class="playlist-grid">
+      <h3 class="section-title">热门歌单Top{{ recommendPlaylists.length }}</h3>
+
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-container">
+        <t-loading size="large" text="正在加载热门歌单..." />
+      </div>
+
+      <!-- 错误状态 -->
+      <div v-else-if="error" class="error-container">
+        <t-alert theme="error" :message="error" />
+        <t-button theme="primary" @click="fetchHotSonglist" style="margin-top: 1rem">
+          重新加载
+        </t-button>
+      </div>
+
+      <!-- 歌单列表 -->
+      <div v-else class="playlist-grid">
         <div
           v-for="playlist in recommendPlaylists"
           :key="playlist.id"
@@ -71,19 +108,18 @@ const playSong = (song: any): void => {
         >
           <div class="playlist-cover">
             <img :src="playlist.cover" :alt="playlist.title" />
-            <div class="play-overlay">
-              <t-button shape="circle" theme="primary" size="large">
-                <i class="iconfont icon-a-tingzhiwukuang"></i>
-              </t-button>
-            </div>
           </div>
           <div class="playlist-info">
             <h4 class="playlist-title">{{ playlist.title }}</h4>
             <p class="playlist-desc">{{ playlist.description }}</p>
-            <span class="play-count">
-              <i class="iconfont icon-a-tingzhiwukuang"></i>
-              {{ playlist.playCount }}
-            </span>
+            <div class="playlist-meta">
+              <span class="play-count">
+                <i class="iconfont icon-bofang"></i>
+                {{ playlist.playCount }}
+              </span>
+              <span class="song-count" v-if="playlist.total">{{ playlist.total }}首</span>
+            </div>
+            <!-- <div class="playlist-author">by {{ playlist.author }}</div> -->
           </div>
         </div>
       </div>
@@ -119,7 +155,7 @@ const playSong = (song: any): void => {
 <style lang="scss" scoped>
 .find-container {
   padding: 2rem;
-  max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -150,9 +186,21 @@ const playSong = (song: any): void => {
   }
 }
 
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 0;
+}
+
+.error-container {
+  text-align: center;
+  padding: 2rem;
+}
+
 .playlist-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 1.5rem;
 }
 
@@ -177,25 +225,10 @@ const playSong = (song: any): void => {
     position: relative;
     aspect-ratio: 1;
     overflow: hidden;
-
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
-    }
-
-    .play-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.3s ease;
     }
   }
 
@@ -222,6 +255,13 @@ const playSong = (song: any): void => {
       overflow: hidden;
     }
 
+    .playlist-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
     .play-count {
       font-size: 0.75rem;
       color: #9ca3af;
@@ -232,6 +272,17 @@ const playSong = (song: any): void => {
       .iconfont {
         font-size: 0.75rem;
       }
+    }
+
+    .song-count {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .playlist-author {
+      font-size: 0.75rem;
+      color: #6b7280;
+      font-style: italic;
     }
   }
 }

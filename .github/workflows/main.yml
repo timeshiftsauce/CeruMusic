@@ -1,31 +1,31 @@
-name: AutoBuild  # 工作流的名称
+name: AutoBuild # 工作流的名称
 
 permissions:
-  contents: write  # 给予写入仓库内容的权限
+  contents: write # 给予写入仓库内容的权限
 
 on:
   push:
     tags:
-      - 'v*'  # 当推送以v开头的标签时触发此工作流
+      - 'v*' # 当推送以v开头的标签时触发此工作流
   workflow_dispatch:
 
 jobs:
   release:
-    name: build and release electron app  # 任务名称
-    runs-on: ${{ matrix.os }}  # 在matrix.os定义的操作系统上运行
+    name: build and release electron app # 任务名称
+    runs-on: ${{ matrix.os }} # 在matrix.os定义的操作系统上运行
     strategy:
-      fail-fast: false  # 如果一个任务失败,其他任务继续运行
+      fail-fast: false # 如果一个任务失败,其他任务继续运行
       matrix:
-        os: [windows-latest, macos-latest]  # 在Windows和macOS上运行任务
+        os: [windows-latest, macos-latest] # 在Windows和macOS上运行任务
 
     steps:
       - name: Check out git repository
-        uses: actions/checkout@v4  # 检出代码仓库
+        uses: actions/checkout@v4 # 检出代码仓库
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22  # 安装Node.js 22 （这里node环境是能够运行代码的环境）
+          node-version: 22 # 安装Node.js 22 （这里node环境是能够运行代码的环境）
 
       - name: Install Dependencies
         run: |
@@ -33,11 +33,11 @@ jobs:
           yarn install  # 安装项目依赖
 
       - name: Build Electron App for windows
-        if: matrix.os == 'windows-latest'  # 只在Windows上运行
-        run: yarn run build:win  # 构建Windows版应用
+        if: matrix.os == 'windows-latest' # 只在Windows上运行
+        run: yarn run build:win # 构建Windows版应用
 
       - name: Build Electron App for macos
-        if: matrix.os == 'macos-latest'  # 只在macOS上运行
+        if: matrix.os == 'macos-latest' # 只在macOS上运行
         run: |
           yarn run build:mac
 
@@ -55,9 +55,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}
-          path: dist  # 上传构建产物作为工作流artifact
+          path: dist # 上传构建产物作为工作流artifact
 
       - name: release
         uses: softprops/action-gh-release@v1
         with:
-          files: 'dist/**'  # 将dist目录下所有文件添加到release
+          files: 'dist/**' # 将dist目录下所有文件添加到release

@@ -1,12 +1,12 @@
-import needle from 'needle'
+import axios from 'axios'
 import { bHh } from './musicSdk/options'
 import { deflateRaw } from 'zlib'
-import { httpOverHttp, httpsOverHttp } from 'tunnel'
+import { HttpsProxyAgent, HttpProxyAgent } from 'hpagent'
 
 // 常量定义
 const DEFAULT_TIMEOUT = 15000
 const DEFAULT_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36'
+  'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36'
 const debugRequest = false
 
 const httpsRxp = /^https:/
@@ -56,58 +56,20 @@ export const clearProxy = () => {
  * @param {string} url - 请求URL
  */
 const getRequestAgent = (url) => {
-  let options
+  let proxyUrl
   if (proxy.enable && proxy.host) {
-    options = {
-      proxy: {
-        host: proxy.host,
-        port: proxy.port
-      }
-    }
-    // 如果有用户名和密码，添加认证
-    if (proxy.username && proxy.password) {
-      options.proxy.proxyAuth = `${proxy.username}:${proxy.password}`
-    }
+    const auth = proxy.username && proxy.password ? `${proxy.username}:${proxy.password}@` : ''
+    proxyUrl = `http://${auth}${proxy.host}:${proxy.port}`
   } else if (proxy.envProxy) {
-    options = {
-      proxy: {
-        host: proxy.envProxy.host,
-        port: proxy.envProxy.port
-      }
-    }
+    proxyUrl = `http://${proxy.envProxy.host}:${proxy.envProxy.port}`
   }
-  return options ? (httpsRxp.test(url) ? httpsOverHttp : httpOverHttp)(options) : undefined
-}
 
-/**
- * 核心请求函数
- * @param {string} url - 请求URL
- * @param {Object} options - 请求选项
- * @param {Function} callback - 回调函数
- */
-const request = (url, options, callback) => {
-  let data
-  if (options.body) {
-    data = options.body
-  } else if (options.form) {
-    data = options.form
-    options.json = false
-  } else if (options.formData) {
-    data = options.formData
-    options.json = false
+  if (proxyUrl) {
+    return httpsRxp.test(url)
+      ? new HttpsProxyAgent({ proxy: proxyUrl })
+      : new HttpProxyAgent({ proxy: proxyUrl })
   }
-  options.response_timeout = options.timeout
-
-  return needle.request(options.method || 'get', url, data, options, (err, resp, body) => {
-    if (!err) {
-      body = resp.body = resp.raw.toString()
-      try {
-        resp.body = JSON.parse(resp.body)
-      } catch (_) {}
-      body = resp.body
-    }
-    callback(err, resp, body)
-  }).request
+  return undefined
 }
 
 /**
@@ -125,30 +87,31 @@ const defaultHeaders = {
 const buildHttpPromise = (url, options) => {
   let obj = {
     isCancelled: false,
+    cancelToken: axios.CancelToken.source(),
     cancelHttp: () => {
-      if (!obj.requestObj) return (obj.isCancelled = true)
-      cancelHttp(obj.requestObj)
-      obj.requestObj = null
-      obj.promise = obj.cancelHttp = null
-      obj.cancelFn(new Error('已取消'))
-      obj.cancelFn = null
+      if (obj.isCancelled) return
+      obj.isCancelled = true
+      obj.cancelToken.cancel('已取消')
     }
   }
-  obj.promise = new Promise((resolve, reject) => {
-    obj.cancelFn = reject
-    debugRequest && console.log(`\n---send request------${url}------------`)
-    fetchData(url, options.method, options, (err, resp, body) => {
+
+  obj.promise = new Promise(async (resolve, reject) => {
+    try {
+      debugRequest && console.log(`\n---send request------${url}------------`)
+      const response = await fetchData(url, options.method, {
+        ...options,
+        cancelToken: obj.cancelToken.token
+      })
       debugRequest && console.log(`\n---response------${url}------------`)
-      debugRequest && console.log(body)
-      obj.requestObj = null
-      obj.cancelFn = null
-      if (err) return reject(err)
-      resolve(resp)
-    }).then((ro) => {
-      obj.requestObj = ro
-      if (obj.isCancelled) obj.cancelHttp()
-    })
+      debugRequest && console.log(response.data)
+      resolve(response)
+    } catch (err) {
+      debugRequest && console.log(`\n---response------${url}------------`)
+      debugRequest && console.log(err.message)
+      reject(err)
+    }
   })
+
   return obj
 }
 
@@ -160,18 +123,19 @@ const buildHttpPromise = (url, options) => {
 export const httpFetch = (url, options = { method: 'get' }) => {
   const requestObj = buildHttpPromise(url, options)
   requestObj.promise = requestObj.promise.catch((err) => {
+    if (axios.isCancel(err)) {
+      return Promise.reject(new Error('已取消'))
+    }
+    if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+      return Promise.reject(new Error('超时'))
+    }
+    if (err.code === 'ENOTFOUND') {
+      return Promise.reject(new Error('未连接'))
+    }
     if (err.message === 'socket hang up') {
       return Promise.reject(new Error('无法请求'))
     }
-    switch (err.code) {
-      case 'ETIMEDOUT':
-      case 'ESOCKETTIMEDOUT':
-        return Promise.reject(new Error('超时'))
-      case 'ENOTFOUND':
-        return Promise.reject(new Error('未连接'))
-      default:
-        return Promise.reject(err)
-    }
+    return Promise.reject(err)
   })
   return requestObj
 }
@@ -181,8 +145,8 @@ export const httpFetch = (url, options = { method: 'get' }) => {
  * @param {Object} requestObj - 请求对象
  */
 export const cancelHttp = (requestObj) => {
-  if (!requestObj || !requestObj.abort) return
-  requestObj.abort()
+  if (!requestObj || !requestObj.cancelHttp) return
+  requestObj.cancelHttp()
 }
 
 /**
@@ -202,14 +166,23 @@ const handleDeflateRaw = (data) =>
  * @param {string} url - 请求URL
  * @param {string} method - 请求方法
  * @param {Object} options - 请求选项
- * @param {Function} callback - 回调函数
  */
-const fetchData = async (url, method, options, callback) => {
-  const { headers = {}, format = 'json', timeout = DEFAULT_TIMEOUT, ...restOptions } = options
+const fetchData = async (url, method = 'get', options = {}) => {
+  const {
+    headers = {},
+    format = 'json',
+    timeout = DEFAULT_TIMEOUT,
+    data,
+    body,
+    form,
+    formData,
+    cancelToken,
+    ...restOptions
+  } = options
 
   console.log('---start---', url)
 
-  const requestHeaders = Object.assign({}, headers)
+  const requestHeaders = Object.assign({}, defaultHeaders, headers)
 
   // 处理特殊头部
   if (requestHeaders[bHh]) {
@@ -229,21 +202,90 @@ const fetchData = async (url, method, options, callback) => {
     delete requestHeaders[bHh]
   }
 
-  return request(
-    url,
-    {
-      ...restOptions,
-      method,
-      headers: Object.assign({}, defaultHeaders, requestHeaders),
-      timeout,
-      agent: getRequestAgent(url),
-      json: format === 'json'
-    },
-    (err, resp, body) => {
-      if (err) return callback(err, null)
-      callback(null, resp, body)
+  // 处理请求数据
+  let requestData = data || body || form || formData
+
+  // 处理表单数据
+  if (form || formData) {
+    if (form) {
+      requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
+      if (typeof form === 'object') {
+        requestData = new URLSearchParams(form).toString()
+      }
     }
-  )
+  }
+
+  const axiosConfig = {
+    method: method.toLowerCase(),
+    url,
+    headers: requestHeaders,
+    timeout,
+    httpsAgent: getRequestAgent(url),
+    httpAgent: getRequestAgent(url),
+    ...restOptions
+  }
+
+  // 添加取消令牌
+  if (cancelToken) {
+    axiosConfig.cancelToken = cancelToken
+  }
+
+  // 根据方法添加数据
+  if (['post', 'put', 'patch'].includes(method.toLowerCase()) && requestData) {
+    axiosConfig.data = requestData
+  } else if (['get', 'delete'].includes(method.toLowerCase()) && requestData) {
+    axiosConfig.params = requestData
+  }
+
+  // 处理响应格式
+  if (format !== 'json') {
+    axiosConfig.responseType = format === 'script' ? 'text' : format
+  } else {
+    // 对于可能需要原始数据的请求，使用 arraybuffer
+    if (url.includes('newlyric.kuwo.cn')) {
+      axiosConfig.responseType = 'arraybuffer'
+    }
+  }
+
+  try {
+    const response = await axios(axiosConfig)
+
+    // 处理不同类型的响应数据
+    let bodyData = response.data
+    let rawData
+
+    if (axiosConfig.responseType === 'arraybuffer') {
+      rawData = Buffer.from(response.data)
+      // 尝试解析为 JSON，如果失败则保持原始数据
+      try {
+        bodyData = JSON.parse(rawData.toString())
+      } catch {
+        bodyData = rawData.toString()
+      }
+    } else {
+      rawData = Buffer.isBuffer(response.data)
+        ? response.data
+        : Buffer.from(
+            typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+          )
+    }
+
+    return {
+      statusCode: response.status,
+      headers: response.headers,
+      body: bodyData,
+      data: bodyData,
+      raw: rawData
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const err = new Error(error.message)
+      err.code = error.code
+      err.response = error.response
+      throw err
+    }
+    throw error
+  }
 }
 
 /**
@@ -261,14 +303,18 @@ export const http = (url, options, cb) => {
   if (options.method == null) options.method = 'get'
 
   debugRequest && console.log(`\n---send request------${url}------------`)
-  return fetchData(url, options.method, options, (err, resp, body) => {
-    debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(body)
-    if (err) {
+
+  fetchData(url, options.method, options)
+    .then((resp) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
+      debugRequest && console.log(resp.body)
+      cb(null, resp, resp.body)
+    })
+    .catch((err) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
       debugRequest && console.log(JSON.stringify(err))
-    }
-    cb(err, resp, body)
-  })
+      cb(err, null, null)
+    })
 }
 
 /**
@@ -284,14 +330,18 @@ export const httpGet = (url, options, callback) => {
   }
 
   debugRequest && console.log(`\n---send request-------${url}------------`)
-  return fetchData(url, 'get', options, function (err, resp, body) {
-    debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(body)
-    if (err) {
+
+  fetchData(url, 'get', options)
+    .then((resp) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
+      debugRequest && console.log(resp.body)
+      callback(null, resp, resp.body)
+    })
+    .catch((err) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
       debugRequest && console.log(JSON.stringify(err))
-    }
-    callback(err, resp, body)
-  })
+      callback(err, null, null)
+    })
 }
 
 /**
@@ -309,14 +359,18 @@ export const httpPost = (url, data, options, callback) => {
   options.data = data
 
   debugRequest && console.log(`\n---send request-------${url}------------`)
-  return fetchData(url, 'post', options, function (err, resp, body) {
-    debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(body)
-    if (err) {
+
+  fetchData(url, 'post', options)
+    .then((resp) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
+      debugRequest && console.log(resp.body)
+      callback(null, resp, resp.body)
+    })
+    .catch((err) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
       debugRequest && console.log(JSON.stringify(err))
-    }
-    callback(err, resp, body)
-  })
+      callback(err, null, null)
+    })
 }
 
 /**
@@ -335,20 +389,28 @@ export const http_jsonp = (url, options, callback) => {
   if (url.indexOf('?') < 0) url += '?'
   url += `&${options.jsonpCallback}=${jsonpCallback}`
 
-  options.format = 'script'
+  options.format = 'text'
 
   debugRequest && console.log(`\n---send request-------${url}------------`)
-  return fetchData(url, 'get', options, function (err, resp, body) {
-    debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(body)
-    if (err) {
-      debugRequest && console.log(JSON.stringify(err))
-    } else {
-      body = JSON.parse(body.replace(new RegExp(`^${jsonpCallback}\\(({.*})\\)$`), '$1'))
-    }
 
-    callback(err, resp, body)
-  })
+  fetchData(url, 'get', options)
+    .then((resp) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
+      debugRequest && console.log(resp.body)
+      try {
+        const body = JSON.parse(
+          resp.body.replace(new RegExp(`^${jsonpCallback}\\(({.*})\\)$`), '$1')
+        )
+        callback(null, resp, body)
+      } catch (err) {
+        callback(err, resp, null)
+      }
+    })
+    .catch((err) => {
+      debugRequest && console.log(`\n---response------${url}------------`)
+      debugRequest && console.log(JSON.stringify(err))
+      callback(err, null, null)
+    })
 }
 
 /**
@@ -358,13 +420,16 @@ export const http_jsonp = (url, options, callback) => {
  */
 export const checkUrl = (url, options = {}) => {
   return new Promise((resolve, reject) => {
-    fetchData(url, 'head', options, (err, resp) => {
-      if (err) return reject(err)
-      if (resp.statusCode === 200) {
-        resolve()
-      } else {
-        reject(new Error(resp.statusCode))
-      }
-    })
+    fetchData(url, 'head', options)
+      .then((resp) => {
+        if (resp.statusCode === 200) {
+          resolve()
+        } else {
+          reject(new Error(resp.statusCode))
+        }
+      })
+      .catch((err) => {
+        reject(err)
+      })
   })
 }

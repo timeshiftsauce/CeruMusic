@@ -1,184 +1,184 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, toRaw } from 'vue'
+import { useRoute } from 'vue-router'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { downloadSingleSong } from '@renderer/utils/download'
+import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
+
+interface MusicItem {
+  singer: string
+  name: string
+  albumName: string
+  albumId: number
+  source: string
+  interval: string
+  songmid: number
+  img: string
+  lrc: null | string
+  types: string[]
+  _types: Record<string, any>
+  typeUrl: Record<string, any>
+}
+
+// 路由实例
+const route = useRoute()
+const LocalUserDetail = LocalUserDetailStore()
 
 // 响应式状态
-const hoveredSong = ref<number | null>(null)
+const songs = ref<MusicItem[]>([])
+const loading = ref(true)
+const currentSong = ref<MusicItem | null>(null)
+const isPlaying = ref(false)
+const playlistInfo = ref({
+  id: '',
+  title: '',
+  author: '',
+  cover: '',
+  total: 0,
+  source: ''
+})
 
-// 模拟歌曲数据
-const mockSongs = ref([
-  {
-    id: 1,
-    index: 1,
-    title: '别让我担心',
-    artist: '刘若英',
-    album: '我等你',
-    duration: '4:32',
-    albumArt: '../../assets/images/cover.png',
-    isPlaying: true,
-    tags: [
-      { label: 'VIP', theme: 'warning' },
-      { label: '原唱', theme: 'success' }
-    ]
-  },
-  {
-    id: 2,
-    index: 2,
-    title: '后来',
-    artist: '刘若英',
-    album: '我等你',
-    duration: '4:18',
-    albumArt: '/placeholder.svg',
-    isPlaying: false,
-    tags: [
-      { label: '原唱', theme: 'success' },
-      { label: 'Hot', theme: 'danger' }
-    ]
-  },
-  {
-    id: 3,
-    index: 3,
-    title: '为爱痴狂',
-    artist: '刘若英',
-    album: '年华',
-    duration: '3:45',
-    albumArt: '/placeholder.svg',
-    isPlaying: false,
-    tags: [{ label: 'VIP', theme: 'warning' }]
-  },
-  {
-    id: 4,
-    index: 4,
-    title: '很爱很爱你',
-    artist: '刘若英',
-    album: '年华',
-    duration: '4:12',
-    albumArt: '/placeholder.svg',
-    isPlaying: false,
-    tags: []
-  },
-  {
-    id: 5,
-    index: 5,
-    title: '原来你也在这里',
-    artist: '刘若英',
-    album: '我等你',
-    duration: '4:28',
-    albumArt: '/placeholder.svg',
-    isPlaying: false,
-    tags: [{ label: '原唱', theme: 'success' }]
-  },
-  {
-    id: 6,
-    index: 5,
-    title: '原来你也在这里',
-    artist: '刘若英',
-    album: '我等你',
-    duration: '4:28',
-    albumArt: '/placeholder.svg',
-    isPlaying: false,
-    tags: [
-      { label: '原唱', theme: 'success' },
-      { label: 'Hot', theme: 'danger' }
-    ]
-  },
-  {
-    id: 7,
-    index: 5,
-    title: '原来你也在这里',
-    artist: '刘若英',
-    album: '我等你',
-    duration: '4:28',
-    albumArt: '/placeholder.svg',
-    isPlaying: false,
-    tags: [{ label: '原唱', theme: 'success' }]
+// 获取歌单歌曲列表
+const fetchPlaylistSongs = async () => {
+  try {
+    loading.value = true
+
+    // 从路由参数中获取歌单信息
+    playlistInfo.value = {
+      id: route.params.id as string,
+      title: (route.query.title as string) || '歌单',
+      author: (route.query.author as string) || '未知',
+      cover: (route.query.cover as string) || '',
+      total: Number(route.query.total) || 0,
+      source: (route.query.source as string) || (LocalUserDetail.userSource.source as any)
+    }
+
+    // 调用API获取歌单详情和歌曲列表
+    const result = await window.api.music.requestSdk('getPlaylistDetail', {
+      source: playlistInfo.value.source,
+      id: playlistInfo.value.id,
+      page: 1
+    }) as any
+    console.log(result)
+    if (result && result.list) {
+      songs.value = result.list
+
+      // 获取歌曲封面
+      setPic(0, playlistInfo.value.source)
+
+      // 如果API返回了歌单详细信息，更新歌单信息
+      if (result.info) {
+        playlistInfo.value = {
+          ...playlistInfo.value,
+          title: result.info.name || playlistInfo.value.title,
+          author: result.info.author || playlistInfo.value.author,
+          cover: result.info.img || playlistInfo.value.cover,
+          total: result.info.total || playlistInfo.value.total
+        }
+      }
+    }
+  } catch (error) {
+    console.error('获取歌单歌曲失败:', error)
+  } finally {
+    loading.value = false
   }
-])
+}
+
+// 获取歌曲封面
+async function setPic(offset: number, source: string) {
+  for (let i = offset; i < songs.value.length; i++) {
+    const tempImg = songs.value[i].img
+    if (tempImg) continue
+    try {
+      const url = await window.api.music.requestSdk('getPic', {
+        source,
+        songInfo: toRaw(songs.value[i])
+      })
+
+      if (typeof url !== 'object') {
+        songs.value[i].img = url
+      } else {
+        songs.value[i].img = 'resources/logo.png'
+      }
+    } catch (e) {
+      songs.value[i].img = 'logo.svg'
+      console.log('获取封面失败 index' + i, e)
+    }
+  }
+}
+
+// 组件事件处理函数
+const handlePlay = (song: MusicItem) => {
+  currentSong.value = song
+  isPlaying.value = true
+  console.log('播放歌曲:', song.name)
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
+  }
+}
+
+const handlePause = () => {
+  isPlaying.value = false
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('pause')
+  }
+}
+
+const handleDownload = (song: MusicItem) => {
+  downloadSingleSong(song.songmid as unknown as string, song.name, song.albumName)
+}
+
+const handleAddToPlaylist = (song: MusicItem) => {
+  console.log('添加到播放列表:', song.name)
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(song))
+  }
+}
+// 组件挂载时获取数据
+onMounted(() => {
+  fetchPlaylistSongs()
+})
 </script>
 
 <template>
   <div class="list-container">
     <!-- 固定头部区域 -->
     <div class="fixed-header">
-      <!-- 搜索结果标题 -->
-      <h2 class="search-title"><span class="search-keyword">别让我担心</span> 的搜索结果</h2>
-
-      <!-- 表格头部 -->
-      <div class="table-header">
-        <div class="header-item" style="justify-content: center">#</div>
-        <div class="header-item">标题</div>
-        <div class="header-item">专辑</div>
-        <div class="header-item">时长</div>
+      <!-- 歌单信息 -->
+      <div class="playlist-header">
+        <div class="playlist-cover">
+          <img :src="playlistInfo.cover" :alt="playlistInfo.title" />
+        </div>
+        <div class="playlist-details">
+          <h1 class="playlist-title">{{ playlistInfo.title }}</h1>
+          <p class="playlist-author">by {{ playlistInfo.author }}</p>
+          <p class="playlist-stats">{{ playlistInfo.total }} 首歌曲</p>
+        </div>
       </div>
     </div>
 
     <!-- 可滚动的歌曲列表区域 -->
     <div class="scrollable-content">
-      <div class="song-list">
-        <div
-          v-for="song in mockSongs"
-          :key="song.id"
-          class="song-item"
-          :class="{
-            'song-item--playing': song.isPlaying,
-            'song-item--hovered': hoveredSong === song.id
-          }"
-          @mouseenter="hoveredSong = song.id"
-          @mouseleave="hoveredSong = null"
-        >
-          <!-- Index/Play Icon -->
-          <div class="song-index">
-            <i v-if="song.isPlaying" class="iconfont icon-a-tingzhiwukuang playing-icon"></i>
-            <i
-              v-else-if="hoveredSong === song.id"
-              class="iconfont icon-a-tingzhiwukuang play-icon"
-            ></i>
-            <span v-else class="index-number">{{ song.index }}</span>
-          </div>
-
-          <!-- Title and Artist -->
-          <div class="song-info">
-            <img :src="'/src/assets/images/cover.png'" :alt="song.title" class="album-art" />
-            <div class="song-details">
-              <div class="title-row">
-                <span class="song-title" :class="{ 'song-title--playing': song.isPlaying }">
-                  {{ song.title }}
-                </span>
-                <div class="tags">
-                  <t-tag
-                    v-for="(tag, index) in song.tags"
-                    :key="index"
-                    :theme="tag.theme"
-                    variant="light-outline"
-                    size="small"
-                    shape="round"
-                    class="song-tab"
-                  >
-                    {{ tag.label }}
-                  </t-tag>
-                </div>
-              </div>
-              <div class="artist-name">{{ song.artist }}</div>
-            </div>
-          </div>
-
-          <!-- Album -->
-          <div class="album-name">
-            <span>{{ song.album }}</span>
-          </div>
-
-          <!-- Duration and Actions -->
-          <div class="duration-actions">
-            <span class="duration">{{ song.duration }}</span>
-            <t-button
-              v-if="hoveredSong === song.id"
-              variant="text"
-              size="small"
-              class="more-button"
-            >
-              <i class="iconfont icon-gengduo"></i>
-            </t-button>
-          </div>
+      <div v-if="loading" class="loading-container">
+        <div class="loading-content">
+          <div class="loading-spinner"></div>
+          <p>加载中...</p>
         </div>
+      </div>
+
+      <div v-else class="song-list-wrapper">
+        <SongVirtualList
+          :songs="songs"
+          :current-song="currentSong"
+          :is-playing="isPlaying"
+          :show-index="true"
+          :show-album="true"
+          :show-duration="true"
+          @play="handlePlay"
+          @pause="handlePause"
+          @download="handleDownload"
+          @add-to-playlist="handleAddToPlaylist"
+        />
       </div>
     </div>
   </div>
@@ -186,222 +186,134 @@ const mockSongs = ref([
 
 <style lang="scss" scoped>
 .list-container {
+  background: #fafafa;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 20px;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  padding: 1.5rem;
-  padding-top: 0;
-  overflow: hidden;
 
   .fixed-header {
+    margin-bottom: 20px;
     flex-shrink: 0;
-    z-index: 10;
-
-    .search-title {
-      font-size: 1em;
-      font-weight: 500;
-      color: #9d9a9a;
-      margin-bottom: 1.2rem;
-
-      .search-keyword {
-        font-size: 1.6rem;
-        color: #f97316;
-        font-weight: 600;
-        line-height: 30px;
-      }
-    }
-
-    .table-header {
-      display: grid;
-      grid-template-columns: 2.5rem 1fr 1fr 5rem;
-      gap: 1rem;
-      padding: 0.5rem 1rem;
-      font-size: 0.875rem;
-      color: #6b7280;
-      border-radius: 0.5rem 0.5rem 0 0;
-      background-color: #efefef;
-
-      .header-item {
-        display: flex;
-        align-items: center;
-      }
-    }
   }
 
   .scrollable-content {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     flex: 1;
-    overflow-y: auto;
-    padding-right: 0.25rem;
-    padding-bottom: 4rem;
-
-    /* 自定义滚动条样式 */
-    &::-webkit-scrollbar {
-      width: 0.375rem;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: #f1f5f9;
-      border-radius: 0.1875rem;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 0.1875rem;
-      transition: background-color 0.2s ease;
-
-      &:hover {
-        background: #94a3b8;
-      }
-    }
-
-    /* Firefox 滚动条样式 */
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 }
 
-.song-list {
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+
+  .loading-content {
+    text-align: center;
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #507daf;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    p {
+      font-size: 14px;
+      color: #666;
+      margin: 0;
+    }
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.playlist-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  .playlist-cover {
+    width: 120px;
+    height: 120px;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .playlist-details {
+    flex: 1;
+
+    .playlist-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #111827;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .playlist-author {
+      font-size: 1rem;
+      color: #6b7280;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .playlist-stats {
+      font-size: 0.875rem;
+      color: #9ca3af;
+      margin: 0;
+    }
+  }
+}
+
+.song-list-wrapper {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-bottom: 1rem;
-  .song-item {
-    display: grid;
-    grid-template-columns: 2.5rem 1fr 1fr 5rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .list-container {
+    padding: 15px;
+  }
+
+  .playlist-header {
+    flex-direction: column;
+    text-align: center;
     gap: 1rem;
-    padding: 0.75rem 1rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border-left: 0.1875rem solid transparent;
-    border-radius: 0.5rem;
-    background-color: #fff;
 
-    &:hover {
-      background-color: #f9fafb;
-    }
-
-    &--playing {
-      background-color: #fff7ed;
-      border-left-color: #f97316;
-    }
-
-    .song-index {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      .playing-icon {
-        color: #f97316;
-        font-size: 1rem;
-      }
-
-      .play-icon {
-        color: #6b7280;
-        font-size: 1rem;
-      }
-
-      .index-number {
-        font-size: 0.875rem;
-        color: #9ca3af;
-      }
-    }
-
-    .song-info {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      min-width: 0;
-
-      .album-art {
-        width: 3rem;
-        height: 3rem;
-        border-radius: 0.5rem;
-        object-fit: cover;
-        flex-shrink: 0;
-        box-shadow: 0 1px 10px rgba(0, 0, 0, 0.3);
-      }
-
-      .song-details {
-        min-width: 0;
-        flex: 1;
-
-        .title-row {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 0.25rem;
-
-          .song-title {
-            font-weight: 500;
-            color: #111827;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-
-            &--playing {
-              color: #ea580c;
-            }
-          }
-
-          .tags {
-            display: flex;
-            gap: 0.25rem;
-            flex-shrink: 0;
-
-            :deep(.t-tag) {
-              font-size: 0.7rem !important;
-              height: auto;
-              margin-right: 0.25rem;
-              padding: 0rem 0.5rem;
-            }
-          }
-        }
-
-        .artist-name {
-          font-size: 0.875rem;
-          color: #6b7280;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      }
-    }
-
-    .album-name {
-      display: flex;
-      align-items: center;
-
-      span {
-        font-size: 0.875rem;
-        color: #4b5563;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-    }
-
-    .duration-actions {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-
-      .duration {
-        font-size: 0.875rem;
-        color: #9ca3af;
-      }
-
-      .more-button {
-        opacity: 0;
-        transition: opacity 0.2s ease;
-
-        .iconfont {
-          font-size: 1rem;
-        }
-      }
-    }
-
-    &:hover .more-button {
-      opacity: 1;
+    .playlist-cover {
+      width: 100px;
+      height: 100px;
     }
   }
 }

@@ -80,7 +80,7 @@ class Logger {
   error(...args: any[]): void {
     this.write(`error ${parseArgs(args)}\n`)
   }
-  
+
   group(...args: any[]): void {
     args.unshift('groupStart---------')
     this.write(`start ${parseArgs(args)}\n`)
@@ -88,20 +88,22 @@ class Logger {
   groupEnd(...args: any[]): void {
     this.write(`end ${parseArgs(args)}\n`)
   }
-  
+
   private write(msg: string): void {
     writeLog(this.logFilePath, msg, WriteMode.APPEND).then()
   }
 }
 
-function parseArgs(args){
-  return args.map(arg=>{
-    if(typeof arg==='object'){
-      return JSON.stringify(arg)
-    }
+function parseArgs(args) {
+  return args
+    .map((arg) => {
+      if (typeof arg === 'object') {
+        return JSON.stringify(arg)
+      }
 
-    return arg
-  }).join(' ')
+      return arg
+    })
+    .join(' ')
 }
 
 async function getLog(pluginId: string) {

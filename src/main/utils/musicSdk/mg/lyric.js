@@ -46,7 +46,7 @@ const mrcTools = {
     }
     return {
       lyric: lrcLines.join('\n'),
-      lxlyric: lxlrcLines.join('\n')
+      crlyric: lxlrcLines.join('\n')
     }
   },
   getText(url, tryNum = 0) {
@@ -70,7 +70,7 @@ const mrcTools = {
     })
   },
   getLrc(url) {
-    return this.getText(url).then((text) => ({ lxlyric: '', lyric: text }))
+    return this.getText(url).then((text) => ({ crlyric: '', lyric: text }))
   },
   getTrc(url) {
     if (!url) return Promise.resolve('')

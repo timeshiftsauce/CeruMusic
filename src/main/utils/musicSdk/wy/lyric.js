@@ -7,7 +7,7 @@ import { eapi } from './utils/crypto'
 
 //   str = str.replace(/\r/g, '')
 
-//   let lxlyric = str.replace(/\[((\d+),\d+)\].*/g, str => {
+//   let crlyric = str.replace(/\[((\d+),\d+)\].*/g, str => {
 //     let result = str.match(/\[((\d+),\d+)\].*/)
 //     let time = parseInt(result[2])
 //     let ms = time % 1000
@@ -30,8 +30,8 @@ import { eapi } from './utils/crypto'
 //     return str
 //   })
 
-//   lxlyric = decodeName(lxlyric)
-//   return lxlyric.trim()
+//   crlyric = decodeName(crlyric)
+//   return crlyric.trim()
 // }
 
 const eapiRequest = (url, data) => {
@@ -96,20 +96,13 @@ const parseTools = {
 
       lrcLines.push(`${startTimeStr}${words.replace(this.rxps.wordTimeAll, '')}`)
 
-      let times = words.match(this.rxps.wordTimeAll)
-      if (!times) continue
-      times = times.map((time) => {
-        const result = /\((\d+),(\d+),\d+\)/.exec(time)
-        return `<${Math.max(parseInt(result[1]) - startMsTime, 0)},${result[2]}>`
-      })
-      const wordArr = words.split(this.rxps.wordTime)
-      wordArr.shift()
-      const newWords = times.map((time, index) => `${time}${wordArr[index]}`).join('')
-      lxlrcLines.push(`${startTimeStr}${newWords}`)
+      // 保持网易云音乐逐字歌词的原始格式 [start,duration](start,duration)xxx
+      const originalTimeTag = result[0] // 保持原始的 [start,duration] 格式
+      lxlrcLines.push(`${originalTimeTag}${words}`)
     }
     return {
       lyric: lrcLines.join('\n'),
-      lxlyric: lxlrcLines.join('\n')
+      crlyric: lxlrcLines.join('\n')
     }
   },
   parseHeaderInfo(str) {
@@ -172,7 +165,7 @@ const parseTools = {
       lyric: '',
       tlyric: '',
       rlyric: '',
-      lxlyric: ''
+      crlyric: ''
     }
     if (ylrc) {
       let lines = this.parseHeaderInfo(ylrc)
@@ -198,7 +191,7 @@ const parseTools = {
         const timeRxp = /^\[[\d:.]+\]/
         const headers = lines.filter((l) => timeRxp.test(l)).join('\n')
         info.lyric = `${headers}\n${result.lyric}`
-        info.lxlyric = result.lxlyric
+        info.crlyric = result.crlyric
         return info
       }
     }
@@ -243,7 +236,7 @@ const parseTools = {
 //       lyric: body.lrc.lyric,
 //       tlyric: body.tlyric?.lyric ?? '',
 //       rlyric: body.romalrc?.lyric ?? '',
-//       // lxlyric: parseLyric(body.klyric.lyric),
+//       // crlyric: parseLyric(body.klyric.lyric),
 //     }
 //   })
 //   return requestObj
