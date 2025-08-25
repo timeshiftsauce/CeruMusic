@@ -10,23 +10,20 @@ import {
 } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
-import { ref, computed, onMounted, watch, reactive, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, toRaw } from 'vue'
 import { shouldUseBlackText } from '@renderer/utils/contrastColor'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { Fullscreen1Icon, FullscreenExit1Icon, ChevronDownIcon } from 'tdesign-icons-vue-next'
-// 导入歌词请求函数
-import musicService from '@renderer/services/music'
 // 直接从包路径导入，避免 WebAssembly 导入问题
 import { parseYrc, parseLrc, parseTTML } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
-
+import _ from 'lodash'
 import { storeToRefs } from 'pinia'
-
 
 interface Props {
   show?: boolean
   coverImage?: string
-  songId?: string|null
-  songInfo: SongList|{songmid:number|null}
+  songId?: string | null
+  songInfo: SongList | { songmid: number | null }
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -53,8 +50,6 @@ const toggleFullscreen = () => {
 onMounted(async () => {
   // 添加事件监听器检测全屏状态变化
   document.addEventListener('fullscreenchange', handleFullscreenChange)
-
-
 })
 
 onBeforeUnmount(() => {
@@ -88,46 +83,86 @@ const state = reactive({
 watch(
   () => props.songId,
   async (newId) => {
-    if (!newId) return
+    if (!newId || !props.songInfo) return
     let lyricText = ''
     let parsedLyrics: LyricLine[] = []
     // 创建一个符合 MusicItem 接口的对象，只包含必要的基本属性
 
     try {
-      // 请求歌词数据，设置yv=true获取逐字歌词
-      try {
-        const res = (await (
-          await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)
-        ).text()) as any
-        if (!res || res.length < 100) throw new Error('ttml 无歌词')
-        parsedLyrics = parseTTML(res).lines
-        console.log('搜索到ttml歌词', parsedLyrics)
-      } catch {
-        const lyricData = await musicService.request('getLyric', {
-          id: newId,
-          yv: true,
-          lv: true,
-          tv: true
-        })
-        console.log(lyricData)
-        // 优先使用逐字歌词(yrc)，如果没有则回退到普通歌词(lrc)
+      // 检查是否为网易云音乐，只有网易云才使用ttml接口
+      const isNetease =
+        props.songInfo && 'source' in props.songInfo && props.songInfo.source === 'wy'
+      const songinfo: any = _.cloneDeep(toRaw(props.songInfo))
+      console.log(songinfo)
+      if (isNetease) {
+        // 网易云音乐优先尝试ttml接口
+        try {
+          const res = (await (
+            await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)
+          ).text()) as any
+          if (!res || res.length < 100) throw new Error('ttml 无歌词')
+          parsedLyrics = parseTTML(res).lines
+          console.log('搜索到ttml歌词', parsedLyrics)
+        } catch {
+          // ttml失败后使用新的歌词API
+          const lyricData = await window.api.music.requestSdk('getLyric', {
+            source: 'wy',
+            songInfo: songinfo
+          })
+          console.log('网易云歌词数据:', lyricData)
 
-        if (lyricData.yrc?.lyric) {
-          lyricText = lyricData.yrc.lyric
-          parsedLyrics = parseYrc(lyricText)
-          console.log('使用逐字歌词', parsedLyrics)
-        } else if (lyricData.lrc?.lyric) {
-          lyricText = lyricData.lrc.lyric
-          parsedLyrics = parseLrc(lyricText)
-          console.log('使用普通歌词', parsedLyrics)
-        }
-        if (lyricData.tlyric && lyricData.tlyric.lyric) {
-          const translatedline = parseLrc(lyricData.tlyric.lyric)
-          console.log(translatedline)
-          for (let i = 0; i < parsedLyrics.length; i++) {
-            parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
+          if (lyricData.crlyric) {
+            // 使用逐字歌词
+            lyricText = lyricData.crlyric
+            console.log('网易云逐字歌词', lyricText)
+            parsedLyrics = parseYrc(lyricText)
+            console.log('使用网易云逐字歌词', parsedLyrics)
+          } else if (lyricData.lyric) {
+            lyricText = lyricData.lyric
+            parsedLyrics = parseLrc(lyricText)
+            console.log('使用网易云普通歌词', parsedLyrics)
           }
-          console.log('使用翻译歌词', translatedline)
+
+          if (lyricData.tlyric) {
+            const translatedline = parseLrc(lyricData.tlyric)
+            console.log('网易云翻译歌词:', translatedline)
+            for (let i = 0; i < parsedLyrics.length; i++) {
+              if (translatedline[i] && translatedline[i].words[0]) {
+                parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
+              }
+            }
+          }
+        }
+      } else {
+        // 其他音乐平台直接使用新的歌词API
+        const source = props.songInfo && 'source' in props.songInfo ? props.songInfo.source : 'kg'
+        // 创建一个纯净的对象，避免Vue响应式对象序列化问题
+        const cleanSongInfo = JSON.parse(JSON.stringify(toRaw(props.songInfo)))
+        const lyricData = await window.api.music.requestSdk('getLyric', {
+          source: source,
+          songInfo: cleanSongInfo
+        })
+        console.log(`${source}歌词数据:`, lyricData)
+
+        if (lyricData.crlyric) {
+          // 使用逐字歌词
+          lyricText = lyricData.crlyric
+          parsedLyrics = parseYrc(lyricText)
+          console.log(`使用${source}逐字歌词`, parsedLyrics)
+        } else if (lyricData.lyric) {
+          lyricText = lyricData.lyric
+          parsedLyrics = parseLrc(lyricText)
+          console.log(`使用${source}普通歌词`, parsedLyrics)
+        }
+
+        if (lyricData.tlyric) {
+          const translatedline = parseLrc(lyricData.tlyric)
+          console.log(`${source}翻译歌词:`, translatedline)
+          for (let i = 0; i < parsedLyrics.length; i++) {
+            if (translatedline[i] && translatedline[i].words[0]) {
+              parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
+            }
+          }
         }
       }
 
@@ -212,20 +247,39 @@ watch(
 <template>
   <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
-    <BackgroundRender ref="bgRef" :album="actualCoverImage" :album-is-video="false" :fps="30" :flow-speed="4"
-      :low-freq-volume="1" :has-lyric="state.lyricLines.length > 10"
-      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1" />
+    <BackgroundRender
+      ref="bgRef"
+      :album="actualCoverImage"
+      :album-is-video="false"
+      :fps="30"
+      :flow-speed="4"
+      :low-freq-volume="1"
+      :has-lyric="state.lyricLines.length > 10"
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
+    />
     <!-- 全屏按钮 -->
-    <button class="fullscreen-btn" :class="{ 'black-text': useBlackText }" @click="toggleFullscreen">
+    <button
+      class="fullscreen-btn"
+      :class="{ 'black-text': useBlackText }"
+      @click="toggleFullscreen"
+    >
       <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
       <FullscreenExit1Icon v-else class="icon" />
     </button>
-    <button class="putawayscreen-btn" :class="{ 'black-text': useBlackText }" @click="emit('toggle-fullscreen')">
+    <button
+      class="putawayscreen-btn"
+      :class="{ 'black-text': useBlackText }"
+      @click="emit('toggle-fullscreen')"
+    >
       <ChevronDownIcon class="icon" />
     </button>
     <Transition name="fade-nav">
-      <TitleBarControls v-if="props.show" class="top" style="-webkit-app-region: drag"
-        :color="useBlackText ? 'black' : 'white'" />
+      <TitleBarControls
+        v-if="props.show"
+        class="top"
+        style="-webkit-app-region: drag"
+        :color="useBlackText ? 'black' : 'white'"
+      />
     </Transition>
     <div class="playbox">
       <!-- 播放控件内容
@@ -234,27 +288,43 @@ watch(
         <p>这里将显示歌曲信息</p>
       </div> -->
       <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
-        <div class="box" :style="!Audio.isPlay
-          ? 'animation-play-state: paused;'
-          : '' +
-          (state.lyricLines.length <= 0
-            ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
-            : '')
-          ">
-          <t-image :src="coverImage" :style="state.lyricLines.length > 0
-            ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
-            : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
-            " shape="circle" class="cover" />
+        <div
+          class="box"
+          :style="
+            !Audio.isPlay
+              ? 'animation-play-state: paused;'
+              : '' +
+                (state.lyricLines.length <= 0
+                  ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
+                  : '')
+          "
+        >
+          <t-image
+            :src="coverImage"
+            :style="
+              state.lyricLines.length > 0
+                ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
+                : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
+            "
+            shape="circle"
+            class="cover"
+          />
         </div>
       </div>
       <div v-show="state.lyricLines.length > 0" class="right">
-        <LyricPlayer ref="lyricPlayerRef" :lyric-lines="props.show ? state.lyricLines : []"
-          :current-time="state.currentTime" :align-position="0.38" style="mix-blend-mode: plus-lighter"
-          class="lyric-player" @line-click="
+        <LyricPlayer
+          ref="lyricPlayerRef"
+          :lyric-lines="props.show ? state.lyricLines : []"
+          :current-time="state.currentTime"
+          :align-position="0.38"
+          style="mix-blend-mode: plus-lighter"
+          class="lyric-player"
+          @line-click="
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
             }
-          ">
+          "
+        >
           <template #bottom-line> Test Bottom Line </template>
         </LyricPlayer>
       </div>
@@ -364,7 +434,7 @@ watch(
     position: relative;
 
     :deep(.lyric-player) {
-      --amll-lyric-player-font-size: max(2vw, 38px);
+      --amll-lyric-player-font-size: max(2vw, 29px);
       box-sizing: border-box;
       width: 100%;
       height: 100%;

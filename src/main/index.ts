@@ -190,7 +190,6 @@ ipcMain.handle('service-music-request', async (_, api, args) => {
   return await musicService.request(api, args)
 })
 
-
 aiEvents(mainWindow)
 
 // This method will be called when Electron has finished

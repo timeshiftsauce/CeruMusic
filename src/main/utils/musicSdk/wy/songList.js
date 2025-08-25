@@ -36,7 +36,7 @@ export default {
       headers: { location },
       statusCode
     } = await requestObj_listDetailLink.promise
-    // console.log(headers)
+    // console.log(statusCode)
     if (statusCode > 400) return this.handleParseId(link, ++retryNum)
     const url = location == null ? link : location
     return this.regExps.listDetailLink.test(url)

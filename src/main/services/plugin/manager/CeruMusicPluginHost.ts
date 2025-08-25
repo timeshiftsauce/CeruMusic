@@ -1,7 +1,7 @@
 import * as vm from 'vm'
 import fetch from 'node-fetch'
 import * as fs from 'fs'
-import {MusicItem} from '../../musicSdk/type'
+import { MusicItem } from '../../musicSdk/type'
 
 // 定义插件结构接口
 export interface PluginInfo {
@@ -26,7 +26,7 @@ interface CeruMusicPlugin {
   getLyric?: (source: string, musicInfo: MusicInfo) => Promise<string>
 }
 
-interface MusicInfo extends MusicItem{
+interface MusicInfo extends MusicItem {
   id?: string
 }
 

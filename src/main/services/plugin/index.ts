@@ -101,7 +101,7 @@ const pluginService = {
     }
   },
 
-  getPluginById(pluginId: string): CeruMusicPluginHost | null{
+  getPluginById(pluginId: string): CeruMusicPluginHost | null {
     if (!Object.hasOwn(loadedPlugins, pluginId)) {
       return null
     }

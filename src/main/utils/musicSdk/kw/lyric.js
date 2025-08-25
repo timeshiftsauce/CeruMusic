@@ -183,7 +183,11 @@ export default {
       lrcT
     }
   },
-  transformLrc(tags, lrclist) {
+  transformLrc(tags, lrclist, keepOriginalTime = false) {
+    if (keepOriginalTime) {
+      // 保持原始时间格式用于逐字歌词
+      return `${tags.join('\n')}\n${lrclist ? lrclist.map((l) => `${l.text}\n`).join('') : '暂无歌词'}`
+    }
     return `${tags.join('\n')}\n${lrclist ? lrclist.map((l) => `[${l.time}]${l.text}\n`).join('') : '暂无歌词'}`
   },
   parseLrc(lrc) {
@@ -224,10 +228,10 @@ export default {
   //         return Promise.reject(new Error('Get lyric failed'))
   //       }
   //       if (lrcInfo.tlyric) lrcInfo.tlyric = lrcInfo.tlyric.replace(lrcTools.rxps.wordTimeAll, '')
-  //       lrcInfo.lxlyric = lrcTools.parse(lrcInfo.lyric)
+  //       lrcInfo.crlyric = lrcTools.parse(lrcInfo.lyric)
   //       // console.log(lrcInfo.lyric)
   //       // console.log(lrcInfo.tlyric)
-  //       // console.log(lrcInfo.lxlyric)
+  //       // console.log(lrcInfo.crlyric)
   //       // console.log(JSON.stringify(lrcInfo))
   //     })
   //   })
@@ -257,9 +261,9 @@ export default {
         // console.log(lrcInfo)
         if (lrcInfo.tlyric) lrcInfo.tlyric = lrcInfo.tlyric.replace(lrcTools.rxps.wordTimeAll, '')
         try {
-          lrcInfo.lxlyric = lrcTools.parse(lrcInfo.lyric)
+          lrcInfo.crlyric = lrcTools.parse(lrcInfo.lyric)
         } catch {
-          lrcInfo.lxlyric = ''
+          lrcInfo.crlyric = ''
         }
         lrcInfo.lyric = lrcInfo.lyric.replace(lrcTools.rxps.wordTimeAll, '')
         if (!existTimeExp.test(lrcInfo.lyric)) return Promise.reject(new Error('Get lyric failed'))

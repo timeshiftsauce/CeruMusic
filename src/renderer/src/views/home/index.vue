@@ -1,11 +1,26 @@
 <script setup lang="ts">
 import PlayMusic from '@renderer/components/Play/PlayMusic.vue'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
-import { ref } from 'vue'
+import { onMounted, ref, watchEffect } from 'vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { useRouter } from 'vue-router'
 import { searchValue } from '@renderer/store/search'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+onMounted(() => {
+  const LocalUserDetail = LocalUserDetailStore()
+  watchEffect(() => {
+    source.value = sourceicon[LocalUserDetail.userSource.source || 'wy']
+  })
+})
 
+const sourceicon = {
+  kg: 'kugouyinle',
+  wy: 'wangyiyun',
+  mg: 'mg',
+  tx: 'tx',
+  kw: 'kw'
+}
+const source = ref('kugouyinle')
 interface MenuItem {
   name: string
   icon: string
@@ -104,7 +119,7 @@ const handleKeyDown = () => {
       </div>
     </t-aside>
 
-    <t-layout>
+    <t-layout style="flex: 1">
       <t-content>
         <div class="content">
           <!-- Header -->
@@ -119,10 +134,7 @@ const handleKeyDown = () => {
             <div class="search-container">
               <div class="search-input">
                 <svg class="icon" aria-hidden="true">
-                  <use
-                    xlink:href="#icon-wangyiyun
-"
-                  ></use>
+                  <use :xlink:href="`#icon-${source}`"></use>
                 </svg>
                 <t-input
                   v-model="keyword"
@@ -143,6 +155,7 @@ const handleKeyDown = () => {
                   </template>
                 </t-input>
               </div>
+
               <TitleBarControls :color="'#000'"></TitleBarControls>
             </div>
           </div>
@@ -175,6 +188,7 @@ const handleKeyDown = () => {
   width: 15rem;
   background-color: #fff;
   border-right: 0.0625rem solid #e5e7eb;
+  flex-shrink: 0;
 
   .sidebar-content {
     padding: 1rem;
@@ -189,7 +203,7 @@ const handleKeyDown = () => {
       .logo-icon {
         width: 2rem;
         height: 2rem;
-        background-color: #f97316;
+        background-color: #4cd47c;
         border-radius: 0.625rem;
         display: flex;
         align-items: center;
@@ -207,7 +221,7 @@ const handleKeyDown = () => {
         color: #111827;
         span {
           font-weight: 500;
-          color: #f54a00;
+          color: #b8f0cc;
         }
       }
     }
@@ -231,11 +245,11 @@ const handleKeyDown = () => {
         }
 
         &.active {
-          background-color: #f97316;
-          color: white;
+          background-color: #4cd47c;
+          color: rgb(255, 255, 255);
 
           &:hover {
-            background-color: #ea580c;
+            background-color: #44ff85;
           }
         }
 
@@ -324,7 +338,6 @@ const handleKeyDown = () => {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    width: 100%;
     height: 0; /* 确保flex子元素能够正确计算高度 */
 
     &::-webkit-scrollbar {

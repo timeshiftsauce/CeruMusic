@@ -223,7 +223,7 @@ const playSong = async (song: SongList) => {
     }
   } catch (error: any) {
     console.error('播放歌曲失败:', error)
-    MessagePlugin.error('播放失败，原因：'+error.message)
+    MessagePlugin.error('播放失败，原因：' + error.message)
   }
 }
 
@@ -664,7 +664,7 @@ const handleProgressDragStart = (event: MouseEvent) => {
 }
 
 // 歌曲信息
-const songInfo = ref<Omit<SongList,'songmid'>&{songmid:null|number}>({
+const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number }>({
   songmid: null,
   hash: '',
   singer: 'CeruMusic',
@@ -805,7 +805,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
   </div>
   <div class="fullbox">
     <FullPlay
-      :song-id="songInfo.songmid?songInfo.songmid.toString():null"
+      :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
       :show="showFullPlay"
       :cover-image="songInfo.img"
       @toggle-fullscreen="toggleFullPlay"
@@ -846,7 +846,13 @@ watch(songInfo, setColor, { deep: true, immediate: true })
               <div class="song-name">{{ song.name }}</div>
               <div class="song-artist">{{ song.singer }}</div>
             </div>
-            <div class="song-duration">{{ song.interval.includes(':') ? song.interval : formatTime(parseInt(song.interval) / 1000) }}</div>
+            <div class="song-duration">
+              {{
+                song.interval.includes(':')
+                  ? song.interval
+                  : formatTime(parseInt(song.interval) / 1000)
+              }}
+            </div>
             <button class="song-remove" @click.stop="localUserStore.removeSong(song.songmid)">
               <span class="iconfont icon-xuanxiangshanchu"></span>
             </button>

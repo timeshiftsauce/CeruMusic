@@ -45,9 +45,10 @@ const parseLyric = (str) => {
     }
   }
   let i = 0
-  let lxlyric = str.replace(/\[((\d+),\d+)\].*/g, (str) => {
+  let crlyric = str.replace(/\[((\d+),\d+)\].*/g, (str) => {
     let result = str.match(/\[((\d+),\d+)\].*/)
-    let time = parseInt(result[2])
+    let lineStartTime = parseInt(result[2]) // 行开始时间
+    let time = lineStartTime
     let ms = time % 1000
     time /= 1000
     let m = parseInt(time / 60)
@@ -59,20 +60,28 @@ const parseLyric = (str) => {
     if (rlyric) rlyric[i] = `[${time}]${rlyric[i]?.join('') ?? ''}`
     if (tlyric) tlyric[i] = `[${time}]${tlyric[i]?.join('') ?? ''}`
     i++
-    return str.replace(result[1], time)
+
+    // 保持原始的 [start,duration] 格式，将相对时间戳转换为绝对时间戳
+    let processedStr = str.replace(/<(\d+),(\d+),(\d+)>/g, (match, start, duration, param) => {
+      const absoluteStart = lineStartTime + parseInt(start)
+      return `(${absoluteStart},${duration},${param})`
+    })
+
+    return processedStr
   })
   rlyric = rlyric ? rlyric.join('\n') : ''
   tlyric = tlyric ? tlyric.join('\n') : ''
-  lxlyric = lxlyric.replace(/<(\d+,\d+),\d+>/g, '<$1>')
-  lxlyric = decodeName(lxlyric)
-  lyric = lxlyric.replace(/<\d+,\d+>/g, '')
+  // 保留完整的时间戳格式 (startTime,duration,param)
+  crlyric = crlyric.replace(/<(\d+,\d+,\d+)>/g, '($1)')
+  crlyric = decodeName(crlyric)
+  lyric = crlyric.replace(/\(\d+,\d+,\d+\)/g, '')
   rlyric = decodeName(rlyric)
   tlyric = decodeName(tlyric)
   return {
     lyric,
     tlyric,
     rlyric,
-    lxlyric
+    crlyric
   }
 }
 

@@ -154,7 +154,7 @@ export const netEaseService: MusicServiceBase = {
           // 对于多个ID，并行获取详情
           const promises = ids.map((id) => sourceModule.musicInfo.getMusicInfo(id))
           const results = await Promise.all(promises)
-          return results.filter((result :any) => result) // 过滤掉失败的结果
+          return results.filter((result: any) => result) // 过滤掉失败的结果
         } else {
           throw new Error(`不支持的音乐源: ${source}`)
         }

@@ -13,7 +13,7 @@ const baseRule = {
   'prefer-const': 'off',
   'no-labels': 'off',
   'node/no-callback-literal': 'off',
-  'multiline-ternary': 'off',
+  'multiline-ternary': 'off'
 }
 const typescriptRule = {
   ...baseRule,
@@ -21,55 +21,59 @@ const typescriptRule = {
   '@typescript-eslint/explicit-function-return-type': 'off',
   '@typescript-eslint/space-before-function-paren': 'off',
   '@typescript-eslint/no-non-null-assertion': 'off',
-  '@typescript-eslint/restrict-template-expressions': [1, {
-    allowBoolean: true,
-    allowAny: true,
-  }],
-  '@typescript-eslint/restrict-plus-operands': [1, {
-    allowBoolean: true,
-    allowAny: true,
-  }],
+  '@typescript-eslint/restrict-template-expressions': [
+    1,
+    {
+      allowBoolean: true,
+      allowAny: true
+    }
+  ],
+  '@typescript-eslint/restrict-plus-operands': [
+    1,
+    {
+      allowBoolean: true,
+      allowAny: true
+    }
+  ],
   '@typescript-eslint/no-misused-promises': [
     'error',
     {
       checksVoidReturn: {
         arguments: false,
-        attributes: false,
-      },
-    },
+        attributes: false
+      }
+    }
   ],
   '@typescript-eslint/naming-convention': 'off',
   '@typescript-eslint/return-await': 'off',
   '@typescript-eslint/ban-ts-comment': 'off',
   '@typescript-eslint/comma-dangle': 'off',
-  '@typescript-eslint/no-unsafe-argument': 'off',
+  '@typescript-eslint/no-unsafe-argument': 'off'
 }
 const vueRule = {
   ...typescriptRule,
   'vue/multi-word-component-names': 'off',
   'vue/max-attributes-per-line': 'off',
   'vue/singleline-html-element-content-newline': 'off',
-  'vue/use-v-on-exact': 'off',
+  'vue/use-v-on-exact': 'off'
 }
 
 exports.base = {
   extends: ['standard'],
   rules: baseRule,
-  parser: '@babel/eslint-parser',
+  parser: '@babel/eslint-parser'
 }
 
 exports.html = {
   files: ['*.html'],
-  plugins: ['html'],
+  plugins: ['html']
 }
 
 exports.typescript = {
   files: ['*.ts'],
   rules: typescriptRule,
   parser: '@typescript-eslint/parser',
-  extends: [
-    'standard-with-typescript',
-  ],
+  extends: ['standard-with-typescript']
 }
 
 exports.vue = {
@@ -82,7 +86,7 @@ exports.vue = {
     'plugin:vue/vue3-recommended',
     'plugin:vue-pug/vue3-recommended',
     // "plugin:vue/strongly-recommended"
-    'standard-with-typescript',
+    'standard-with-typescript'
   ],
   parserOptions: {
     sourceType: 'module',
@@ -91,8 +95,8 @@ exports.vue = {
       js: '@typescript-eslint/parser',
 
       // Script parser for `<script lang="ts">`
-      ts: '@typescript-eslint/parser',
+      ts: '@typescript-eslint/parser'
     },
-    extraFileExtensions: ['.vue'],
-  },
+    extraFileExtensions: ['.vue']
+  }
 }

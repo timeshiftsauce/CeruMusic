@@ -14,7 +14,17 @@ const emitter = mitt<PlaylistEvents>()
 
 // 将事件总线挂载到全局
 ;(window as any).musicEmitter = emitter
-
+const qualityMap: Record<string, string> = {
+  '128k': '标准音质',
+  '192k': '高品音质',
+  '320k': '超高品质',
+  flac: '无损音质',
+  flac24bit: '超高解析',
+  hires: '高清臻音',
+  atmos: '全景环绕',
+  master: '超清母带'
+}
+const qualityKey = Object.keys(qualityMap)
 /**
  * 获取歌曲真实播放URL
  * @param song 歌曲对象
@@ -25,19 +35,27 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     // 获取当前用户的信息
     const LocalUserDetail = LocalUserDetailStore()
     // 通过统一的request方法获取真实的播放URL
-    const urlData = await window.api.music.requestSdk('getMusicUrl',{
-      pluginId:(LocalUserDetail.userSource.pluginId as unknown as string),
+    let quality = LocalUserDetail.userSource.quality as string
+    if (
+      qualityKey.indexOf(quality) >
+      qualityKey.indexOf((song.types[song.types.length - 1] as unknown as { type: any }).type)
+    ) {
+      quality = (song.types[song.types.length - 1] as unknown as { type: any }).type
+    }
+    console.log(quality)
+    const urlData = await window.api.music.requestSdk('getMusicUrl', {
+      pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
       source: song.source,
-      songInfo:song,
-      quality: LocalUserDetail.userSource.quality as string
+      songInfo: song,
+      quality
     })
     console.log(urlData)
-    if (typeof urlData === 'object'&&urlData.error) {
+    if (typeof urlData === 'object' && urlData.error) {
       throw new Error(urlData.error)
-    }else{
+    } else {
       return urlData as string
     }
-  } catch (error:any) {
+  } catch (error: any) {
     console.error('获取歌曲URL失败:', error)
     throw new Error('获取歌曲播放链接失败' + error.message)
   }
@@ -55,22 +73,23 @@ export async function addToPlaylistAndPlay(
   playSongCallback: (song: SongList) => Promise<void>
 ) {
   try {
+    // 获取真实播放URL
+
+    await getSongRealUrl(song)
+    const playResult = playSongCallback(song)
+
     // 使用store的方法添加歌曲到第一位
     localUserStore.addSongToFirst(song)
 
-    // 获取真实播放URL
-    await getSongRealUrl(song)
-
     // 播放歌曲 - 确保正确处理Promise
-    const playResult = playSongCallback(song)
     if (playResult && typeof playResult.then === 'function') {
       await playResult
     }
 
     await MessagePlugin.success('已添加到播放列表并开始播放')
   } catch (error) {
-    console.error('添加到播放列表并播放失败:', error)
-    await MessagePlugin.error('播放失败，请重试')
+    console.error('播放失败:', error)
+    await MessagePlugin.error('播放失败了，可能还没有版权')
   }
 }
 
@@ -82,7 +101,9 @@ export async function addToPlaylistAndPlay(
 export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
   try {
     // 检查歌曲是否已在播放列表中
-    const existingIndex = localUserStore.list.findIndex((item: SongList) => item.songmid === song.songmid)
+    const existingIndex = localUserStore.list.findIndex(
+      (item: SongList) => item.songmid === song.songmid
+    )
 
     if (existingIndex !== -1) {
       await MessagePlugin.warning('歌曲已在播放列表中')
@@ -91,14 +112,6 @@ export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
 
     // 使用store的方法添加歌曲
     localUserStore.addSong(song)
-
-    // 预加载歌曲URL（可选，提升用户体验）
-    try {
-      await getSongRealUrl(song)
-    } catch (error) {
-      console.warn('预加载歌曲URL失败:', error)
-      // 预加载失败不影响添加到播放列表
-    }
 
     await MessagePlugin.success('已添加到播放列表')
   } catch (error) {
