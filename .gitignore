@@ -12,3 +12,7 @@ build
 /plugins/
 temp
 temp/log.txt
+/.kiro/
+/.vscode/
+/.codebuddy/
+/.idea/
