@@ -1,4 +1,19 @@
+import { CacheInfo, CacheOperationResult } from './musicCache'
+
 // 全局类型定义
+declare global {
+  interface Window {
+    electronAPI: {
+      // 音乐缓存相关
+      musicCache: {
+        getInfo: () => Promise<CacheInfo>
+        clear: () => Promise<CacheOperationResult>
+        getSize: () => Promise<number>
+      }
+    }
+  }
+}
+
 declare namespace LX {
   namespace Music {
     // 音质类型

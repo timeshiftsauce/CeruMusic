@@ -65,7 +65,6 @@ export const matchToken = (headers) => {
 //   })
 // })
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export const decodeLyric = (options) => {
   if (typeof options === 'string') {
     // 兼容旧的调用方式

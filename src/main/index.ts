@@ -191,6 +191,7 @@ ipcMain.handle('service-music-request', async (_, api, args) => {
 })
 
 aiEvents(mainWindow)
+import './events/musicCache'
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

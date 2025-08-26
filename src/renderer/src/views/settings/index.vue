@@ -52,6 +52,7 @@ const clearAPIKey = (): void => {
 }
 import { useRouter } from 'vue-router'
 import { computed, watch } from 'vue'
+import MusicCache from '@renderer/components/Settings/MusicCache.vue'
 const router = useRouter()
 const goPlugin = () => {
   router.push('/plugins')
@@ -203,16 +204,6 @@ const getCurrentSourceName = () => {
         </div>
 
         <div class="demo-section">
-          <h3>当前风格预览</h3>
-          <div class="preview-container">
-            <div class="mock-titlebar">
-              <div class="mock-title">Ceru Music - 设置</div>
-              <TitleBarControls :control-style="currentStyle" />
-            </div>
-          </div>
-        </div>
-
-        <div class="demo-section">
           <h3>两种风格对比</h3>
           <div class="comparison-container">
             <div class="style-demo">
@@ -232,7 +223,10 @@ const getCurrentSourceName = () => {
             </div>
           </div>
         </div>
-
+        <div class="demo-section">
+          <h3>应用主题色</h3>
+          <ThemeSelector />
+        </div>
         <div class="demo-section">
           <h3>DeepSeek API 配置</h3>
           <div class="api-config-container">
@@ -303,7 +297,6 @@ const getCurrentSourceName = () => {
           <PlaylistSettings />
           <!-- <PlaylistActions></PlaylistActions> -->
         </div>
-
         <!-- 插件管理部分 -->
         <div class="demo-section">
           <h3>插件管理</h3>
@@ -432,6 +425,12 @@ const getCurrentSourceName = () => {
             </div>
           </div>
         </div>
+        <div class="demo-section">
+          <div>
+            <MusicCache></MusicCache>
+          </div>
+        </div>
+
 
         <div class="demo-section">
           <h3>功能说明</h3>
@@ -768,8 +767,8 @@ const getCurrentSourceName = () => {
       }
 
       .plugin-status {
-        background: #10b981;
-        color: rgb(0, 0, 0);
+        background: var(--td-brand-color-5);
+        color: var(--td-gray-color-1);
         padding: 0.25rem 0.75rem;
         border-radius: 1rem;
         font-size: 0.875rem;
@@ -822,8 +821,8 @@ const getCurrentSourceName = () => {
 
     &.active {
       background: rgba(255, 255, 255, 0.2);
-      border-color: #10b981;
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+      border-color: var(--td-brand-color-5);
+      box-shadow: 0 0 20px var(--td-gray-color-6);
     }
 
     .source-icon {
@@ -899,12 +898,12 @@ const getCurrentSourceName = () => {
       }
 
       :deep(.t-slider__track-active) {
-        background: linear-gradient(90deg, #10b981, #059669);
+        background: linear-gradient(90deg, var(--td-brand-color-5), var(--td-brand-color-6));
       }
 
       :deep(.t-slider__button) {
         background: white;
-        border: 3px solid #10b981;
+        border: 3px solid var(--td-brand-color-5);
         box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
       }
     }
@@ -951,7 +950,7 @@ const getCurrentSourceName = () => {
 
       .status-value {
         font-weight: 600;
-        color: #10b981;
+        color: var(--td-brand-color-6);
       }
     }
   }

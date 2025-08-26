@@ -29,25 +29,25 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器，
 
 - **IDE**: VS Code 或 WebStorm
 - **Node.js 版本**: 推荐使用最新稳定版
-- **包管理器**: pnpm
+- **包管理器**: yarn
 
 ### 项目设置
 
 1. 安装依赖：
 
    ```bash
-   pnpm install
+   yarn install
    ```
 
 2. 启动开发服务器：
 
    ```bash
-   pnpm dev
+   yarn dev
    ```
 
 3. 构建应用：
    ```bash
-   pnpm build
+   yarn build
    ```
 
 ### 平台构建指令
@@ -55,18 +55,18 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器，
 - **Windows**:
 
   ```bash
-  pnpm build:win
+  yarn build:win
   ```
 
 - **macOS**:
 
   ```bash
-  pnpm build:mac
+  yarn build:mac
   ```
 
 - **Linux**:
   ```bash
-  pnpm build:linux
+  yarn build:linux
   ```
 
 ## 文档与资源

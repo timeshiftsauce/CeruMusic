@@ -89,3 +89,7 @@ export interface PlaylistDetailResult {
   source: string
   info: PlaylistInfo
 }
+
+export interface DownloadSingleSongArgs extends GetMusicUrlArg {
+  path?: string
+}
