@@ -1,7 +1,0 @@
-log [CeruMusic] Plugin "ikun音源" loaded successfully.
-log [聚合API接口 (by lerd) by Ceru插件] 注册事件监听器: request
-log [聚合API接口 (by lerd) by Ceru插件] 发送事件: inited [object Object]
-log [聚合API接口 (by lerd) by Ceru插件] 音源注册完成: tx,wy,kg,kw,mg
-log [聚合API接口 (by lerd) by Ceru插件] 动态音源信息已更新: [object Object]
-log [CeruMusic] 事件驱动插件初始化成功
-log [CeruMusic] Plugin "聚合API接口 (by lerd)" loaded successfully.
