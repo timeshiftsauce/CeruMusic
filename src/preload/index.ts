@@ -61,6 +61,12 @@ const api = {
     }
   },
 
+  musicCache: {
+    getInfo: () => ipcRenderer.invoke('music-cache:get-info'),
+    clear: () => ipcRenderer.invoke('music-cache:clear'),
+    getSize: () => ipcRenderer.invoke('music-cache:get-size')
+  },
+
   getUserConfig: () => ipcRenderer.invoke('get-user-config')
 }
 

@@ -125,7 +125,7 @@ const handlePause = () => {
 }
 
 const handleDownload = (song: MusicItem) => {
-  downloadSingleSong(song.songmid as unknown as string, song.name, song.albumName)
+  downloadSingleSong(song)
 }
 
 const handleAddToPlaylist = (song: MusicItem) => {

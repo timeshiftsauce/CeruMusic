@@ -106,7 +106,6 @@ const handleKeyDown = () => {
           <t-button
             v-for="(item, index) in menuList"
             :key="index"
-            :theme="menuActive == index ? 'warning' : ''"
             :variant="menuActive == index ? 'base' : 'text'"
             :class="menuActive == index ? 'nav-button active' : 'nav-button'"
             block
@@ -203,7 +202,7 @@ const handleKeyDown = () => {
       .logo-icon {
         width: 2rem;
         height: 2rem;
-        background-color: #4cd47c;
+        background-color: var(--td-brand-color-4);
         border-radius: 0.625rem;
         display: flex;
         align-items: center;
@@ -245,11 +244,11 @@ const handleKeyDown = () => {
         }
 
         &.active {
-          background-color: #4cd47c;
+          background-color: var(--td-brand-color-4);
           color: rgb(255, 255, 255);
 
           &:hover {
-            background-color: #44ff85;
+            background-color: var(--td-brand-color-5);
           }
         }
 

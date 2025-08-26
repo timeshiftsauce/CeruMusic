@@ -16,6 +16,9 @@
       ],
       "@common/*":[
         "src/common/*"
+      ],
+      "@types/*": [
+        "src/renderer/src/types/*"
       ]
     }
   }

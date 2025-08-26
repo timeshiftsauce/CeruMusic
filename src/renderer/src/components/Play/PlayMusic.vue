@@ -412,7 +412,7 @@ const playNext = async () => {
 
 // 定期保存当前播放位置
 let savePositionInterval: number | null = null
-
+let unEnded:()=>any = ()=>{}
 // 初始化播放器
 onMounted(async () => {
   console.log('加载')
@@ -420,8 +420,10 @@ onMounted(async () => {
   initPlaylistEventListeners(localUserStore, playSong)
 
   // 监听音频结束事件，根据播放模式播放下一首
-  controlAudio.subscribe('ended', () => {
-    playNext()
+  unEnded = controlAudio.subscribe('ended', () => {
+    window.requestAnimationFrame(()=>{
+      playNext()
+    })
   })
 
   // 检查是否有上次播放的歌曲
@@ -471,6 +473,7 @@ onUnmounted(() => {
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)
   }
+  unEnded()
 })
 
 // 组件被激活时（从缓存中恢复）

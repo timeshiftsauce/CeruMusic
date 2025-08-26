@@ -19,6 +19,12 @@ interface CustomAPI {
     ) => ReturnType<MainApi[T]>
   }
 
+  musicCache: {
+    getInfo: () => Promise<any>
+    clear: () => Promise
+    getSize: () => Promise<string>
+  },
+
   ai: {
     ask: (prompt: string) => Promise<any>
     askStream: (prompt: string, streamId: string) => Promise<any>

@@ -58,25 +58,25 @@ const vueRule = {
   'vue/use-v-on-exact': 'off'
 }
 
-exports.base = {
+export const base = {
   extends: ['standard'],
   rules: baseRule,
   parser: '@babel/eslint-parser'
 }
 
-exports.html = {
+export const html = {
   files: ['*.html'],
   plugins: ['html']
 }
 
-exports.typescript = {
+export const typescript = {
   files: ['*.ts'],
   rules: typescriptRule,
   parser: '@typescript-eslint/parser',
   extends: ['standard-with-typescript']
 }
 
-exports.vue = {
+export const vue = {
   files: ['*.vue'],
   rules: vueRule,
   parser: 'vue-eslint-parser',

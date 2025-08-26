@@ -17,7 +17,7 @@ export const LocalUserDetailStore = defineStore('Local', () => {
     } else {
       userInfo.value = {
         lastPlaySongId: null,
-        topBarStyle: true,
+        topBarStyle: false,
         mainColor: '#00DAC0',
         volume: 80,
         currentTime: 0

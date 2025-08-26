@@ -5,7 +5,7 @@ import { getAppDirPath } from '../../utils/path'
 import { remove_empty_strings } from '../../utils/array'
 
 function getLogPath(pluginId: string): string {
-  return path.join(getAppDirPath(), 'plugin', 'logs', `${pluginId}.txt`)
+  return path.join(getAppDirPath(), 'plugins', 'logs', `${pluginId}.txt`)
 }
 
 const fileLock: Record<string, Promise<any> | undefined> = {}

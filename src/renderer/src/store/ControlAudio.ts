@@ -102,7 +102,7 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
 
   // 初始化
   const init = (el: ControlAudioState['audio']) => {
-    userInfo = LocalUserDetailStore().userInfo
+    userInfo = LocalUserDetailStore()
     console.log(el, '全局音频挂载初始化success')
     Audio.audio = el
   }
@@ -139,21 +139,20 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
           transitionVolume(Audio.audio, volume / 100, Audio.volume <= volume)
         } else {
           Audio.audio.volume = Number((volume / 100).toFixed(2))
-          console.log('vo', Audio.audio.volume)
         }
         Audio.volume = volume
-        userInfo.volume = volume
+        userInfo.userInfo.volume = volume
       }
     } else {
       if (typeof volume === 'number' && Audio.audio) {
         if (volume <= 0) {
           Audio.volume = 0
           Audio.audio.volume = 0
-          userInfo.volume = 0
+          userInfo.userInfo.volume = 0
         } else {
           Audio.volume = 100
           Audio.audio.volume = 100
-          userInfo.volume = 100
+          userInfo.userInfo.volume = 100
         }
       } else {
         throw new Error('音量必须是0-100之间的数字')

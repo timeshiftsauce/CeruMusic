@@ -11,12 +11,16 @@ export function request<T extends keyof MainApi>(
     source: any
   } & (MethodParams<T> extends object ? MethodParams<T> : { [key: string]: any })
 ): ReturnType<MainApi[T]> {
-  const { source, ...args } = options
-  if (!source) throw new Error('请配置音源')
-  const Api = main(source)
-  if (Api.hasOwnProperty(method)) {
-    return (Api[method] as (args: any) => any)(args)
+  try {
+    const { source, ...args } = options
+    if (!source) throw new Error('请配置音源')
+    const Api = main(source)
+    if (Api.hasOwnProperty(method)) {
+      return (Api[method] as (args: any) => any)(args)
+    }
+    throw new Error(`未知的方法: ${method}`)
+  }catch (error:any){
+    throw new Error(error.message)
   }
-  throw new Error(`未知的方法: ${method}`)
 }
 ipcMain.handle('service-music-sdk-request', request)

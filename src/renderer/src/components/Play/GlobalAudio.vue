@@ -59,6 +59,7 @@ onDeactivated(() => {
 const handleEnded = (): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('ended')
+  console.log('eddddddddd')
 }
 
 const handleSeeked = (): void => {

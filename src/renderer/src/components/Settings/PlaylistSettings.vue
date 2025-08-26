@@ -239,7 +239,7 @@ watch(
       <t-card title="播放列表统计" hover-shadow>
         <div class="stats-content">
           <div class="stat-item">
-            <span class="iconfont icon-bofang"></span>
+            <t-icon name="play" />
             <div class="stat-info">
               <div class="stat-label">歌曲数量</div>
               <div class="stat-value">{{ playlistStats.totalSongs }} 首</div>

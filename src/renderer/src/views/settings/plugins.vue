@@ -628,7 +628,7 @@ onMounted(async () => {
 }
 
 .current-tag {
-  background-color: #28a745;
+  background-color: var(--td-brand-color-5);
   color: white;
   padding: 2px 8px;
   border-radius: 12px;
@@ -810,7 +810,7 @@ onMounted(async () => {
     font-size: 12px;
 
     .console-prompt {
-      color: #00d4aa;
+      color: var(--td-brand-color-5);
       font-weight: bold;
     }
 

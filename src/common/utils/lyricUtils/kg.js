@@ -6,7 +6,6 @@ const enc_key = Buffer.from(
   [0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47, 0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69],
   'binary'
 )
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const decodeLyric = (str) =>
   new Promise((resolve, reject) => {
     if (!str.length) return
@@ -22,7 +21,6 @@ const decodeLyric = (str) =>
 
 const headExp = /^.*\[id:\$\w+\]\n/
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const parseLyric = (str) => {
   str = str.replace(/\r/g, '')
   if (headExp.test(str)) str = str.replace(headExp, '')
@@ -85,7 +83,6 @@ const parseLyric = (str) => {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export const decodeKrc = async (data) => {
   return decodeLyric(data).then(parseLyric)
 }
