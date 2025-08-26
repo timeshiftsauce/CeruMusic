@@ -11,3 +11,4 @@ build
 /plugin/
 /plugins/
 temp
+temp/log.txt
