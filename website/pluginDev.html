@@ -1,0 +1,1567 @@
+<!doctype html>
+<html>
+<head>
+<meta charset='UTF-8'><meta name='viewport' content='width=device-width initial-scale=1'>
+
+<style type='text/css'>html {overflow-x: initial !important;}:root { --bg-color:#ffffff; --text-color:#333333; --select-text-bg-color:#B5D6FC; --select-text-font-color:auto; --monospace:"Lucida Console",Consolas,"Courier",monospace; --title-bar-height:20px; }
+.mac-os-11 { --title-bar-height:28px; }
+html { font-size: 14px; background-color: var(--bg-color); color: var(--text-color); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+body { margin: 0px; padding: 0px; height: auto; inset: 0px; font-size: 1rem; line-height: 1.42857; overflow-x: hidden; background: inherit; tab-size: 4; }
+iframe { margin: auto; }
+a.url { word-break: break-all; }
+a:active, a:hover { outline: 0px; }
+.in-text-selection, ::selection { text-shadow: none; background: var(--select-text-bg-color); color: var(--select-text-font-color); }
+#write { margin: 0px auto; height: auto; width: inherit; word-break: normal; overflow-wrap: break-word; position: relative; white-space: normal; overflow-x: visible; padding-top: 36px; }
+#write.first-line-indent p { text-indent: 2em; }
+#write.first-line-indent li p, #write.first-line-indent p * { text-indent: 0px; }
+#write.first-line-indent li { margin-left: 2em; }
+.for-image #write { padding-left: 8px; padding-right: 8px; }
+body.typora-export { padding-left: 30px; padding-right: 30px; }
+.typora-export .footnote-line, .typora-export li, .typora-export p { white-space: pre-wrap; }
+.typora-export .task-list-item input { pointer-events: none; }
+@media screen and (max-width: 500px) {
+  body.typora-export { padding-left: 0px; padding-right: 0px; }
+  #write { padding-left: 20px; padding-right: 20px; }
+}
+#write li > figure:last-child { margin-bottom: 0.5rem; }
+#write ol, #write ul { position: relative; }
+img { max-width: 100%; vertical-align: middle; image-orientation: from-image; }
+button, input, select, textarea { color: inherit; font: inherit; }
+input[type="checkbox"], input[type="radio"] { line-height: normal; padding: 0px; }
+*, ::after, ::before { box-sizing: border-box; }
+#write h1, #write h2, #write h3, #write h4, #write h5, #write h6, #write p, #write pre { width: inherit; }
+#write h1, #write h2, #write h3, #write h4, #write h5, #write h6, #write p { position: relative; }
+p { line-height: inherit; }
+h1, h2, h3, h4, h5, h6 { break-after: avoid-page; break-inside: avoid; orphans: 4; }
+p { orphans: 4; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.8rem; }
+h3 { font-size: 1.6rem; }
+h4 { font-size: 1.4rem; }
+h5 { font-size: 1.2rem; }
+h6 { font-size: 1rem; }
+.md-math-block, .md-rawblock, h1, h2, h3, h4, h5, h6, p { margin-top: 1rem; margin-bottom: 1rem; }
+.hidden { display: none; }
+.md-blockmeta { color: rgb(204, 204, 204); font-weight: 700; font-style: italic; }
+a { cursor: pointer; }
+sup.md-footnote { padding: 2px 4px; background-color: rgba(238, 238, 238, 0.7); color: rgb(85, 85, 85); border-radius: 4px; cursor: pointer; }
+sup.md-footnote a, sup.md-footnote a:hover { color: inherit; text-transform: inherit; text-decoration: inherit; }
+#write input[type="checkbox"] { cursor: pointer; width: inherit; height: inherit; }
+figure { overflow-x: auto; margin: 1.2em 0px; max-width: calc(100% + 16px); padding: 0px; }
+figure > table { margin: 0px; }
+thead, tr { break-inside: avoid; break-after: auto; }
+thead { display: table-header-group; }
+table { border-collapse: collapse; border-spacing: 0px; width: 100%; overflow: auto; break-inside: auto; text-align: left; }
+table.md-table td { min-width: 32px; }
+.CodeMirror-gutters { border-right: 0px; background-color: inherit; }
+.CodeMirror-linenumber { user-select: none; }
+.CodeMirror { text-align: left; }
+.CodeMirror-placeholder { opacity: 0.3; }
+.CodeMirror pre { padding: 0px 4px; }
+.CodeMirror-lines { padding: 0px; }
+div.hr:focus { cursor: none; }
+#write pre { white-space: pre-wrap; }
+#write.fences-no-line-wrapping pre { white-space: pre; }
+#write pre.ty-contain-cm { white-space: normal; }
+.CodeMirror-gutters { margin-right: 4px; }
+.md-fences { font-size: 0.9rem; display: block; break-inside: avoid; text-align: left; overflow: visible; white-space: pre; background: inherit; position: relative !important; }
+.md-fences-adv-panel { width: 100%; margin-top: 10px; text-align: center; padding-top: 0px; padding-bottom: 8px; overflow-x: auto; }
+#write .md-fences.mock-cm { white-space: pre-wrap; }
+.md-fences.md-fences-with-lineno { padding-left: 0px; }
+#write.fences-no-line-wrapping .md-fences.mock-cm { white-space: pre; overflow-x: auto; }
+.md-fences.mock-cm.md-fences-with-lineno { padding-left: 8px; }
+.CodeMirror-line, twitterwidget { break-inside: avoid; }
+svg { break-inside: avoid; }
+.footnotes { opacity: 0.8; font-size: 0.9rem; margin-top: 1em; margin-bottom: 1em; }
+.footnotes + .footnotes { margin-top: 0px; }
+.md-reset { margin: 0px; padding: 0px; border: 0px; outline: 0px; vertical-align: top; background: 0px 0px; text-decoration: none; text-shadow: none; float: none; position: static; width: auto; height: auto; white-space: nowrap; cursor: inherit; -webkit-tap-highlight-color: transparent; line-height: normal; font-weight: 400; text-align: left; box-sizing: content-box; direction: ltr; }
+li div { padding-top: 0px; }
+blockquote { margin: 1rem 0px; }
+li .mathjax-block, li p { margin: 0.5rem 0px; }
+li blockquote { margin: 1rem 0px; }
+li { margin: 0px; position: relative; }
+blockquote > :last-child { margin-bottom: 0px; }
+blockquote > :first-child, li > :first-child { margin-top: 0px; }
+.footnotes-area { color: rgb(136, 136, 136); margin-top: 0.714rem; padding-bottom: 0.143rem; white-space: normal; }
+#write .footnote-line { white-space: pre-wrap; }
+@media print {
+  body, html { border: 1px solid transparent; height: 99%; break-after: avoid; break-before: avoid; font-variant-ligatures: no-common-ligatures; }
+  #write { margin-top: 0px; padding-top: 0px; border-color: transparent !important; padding-bottom: 0px !important; }
+  .typora-export * { -webkit-print-color-adjust: exact; }
+  .typora-export #write { break-after: avoid; }
+  .typora-export #write::after { height: 0px; }
+  .is-mac table { break-inside: avoid; }
+  .typora-export-show-outline .typora-export-sidebar { display: none; }
+}
+.footnote-line { margin-top: 0.714em; font-size: 0.7em; }
+a img, img a { cursor: pointer; }
+pre.md-meta-block { font-size: 0.8rem; min-height: 0.8rem; white-space: pre-wrap; background: rgb(204, 204, 204); display: block; overflow-x: hidden; }
+p > .md-image:only-child:not(.md-img-error) img, p > img:only-child { display: block; margin: auto; }
+#write.first-line-indent p > .md-image:only-child:not(.md-img-error) img { left: -2em; position: relative; }
+p > .md-image:only-child { display: inline-block; width: 100%; }
+#write .MathJax_Display { margin: 0.8em 0px 0px; }
+.md-math-block { width: 100%; }
+.md-math-block:not(:empty)::after { display: none; }
+.MathJax_ref { fill: currentcolor; }
+[contenteditable="true"]:active, [contenteditable="true"]:focus, [contenteditable="false"]:active, [contenteditable="false"]:focus { outline: 0px; box-shadow: none; }
+.md-task-list-item { position: relative; list-style-type: none; }
+.task-list-item.md-task-list-item { padding-left: 0px; }
+.md-task-list-item > input { position: absolute; top: 0px; left: 0px; margin-left: -1.2em; margin-top: calc(1em - 10px); border: none; }
+.math { font-size: 1rem; }
+.md-toc { min-height: 3.58rem; position: relative; font-size: 0.9rem; border-radius: 10px; }
+.md-toc-content { position: relative; margin-left: 0px; }
+.md-toc-content::after, .md-toc::after { display: none; }
+.md-toc-item { display: block; color: rgb(65, 131, 196); }
+.md-toc-item a { text-decoration: none; }
+.md-toc-inner:hover { text-decoration: underline; }
+.md-toc-inner { display: inline-block; cursor: pointer; }
+.md-toc-h1 .md-toc-inner { margin-left: 0px; font-weight: 700; }
+.md-toc-h2 .md-toc-inner { margin-left: 2em; }
+.md-toc-h3 .md-toc-inner { margin-left: 4em; }
+.md-toc-h4 .md-toc-inner { margin-left: 6em; }
+.md-toc-h5 .md-toc-inner { margin-left: 8em; }
+.md-toc-h6 .md-toc-inner { margin-left: 10em; }
+@media screen and (max-width: 48em) {
+  .md-toc-h3 .md-toc-inner { margin-left: 3.5em; }
+  .md-toc-h4 .md-toc-inner { margin-left: 5em; }
+  .md-toc-h5 .md-toc-inner { margin-left: 6.5em; }
+  .md-toc-h6 .md-toc-inner { margin-left: 8em; }
+}
+a.md-toc-inner { font-size: inherit; font-style: inherit; font-weight: inherit; line-height: inherit; }
+.footnote-line a:not(.reversefootnote) { color: inherit; }
+.reversefootnote { font-family: ui-monospace, sans-serif; }
+.md-attr { display: none; }
+.md-fn-count::after { content: "."; }
+code, pre, samp, tt { font-family: var(--monospace); }
+kbd { margin: 0px 0.1em; padding: 0.1em 0.6em; font-size: 0.8em; color: rgb(36, 39, 41); background: rgb(255, 255, 255); border: 1px solid rgb(173, 179, 185); border-radius: 3px; box-shadow: rgba(12, 13, 14, 0.2) 0px 1px 0px, rgb(255, 255, 255) 0px 0px 0px 2px inset; white-space: nowrap; vertical-align: middle; }
+.md-comment { color: rgb(162, 127, 3); opacity: 0.6; font-family: var(--monospace); }
+code { text-align: left; vertical-align: initial; }
+a.md-print-anchor { white-space: pre !important; border-width: initial !important; border-style: none !important; border-color: initial !important; display: inline-block !important; position: absolute !important; width: 1px !important; right: 0px !important; outline: 0px !important; background: 0px 0px !important; text-decoration: initial !important; text-shadow: initial !important; }
+.os-windows.monocolor-emoji .md-emoji { font-family: "Segoe UI Symbol", sans-serif; }
+.md-diagram-panel > svg { max-width: 100%; }
+[lang="flow"] svg, [lang="mermaid"] svg { max-width: 100%; height: auto; }
+[lang="mermaid"] .node text { font-size: 1rem; }
+table tr th { border-bottom: 0px; }
+video { max-width: 100%; display: block; margin: 0px auto; }
+iframe { max-width: 100%; width: 100%; border: none; }
+.highlight td, .highlight tr { border: 0px; }
+mark { background: rgb(255, 255, 0); color: rgb(0, 0, 0); }
+.md-html-inline .md-plain, .md-html-inline strong, mark .md-inline-math, mark strong { color: inherit; }
+.md-expand mark .md-meta { opacity: 0.3 !important; }
+mark .md-meta { color: rgb(0, 0, 0); }
+@media print {
+  .typora-export h1, .typora-export h2, .typora-export h3, .typora-export h4, .typora-export h5, .typora-export h6 { break-inside: avoid; }
+}
+.md-diagram-panel .messageText { stroke: none !important; }
+.md-diagram-panel .start-state { fill: var(--node-fill); }
+.md-diagram-panel .edgeLabel rect { opacity: 1 !important; }
+.md-fences.md-fences-math { font-size: 1em; }
+.md-fences-advanced:not(.md-focus) { padding: 0px; white-space: nowrap; border: 0px; }
+.md-fences-advanced:not(.md-focus) { background: inherit; }
+.typora-export-show-outline .typora-export-content { max-width: 1440px; margin: auto; display: flex; flex-direction: row; }
+.typora-export-sidebar { width: 300px; font-size: 0.8rem; margin-top: 80px; margin-right: 18px; }
+.typora-export-show-outline #write { --webkit-flex:2; flex: 2 1 0%; }
+.typora-export-sidebar .outline-content { position: fixed; top: 0px; max-height: 100%; overflow: hidden auto; padding-bottom: 30px; padding-top: 60px; width: 300px; }
+@media screen and (max-width: 1024px) {
+  .typora-export-sidebar, .typora-export-sidebar .outline-content { width: 240px; }
+}
+@media screen and (max-width: 800px) {
+  .typora-export-sidebar { display: none; }
+}
+.outline-content li, .outline-content ul { margin-left: 0px; margin-right: 0px; padding-left: 0px; padding-right: 0px; list-style: none; }
+.outline-content ul { margin-top: 0px; margin-bottom: 0px; }
+.outline-content strong { font-weight: 400; }
+.outline-expander { width: 1rem; height: 1.42857rem; position: relative; display: table-cell; vertical-align: middle; cursor: pointer; padding-left: 4px; }
+.outline-expander::before { content: ""; position: relative; font-family: Ionicons; display: inline-block; font-size: 8px; vertical-align: middle; }
+.outline-item { padding-top: 3px; padding-bottom: 3px; cursor: pointer; }
+.outline-expander:hover::before { content: ""; }
+.outline-h1 > .outline-item { padding-left: 0px; }
+.outline-h2 > .outline-item { padding-left: 1em; }
+.outline-h3 > .outline-item { padding-left: 2em; }
+.outline-h4 > .outline-item { padding-left: 3em; }
+.outline-h5 > .outline-item { padding-left: 4em; }
+.outline-h6 > .outline-item { padding-left: 5em; }
+.outline-label { cursor: pointer; display: table-cell; vertical-align: middle; text-decoration: none; color: inherit; }
+.outline-label:hover { text-decoration: underline; }
+.outline-item:hover { border-color: rgb(245, 245, 245); background-color: var(--item-hover-bg-color); }
+.outline-item:hover { margin-left: -28px; margin-right: -28px; border-left: 28px solid transparent; border-right: 28px solid transparent; }
+.outline-item-single .outline-expander::before, .outline-item-single .outline-expander:hover::before { display: none; }
+.outline-item-open > .outline-item > .outline-expander::before { content: ""; }
+.outline-children { display: none; }
+.info-panel-tab-wrapper { display: none; }
+.outline-item-open > .outline-children { display: block; }
+.typora-export .outline-item { padding-top: 1px; padding-bottom: 1px; }
+.typora-export .outline-item:hover { margin-right: -8px; border-right: 8px solid transparent; }
+.typora-export .outline-expander::before { content: "+"; font-family: inherit; top: -1px; }
+.typora-export .outline-expander:hover::before, .typora-export .outline-item-open > .outline-item > .outline-expander::before { content: "−"; }
+.typora-export-collapse-outline .outline-children { display: none; }
+.typora-export-collapse-outline .outline-item-open > .outline-children, .typora-export-no-collapse-outline .outline-children { display: block; }
+.typora-export-no-collapse-outline .outline-expander::before { content: "" !important; }
+.typora-export-show-outline .outline-item-active > .outline-item .outline-label { font-weight: 700; }
+.md-inline-math-container mjx-container { zoom: 0.95; }
+
+
+.CodeMirror { height: auto; }
+.CodeMirror.cm-s-inner { background: inherit; }
+.CodeMirror-scroll { overflow: auto hidden; z-index: 3; }
+.CodeMirror-gutter-filler, .CodeMirror-scrollbar-filler { background-color: rgb(255, 255, 255); }
+.CodeMirror-gutters { border-right: 1px solid rgb(221, 221, 221); background: inherit; white-space: nowrap; }
+.CodeMirror-linenumber { padding: 0px 3px 0px 5px; text-align: right; color: rgb(153, 153, 153); }
+.cm-s-inner .cm-keyword { color: rgb(119, 0, 136); }
+.cm-s-inner .cm-atom, .cm-s-inner.cm-atom { color: rgb(34, 17, 153); }
+.cm-s-inner .cm-number { color: rgb(17, 102, 68); }
+.cm-s-inner .cm-def { color: rgb(0, 0, 255); }
+.cm-s-inner .cm-variable { color: rgb(0, 0, 0); }
+.cm-s-inner .cm-variable-2 { color: rgb(0, 85, 170); }
+.cm-s-inner .cm-variable-3 { color: rgb(0, 136, 85); }
+.cm-s-inner .cm-string { color: rgb(170, 17, 17); }
+.cm-s-inner .cm-property { color: rgb(0, 0, 0); }
+.cm-s-inner .cm-operator { color: rgb(152, 26, 26); }
+.cm-s-inner .cm-comment, .cm-s-inner.cm-comment { color: rgb(170, 85, 0); }
+.cm-s-inner .cm-string-2 { color: rgb(255, 85, 0); }
+.cm-s-inner .cm-meta { color: rgb(85, 85, 85); }
+.cm-s-inner .cm-qualifier { color: rgb(85, 85, 85); }
+.cm-s-inner .cm-builtin { color: rgb(51, 0, 170); }
+.cm-s-inner .cm-bracket { color: rgb(153, 153, 119); }
+.cm-s-inner .cm-tag { color: rgb(17, 119, 0); }
+.cm-s-inner .cm-attribute { color: rgb(0, 0, 204); }
+.cm-s-inner .cm-header, .cm-s-inner.cm-header { color: rgb(0, 0, 255); }
+.cm-s-inner .cm-quote, .cm-s-inner.cm-quote { color: rgb(0, 153, 0); }
+.cm-s-inner .cm-hr, .cm-s-inner.cm-hr { color: rgb(153, 153, 153); }
+.cm-s-inner .cm-link, .cm-s-inner.cm-link { color: rgb(0, 0, 204); }
+.cm-negative { color: rgb(221, 68, 68); }
+.cm-positive { color: rgb(34, 153, 34); }
+.cm-header, .cm-strong { font-weight: 700; }
+.cm-del { text-decoration: line-through; }
+.cm-em { font-style: italic; }
+.cm-link { text-decoration: underline; }
+.cm-error { color: red; }
+.cm-invalidchar { color: red; }
+.cm-constant { color: rgb(38, 139, 210); }
+.cm-defined { color: rgb(181, 137, 0); }
+div.CodeMirror span.CodeMirror-matchingbracket { color: rgb(0, 255, 0); }
+div.CodeMirror span.CodeMirror-nonmatchingbracket { color: rgb(255, 34, 34); }
+.cm-s-inner .CodeMirror-activeline-background { background: inherit; }
+.CodeMirror { position: relative; overflow: hidden; }
+.CodeMirror-scroll { height: 100%; outline: 0px; position: relative; box-sizing: content-box; background: inherit; }
+.CodeMirror-sizer { position: relative; }
+.CodeMirror-gutter-filler, .CodeMirror-hscrollbar, .CodeMirror-scrollbar-filler, .CodeMirror-vscrollbar { position: absolute; z-index: 6; display: none; outline: 0px; }
+.CodeMirror-vscrollbar { right: 0px; top: 0px; overflow: hidden; }
+.CodeMirror-hscrollbar { bottom: 0px; left: 0px; overflow: auto hidden; }
+.CodeMirror-scrollbar-filler { right: 0px; bottom: 0px; }
+.CodeMirror-gutter-filler { left: 0px; bottom: 0px; }
+.CodeMirror-gutters { position: absolute; left: 0px; top: 0px; padding-bottom: 10px; z-index: 3; overflow-y: hidden; }
+.CodeMirror-gutter { white-space: normal; height: 100%; box-sizing: content-box; padding-bottom: 30px; margin-bottom: -32px; display: inline-block; }
+.CodeMirror-gutter-wrapper { position: absolute; z-index: 4; background: 0px 0px !important; border: none !important; }
+.CodeMirror-gutter-background { position: absolute; top: 0px; bottom: 0px; z-index: 4; }
+.CodeMirror-gutter-elt { position: absolute; cursor: default; z-index: 4; }
+.CodeMirror-lines { cursor: text; }
+.CodeMirror pre { border-radius: 0px; border-width: 0px; background: 0px 0px; font-family: inherit; font-size: inherit; margin: 0px; white-space: pre; overflow-wrap: normal; color: inherit; z-index: 2; position: relative; overflow: visible; }
+.CodeMirror-wrap pre { overflow-wrap: break-word; white-space: pre-wrap; word-break: normal; }
+.CodeMirror-code pre { border-right: 30px solid transparent; width: fit-content; }
+.CodeMirror-wrap .CodeMirror-code pre { border-right: none; width: auto; }
+.CodeMirror-linebackground { position: absolute; inset: 0px; z-index: 0; }
+.CodeMirror-linewidget { position: relative; z-index: 2; overflow: auto; }
+.CodeMirror-wrap .CodeMirror-scroll { overflow-x: hidden; }
+.CodeMirror-measure { position: absolute; width: 100%; height: 0px; overflow: hidden; visibility: hidden; }
+.CodeMirror-measure pre { position: static; }
+.CodeMirror div.CodeMirror-cursor { position: absolute; visibility: hidden; border-right: none; width: 0px; }
+.CodeMirror div.CodeMirror-cursor { visibility: hidden; }
+.CodeMirror-focused div.CodeMirror-cursor { visibility: inherit; }
+.cm-searching { background: rgba(255, 255, 0, 0.4); }
+span.cm-underlined { text-decoration: underline; }
+span.cm-strikethrough { text-decoration: line-through; }
+.cm-tw-syntaxerror { color: rgb(255, 255, 255); background-color: rgb(153, 0, 0); }
+.cm-tw-deleted { text-decoration: line-through; }
+.cm-tw-header5 { font-weight: 700; }
+.cm-tw-listitem:first-child { padding-left: 10px; }
+.cm-tw-box { border-style: solid; border-right-width: 1px; border-bottom-width: 1px; border-left-width: 1px; border-color: inherit; border-top-width: 0px !important; }
+.cm-tw-underline { text-decoration: underline; }
+@media print {
+  .CodeMirror div.CodeMirror-cursor { visibility: hidden; }
+}
+
+
+/* 待完善 */
+/**
+ * 1. 代码非等宽字体；
+ * 2. kbd样式
+ * 3. 行内代码样式优化
+ */
+
+/* 字体引入：鸿蒙字体 */
+
+html {
+  font-size: 16px;
+  font-family: "HarmonyOS_Sans_SC";
+}
+
+/* 打印页面设置 */
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    /*确保打印颜色一致*/
+    print-color-adjust: exact;
+  }
+
+  body {
+    width: 21cm;
+    /* 设置页面宽度为A4宽度 */
+    height: 29.7cm;
+    /* 设置页面高度为A4高度 */
+    margin: 1cm;
+    /* 设置页面边距 */
+  }
+
+  p {
+    line-height: 1.5rem;
+    /*设置打印内容的行高*/
+  }
+
+  ol,
+  ul,
+  figure,
+  pre {
+    /*设置一些元素不会被分页截断对应有序列表、无序列表、图片(表格)、代码块*/
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* 软件内部Markdown样式 */
+#write {
+  max-width: 950px;
+  margin: 0 auto;
+  padding: 15px;
+  line-height: 2.25;
+  color: #000;
+  letter-spacing: 1.1px;
+  word-break: break-word;
+  word-wrap: break-word;
+  text-align: left;
+  background-image: linear-gradient(90deg,
+      rgba(50, 0, 0, 0.05) calc(3% * var(--bg-grid)),
+      rgba(0, 0, 0, 0) calc(3% * var(--bg-grid))),
+    linear-gradient(360deg,
+      rgba(50, 0, 0, 0.05) calc(3% * var(--bg-grid)),
+      rgba(0, 0, 0, 0) calc(3% * var(--bg-grid)));
+  background-size: 20px 20px;
+  background-position: center center;
+}
+
+#write p {
+  color: #333;
+  margin: 10px 10px;
+  font-family: Optima-Regular, Optima, PingFangSC-light, PingFangTC-light,
+    "PingFang SC", Cambria, Cochin, Georgia, Times, "Times New Roman", serif;
+
+  font-size: 1rem;
+  word-spacing: 2px;
+}
+
+#write h3:after,
+h4:after,
+h5:after,
+h6:after {
+  content: "";
+  display: inline-block;
+  margin-left: 0.2em;
+  height: 2em;
+  width: 1.2em;
+  vertical-align: top;
+}
+
+#write h3:after {
+  background: var(--h3-r-graphic);
+}
+
+#write h4:after {
+  background: var(--h4-r-graphic);
+}
+
+#write h5:after {
+  background: var(--h5-r-graphic);
+}
+
+#write h6:after {
+  background: var(--h6-r-graphic);
+}
+
+/* 一级标题 */
+#write h1:after {
+  font-size: 1.8rem;
+  text-align: center;
+  font-weight: bold;
+  color: #000;
+  border-bottom: none;
+}
+
+#write h1 {
+  text-align: center;
+}
+
+/* 二级标题 */
+#write h2 {
+  color: var(--head-title-h2-color);
+  font-size: 1.4rem;
+  line-height: 1.6;
+  width: fit-content;
+  font-weight: bold;
+  margin: 20px 0;
+  padding: 1px 12.5px;
+  border-radius: 4px;
+  background: var(--head-title-h2-background);
+  background-size: 200% 100%;
+  background-position: 0% 0%;
+  transition: all ease-in-out 0.1s;
+}
+
+#write h2.md-heading a {
+  text-decoration: underline;
+  border-bottom: 0;
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 2px;
+}
+
+#write h2:hover {
+  background-position: -100% -100%;
+  transition: all ease-in-out 0.1s;
+}
+
+/* 三级标题 */
+#write h3 {
+  width: fit-content;
+  margin: 20px 0;
+  font-size: 1.3rem;
+  text-align: left;
+  padding-left: 10px;
+  border-left: 5px solid var(--head-title-color);
+}
+
+/* 三级标题内容 */
+#write h3 span {
+  border-bottom: 2px hidden var(--head-title-color);
+}
+
+/* #write h3 span:hover {
+  border-bottom: 2px solid var(--head-title-color);
+  transition: all linear 0.1s;
+} */
+
+#write h4 {
+  margin: 20px 0;
+  font-size: 1.15rem;
+  text-align: left;
+}
+
+#write h4::before {
+  content: "";
+  margin-right: 7px;
+  display: inline-block;
+  background-color: var(--head-title-color);
+  width: 10px;
+  height: 10px;
+  border-radius: 100%;
+  border: var(--head-title-color) 1px solid;
+  vertical-align: inherit;
+}
+
+#write h5 {
+  margin: 23px 0;
+  font-size: 1.1rem;
+  text-align: left;
+}
+
+#write h5::before {
+  content: "";
+  margin-right: 7px;
+  display: inline-block;
+  background-color: #ffffff;
+  width: 10px;
+  height: 10px;
+  border-radius: 100%;
+  border: var(--head-title-color) 2px solid;
+  vertical-align: inherit;
+}
+
+#write h6 {
+  margin: 23px 0;
+  font-size: 1.1rem;
+  text-align: left;
+}
+
+#write h6::before {
+  content: "-";
+  color: var(--head-title-color);
+  margin-right: 7px;
+  display: inline-block;
+  vertical-align: inherit;
+}
+
+/* 标题自动编号 */
+#write {
+  counter-reset: h1;
+}
+
+h1 {
+  counter-reset: h2;
+}
+
+h2 {
+  counter-reset: h3;
+}
+
+h3 {
+  counter-reset: h4;
+}
+
+h4 {
+  counter-reset: h5;
+}
+
+h5 {
+  counter-reset: h6;
+}
+
+.sidebar-content {
+  counter-reset: h1
+}
+.outline-content {
+  counter-reset: h1
+}
+.outline-h1 {
+  counter-reset: h2
+}
+
+.outline-h2 {
+  counter-reset: h3
+}
+
+.outline-h3 {
+  counter-reset: h4
+}
+
+.outline-h4 {
+  counter-reset: h5
+}
+
+.outline-h5 {
+  counter-reset: h6
+}
+
+
+
+.md-toc-content {
+  counter-reset: h1toc
+}
+
+.md-toc-h1 {
+  counter-reset: h2toc
+}
+
+.md-toc-h2 {
+  counter-reset: h3toc
+}
+
+.md-toc-h3 {
+  counter-reset: h4toc
+}
+
+.md-toc-h4 {
+  counter-reset: h5toc
+}
+
+.md-toc-h5 {
+  counter-reset: h6toc
+}
+
+
+#write h1:before {
+  counter-increment: h1;
+  content: var(--autonum-h1);
+}
+#outline-content li.outline-h1>div>span.outline-label:before {
+  counter-increment: h1;
+  content: var(--autonum-h1);
+}
+.outline-content .outline-h1>.outline-item>.outline-label:before{
+  counter-increment: h1;
+  content: var(--autonum-h1);
+}
+#write span.md-toc-item.md-toc-h1>a:before {
+  counter-increment: h1toc;
+  content: var(--autonum-h1toc);
+}
+
+#write h2:before {
+  counter-increment: h2;
+  content: var(--autonum-h2);
+  color: var(--head-title-h2-color);
+}
+.outline-content .outline-h2>.outline-item>.outline-label:before {
+  counter-increment: h2;
+  content: var(--autonum-h2);
+}
+li.outline-h2>div>a.outline-label:before {
+  counter-increment: h2;
+  content: var(--autonum-h2);
+}
+
+#write span.md-toc-item.md-toc-h2>a:before {
+  counter-increment: h2toc;
+  content: var(--autonum-h2toc);
+}
+
+
+#write h3>span:first-of-type::before {
+  counter-increment: h3;
+  content: var(--autonum-h3);
+  color: var(--element-color);
+}
+#outline-content li.outline-h3>div>span.outline-label:before {
+  counter-increment: h3;
+  content: var(--autonum-h3);
+}
+.outline-content .outline-h3>.outline-item>.outline-label:before {
+  counter-increment: h3;
+  content: var(--autonum-h3);
+}
+#write span.md-toc-item.md-toc-h3>a:before {
+  counter-increment: h3toc;
+  content: var(--autonum-h3toc);
+}
+
+
+#write h4>span:first-of-type::before {
+  counter-increment: h4;
+  content: var(--autonum-h4);
+  color: var(--element-color);
+}
+#outline-content li.outline-h4>div>span.outline-label:before {
+  counter-increment: h4;
+  content: var(--autonum-h4);
+}
+.outline-content .outline-h4>.outline-item>.outline-label:before {
+  counter-increment: h4;
+  content: var(--autonum-h4);
+}
+#write span.md-toc-item.md-toc-h4>a:before {
+  counter-increment: h4toc;
+  content: var(--autonum-h4toc);
+}
+
+
+#write h5>span:first-of-type::before {
+  counter-increment: h5;
+  content: var(--autonum-h5);
+  color: var(--element-color);
+}
+#outline-content li.outline-h5>div>span.outline-label:before {
+  counter-increment: h5;
+  content: var(--autonum-h5);
+}
+.outline-content .outline-h5>.outline-item>.outline-label:before {
+  counter-increment: h5;
+  content: var(--autonum-h5);
+}
+#write span.md-toc-item.md-toc-h5>a:before {
+  counter-increment: h5toc;
+  content: var(--autonum-h5toc);
+}
+
+
+#write h6>span:first-of-type::before {
+  counter-increment: h6;
+  content: var(--autonum-h6);
+  color: var(--element-color);
+}
+#outline-content li.outline-h6>div>span.outline-label:before {
+  counter-increment: h6;
+  content: var(--autonum-h6);
+}
+.outline-content .outline-h6>.outline-item>.outline-label:before {
+  counter-increment: h6;
+  content: var(--autonum-h6);
+}
+#write span.md-toc-item.md-toc-h6>a:before {
+  counter-increment: h6toc;
+  content: var(--autonum-h6toc);
+}
+
+
+/* 列表 */
+::marker {
+  color: var(--element-color-deep);
+}
+
+li.md-list-item {
+  margin: 0.4rem 0;
+}
+
+#write ul,
+#write ol {
+  margin-top: 0px;
+  margin-left: 16px;
+  margin-bottom: 8px;
+  padding-left: 13px;
+}
+
+#write em {
+  padding: 0 3px 0 0;
+}
+
+#write ul {
+  list-style-type: disc;
+}
+
+#write ul ul {
+  list-style-type: circle;
+}
+
+#write ul ul ul {
+  list-style-type: square;
+}
+
+#write ol {
+  list-style-type: decimal;
+}
+
+#write ol ol {
+  list-style-type: lower-alpha;
+}
+
+#write ol ol ol {
+  list-style-type: lower-roman;
+}
+
+#write li section {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  line-height: 1.7rem;
+  text-align: justify;
+  color: #000000;
+  font-weight: 500;
+}
+
+#write li:before {
+  content: "";
+  height: calc(100% - 50px);
+  top: 35px;
+  position: absolute;
+  border-left: 0.5px solid var(--element-color);
+  left: -14.5px;
+}
+
+/* 任务列表样式 */
+
+.task-list-item input{
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+  -webkit-appearance: initial;
+  top: 3px;
+  left: 4px;
+}
+
+.task-list-item input:focus{
+  outline: none;
+  box-shadow: none;
+}
+
+.task-list-item input:before{
+  border: 1px solid var(--element-color-deep);
+  border-radius: 1.2rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  background: #fff;
+  content: ' ';
+  transition: background-color 200ms ease-in-out;
+  display: block;
+}
+
+.task-list-item input:checked:before,
+.task-list-item input[checked]:before{
+  background: var(--element-color-soo-shallow);
+  border-width: 2px;
+  display:inline-block;
+  transition: background-color 200ms ease-in-out;
+}
+
+.task-list-item input:checked:after,
+.task-list-item input[checked]:after {
+  opacity: 1;
+}
+
+/* .task-list-item input[type="checkbox"]:checked + p span {
+  text-decoration: line-through;
+  text-decoration-color:var(--element-color)
+} */
+
+.task-list-item input[type="checkbox"] + p span {
+  position: relative;
+  display: inline-block;
+}
+
+.task-list-item input[type="checkbox"] + p span::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 52%;
+  width: calc(100%*var(--check-line));
+  height: 2px;
+  background: var(--element-color);
+  transform: scaleX(0); 
+  transform-origin: left center;
+  transition: transform 0.2s ease-in-out; 
+}
+
+.task-list-item input[type="checkbox"]:checked + p span::after {
+  transform: scaleX(1); 
+}
+
+.task-list-item input[type="checkbox"]:not(:checked) + p span::after {
+  transform-origin: right center; 
+  transition-delay: 0.1s; 
+}
+
+.task-list-item input:after {
+  opacity: 1;
+  -webkit-transition: opacity 0.05s ease-in-out;
+  -moz-transition: opacity 0.05s ease-in-out;
+  transition: opacity 0.05s ease-in-out;
+  -webkit-transform: rotate(-45deg);
+  -moz-transform: rotate(-45deg);
+  transform: rotate(-45deg);
+  position: absolute;
+  top: 0.325rem;
+  left: 0.28125rem;
+  width: 0.6375rem;
+  height: 0.4rem;
+  border: 3px solid var(--element-color-deep);
+  border-top: 0;
+  border-right: 0;
+  content: ' ';
+  opacity: 0;
+}
+
+/* 引用 */
+
+#write blockquote {
+  margin-left: 12px;
+  padding: 12px;
+  background: var(--element-color-soo-shallow);
+  border: 0px solid var(--element-color);
+  border-left-color: var(--element-color);
+  border-left-width: 4px;
+  border-radius: 4px;
+  line-height: 26px;
+}
+
+#write blockquote p {
+  color: #000;
+}
+
+/* 超链接 */
+#write a {
+  color: #000;
+}
+
+#write a:visited {
+  color: var(--element-color-deep);
+}
+
+#write a:not(.md-toc-inner) {
+  font-weight: bolder;
+  text-decoration: none;
+  transform: all linear 0.1s;
+}
+
+#write a:hover:not(.md-toc-inner) {
+  font-weight: bold;
+  color: var(--element-color-deep);
+  border-bottom: 1px solid var(--element-color-deep);
+  transform: all linear 0.1s;
+}
+
+#write p a:not(.md-toc-inner)::before {
+  content: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath  d='M477.934459 330.486594A50.844091 50.844091 0 0 1 406.752731 258.796425L512 152.532274a254.220457 254.220457 0 0 1 359.467726 359.467726L762.66137 618.772592a50.844091 50.844091 0 1 1-71.690168-71.690169l106.772591-106.772592a152.532274 152.532274 0 0 0-215.578947-215.578947z m70.164846 361.501489A50.844091 50.844091 0 1 1 619.789474 762.66137l-107.281033 107.281033A254.220457 254.220457 0 0 1 152.532274 512L259.813307 406.752731a50.844091 50.844091 0 1 1 72.19861 69.656405l-107.789474 107.281033a152.532274 152.532274 0 0 0 215.578947 215.578947z m-126.601788-16.77855a50.844091 50.844091 0 1 1-71.690168-71.690169l251.678252-251.678252a50.844091 50.844091 0 0 1 71.690169 71.690169z'/%3E%3C/svg%3E");
+  color: #f68800;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.2em;
+  vertical-align: sub;
+}
+
+#write a.md-toc-inner:hover {
+  color: var(--element-color-deep);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+#write sup a::before {
+  content: none;
+}
+
+/* 加粗 */
+#write strong {
+  color: #000;
+  font-weight: bold;
+}
+
+/* 斜体 */
+#write em {
+  font-style: italic;
+  color: #000;
+}
+
+/* 高亮 */
+#write mark {
+  font-weight: bolder;
+  color: #000;
+  background: var(--element-color-so-shallow);
+}
+
+/* 删除线 */
+#write del {
+  text-decoration-color: var(--element-color-deep);
+}
+
+/* 分隔线*/
+#write hr {
+  height: 1px;
+  padding: 0;
+  border: none;
+  border-top: 2px solid var(--head-title-color);
+}
+
+/* 图片*/
+#write img {
+  border-radius: 6px;
+  margin: 20px auto;
+  object-fit: contain;
+}
+
+/* 图片描述文字 */
+#write figcaption {
+  display: block;
+  font-size: 13px;
+  color: #595959;
+}
+
+/* Yaml */
+pre.md-meta-block {
+  padding: 8px 15px;
+  border: 2px dotted var(--element-color);
+  background-color: var(--element-color-soo-shallow);
+}
+
+/* 行内代码 */
+#write p code {
+  padding: 3px 3px 1px;
+  color: var(--element-color-linecode);
+  background: var(--element-color-linecode-background);
+  border-radius: 3px;
+  font-family: "CascadiaCode" monospace;
+  letter-spacing: 0.5px;
+}
+
+#write li code {
+  color: var(--element-color-linecode);
+}
+
+/* 代码块 */
+
+.md-fences:not([lang="mermaid"])::before {
+  content: attr(lang);
+  font-family: "CascadiaCode" monospace;
+  text-align: right;
+  padding-right: 15px;
+  color: #7e7e7e;
+  display: block;
+  background: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgIHg9IjBweCIgeT0iMHB4IiB3aWR0aD0iNDUwcHgiIGhlaWdodD0iMTMwcHgiPgogIDxlbGxpcHNlIGN4PSI2NSIgY3k9IjY1IiByeD0iNTAiIHJ5PSI1MiIgc3Ryb2tlPSJyZ2IoMjIwLDYwLDU0KSIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJyZ2IoMjM3LDEwOCw5NikiLz4KICA8ZWxsaXBzZSBjeD0iMjI1IiBjeT0iNjUiIHJ4PSI1MCIgcnk9IjUyIiAgc3Ryb2tlPSJyZ2IoMjE4LDE1MSwzMykiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0icmdiKDI0NywxOTMsODEpIi8+CiAgPGVsbGlwc2UgY3g9IjM4NSIgY3k9IjY1IiByeD0iNTAiIHJ5PSI1MiIgIHN0cm9rZT0icmdiKDI3LDE2MSwzNykiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0icmdiKDEwMCwyMDAsODYpIi8+Cjwvc3ZnPg==);
+  height: 30px;
+  width: 100%;
+  background-size: 40px;
+  background-repeat: no-repeat;
+  background-color: #f8f8f8;
+  border-radius: 5px 5px 0 0;
+  background-position: 6px 10px;
+}
+
+.CodeMirror-wrap .CodeMirror-scroll {
+  overflow-x: auto;
+}
+
+.md-fences .cm-s-inner.CodeMirror {
+  margin-top: -0.5rem;
+}
+
+.cm-s-inner.CodeMirror {
+  padding: 1.2rem 0.8rem;
+  color: #4f5467;
+  font-family: "CascadiaCode" monospace;
+  border-radius: 10px;
+  background-color: #fa0303;
+  /* border: 1px solid #eef2f5;*/
+  line-height: 1.6rem;
+}
+
+.CodeMirror-gutters {
+  border-right: 1px solid #9d9d9d52;
+  background: inherit;
+  white-space: nowrap;
+}
+
+pre.CodeMirror-line {
+  padding: 0 1.2rem;
+}
+
+.CodeMirror-linenumber {
+  padding: 0 3px 0 5px;
+  text-align: right;
+  color: #a3a3a3;
+}
+
+.cm-s-inner.CodeMirror {
+  background: #f8f8f8;
+  border-radius: 0 0 5px 5px;
+  padding: 20px 10px 20px 10px;
+  page-break-before: auto;
+  line-height: 1.8rem;
+}
+
+.md-rawblock .md-rawblock-tooltip {
+  inset: auto 0.3rem auto auto;
+  transform: translateY(-120%);
+}
+
+/* 代码块颜色 */
+.cm-keyword {
+  color: #a626a4 !important;
+  font-weight: 700 !important;
+}
+
+.cm-variable {
+  color: #b92121 !important;
+}
+
+.cm-tag {
+  color: var(--color-cm-keyword) !important;
+  font-weight: 700 !important;
+}
+
+.cm-variable-3,
+.cm-variable-2 {
+  color: #7aadad !important;
+  font-weight: 700 !important;
+}
+
+.cm-def {
+  color: #c18401 !important;
+}
+
+.cm-attribute {
+  color: #8f6aa8 !important;
+}
+
+.cm-comment,
+.md-comment,
+.md-meta {
+  color: #9a9a9a !important;
+}
+
+.cm-string {
+  color: #50a14f !important;
+  font-variant-ligatures: common-ligatures !important;
+}
+
+.cm-link {
+  color: #e46918 !important;
+}
+
+.cm-type {
+  color: #626161;
+}
+
+.cm-property {
+  color: #800a84 !important;
+}
+
+.cm-tag:not(.cm-bracket) {
+  font-weight: 700 !important;
+}
+
+.cm-operator {
+  color: #0abe00 !important;
+}
+
+.cm-number {
+  color: #1694b6 !important;
+}
+
+.cm-meta {
+  color: #4078f2 !important;
+  font-weight: 700 !important;
+}
+
+.cm-builtin {
+  color: #fa6060 !important;
+}
+
+/* KBD */
+kbd {
+  padding: 2px 4px;
+  font-size: 90%;
+  font-weight: bolder;
+  color: var(--element-color-linecode);
+  border: var(--element-color) solid 1px;
+  border-radius: 3px;
+  transition: all 0.2s linear;
+  box-shadow: inset 0 -1px 0 var(--element-color-so-shallow);
+}
+
+kbd:hover {
+  background: var(--element-color-so-shallow);
+}
+
+/** 表格内的单元格*/
+#write table tr th,
+#write table tr td {
+  font-size: 14px;
+  color: #000;
+}
+
+#write .footnotes {
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 0.8px solid var(--element-color-deep);
+}
+
+#write table.md-table {
+  overflow: hidden;
+}
+
+#write table thead {
+  border-top: 1px solid #dedddd;
+  border-bottom: 1px solid #dedddd;
+}
+
+#write table tbody {
+  border-bottom: 1px solid #dedddd;
+}
+
+/* 脚注文字 */
+#write .footnote-word {
+  font-weight: normal;
+  color: #595959;
+}
+
+/* 脚注上标 */
+#write .footnote-ref {
+  font-weight: normal;
+  color: #595959;
+}
+
+/*脚注链接样式*/
+#write .footnote-item em {
+  font-size: 14px;
+  color: #595959;
+  display: block;
+  background: none;
+}
+
+/* 目录 */
+
+.md-toc * {
+  font-family: "HarmonyOS_Sans_SC";
+}
+
+.md-tooltip-hide>span {
+  display: none;
+}
+
+.md-toc:before {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+  content: "目录";
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+}
+
+.md-toc {
+  padding: 20px 0;
+  margin: 0 20px;
+  background-color: var(--element-color-soo-shallow);
+  border: 2px solid var(--element-color);
+  border-radius: 5px;
+}
+
+.md-toc-item {
+  line-height: 1.8em;
+  display: block;
+  color: #333;
+}
+
+/* 程序UI */
+
+/* 侧边栏 */
+
+#typora-sidebar {
+  height: 100%;
+  color: var(--appui-color-text);
+  font-size: 0.92rem;
+  background-color: #fff;
+}
+
+/* 滑块 */
+
+#outline-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+#file-library::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: rgba(179, 179, 179, 0.425);
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+/* 侧边栏 文件 */
+
+.active-tab-files #info-panel-tab-file .info-panel-tab-border,
+.active-tab-outline #info-panel-tab-outline .info-panel-tab-border,
+.ty-show-search #info-panel-tab-search .info-panel-tab-border {
+  border-radius: 10px;
+  height: 4px;
+  background-color: var(--appui-color);
+}
+
+.file-node-content {
+  line-height: 1.2rem;
+}
+
+.file-tree-node.active>.file-node-content {
+  color: var(--appui-color);
+}
+
+span.file-node-title {
+  color: var(--appui-color-text);
+}
+
+.file-node-icon {
+  color: var(--appui-color-icon);
+  padding-right: 0.2rem;
+}
+
+.file-tree-node.active>.file-node-background {
+  font-weight: bolder;
+  border-left: 4px solid var(--appui-color);
+  border-color: var(--appui-color);
+}
+
+.info-panel-tab-title {
+  font-weight: bolder;
+  color: var(--appui-color-text);
+}
+
+/* 侧边栏 搜索 */
+
+#file-library-search-panel {
+  background-color: #fff;
+}
+
+#file-library-search-input {
+  border-radius: 3px;
+  border-color: var(--appui-color);
+}
+
+#file-library-search-input:focus {
+  border-width: 2px;
+}
+
+/* 侧边栏 大纲 */
+#outline-content .outline-h1>.outline-item {
+  font-size: larger;
+  font-weight: bold;
+  color: var(--element-color-deep);
+}
+
+#outline-content .outline-h1:not(:first-of-type)>.outline-item {
+  margin-top: 10px;
+}
+
+#outline-content .outline-h2>.outline-item::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--element-color);
+  vertical-align: middle;
+  float: left;
+  margin-top: -2px;
+  margin-right: 11px;
+  margin-left: -24px;
+  border-radius: 100%;
+  border: 3px solid #fff;
+  z-index: 100;
+  position: relative;
+  top: 8px;
+  left: 8px;
+}
+
+#outline-content .outline-h2::after {
+  content: "";
+  height: calc(100% - 24px);
+  width: 1px;
+  background: var(--element-color);
+  position: absolute;
+  left: 3px;
+  top: 21px;
+}
+
+#outline-content .outline-h2>.outline-item:last-child:after {
+  display: none;
+}
+
+#outline-content .outline-h2>.outline-item>.outline-label {
+  line-height: 1.65rem;
+  margin: 0;
+}
+
+#outline-content .outline-h2>.outline-item {
+  margin-bottom: -3px;
+}
+
+#outline-content .outline-h3>.outline-item>.outline-label {
+  border-left: 2px solid var(--element-color);
+  padding-left: 8px;
+}
+
+.outline-item-active:not(.outline-item-wrapper)::after {
+  content: "";
+  position: relative;
+  width: 11px;
+  height: 8px;
+  background: var(--element-color-deep);
+  float: right;
+  top: -12px;
+  z-index: 100;
+  border-radius: 40% 20% 20% 40%;
+}
+
+/* 导出HTML的样式 */
+body.typora-export {
+  padding-left: 0px;
+}
+
+.typora-export-content .outline-content::before {
+  content: "目录";
+  font-size: 20px;
+  font-weight: bold;
+  position: absolute;
+  top: 22px;
+  left: 15px;
+  border-radius: 5px;
+  box-sizing: border-box;
+  z-index: -1;
+}
+
+.typora-export-sidebar .outline-content {
+  height: 100%;
+  padding-left: 15px;
+  border-right: 1px solid #d2d2d2;
+}
+
+.typora-export-content .typora-export-content {
+  padding-left: 0px;
+}
+
+.typora-export-content .outline-expander {
+  width: 0;
+}
+
+.typora-export-content .outline-item-active>.outline-item::after {
+  content: "";
+  position: relative;
+  width: 11px;
+  height: 8px;
+  background: var(--element-color-deep);
+  float: right;
+  right: 5px;
+  top: -14px;
+  z-index: 100;
+  border-radius: 40% 20% 20% 40%;
+}
+
+.typora-export-content .outline-label {
+  max-width: 250px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outline-content .outline-h1>.outline-item {
+  font-size: larger;
+  font-weight: bold;
+  color: var(--element-color-deep);
+}
+
+.outline-content .outline-h1:not(:first-of-type)>.outline-item {
+  margin-top: 10px;
+}
+
+.outline-content .outline-h2>.outline-item::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--element-color-deep);
+  vertical-align: middle;
+  float: left;
+  margin-top: -2px;
+  margin-right: 11px;
+  margin-left: -24px;
+  border-radius: 100%;
+  border: 3px solid #fff;
+  z-index: 100;
+  position: relative;
+  top: 8px;
+  left: 8px;
+}
+
+.outline-content .outline-h2::after {
+  content: "";
+  height: calc(100% - 24px);
+  width: 1px;
+  background: var(--element-color);
+  position: absolute;
+  left: 3px;
+  top: 21px;
+}
+
+.outline-content .outline-h2>.outline-item:last-child:after {
+  display: none;
+}
+
+.outline-content .outline-h2>.outline-item>.outline-label {
+  line-height: 1.65rem;
+  margin: 0;
+}
+
+.outline-content .outline-h2>.outline-item {
+  margin-bottom: -3px;
+}
+
+.outline-content .outline-h3>.outline-item>.outline-label {
+  border-left: 2px solid var(--element-color);
+  padding-left: 8px;
+}@import url();
+
+:root {
+  /* 标题后小图标，借鉴自思源笔记主题——Savor */
+  --h1-r-graphic: url("data:image/svg+xml;utf8,<svg fill='rgba(74, 200, 141, 0.5)' height='24' viewBox='0 0 32 32' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M4.8 29.714v0c-1.371 0-2.514-1.143-2.514-2.514v0c0-1.371 1.143-2.514 2.514-2.514v0c1.371 0 2.514 1.143 2.514 2.514v0c0.114 1.371-1.029 2.514-2.514 2.514z'/></svg>") no-repeat center;
+  --h2-r-graphic: url("data:image/svg+xml;utf8,<svg fill='rgba(74, 200, 141, 0.5)' height='24' viewBox='0 0 32 32' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M11.429 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM4.571 18.286c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286z'/></svg>") no-repeat center;
+  --h3-r-graphic: url("data:image/svg+xml;utf8,<svg fill='rgba(74, 200, 141, 0.5)' height='28' viewBox='0 0 32 32' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M4.571 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM4.571 18.286c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286z'/></svg>") no-repeat center;
+  --h4-r-graphic: url("data:image/svg+xml;utf8,<svg fill='rgba(74, 200, 141, 0.5)' height='24' viewBox='0 0 32 32' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M4.571 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM4.571 18.286c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 22.857c1.257 0 2.286-1.029 2.286-2.286s-1.029-2.286-2.286-2.286-2.286 1.029-2.286 2.286 1.029 2.286 2.286 2.286z'/></svg>") no-repeat center;
+  --h5-r-graphic: url("data:image/svg+xml;utf8,<svg fill='rgba(74, 200, 141, 0.5)' height='24' viewBox='0 0 32 32' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M4.571 18.286c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 22.857c1.257 0 2.286-1.029 2.286-2.286s-1.029-2.286-2.286-2.286-2.286 1.029-2.286 2.286 1.029 2.286 2.286 2.286zM4.571 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM4.571 11.429c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286z'/></svg>") no-repeat center;
+  --h6-r-graphic: url("data:image/svg+xml;utf8,<svg fill='rgba(74, 200, 141, 0.5)' height='24' viewBox='0 0 32 32' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M4.571 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM4.571 18.286c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM4.571 11.429c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 18.286c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 25.143c-1.257 0-2.286 1.029-2.286 2.286s1.029 2.286 2.286 2.286 2.286-1.029 2.286-2.286-1.029-2.286-2.286-2.286zM11.429 16c1.257 0 2.286-1.029 2.286-2.286s-1.029-2.286-2.286-2.286-2.286 1.029-2.286 2.286 1.029 2.286 2.286 2.286z'/></svg>") no-repeat center;
+
+  /* 是否开启网格背景？1 是；0 否 */
+  --bg-grid: 0;
+
+  /* 已完成的代办事项是否显示删除线？1 是；0 否 */
+  --check-line:1; 
+
+  /* 自动编号格式设置 无需自动编号可全部注释掉或部分注释掉*/
+  /* --autonum-h1: counter(h1) ". ";
+  --autonum-h2: counter(h1) "." counter(h2) ". ";
+  --autonum-h3: counter(h1) "." counter(h2) "." counter(h3) ". ";
+  --autonum-h4: counter(h1) "." counter(h2) "." counter(h3) "." counter(h4) ". ";
+  --autonum-h5: counter(h1) "." counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) ". ";
+  --autonum-h6: counter(h1) "." counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) "." counter(h6) ". "; */
+
+   /* 下面是文章内Toc目录自动编号，与上面一样即可 */
+  /* --autonum-h1toc: counter(h1toc) ". ";
+  --autonum-h2toc: counter(h1toc) "." counter(h2toc) ". ";
+  --autonum-h3toc: counter(h1toc) "." counter(h2toc) "." counter(h3toc) ". ";
+  --autonum-h4toc: counter(h1toc) "." counter(h2toc) "." counter(h3toc) "." counter(h4toc) ". ";
+  --autonum-h5toc: counter(h1toc) "." counter(h2toc) "." counter(h3toc) "." counter(h4toc) "." counter(h5toc) ". ";
+  --autonum-h6toc: counter(h1toc) "." counter(h2toc) "." counter(h3toc) "." counter(h4toc) "." counter(h5toc) "." counter(h6toc) ". "; */
+
+
+  /* 主题颜色 */
+
+  --head-title-color: #3db8bf;
+  /* 标题主色 */
+  --head-title-h2-color: #fff;
+  --head-title-h2-background: linear-gradient(to right,
+      #3DB8D3,
+      #80F7C4);
+  /* 二级标题主色，因为二级标题是背景色的，所以单独设置 */
+
+  --element-color: #3db8bf;
+  /* 元素主色 */
+  --element-color-deep: #089ba3;
+  /* 元素深色 */
+  --element-color-shallow: #7aeaf0;
+  /* 元素浅色 */
+  --element-color-so-shallow: #7aeaf077;
+  /* 元素很浅色 */
+  --element-color-soo-shallow: #7aeaf018;
+  /* 元素非常浅色 */
+
+  --element-color-linecode: #089ba3;
+  /* 行内代码文字色 */
+  --element-color-linecode-background: #7aeaf018;
+  /* 行内代码背景色 */
+
+  /* 程序本体UI */
+  --appui-color: #3db8bf;
+  /* 程序UI主题色 */
+  --appui-color-icon: #3db8bf;
+  /* 程序UI图标颜色 */
+  --appui-color-text: #333;
+  /* 程序UI文字色 */
+  --primary-color: #3db8bf;
+}
+
+
+</style><title>CeruMusic插件开发文档</title>
+</head>
+<body class='typora-export os-windows'><div class='typora-export-content'>
+<div id='write'  class=''><h1 id='cerumusic-插件开发文档'><span>CeruMusic 插件开发文档</span></h1><h2 id='概述'><span>概述</span></h2><p><span>本文档介绍如何为 CeruMusic 开发音乐源插件。CeruMusic 插件是运行在沙箱环境中的 JavaScript 模块，用于从各种音乐平台获取音乐资源。</span></p><h2 id='插件结构'><span>插件结构</span></h2><h3 id='基本结构'><span>基本结构</span></h3><p><span>每个 CeruMusic 插件必须导出以下三个核心组件：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">module</span>.<span class="cm-property">exports</span> <span class="cm-operator">=</span> {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">pluginInfo</span>, <span class="cm-comment">// 插件信息</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">sources</span>, <span class="cm-comment">// 支持的音源</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">musicUrl</span> <span class="cm-comment">// 获取音乐链接的函数</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 144px;"></div><div class="CodeMirror-gutters" style="display: none; height: 144px;"></div></div></div></pre><h1 id='完整示例'><span>完整示例</span></h1><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript" style="break-inside: unset;"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">/**</span></span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment"> * 示例音乐插件</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment"> * @author 开发者名称</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment"> * @version 1.0.0</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment"> */</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 1. 插件信息</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">pluginInfo</span> <span class="cm-operator">=</span> {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">name</span>: <span class="cm-string">'示例音源插件'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">version</span>: <span class="cm-string">'1.0.0'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">author</span>: <span class="cm-string">'开发者名称'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">description</span>: <span class="cm-string">'这是一个示例音乐源插件'</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 2. 支持的音源配置</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">sources</span> <span class="cm-operator">=</span> {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">demo</span>: {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">name</span>: <span class="cm-string">'示例音源'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">type</span>: <span class="cm-string">'music'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">qualitys</span>: [<span class="cm-string">'128k'</span>, <span class="cm-string">'320k'</span>, <span class="cm-string">'flac'</span>]</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  },</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">demo2</span>: {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">name</span>: <span class="cm-string">'示例音源2'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">type</span>: <span class="cm-string">'music'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">qualitys</span>: [<span class="cm-string">'128k'</span>, <span class="cm-string">'320k'</span>]</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 3. 获取音乐URL的核心函数</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">async</span> <span class="cm-keyword">function</span> <span class="cm-def">musicUrl</span>(<span class="cm-def">source</span>, <span class="cm-def">musicInfo</span>, <span class="cm-def">quality</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 从 cerumusic 对象获取 API</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> { <span class="cm-def">request</span>, <span class="cm-def">env</span>, <span class="cm-def">version</span> } <span class="cm-operator">=</span> <span class="cm-variable">cerumusic</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 构建请求参数</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">songId</span> <span class="cm-operator">=</span> <span class="cm-variable-2">musicInfo</span>.<span class="cm-property">hash</span> <span class="cm-operator">??</span> <span class="cm-variable-2">musicInfo</span>.<span class="cm-property">songmid</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">apiUrl</span> <span class="cm-operator">=</span> <span class="cm-string-2">`https://api.example.com/music/${</span><span class="cm-variable-2">source</span><span class="cm-string-2">}/${</span><span class="cm-variable-2">songId</span><span class="cm-string-2">}/${</span><span class="cm-variable-2">quality</span><span class="cm-string-2">}`</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] 请求音乐链接: ${</span><span class="cm-variable-2">apiUrl</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 发起网络请求</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> { <span class="cm-def">body</span>, <span class="cm-def">statusCode</span> } <span class="cm-operator">=</span> <span class="cm-keyword">await</span> <span class="cm-variable-2">request</span>(<span class="cm-variable-2">apiUrl</span>, {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">method</span>: <span class="cm-string">'GET'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">headers</span>: {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string cm-property">'Content-Type'</span>: <span class="cm-string">'application/json'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string cm-property">'User-Agent'</span>: <span class="cm-string-2">`cerumusic-${</span><span class="cm-variable-2">env</span><span class="cm-string-2">}/${</span><span class="cm-variable-2">version</span><span class="cm-string-2">}`</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  })</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 处理响应</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">if</span> (<span class="cm-variable-2">statusCode</span> <span class="cm-operator">!==</span> <span class="cm-number">200</span> <span class="cm-operator">||</span> <span class="cm-variable-2">body</span>.<span class="cm-property">code</span> <span class="cm-operator">!==</span> <span class="cm-number">200</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">errorMessage</span> <span class="cm-operator">=</span> <span class="cm-variable-2">body</span>.<span class="cm-property">msg</span> <span class="cm-operator">||</span> <span class="cm-string-2">`接口错误 (HTTP: ${</span><span class="cm-variable-2">statusCode</span><span class="cm-string-2">})`</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">error</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] Error: ${</span><span class="cm-variable-2">errorMessage</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-keyword">throw</span> <span class="cm-keyword">new</span> <span class="cm-variable">Error</span>(<span class="cm-variable-2">errorMessage</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] 获取成功: ${</span><span class="cm-variable-2">body</span>.<span class="cm-property">url</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">return</span> <span class="cm-variable-2">body</span>.<span class="cm-property">url</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 4. 可选：获取封面图片</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">async</span> <span class="cm-keyword">function</span> <span class="cm-def">getPic</span>(<span class="cm-def">source</span>, <span class="cm-def">musicInfo</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> { <span class="cm-def">request</span> } <span class="cm-operator">=</span> <span class="cm-variable">cerumusic</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">songId</span> <span class="cm-operator">=</span> <span class="cm-variable-2">musicInfo</span>.<span class="cm-property">hash</span> <span class="cm-operator">??</span> <span class="cm-variable-2">musicInfo</span>.<span class="cm-property">songmid</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> { <span class="cm-def">body</span> } <span class="cm-operator">=</span> <span class="cm-keyword">await</span> <span class="cm-variable-2">request</span>(<span class="cm-string-2">`https://api.example.com/pic/${</span><span class="cm-variable-2">source</span><span class="cm-string-2">}/${</span><span class="cm-variable-2">songId</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">return</span> <span class="cm-variable-2">body</span>.<span class="cm-property">picUrl</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 5. 可选：获取歌词</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">async</span> <span class="cm-keyword">function</span> <span class="cm-def">getLyric</span>(<span class="cm-def">source</span>, <span class="cm-def">musicInfo</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> { <span class="cm-def">request</span> } <span class="cm-operator">=</span> <span class="cm-variable">cerumusic</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">songId</span> <span class="cm-operator">=</span> <span class="cm-variable-2">musicInfo</span>.<span class="cm-property">hash</span> <span class="cm-operator">??</span> <span class="cm-variable-2">musicInfo</span>.<span class="cm-property">songmid</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> { <span class="cm-def">body</span> } <span class="cm-operator">=</span> <span class="cm-keyword">await</span> <span class="cm-variable-2">request</span>(<span class="cm-string-2">`https://api.example.com/lyric/${</span><span class="cm-variable-2">source</span><span class="cm-string-2">}/${</span><span class="cm-variable-2">songId</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">return</span> <span class="cm-variable-2">body</span>.<span class="cm-property">lyric</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 导出插件</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">module</span>.<span class="cm-property">exports</span> <span class="cm-operator">=</span> {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">pluginInfo</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">sources</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">musicUrl</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">getPic</span>, <span class="cm-comment">// 可选</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">getLyric</span> <span class="cm-comment">// 可选</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 2447px;"></div><div class="CodeMirror-gutters" style="display: none; height: 2447px;"></div></div></div></pre><h2 id='详细说明'><span>详细说明</span></h2><h3 id='1-plugininfo-对象'><span>1. pluginInfo 对象</span></h3><p><span>插件的基本信息，必须包含以下字段：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">pluginInfo</span> <span class="cm-operator">=</span> {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">name</span>: <span class="cm-string">'插件名称'</span>, <span class="cm-comment">// 必需：插件显示名称</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">version</span>: <span class="cm-string">'1.0.0'</span>, <span class="cm-comment">// 必需：版本号</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">author</span>: <span class="cm-string">'作者名'</span>, <span class="cm-comment">// 必需：作者信息</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">description</span>: <span class="cm-string">'插件描述'</span> <span class="cm-comment">// 必需：功能描述</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 173px;"></div><div class="CodeMirror-gutters" style="display: none; height: 173px;"></div></div></div></pre><h3 id='2-sources-对象'><span>2. sources 对象</span></h3><p><span>定义插件支持的音源，键为音源标识，值为音源配置：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript" style="break-inside: unset;"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">sources</span> <span class="cm-operator">=</span> {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 音源标识（用于API调用）</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">source_id</span>: {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">name</span>: <span class="cm-string">'音源显示名称'</span>, <span class="cm-comment">// 必需：用户看到的名称</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">type</span>: <span class="cm-string">'music'</span>, <span class="cm-comment">// 必需：固定为 'music'</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">qualitys</span>: [</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-comment">// 必需：支持的音质列表</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string">'128k'</span>, <span class="cm-comment">// 标准音质</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string">'320k'</span>, <span class="cm-comment">// 高音质</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string">'flac'</span>, <span class="cm-comment">// 无损音质</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string">'flac24bit'</span>, <span class="cm-comment">// 24位无损</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp; &nbsp;<span class="cm-string">'hires'</span> <span class="cm-comment">// 高解析度</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;  ]</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 432px;"></div><div class="CodeMirror-gutters" style="display: none; height: 432px;"></div></div></div></pre><h3 id='3-musicurl-函数'><span>3. musicUrl 函数</span></h3><p><span>获取音乐播放链接的核心函数：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">async</span> <span class="cm-keyword">function</span> <span class="cm-def">musicUrl</span>(<span class="cm-def">source</span>, <span class="cm-def">musicInfo</span>, <span class="cm-def">quality</span>) {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// source: 音源标识（sources 对象的键）</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// musicInfo: 歌曲信息对象</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// quality: 请求的音质</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 返回: Promise&lt;string&gt; - 音乐播放链接</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 173px;"></div><div class="CodeMirror-gutters" style="display: none; height: 173px;"></div></div></div></pre><h4 id='musicinfo-对象结构'><span>musicInfo 对象结构</span></h4><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">musicInfo</span> <span class="cm-operator">=</span> {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">songmid</span>: <span class="cm-string">'歌曲ID'</span>, <span class="cm-comment">// 歌曲标识符</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">hash</span>: <span class="cm-string">'歌曲哈希'</span>, <span class="cm-comment">// 备用标识符</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">title</span>: <span class="cm-string">'歌曲标题'</span>, <span class="cm-comment">// 歌曲名称</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">artist</span>: <span class="cm-string">'艺术家'</span>, <span class="cm-comment">// 演唱者</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-property">album</span>: <span class="cm-string">'专辑名'</span> <span class="cm-comment">// 专辑信息</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// ... 其他可能的字段</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 230px;"></div><div class="CodeMirror-gutters" style="display: none; height: 230px;"></div></div></div></pre><h2 id='可用-api'><span>可用 API</span></h2><h3 id='cerumusic-对象'><span>cerumusic 对象</span></h3><p><span>插件运行时可以访问 </span><code>cerumusic</code><span> 全局对象：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation"><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> { <span class="cm-def">request</span>, <span class="cm-def">env</span>, <span class="cm-def">version</span>, <span class="cm-def">utils</span> } <span class="cm-operator">=</span> <span class="cm-variable">cerumusic</span></span></pre></div></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 29px;"></div><div class="CodeMirror-gutters" style="display: none; height: 29px;"></div></div></div></pre><h4 id='request-函数'><span>request 函数</span></h4><p><span>用于发起 HTTP 请求：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// Promise 模式</span></span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">response</span> <span class="cm-operator">=</span> <span class="cm-keyword">await</span> <span class="cm-variable">request</span>(<span class="cm-variable">url</span>, <span class="cm-variable">options</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// Callback 模式</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">request</span>(<span class="cm-variable">url</span>, <span class="cm-variable">options</span>, (<span class="cm-def">error</span>, <span class="cm-def">response</span>) <span class="cm-operator">=&gt;</span> {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">if</span> (<span class="cm-variable-2">error</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">error</span>(<span class="cm-string">'请求失败:'</span>, <span class="cm-variable-2">error</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-keyword">return</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string">'响应:'</span>, <span class="cm-variable-2">response</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">})</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 317px;"></div><div class="CodeMirror-gutters" style="display: none; height: 317px;"></div></div></div></pre><p><strong><span>参数说明:</span></strong></p><ul><li><p><code>url</code><span> (string): 请求地址</span></p></li><li><p><code>options</code><span> (Object): 请求选项</span></p><ul><li><code>method</code><span>: HTTP 方法 (&#39;GET&#39;, &#39;POST&#39;, 等)</span></li><li><code>headers</code><span>: 请求头对象</span></li><li><code>body</code><span>: 请求体（POST 请求时）</span></li></ul></li></ul><p><strong><span>响应格式:</span></strong></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">{</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">body</span>: {}, &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="cm-comment">// 解析后的响应体</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">statusCode</span>: <span class="cm-number">200</span>, &nbsp; &nbsp; &nbsp; <span class="cm-comment">// HTTP 状态码</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">headers</span>: {} &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="cm-comment">// 响应头</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 144px;"></div><div class="CodeMirror-gutters" style="display: none; height: 144px;"></div></div></div></pre><h4 id='utils-对象'><span>utils 对象</span></h4><p><span>提供实用工具函数：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> { <span class="cm-def">utils</span> } <span class="cm-operator">=</span> <span class="cm-variable">cerumusic</span></span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// Buffer 操作</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">buffer</span> <span class="cm-operator">=</span> <span class="cm-variable">utils</span>.<span class="cm-property">buffer</span>.<span class="cm-property">from</span>(<span class="cm-string">'hello'</span>, <span class="cm-string">'utf8'</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">string</span> <span class="cm-operator">=</span> <span class="cm-variable">utils</span>.<span class="cm-property">buffer</span>.<span class="cm-property">bufToString</span>(<span class="cm-variable">buffer</span>, <span class="cm-string">'utf8'</span>)</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 144px;"></div><div class="CodeMirror-gutters" style="display: none; height: 144px;"></div></div></div></pre><h2 id='错误处理'><span>错误处理</span></h2><h3 id='最佳实践'><span>最佳实践</span></h3><ol start='' ><li><p><strong><span>总是检查 API 响应状态</span></strong></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation"><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">if</span> (<span class="cm-variable">statusCode</span> <span class="cm-operator">!==</span> <span class="cm-number">200</span> <span class="cm-operator">||</span> <span class="cm-variable">body</span>.<span class="cm-property">code</span> <span class="cm-operator">!==</span> <span class="cm-number">200</span>) {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">throw</span> <span class="cm-keyword">new</span> <span class="cm-variable">Error</span>(<span class="cm-string-2">`请求失败: ${</span><span class="cm-variable">body</span>.<span class="cm-property">msg</span> <span class="cm-operator">||</span> <span class="cm-string">'未知错误'</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 86px;"></div><div class="CodeMirror-gutters" style="display: none; height: 86px;"></div></div></div></pre></li><li><p><strong><span>提供有意义的错误信息</span></strong></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation"><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">error</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] Error: ${</span><span class="cm-variable">errorMessage</span><span class="cm-string-2">}`</span>)</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">throw</span> <span class="cm-keyword">new</span> <span class="cm-variable">Error</span>(<span class="cm-variable">errorMessage</span>)</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 58px;"></div><div class="CodeMirror-gutters" style="display: none; height: 58px;"></div></div></div></pre></li><li><p><strong><span>处理网络异常</span></strong></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">try</span> {</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">response</span> <span class="cm-operator">=</span> <span class="cm-keyword">await</span> <span class="cm-variable">request</span>(<span class="cm-variable">url</span>, <span class="cm-variable">options</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-comment">// 处理响应</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">} <span class="cm-keyword">catch</span> (<span class="cm-def">error</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">error</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] 网络请求失败:`</span>, <span class="cm-variable-2">error</span>.<span class="cm-property">message</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">throw</span> <span class="cm-keyword">new</span> <span class="cm-variable">Error</span>(<span class="cm-string-2">`网络错误: ${</span><span class="cm-variable-2">error</span>.<span class="cm-property">message</span><span class="cm-string-2">}`</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 202px;"></div><div class="CodeMirror-gutters" style="display: none; height: 202px;"></div></div></div></pre></li></ol><h3 id='常见错误类型'><span>常见错误类型</span></h3><ul><li><strong><span>网络错误</span></strong><span>: 无法连接到 API 服务器</span></li><li><strong><span>认证错误</span></strong><span>: API 密钥无效或过期</span></li><li><strong><span>参数错误</span></strong><span>: 请求参数格式不正确</span></li><li><strong><span>资源不存在</span></strong><span>: 请求的歌曲不存在</span></li><li><strong><span>限流错误</span></strong><span>: 请求过于频繁</span></li></ul><h2 id='事件驱动插件'><span>事件驱动插件</span></h2><p><span>对于使用 </span><code>lx.on(EVENT_NAMES.request)</code><span> 模式的插件，可以使用转换器：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation"><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-comment">// 使用转换器转换事件驱动插件</span></span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">node</span> <span class="cm-variable">converter</span><span class="cm-operator">-</span><span class="cm-variable">event</span><span class="cm-operator">-</span><span class="cm-variable">driven</span>.<span class="cm-property">js</span> <span class="cm-variable">input</span><span class="cm-operator">-</span><span class="cm-variable">plugin</span>.<span class="cm-property">js</span> <span class="cm-variable">output</span><span class="cm-operator">-</span><span class="cm-variable">plugin</span>.<span class="cm-property">js</span></span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 58px;"></div><div class="CodeMirror-gutters" style="display: none; height: 58px;"></div></div></div></pre><p><span>转换后的插件将兼容 CeruMusicPluginHost。</span></p><h2 id='调试技巧'><span>调试技巧</span></h2><h3 id='1-使用-consolelog'><span>1. 使用 console.log</span></h3><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation"><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] 调试信息:`</span>, <span class="cm-variable">data</span>)</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">error</span>(<span class="cm-string-2">`[${</span><span class="cm-variable">pluginInfo</span>.<span class="cm-property">name</span><span class="cm-string-2">}] 错误:`</span>, <span class="cm-variable">error</span>)</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 58px;"></div><div class="CodeMirror-gutters" style="display: none; height: 58px;"></div></div></div></pre><h3 id='2-检查请求和响应'><span>2. 检查请求和响应</span></h3><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation"><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string">'请求URL:'</span>, <span class="cm-variable">url</span>)</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string">'请求选项:'</span>, <span class="cm-variable">options</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string">'响应状态:'</span>, <span class="cm-variable">statusCode</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string">'响应内容:'</span>, <span class="cm-variable">body</span>)</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 115px;"></div><div class="CodeMirror-gutters" style="display: none; height: 115px;"></div></div></div></pre><h3 id='3-测试插件'><span>3. 测试插件</span></h3><p><span>创建测试文件：</span></p><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang="javascript" style="break-inside: unset;"><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang="javascript"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">const</span> <span class="cm-def">CeruMusicPluginHost</span> <span class="cm-operator">=</span> <span class="cm-variable">require</span>(<span class="cm-string">'./CeruMusicPluginHost'</span>)</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-keyword">async</span> <span class="cm-keyword">function</span> <span class="cm-def">testPlugin</span>() {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">host</span> <span class="cm-operator">=</span> <span class="cm-keyword">new</span> <span class="cm-variable">CeruMusicPluginHost</span>()</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">await</span> <span class="cm-variable-2">host</span>.<span class="cm-property">loadPlugin</span>(<span class="cm-string">'./my-plugin.js'</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">musicInfo</span> <span class="cm-operator">=</span> {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">songmid</span>: <span class="cm-string">'test123'</span>,</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-property">title</span>: <span class="cm-string">'测试歌曲'</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp;<span class="cm-keyword">try</span> {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-keyword">const</span> <span class="cm-def">url</span> <span class="cm-operator">=</span> <span class="cm-keyword">await</span> <span class="cm-variable-2">host</span>.<span class="cm-property">getMusicUrl</span>(<span class="cm-string">'demo'</span>, <span class="cm-variable-2">musicInfo</span>, <span class="cm-string">'320k'</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">log</span>(<span class="cm-string">'成功获取URL:'</span>, <span class="cm-variable-2">url</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  } <span class="cm-keyword">catch</span> (<span class="cm-def">error</span>) {</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"> &nbsp; &nbsp;<span class="cm-variable">console</span>.<span class="cm-property">error</span>(<span class="cm-string">'测试失败:'</span>, <span class="cm-variable-2">error</span>.<span class="cm-property">message</span>)</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">  }</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">}</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="" cm-zwsp="">
+</span></span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span class="cm-variable">testPlugin</span>()</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 576px;"></div><div class="CodeMirror-gutters" style="display: none; height: 576px;"></div></div></div></pre><h2 id='发布和分发'><span>发布和分发</span></h2><h3 id='文件结构'><span>文件结构</span></h3><pre class="md-fences md-end-block ty-contain-cm modeLoaded" spellcheck="false" lang=""><div class="CodeMirror cm-s-inner cm-s-null-scroll CodeMirror-wrap" lang=""><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 32.3958px; left: 29.1979px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; outline: none;"></textarea></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 0px; margin-bottom: 0px; border-right-width: 0px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre><span>xxxxxxxxxx</span></pre></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-code" role="presentation" style=""><div class="CodeMirror-activeline" style="position: relative;"><div class="CodeMirror-activeline-background CodeMirror-linebackground"></div><div class="CodeMirror-gutter-background CodeMirror-activeline-gutter" style="left: 0px; width: 0px;"></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">my-plugin/</span></pre></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">├── plugin.js &nbsp; &nbsp; &nbsp; &nbsp;  # 主插件文件</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">├── package.json &nbsp; &nbsp; &nbsp; # 包信息（可选）</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">├── README.md &nbsp; &nbsp; &nbsp; &nbsp;  # 说明文档</span></pre><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;">└── test.js &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; # 测试文件（可选）</span></pre></div></div></div></div></div><div style="position: absolute; height: 0px; width: 1px; border-bottom: 0px solid transparent; top: 144px;"></div><div class="CodeMirror-gutters" style="display: none; height: 144px;"></div></div></div></pre><h3 id='版本管理'><span>版本管理</span></h3><p><span>遵循语义化版本规范：</span></p><ul><li><code>1.0.0</code><span> - 主版本.次版本.修订版本</span></li><li><span>主版本：不兼容的 API 修改</span></li><li><span>次版本：向下兼容的功能性新增</span></li><li><span>修订版本：向下兼容的问题修正</span></li></ul><h2 id='示例插件'><span>示例插件</span></h2><p><span>查看项目中的示例：</span></p><ul><li><code>example-plugin.js</code><span> - 基础插件示例</span></li><li><code>plugin.js</code><span> - 事件驱动插件示例</span></li><li><code>fm.js</code><span> - 复杂插件示例</span></li></ul><h2 id='常见问题'><span>常见问题</span></h2><p><strong><span>Q: 如何处理需要登录的 API？</span></strong></p><p><span>A: 在请求头中添加认证信息，或使用 Cookie。</span></p><p><strong><span>Q: 如何处理加密的 API 响应？</span></strong></p><p><span>A: 在插件中实现解密逻辑，使用 </span><code>utils</code><span> 对象提供的工具函数。</span></p><p><strong><span>Q: 插件可以访问文件系统吗？</span></strong></p><p><span>A: 不可以，插件运行在受限的沙箱环境中，无法直接访问文件系统。</span></p><p><strong><span>Q: 如何优化插件性能？</span></strong></p><p><span>A: 减少不必要的网络请求，使用适当的缓存策略，避免阻塞操作。</span></p><h2 id='贡献指南'><span>贡献指南</span></h2><ol start='' ><li><span>Fork 项目仓库</span></li><li><span>创建功能分支</span></li><li><span>编写插件代码和测试</span></li><li><span>提交 Pull Request</span></li><li><span>等待代码审查</span></li></ol><p><span>欢迎贡献新的音源插件！</span></p></div></div>
+</body>
+</html>
