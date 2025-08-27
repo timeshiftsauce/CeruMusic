@@ -11,6 +11,15 @@ declare global {
         getSize: () => Promise<number>
       }
     }
+    api: {
+      // 自动更新相关
+      autoUpdater: {
+        checkForUpdates: () => Promise<void>
+        quitAndInstall: () => Promise<void>
+        onMessage: (callback: (data: { type: string; data?: any }) => void) => void
+        removeMessageListener: () => void
+      }
+    }
   }
 }
 

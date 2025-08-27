@@ -38,6 +38,9 @@ declare module 'vue' {
     TRadioGroup: typeof import('tdesign-vue-next')['RadioGroup']
     TSlider: typeof import('tdesign-vue-next')['Slider']
     TTooltip: typeof import('tdesign-vue-next')['Tooltip']
+    UpdateExample: typeof import('./src/components/UpdateExample.vue')['default']
+    UpdateProgress: typeof import('./src/components/UpdateProgress.vue')['default']
+    UpdateSettings: typeof import('./src/components/Settings/UpdateSettings.vue')['default']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }

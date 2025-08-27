@@ -192,6 +192,7 @@ ipcMain.handle('service-music-request', async (_, api, args) => {
 
 aiEvents(mainWindow)
 import './events/musicCache'
+import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -276,6 +277,14 @@ app.whenReady().then(async () => {
 
   createWindow()
   createTray()
+  
+  // 注册自动更新事件
+  registerAutoUpdateEvents()
+  
+  // 初始化自动更新器
+  if (mainWindow) {
+    initAutoUpdateForWindow(mainWindow)
+  }
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

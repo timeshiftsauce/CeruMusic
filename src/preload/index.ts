@@ -67,7 +67,48 @@ const api = {
     getSize: () => ipcRenderer.invoke('music-cache:get-size')
   },
 
-  getUserConfig: () => ipcRenderer.invoke('get-user-config')
+  getUserConfig: () => ipcRenderer.invoke('get-user-config'),
+
+  // 自动更新相关
+  autoUpdater: {
+    checkForUpdates: () => ipcRenderer.invoke('auto-updater:check-for-updates'),
+    downloadUpdate: () => ipcRenderer.invoke('auto-updater:download-update'),
+    quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
+    
+    // 监听更新事件
+    onCheckingForUpdate: (callback: () => void) => {
+      ipcRenderer.on('auto-updater:checking-for-update', callback);
+    },
+    onUpdateAvailable: (callback: () => void) => {
+      ipcRenderer.on('auto-updater:update-available', callback);
+    },
+    onUpdateNotAvailable: (callback: () => void) => {
+      ipcRenderer.on('auto-updater:update-not-available', callback);
+    },
+    onDownloadProgress: (callback: (progress: any) => void) => {
+      ipcRenderer.on('auto-updater:download-progress', (_, progress) => callback(progress));
+    },
+    onUpdateDownloaded: (callback: () => void) => {
+      ipcRenderer.on('auto-updater:update-downloaded', callback);
+    },
+    onError: (callback: (error: string) => void) => {
+      ipcRenderer.on('auto-updater:error', (_, error) => callback(error));
+    },
+    onDownloadStarted: (callback: (updateInfo: any) => void) => {
+      ipcRenderer.on('auto-updater:download-started', (_, updateInfo) => callback(updateInfo));
+    },
+    
+    // 移除所有监听器
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('auto-updater:checking-for-update');
+      ipcRenderer.removeAllListeners('auto-updater:update-available');
+      ipcRenderer.removeAllListeners('auto-updater:update-not-available');
+      ipcRenderer.removeAllListeners('auto-updater:download-started');
+      ipcRenderer.removeAllListeners('auto-updater:download-progress');
+      ipcRenderer.removeAllListeners('auto-updater:update-downloaded');
+      ipcRenderer.removeAllListeners('auto-updater:error');
+    }
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -197,7 +197,9 @@ class CeruMusicPluginHost {
         }
 
         if (callback) {
-          makeRequest().catch(() => {}) // 错误已在makeRequest中处理
+          makeRequest().catch((error) => {
+            console.error(`[CeruMusic] Unhandled request error in callback mode: ${error.message}`)
+          }) // 确保错误被正确处理
           return undefined
         } else {
           return makeRequest()
@@ -407,7 +409,9 @@ class CeruMusicPluginHost {
         }
 
         if (callback) {
-          makeRequest().catch(() => {}) // 错误已在makeRequest中处理
+          makeRequest().catch((error) => {
+            console.error(`[CeruMusic] Unhandled request error in callback mode: ${error.message}`)
+          }) // 确保错误被正确处理
           return undefined
         } else {
           return makeRequest()
