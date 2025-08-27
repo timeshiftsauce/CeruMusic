@@ -2,6 +2,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 import { MainApi, MethodParams } from '../main/services/musicSdk/index'
 // 自定义 API 接口
 interface CustomAPI {
+  autoUpdater: any
   minimize: () => void
   maximize: () => void
   close: () => void

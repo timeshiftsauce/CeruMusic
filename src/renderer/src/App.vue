@@ -3,16 +3,25 @@ import { onMounted } from 'vue'
 import GlobalAudio from './components/Play/GlobalAudio.vue'
 import FloatBall from './components/AI/FloatBall.vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useAutoUpdate } from './composables/useAutoUpdate'
+
 const userInfo = LocalUserDetailStore()
+const { checkForUpdates } = useAutoUpdate()
+
 import './assets/main.css'
 import './assets/theme/blue.css'
 import './assets/theme/pink.css'
 import './assets/theme/orange.css'
 import './assets/theme/cyan.css'
+
 onMounted(() => {
   userInfo.init()
-  // 设置测试音频URL
   loadSavedTheme()
+  
+  // 应用启动后延迟3秒检查更新，避免影响启动速度
+  setTimeout(() => {
+    checkForUpdates()
+  }, 3000)
 })
 
 // 基于现有主题文件的配置
@@ -51,4 +60,5 @@ const applyTheme = (themeName) => {
   <router-view />
   <GlobalAudio />
   <FloatBall />
+  <UpdateProgress />
 </template>
