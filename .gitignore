@@ -16,3 +16,5 @@ temp/log.txt
 /.vscode/
 /.codebuddy/
 /.idea/
+docs/.vitepress/dist
+docs/.vitepress/cache

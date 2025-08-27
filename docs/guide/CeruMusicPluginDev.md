@@ -1,3 +1,7 @@
+---
+layout: doc
+---
+
 # CeruMusic 插件开发文档
 
 ## 概述

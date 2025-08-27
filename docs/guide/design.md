@@ -11,7 +11,7 @@ Ceru Music 是一个基于 Electron + Vue 3 的跨平台桌面音乐播放器，
 - **前端框架**: Vue 3 + TypeScript + Composition API
 - **桌面框架**: Electron (v37.2.3)
 - **UI组件库**: TDesign Vue Next (v1.15.2)
-- ![image-20250813180317221](D:\code\Ceru-Music\docs\assets\image-20250813180317221.png)
+- ![image-20250813180317221](..\assets\image-20250813180317221.png)
 - **状态管理**: Pinia (v3.0.3)
 - **路由管理**: Vue Router (v4.5.1)
 - **构建工具**: Vite + electron-vite
@@ -397,7 +397,7 @@ export const useAppStore = defineStore('app', {
 
 ### 欢迎页面设计
 
-![image-20250813180856660](D:\code\Ceru-Music\docs\assets\image-20250813180856660.png)
+![image-20250813180856660](..\assets\image-20250813180856660.png)
 
 ```vue
 <template>
@@ -456,7 +456,7 @@ function skipWelcome() {
 
 ##### 界面UI参考
 
-![.\assets\image-20250813180944752.png)
+![..\assets\image-20250813180944752.png)
 
 ## 页面动画设计
 

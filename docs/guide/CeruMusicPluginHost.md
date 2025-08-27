@@ -1,3 +1,7 @@
+---
+layout: doc
+---
+
 # CeruMusicPluginHost 使用文档
 
 ## 概述
@@ -109,9 +113,7 @@ try {
 
 ### 构造函数
 
-```javascript
-new CeruMusicPluginHost(pluginCode?)
-```
+`new CeruMusicPluginHost(pluginCode)`
 
 **参数:**
 
@@ -125,9 +127,9 @@ new CeruMusicPluginHost(pluginCode?)
 
 **参数:**
 
-- `pluginPath` (string): 插件文件路径
+`pluginPath` (string): 插件文件路径
 
-**返回:** Promise<Object> - 插件导出的对象
+**返回:** `Promise<Object>` - 插件导出的对象
 
 #### getPluginInfo()
 
@@ -151,7 +153,7 @@ new CeruMusicPluginHost(pluginCode?)
 - `musicInfo` (Object): 歌曲信息对象
 - `quality` (string): 音质标识
 
-**返回:** Promise<string> - 音乐播放链接
+**返回:** `Promise<string>` - 音乐播放链接
 
 #### getPic(source, musicInfo)
 
@@ -162,7 +164,7 @@ new CeruMusicPluginHost(pluginCode?)
 - `source` (string): 音源标识
 - `musicInfo` (Object): 歌曲信息对象
 
-**返回:** Promise<string> - 封面链接
+**返回:** `Promise<string>` - 封面链接
 
 #### getLyric(source, musicInfo)
 
@@ -173,7 +175,7 @@ new CeruMusicPluginHost(pluginCode?)
 - `source` (string): 音源标识
 - `musicInfo` (Object): 歌曲信息对象
 
-**返回:** Promise<string> - 歌词内容
+**返回:** `Promise<string>` - 歌词内容
 
 ## 插件环境
 
