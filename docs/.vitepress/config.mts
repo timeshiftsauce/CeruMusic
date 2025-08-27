@@ -51,6 +51,6 @@ export default defineConfig({
     }
   },
   lastUpdated: true,
-  head: [['link', { rel: 'icon', href: (process.env.BASE_URL ?? '/CeruMusic') + '/logo.svg' }]]
+  head: [['link', { rel: 'icon', href: (process.env.BASE_URL ?? '/CeruMusic/') + 'logo.svg' }]]
 })
 // Smooth scrolling functions
