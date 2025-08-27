@@ -1,82 +1,109 @@
-name: AutoBuild # 工作流的名称
+name: AutoBuild
 
 permissions:
-  contents: write # 给予写入仓库内容的权限
+  contents: write
 
 on:
   push:
     tags:
-      - 'v*' # 当推送以v开头的标签时触发此工作流
+      - 'v*'
   workflow_dispatch:
 
 jobs:
-  release:
-    name: build and release electron app # 任务名称
-    runs-on: ${{ matrix.os }} # 在matrix.os定义的操作系统上运行
+  build:
+    name: Build Electron App
+    runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # 如果一个任务失败,其他任务继续运行
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest] # 在Windows、macOS和Ubuntu上运行任务
+        os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
       - name: Check out git repository
-        uses: actions/checkout@v4 # 检出代码仓库
+        uses: actions/checkout@v4
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 安装Node.js 22
+          node-version: 22
 
       - name: Install Dependencies
         run: |
           npm i -g yarn
-          yarn install  # 安装项目依赖
+          yarn install
 
       - name: Build Electron App for Windows
-        if: matrix.os == 'windows-latest' # 只在Windows上运行
-        run: yarn run build:win # 构建Windows版应用
+        if: matrix.os == 'windows-latest'
+        run: yarn run build:win
 
       - name: Build Electron App for macOS
-        if: matrix.os == 'macos-latest' # 只在macOS上运行
+        if: matrix.os == 'macos-latest'
         run: yarn run build:mac
 
       - name: Build Electron App for Linux
-        if: matrix.os == 'ubuntu-latest' # 只在Linux上运行
+        if: matrix.os == 'ubuntu-latest'
         run: yarn run build:linux
 
       - name: Cleanup Artifacts for Windows
         if: matrix.os == 'windows-latest'
         run: |
-          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"  # 清理Windows构建产物,只保留特定文件
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml" "!dist/*.blockmap"
 
       - name: Cleanup Artifacts for macOS
         if: matrix.os == 'macos-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|*.pkg|latest*.yml)"  # 清理macOS构建产物
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|*.pkg|latest*.yml|*.blockmap)"
 
       - name: Cleanup Artifacts for Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.rpm|*.snap|*.tar.gz|latest*.yml)"  # 清理Linux构建产物
+          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.rpm|*.snap|*.tar.gz|latest*.yml)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}
-          path: dist # 上传构建产物作为工作流artifact
+          name: ${{ matrix.os }}-dist
+          path: dist/
 
-release:
-  name: Create Release
-  runs-on: ubuntu-latest
-  needs: build
-  steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-    - name: Create GitHub Release with all files
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          artifacts/**/*
+      - name: List downloaded files for debugging
+        run: |
+          echo "Artifacts structure:"
+          find artifacts -type f -name "*" | sort
+
+      - name: Prepare release files
+        run: |
+          # 创建release_files目录并收集所有构建文件
+          mkdir -p release_files
+          
+          # 复制Windows构建文件
+          if [ -d "artifacts/windows-latest-dist" ]; then
+            cp artifacts/windows-latest-dist/dist/* release_files/ 2>/dev/null || true
+          fi
+          
+          # 复制macOS构建文件
+          if [ -d "artifacts/macos-latest-dist" ]; then
+            cp artifacts/macos-latest-dist/dist/* release_files/ 2>/dev/null || true
+          fi
+          
+          # 复制Linux构建文件
+          if [ -d "artifacts/ubuntu-latest-dist" ]; then
+            cp artifacts/ubuntu-latest-dist/dist/* release_files/ 2>/dev/null || true
+          fi
+          
+          echo "Files to be released:"
+          ls -la release_files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release_files/*
