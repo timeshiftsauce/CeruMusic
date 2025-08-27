@@ -4,7 +4,6 @@ import { ControlAudioStore } from '@renderer/store/ControlAudio'
 
 const audioStore = ControlAudioStore()
 const audioMeta = ref<HTMLAudioElement>()
-
 // 提供订阅方法给子组件使用
 provide('audioSubscribe', audioStore.subscribe)
 
@@ -15,6 +14,7 @@ let playbackPosition = 0
 onMounted(() => {
   audioStore.init(audioMeta.value)
   console.log('音频组件初始化完成')
+  // window.api.ping(handleEnded)
 })
 
 // 组件被激活时（从缓存中恢复）
@@ -55,11 +55,9 @@ onDeactivated(() => {
 //     audioStore.Audio.duration = audioMeta.value.duration || 0
 //   }
 // }
-
 const handleEnded = (): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('ended')
-  console.log('eddddddddd')
 }
 
 const handleSeeked = (): void => {
@@ -96,6 +94,7 @@ const handleError = (event: Event): void => {
   console.error('音频加载错误:', target.error)
   audioStore.Audio.isPlay = false
   audioStore.publish('error')
+  // window.api.pingService.stop()
 }
 
 const handleLoadedData = (): void => {
@@ -108,10 +107,13 @@ const handleLoadedData = (): void => {
 const handleCanPlay = (): void => {
   console.log('音频可以开始播放')
   audioStore.publish('canplay')
+  // window.api.pingService.start()
 }
 
 onUnmounted(() => {
   // 组件卸载时清空所有订阅者
+  window.api.pingService.stop()
+
   audioStore.clearAllSubscribers()
 })
 </script>
@@ -122,13 +124,14 @@ onUnmounted(() => {
       ref="audioMeta"
       preload="auto"
       :src="audioStore.Audio.url"
-      @ended="handleEnded"
       @seeked="handleSeeked"
       @play="handlePlay"
       @pause="handlePause"
       @error="handleError"
       @loadeddata="handleLoadedData"
+      @ended="handleEnded"
       @canplay="handleCanPlay"
+      id="globaAudio"
     ></audio>
   </div>
 </template>

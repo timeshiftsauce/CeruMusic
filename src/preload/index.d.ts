@@ -44,7 +44,11 @@ interface CustomAPI {
     loadAllPlugins: () => Promise<any>
     getPluginLog: (pluginId: string) => Promise<any>
   }
-
+  ping: (callback: Function<any>) => undefined
+  pingService: {
+    start: () => undefined,
+    stop: () => undefined
+  }
   // 用户配置API
   getUserConfig: () => Promise<any>
 }

@@ -91,8 +91,10 @@ function createWindow(): void {
       sandbox: false,
       webSecurity: false,
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      backgroundThrottling: false
     }
+
   })
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
@@ -217,9 +219,6 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
-
   // 窗口控制 IPC 处理
   ipcMain.on('window-minimize', () => {
     const window = BrowserWindow.getFocusedWindow()
@@ -277,10 +276,17 @@ app.whenReady().then(async () => {
 
   createWindow()
   createTray()
-  
+
   // 注册自动更新事件
   registerAutoUpdateEvents()
-  
+  ipcMain.on('startPing', () => {
+    if (ping) clearInterval(ping)
+    console.log('start-----开始')
+    startPing()
+  })
+  ipcMain.on('stopPing', () => {
+    clearInterval(ping)
+  })
   // 初始化自动更新器
   if (mainWindow) {
     initAutoUpdateForWindow(mainWindow)
@@ -306,3 +312,60 @@ app.on('before-quit', () => {
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
+
+let ping: NodeJS.Timeout
+function startPing() {
+  let interval = 3000
+
+  ping = setInterval(() => {
+    if (mainWindow) {
+      mainWindow.webContents
+        .executeJavaScript(
+          `
+    (function() {
+      const audio = document.getElementById("globaAudio");
+      if(!audio) return { playing:false, ended: false };
+
+      if(audio.ended) return { playing:false, ended: true };
+
+      return { playing: !audio.paused, ended: false, currentTime: audio.currentTime, duration: audio.duration };
+    })()
+    `
+        )
+        .then((res) => {
+          console.log(res)
+          if (res.duration - res.currentTime <= 20) {
+            clearInterval(ping)
+            interval = 500
+            ping = setInterval(() => {
+              if (mainWindow) {
+                mainWindow.webContents
+                  .executeJavaScript(
+                    `
+                  (function() {
+                    const audio = document.getElementById("globaAudio");
+                    if(!audio) return { playing:false, ended: false };
+
+                    if(audio.ended) return { playing:false, ended: true };
+
+                    return { playing: !audio.paused, ended: false, currentTime: audio.currentTime, duration: audio.duration };
+                  })()
+                `
+                  )
+                  .then((res) => {
+                    console.log(res)
+                    if (res && res.ended) {
+                      mainWindow?.webContents.send('song-ended')
+                      console.log('next song')
+                      clearInterval(ping)
+                    }
+                  })
+                  .catch((err) => console.warn(err))
+              }
+            }, interval)
+          }
+        })
+        .catch((err) => console.warn(err))
+    }
+  }, interval)
+}
