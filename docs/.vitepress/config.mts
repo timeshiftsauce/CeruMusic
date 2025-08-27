@@ -31,7 +31,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/vuejs/vitepress' }
+      { icon: 'github', link: 'https://github.com/timeshiftsauce/CeruMusic' }
     ],
     footer: {
       message: 'Released under the Apache License 2.0 License.',
