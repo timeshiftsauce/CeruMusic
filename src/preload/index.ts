@@ -74,7 +74,7 @@ const api = {
     checkForUpdates: () => ipcRenderer.invoke('auto-updater:check-for-updates'),
     downloadUpdate: () => ipcRenderer.invoke('auto-updater:download-update'),
     quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
-    
+
     // 监听更新事件
     onCheckingForUpdate: (callback: () => void) => {
       ipcRenderer.on('auto-updater:checking-for-update', callback);
@@ -97,7 +97,7 @@ const api = {
     onDownloadStarted: (callback: (updateInfo: any) => void) => {
       ipcRenderer.on('auto-updater:download-started', (_, updateInfo) => callback(updateInfo));
     },
-    
+
     // 移除所有监听器
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('auto-updater:checking-for-update');
@@ -108,6 +108,11 @@ const api = {
       ipcRenderer.removeAllListeners('auto-updater:update-downloaded');
       ipcRenderer.removeAllListeners('auto-updater:error');
     }
+  },
+  ping: (callbaack: Function) => ipcRenderer.on('song-ended', () => callbaack()),
+  pingService: {
+    start: () => { ipcRenderer.send('startPing'); console.log('eventStart') },
+    stop: () => { ipcRenderer.send('stopPing') }
   }
 }
 
