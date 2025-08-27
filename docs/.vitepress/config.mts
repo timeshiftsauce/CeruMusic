@@ -4,11 +4,11 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   lang: 'zh-CN',
   title: "Ceru Music",
-  base: '/CeruMusic',
+  base: '/CeruMusic/',
   description: "Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。",
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
-    logo: '../assets/logo.svg',
+    logo: '/assets/logo.svg',
     nav: [
       { text: '首页', link: '/' },
       { text: '使用文档', link: '/guide/' }
@@ -46,6 +46,6 @@ export default defineConfig({
     }
   },
   lastUpdated: true,
-
+  head: [['link', { rel: 'icon', href: '/CeruMusic/logo.svg' }]]
 })
 // Smooth scrolling functions
