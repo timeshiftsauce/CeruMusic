@@ -7,7 +7,7 @@ hero:
   text: '澜音 播放器'
   tagline: 澜音是一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。
   image:
-    src: './assets/logo.svg'
+    src: '/logo.svg'
   actions:
     - theme: brand
       text: 下载应用
