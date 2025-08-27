@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false # 如果一个任务失败,其他任务继续运行
       matrix:
-        os: [windows-latest, macos-latest] # 在Windows和macOS上运行任务
+        os: [windows-latest, macos-latest, ubuntu-latest] # 在Windows、macOS和Ubuntu上运行任务
 
     steps:
       - name: Check out git repository
@@ -25,39 +25,63 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 安装Node.js 22 （这里node环境是能够运行代码的环境）
+          node-version: 22 # 安装Node.js 22
 
       - name: Install Dependencies
         run: |
           npm i -g yarn
           yarn install  # 安装项目依赖
 
-      - name: Build Electron App for windows
+      - name: Build Electron App for Windows
         if: matrix.os == 'windows-latest' # 只在Windows上运行
         run: yarn run build:win # 构建Windows版应用
 
-      - name: Build Electron App for macos
+      - name: Build Electron App for macOS
         if: matrix.os == 'macos-latest' # 只在macOS上运行
-        run: |
-          yarn run build:mac
+        run: yarn run build:mac
+
+      - name: Build Electron App for Linux
+        if: matrix.os == 'ubuntu-latest' # 只在Linux上运行
+        run: yarn run build:linux
 
       - name: Cleanup Artifacts for Windows
         if: matrix.os == 'windows-latest'
         run: |
           npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"  # 清理Windows构建产物,只保留特定文件
 
-      - name: Cleanup Artifacts for MacOS
+      - name: Cleanup Artifacts for macOS
         if: matrix.os == 'macos-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"  # 清理macOS构建产物,只保留特定文件
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|*.pkg|latest*.yml)"  # 清理macOS构建产物
 
-      - name: upload artifacts
+      - name: Cleanup Artifacts for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.rpm|*.snap|*.tar.gz|latest*.yml)"  # 清理Linux构建产物
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}
           path: dist # 上传构建产物作为工作流artifact
 
-      - name: release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts for debugging
+        run: ls -R artifacts
+
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: 'dist/**' # 将dist目录下所有文件添加到release
+          files: |
+            artifacts/windows-latest/dist/*
+            artifacts/macos-latest/dist/*
+            artifacts/ubuntu-latest/dist/*

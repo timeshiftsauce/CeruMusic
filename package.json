@@ -19,8 +19,8 @@
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "yarn run build && electron-builder --dir",
     "build:win": "yarn run build && electron-builder --win --x64 --config --publish never",
-    "build:mac": "yarn run build && electron-builder --mac --config  --publish never",
-    "build:linux": "yarn run build && electron-builder --linux --publish never",
+    "build:mac": "yarn run build && electron-builder --mac --config --publish never",
+    "build:linux": "yarn run build && electron-builder --linux --config --publish never",
     "build:deps": "electron-builder install-app-deps && yarn run build && electron-builder --win --x64 --config",
     "buildico": "electron-icon-builder --input=./resources/logo.png --output=resources --flatten"
   },
