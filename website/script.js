@@ -65,7 +65,7 @@ async function downloadApp(platform) {
         // Fallback to GitHub releases page
         setTimeout(() => {
             showNotification('正在跳转到GitHub下载页面...', 'info');
-            window.open(`https://github.com/${GITHUB_REPO}/releases/latest`, '_blank');
+            window.open(`https://gh.bugdey.us.kg/https://github.com/${GITHUB_REPO}/releases/latest`, '_blank');
         }, 2000);
     } finally {
         // Restore button state
