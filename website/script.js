@@ -53,7 +53,7 @@ async function downloadApp(platform) {
         showNotification(`正在下载 ${getPlatformName(platform)} 版本 v${release.tag_name}...`, 'success');
         
         // Start download
-        window.open(downloadUrl, '_blank');
+        window.open('https://gh.bugdey.us.kg/'+downloadUrl, '_blank');
         
         // Track download
         trackDownload(platform, release.tag_name);
