@@ -65,23 +65,18 @@ jobs:
           name: ${{ matrix.os }}
           path: dist # 上传构建产物作为工作流artifact
 
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: release
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+release:
+  name: Create Release
+  runs-on: ubuntu-latest
+  needs: build
+  steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
 
-      - name: List artifacts for debugging
-        run: ls -R artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            artifacts/windows-latest/dist/*
-            artifacts/macos-latest/dist/*
-            artifacts/ubuntu-latest/dist/*
+    - name: Create GitHub Release with all files
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/**/*
