@@ -32,7 +32,12 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/timeshiftsauce/CeruMusic' }
+      { icon: 'github', link: 'https://github.com/timeshiftsauce/CeruMusic' },
+      { icon: 'gitee', link: 'https://gitee.com/sqjcode/CeruMuisc' },
+      { icon: 'qq', link: 'https://qm.qq.com/q/IDpQnbGd06' },
+      { icon: 'beatsbydre', link: 'https://shiqianjiang.cn' },
+      { icon: 'bilibili', link: 'https://space.bilibili.com/696709986' }
+
     ],
     footer: {
       message: 'Released under the Apache License 2.0 License.',
