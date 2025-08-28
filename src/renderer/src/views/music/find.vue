@@ -11,7 +11,7 @@ const loading = ref(true)
 const error = ref('')
 
 // 热门歌曲数据
-const hotSongs:any = ref([])
+const hotSongs: any = ref([])
 
 // 获取热门歌单数据
 const fetchHotSonglist = async () => {
@@ -229,6 +229,8 @@ onMounted(() => {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      user-select: none;
+      -webkit-user-drag: none;
     }
   }
 

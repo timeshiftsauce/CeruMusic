@@ -8,7 +8,7 @@ export function transitionVolume(
 ): Promise<undefined> {
   clearInterval(timer)
   const playVolume = lengthen ? 40 : 20
-  const pauseVolume = lengthen ? 20 : 10
+  const pauseVolume = lengthen ? 30 : 20
   return new Promise((resolve) => {
     if (target) {
       timer = setInterval(() => {
@@ -22,7 +22,7 @@ export function transitionVolume(
     }
     timer = setInterval(() => {
       audio.volume = Math.max(audio.volume - volume / pauseVolume, 0)
-      if (audio.volume <= 20) {
+      if (audio.volume <= 0) {
         clearInterval(timer)
         audio.volume = volume
         resolve(undefined)
