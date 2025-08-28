@@ -530,6 +530,7 @@ watch(
 
 // 全屏展示相关
 const toggleFullPlay = () => {
+  if (!songInfo.value.songmid) return
   showFullPlay.value = !showFullPlay.value
 }
 
@@ -670,22 +671,24 @@ const handleProgressDragStart = (event: MouseEvent) => {
 const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number }>({
   songmid: null,
   hash: '',
-  singer: 'CeruMusic',
-  name: '未知歌曲名',
+  name: '欢迎使用CeruMusic 🎉',
+  singer: '可以配置音源插件来播放你的歌曲',
   albumName: '',
   albumId: 0,
   source: '',
   interval: '00:00',
-  img: 'https://oss.shiqianjiang.cn//storage/default/20250723/mmexport1744732a2f8406e483442888d29521de63ca4f98bc085a2.jpeg',
+  img: '',
   lrc: null,
   types: [],
   _types: {},
   typeUrl: {}
 })
-const maincolor = ref('rgba(0, 0, 0, 1)')
+const maincolor = ref('var(--td-brand-color-5)')
 const startmaincolor = ref('rgba(0, 0, 0, 1)')
 const contrastTextColor = ref('rgba(0, 0, 0, .8)')
-const hoverColor = ref('rgba(0,0,0,1)')
+const hoverColor = ref('var(--td-brand-color-5)')
+const playbg = ref('var(--td-brand-color-2)')
+const playbghover = ref('var(--td-brand-color-3)')
 async function setColor() {
   console.log('主题色刷新')
   const color = await extractDominantColor(songInfo.value.img)
@@ -694,8 +697,18 @@ async function setColor() {
   startmaincolor.value = `rgba(${color.r},${color.g},${color.b},.2)`
   contrastTextColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.img, 0.6)
   hoverColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.img, 1)
+  playbg.value = 'rgba(255,255,255,0.2)'
+  playbghover.value = 'rgba(255,255,255,0.33)'
 }
-watch(songInfo, setColor, { deep: true, immediate: true })
+watch(
+  songInfo,
+  async (newVal) => {
+    if (newVal.img) {
+      await setColor()
+    }
+  },
+  { deep: true, immediate: true }
+)
 // onMounted(setColor)
 </script>
 
@@ -718,7 +731,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
     <div class="player-content">
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
-        <div class="album-cover">
+        <div class="album-cover" v-show="songInfo.img">
           <img :src="songInfo.img" alt="专辑封面" />
         </div>
 
@@ -793,14 +806,16 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
-            <t-button
-              class="control-btn"
-              shape="circle"
-              variant="text"
-              @click.stop="togglePlaylist"
-            >
-              <liebiao style="width: 1.5em; height: 1.5em" />
-            </t-button>
+            <t-badge :count="list.length" :maxCount="99" color="#aaa">
+              <t-button
+                class="control-btn"
+                shape="circle"
+                variant="text"
+                @click.stop="togglePlaylist"
+              >
+                <liebiao style="width: 1.5em; height: 1.5em" />
+              </t-button>
+            </t-badge>
           </t-tooltip>
         </div>
       </div>
@@ -999,7 +1014,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
 
     .song-name {
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 700;
       color: v-bind(hoverColor);
       white-space: nowrap;
       overflow: hidden;
@@ -1044,7 +1059,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
     }
 
     &.play-btn {
-      background-color: #ffffff27;
+      background-color: v-bind(playbg);
       transition: background-color 0.2s ease;
 
       border-radius: 50%;
@@ -1061,7 +1076,7 @@ watch(songInfo, setColor, { deep: true, immediate: true })
       }
 
       &:hover {
-        background-color: #ffffff62;
+        background-color: v-bind(playbghover);
         color: v-bind(contrastTextColor);
       }
     }

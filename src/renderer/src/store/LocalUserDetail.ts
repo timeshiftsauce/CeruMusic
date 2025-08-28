@@ -20,7 +20,8 @@ export const LocalUserDetailStore = defineStore('Local', () => {
         topBarStyle: false,
         mainColor: '#00DAC0',
         volume: 80,
-        currentTime: 0
+        currentTime: 0,
+        selectSources: 'wy'
       }
       localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
     }

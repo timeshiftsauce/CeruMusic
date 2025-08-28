@@ -5,9 +5,12 @@ import DOMPurify from 'dompurify'
 import { Loading as TLoading } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
+import { useSettingsStore } from '@renderer/store/Settings'
 
 const userStore = LocalUserDetailStore()
+const settingsStore = useSettingsStore()
 const { userInfo } = storeToRefs(userStore)
+const { settings } = storeToRefs(settingsStore)
 
 const ball = ref<HTMLElement | null>(null)
 const ballClass = ref('hidden-right') // 默认半隐藏
@@ -30,7 +33,7 @@ const windowSize = ref({ width: 0, height: 0 }) // 窗口尺寸
 
 // 显示悬浮球
 // 悬浮球可见性控制
-const isFloatBallVisible = ref(true)
+const isFloatBallVisible = ref(settings.value.showFloatBall !== false) // 默认显示，除非明确设置为false
 const isHovering = ref(false)
 
 const showBall = () => {
@@ -42,6 +45,7 @@ const showBall = () => {
 const closeBall = (e: MouseEvent) => {
   e.stopPropagation() // 阻止事件冒泡
   isFloatBallVisible.value = false
+  settingsStore.updateSettings({ showFloatBall: false })
 }
 
 // 鼠标进入悬浮球
@@ -60,7 +64,7 @@ const handleMouseLeave = () => {
 const startAutoHide = () => {
   clearTimer()
   timer = window.setTimeout(() => {
-    ballClass.value = 'hidden-right'
+    ballClass.value = isOnLeft.value ? 'hidden-left' : 'hidden-right'
   }, 3000) // 3 秒没操作缩回去
 }
 
@@ -119,8 +123,8 @@ const handleMouseUp = () => {
   document.removeEventListener('mouseup', handleMouseUp)
 
   if (hasDragged.value) {
-    // 自动吸边逻辑，考虑外层容器尺寸120px
-    const centerX = ballPosition.value.x + 60 // 外层容器中心点
+    // 自动吸边逻辑
+    const centerX = ballPosition.value.x + 60 // 悬浮球中心点
     const screenCenter = windowSize.value.width / 2
 
     if (centerX < screenCenter) {
@@ -134,8 +138,9 @@ const handleMouseUp = () => {
       isOnLeft.value = false
       ballClass.value = 'hidden-right'
     }
-
-    // 重新开启自动隐藏
+    // 保存位置到本地存储
+    saveBallPosition()
+    clearTimer()
     startAutoHide()
   }
 }
@@ -316,6 +321,15 @@ watch(
   { immediate: false }
 )
 
+// 监听设置变化，更新悬浮球可见性
+watch(
+  () => settings.value.showFloatBall,
+  (newValue) => {
+    isFloatBallVisible.value = newValue
+  },
+  { immediate: true }
+)
+
 // 更新窗口尺寸
 const updateWindowSize = () => {
   windowSize.value = {
@@ -324,8 +338,39 @@ const updateWindowSize = () => {
   }
 }
 
-// 初始化悬浮球位置
-const initBallPosition = () => {
+// 保存悬浮球位置到本地存储
+const saveBallPosition = () => {
+  const positionData = {
+    x: ballPosition.value.x,
+    y: ballPosition.value.y,
+    isOnLeft: isOnLeft.value
+  }
+  localStorage.setItem('floatBallPosition', JSON.stringify(positionData))
+}
+
+// 从本地存储加载悬浮球位置
+const loadBallPosition = () => {
+  try {
+    const savedPosition = localStorage.getItem('floatBallPosition')
+    if (savedPosition) {
+      const positionData = JSON.parse(savedPosition)
+      ballPosition.value = {
+        x: positionData.x,
+        y: positionData.y
+      }
+      isOnLeft.value = positionData.isOnLeft
+    } else {
+      // 如果没有保存过位置，使用默认位置
+      setDefaultPosition()
+    }
+  } catch (error) {
+    console.error('加载悬浮球位置失败:', error)
+    setDefaultPosition()
+  }
+}
+
+// 设置默认位置
+const setDefaultPosition = () => {
   updateWindowSize()
   ballPosition.value = {
     x: windowSize.value.width - 126, // 考虑外层容器尺寸120px
@@ -334,10 +379,20 @@ const initBallPosition = () => {
   isOnLeft.value = false
 }
 
+// 初始化悬浮球位置
+const initBallPosition = () => {
+  updateWindowSize()
+  loadBallPosition()
+}
+
 // 定义 handleResize 函数
 const handleResize = () => {
   updateWindowSize()
-  initBallPosition()
+  // 保证悬浮球不超出边界
+  const maxX = windowSize.value.width - 120
+  const maxY = windowSize.value.height - 196
+  ballPosition.value.x = Math.max(0, Math.min(ballPosition.value.x, maxX))
+  ballPosition.value.y = Math.max(0, Math.min(ballPosition.value.y, maxY))
 }
 
 onMounted(() => {
@@ -351,6 +406,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
   window.removeEventListener('resize', handleResize)
+  saveBallPosition() // 保存位置
 })
 </script>
 
