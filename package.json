@@ -5,7 +5,7 @@
   "main": "./out/main/index.js",
   "author": "sqj,wldss,star",
   "license": "Apache-2.0",
-  "homepage": "https://electron-vite.org",
+  "homepage": "https://ceru.docs.shiqianjiang.cn",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache . --fix",

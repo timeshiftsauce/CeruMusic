@@ -12,8 +12,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-// 将事件总线挂载到全局
-;(window as any).musicEmitter = emitter
+  // 将事件总线挂载到全局
+  ; (window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -87,8 +87,12 @@ export async function addToPlaylistAndPlay(
     }
 
     await MessagePlugin.success('已添加到播放列表并开始播放')
-  } catch (error) {
+  } catch (error: any) {
     console.error('播放失败:', error)
+    if (error.message) {
+      await MessagePlugin.error('播放失败了: ' + error.message)
+      return
+    }
     await MessagePlugin.error('播放失败了，可能还没有版权')
   }
 }

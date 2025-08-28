@@ -53,6 +53,7 @@ const clearAPIKey = (): void => {
 import { useRouter } from 'vue-router'
 import { computed, watch } from 'vue'
 import MusicCache from '@renderer/components/Settings/MusicCache.vue'
+import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
 const router = useRouter()
 const goPlugin = () => {
   router.push('/plugins')
@@ -181,7 +182,7 @@ const getCurrentSourceName = () => {
     <div class="settings-container">
       <div class="settings-content">
         <div class="settings-header">
-          <h2>标题栏控制组件演示</h2>
+          <h2>设置你的顶部控制栏</h2>
           <p>这里展示了两种不同风格的标题栏控制按钮</p>
         </div>
 
@@ -289,6 +290,8 @@ const getCurrentSourceName = () => {
               </div>
             </div>
           </div>
+          <AIFloatBallSettings></AIFloatBallSettings>
+
         </div>
 
         <!-- 播放列表管理部分 -->
@@ -430,7 +433,9 @@ const getCurrentSourceName = () => {
             <MusicCache></MusicCache>
           </div>
         </div>
-
+        <div class="demo-section">
+          <Versions></Versions>
+        </div>
 
         <div class="demo-section">
           <h3>功能说明</h3>
@@ -508,7 +513,7 @@ const getCurrentSourceName = () => {
 }
 
 .settings-content {
-  max-width: 800px;
+  max-width: 1100px;
   margin: 0 auto;
   background: #fff;
   padding: 2rem;
@@ -574,7 +579,7 @@ const getCurrentSourceName = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 14px 1rem;
   background: #f6f6f6;
   border-radius: 0.375rem;
   border: 1px solid #d1d5db;
@@ -602,7 +607,7 @@ const getCurrentSourceName = () => {
 
   .iconfont {
     font-size: 1.25rem;
-    color: #f97316;
+    color: var(--td-brand-color);
     margin-top: 0.125rem;
   }
 
@@ -1015,23 +1020,23 @@ const getCurrentSourceName = () => {
 }
 
 // 响应式设计
-@media (max-width: 768px) {
-  .music-config-container {
-    .source-cards {
-      grid-template-columns: 1fr;
-    }
+// @media (max-width: 768px) {
+//   .music-config-container {
+//     .source-cards {
+//       grid-template-columns: 1fr;
+//     }
 
-    .config-status {
-      grid-template-columns: 1fr;
-    }
-  }
+//     .config-status {
+//       grid-template-columns: 1fr;
+//     }
+//   }
 
-  .plugin-prompt {
-    flex-direction: column;
-    text-align: center;
-    gap: 1.5rem;
-  }
-}
+//   .plugin-prompt {
+//     flex-direction: column;
+//     text-align: center;
+//     gap: 1.5rem;
+//   }
+// }
 
 // 动画效果
 @keyframes fadeInUp {

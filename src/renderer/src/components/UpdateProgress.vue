@@ -5,20 +5,18 @@
         <h3>正在下载更新</h3>
         <p v-if="downloadState.updateInfo">版本 {{ downloadState.updateInfo.name }}</p>
       </div>
-      
+
       <div class="progress-content">
         <div class="progress-bar-container">
           <div class="progress-bar">
-            <div 
-              class="progress-fill" 
+            <div
+              class="progress-fill"
               :style="{ width: `${downloadState.progress.percent}%` }"
             ></div>
           </div>
-          <div class="progress-text">
-            {{ Math.round(downloadState.progress.percent) }}%
-          </div>
+          <div class="progress-text">{{ Math.round(downloadState.progress.percent) }}%</div>
         </div>
-        
+
         <div class="progress-details">
           <div class="download-info">
             <span>已下载: {{ formatBytes(downloadState.progress.transferred) }}</span>
@@ -46,46 +44,52 @@ let speedInterval: NodeJS.Timeout | null = null
 const calculateSpeed = () => {
   const currentTime = Date.now()
   const currentTransferred = downloadState.progress.transferred
-  
+
   if (lastTime > 0) {
     const timeDiff = (currentTime - lastTime) / 1000 // 秒
     const sizeDiff = currentTransferred - lastTransferred // 字节
-    
+
     if (timeDiff > 0) {
       downloadSpeed.value = sizeDiff / timeDiff
     }
   }
-  
+
   lastTransferred = currentTransferred
   lastTime = currentTime
 }
 
 // 监听下载进度变化
-watch(() => downloadState.progress.transferred, () => {
-  calculateSpeed()
-})
+watch(
+  () => downloadState.progress.transferred,
+  () => {
+    calculateSpeed()
+  }
+)
 
 // 开始监听时重置速度计算
-watch(() => downloadState.isDownloading, (isDownloading) => {
-  if (isDownloading) {
-    lastTransferred = 0
-    lastTime = 0
-    downloadSpeed.value = 0
-    
-    // 每秒更新一次速度显示
-    speedInterval = setInterval(() => {
-      if (!downloadState.isDownloading) {
-        downloadSpeed.value = 0
+watch(
+  () => downloadState.isDownloading,
+  (isDownloading) => {
+    if (isDownloading) {
+      lastTransferred = 0
+      lastTime = 0
+      downloadSpeed.value = 0
+
+      // 每秒更新一次速度显示
+      speedInterval = setInterval(() => {
+        if (!downloadState.isDownloading) {
+          downloadSpeed.value = 0
+        }
+      }, 1000)
+    } else {
+      if (speedInterval) {
+        clearInterval(speedInterval)
+        speedInterval = null
       }
-    }, 1000)
-  } else {
-    if (speedInterval) {
-      clearInterval(speedInterval)
-      speedInterval = null
+      downloadSpeed.value = 0
     }
-    downloadSpeed.value = 0
   }
-})
+)
 
 onUnmounted(() => {
   if (speedInterval) {
@@ -96,11 +100,11 @@ onUnmounted(() => {
 // 格式化字节大小
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B'
-  
+
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 </script>
@@ -168,14 +172,14 @@ const formatBytes = (bytes: number): string => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #0052d9, #266fe8);
+  background: linear-gradient(90deg, var(--td-brand-color-5), var(--td-brand-color-3));
   border-radius: 4px;
   transition: width 0.3s ease;
 }
 
 .progress-text {
   font-weight: 600;
-  color: #0052d9;
+  color: var(--td-brand-color-6);
   min-width: 40px;
   text-align: right;
 }
@@ -195,7 +199,7 @@ const formatBytes = (bytes: number): string => {
 
 .download-speed {
   text-align: center;
-  color: #0052d9;
+  color: var(--td-brand-color-4);
   font-weight: 500;
 }
 
@@ -205,19 +209,19 @@ const formatBytes = (bytes: number): string => {
     background: #2d2d2d;
     color: #fff;
   }
-  
+
   .progress-header h3 {
     color: #fff;
   }
-  
+
   .progress-header p {
     color: #ccc;
   }
-  
+
   .progress-bar {
     background-color: #404040;
   }
-  
+
   .progress-details {
     color: #ccc;
   }
