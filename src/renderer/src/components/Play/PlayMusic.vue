@@ -412,7 +412,7 @@ const playNext = async () => {
 
 // 定期保存当前播放位置
 let savePositionInterval: number | null = null
-let unEnded:()=>any = ()=>{}
+let unEnded: () => any = () => {}
 // 初始化播放器
 onMounted(async () => {
   console.log('加载')
@@ -421,7 +421,7 @@ onMounted(async () => {
 
   // 监听音频结束事件，根据播放模式播放下一首
   unEnded = controlAudio.subscribe('ended', () => {
-    window.requestAnimationFrame(()=>{
+    window.requestAnimationFrame(() => {
       playNext()
     })
   })

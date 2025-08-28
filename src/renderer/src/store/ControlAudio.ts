@@ -198,8 +198,8 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
   }
   const stop = () => {
     if (Audio.audio) {
+      Audio.isPlay = false
       return transitionVolume(Audio.audio, Audio.volume / 100, false, true).then(() => {
-        Audio.isPlay = false
         Audio.audio?.pause()
       })
     }
