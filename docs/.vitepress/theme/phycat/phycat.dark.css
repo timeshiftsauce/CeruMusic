@@ -1,6 +1,5 @@
-
 /* 暗色主题界面UI颜色重写 */
-.dropdown-menu{
+.dropdown-menu {
   background: #222222;
 }
 #recent-file-panel {
@@ -19,31 +18,29 @@
   border: 1px solid #9292928f;
 }
 
-
-
 /* 字体引入：鸿蒙字体 */
 
 @font-face {
-  font-family: "HarmonyOS_Sans_SC";
+  font-family: 'HarmonyOS_Sans_SC';
   font-weight: normal;
   font-style: normal;
-  src: url("HarmonyOS_Sans_SC_Regular.woff");
+  src: url('HarmonyOS_Sans_SC_Regular.woff');
 }
 
 @font-face {
-  font-family: "HarmonyOS_Sans_SC";
+  font-family: 'HarmonyOS_Sans_SC';
   font-weight: bold;
   font-style: normal;
-  src: url("HarmonyOS_Sans_SC_Bold.woff");
+  src: url('HarmonyOS_Sans_SC_Bold.woff');
 }
 @font-face {
-  font-family: "CascadiaCode";
+  font-family: 'CascadiaCode';
   src: url('Cascadia-Code-Regular.ttf');
 }
 
 html {
   font-size: 16px;
-  font-family: "HarmonyOS_Sans_SC";
+  font-family: 'HarmonyOS_Sans_SC';
 }
 
 /* 打印页面设置 */
@@ -61,7 +58,11 @@ html {
   p {
     line-height: 1.5rem; /*设置打印内容的行高*/
   }
-  ol,ul,figure,pre {  /*设置一些元素不会被分页截断对应有序列表、无序列表、图片(表格)、代码块*/
+  ol,
+  ul,
+  figure,
+  pre {
+    /*设置一些元素不会被分页截断对应有序列表、无序列表、图片(表格)、代码块*/
     page-break-inside: avoid;
     break-inside: avoid;
   }
@@ -87,8 +88,9 @@ html.dark #app .vp-doc {
 html.dark #app .vp-doc p {
   color: var(--dark-text-color);
   margin: 10px 10px;
-  font-family: Optima-Regular, Optima, PingFangSC-light, PingFangTC-light,
-    "PingFang SC", Cambria, Cochin, Georgia, Times, "Times New Roman", serif;
+  font-family:
+    Optima-Regular, Optima, PingFangSC-light, PingFangTC-light, 'PingFang SC', Cambria, Cochin,
+    Georgia, Times, 'Times New Roman', serif;
 
   font-size: 1rem;
   word-spacing: 2px;
@@ -97,7 +99,7 @@ html.dark #app .vp-doc h3:after,
 h4:after,
 h5:after,
 h6:after {
-  content: "";
+  content: '';
   display: inline-block;
   margin-left: 0.2em;
   height: 2em;
@@ -182,7 +184,7 @@ html.dark #app .vp-doc h4 {
 }
 
 html.dark #app .vp-doc h4::before {
-  content: "";
+  content: '';
   margin-right: 7px;
   display: inline-block;
   background-color: var(--head-title-color);
@@ -200,7 +202,7 @@ html.dark #app .vp-doc h5 {
 }
 
 html.dark #app .vp-doc h5::before {
-  content: "";
+  content: '';
   margin-right: 7px;
   display: inline-block;
   background-color: #ffffff;
@@ -218,7 +220,7 @@ html.dark #app .vp-doc h6 {
 }
 
 html.dark #app .vp-doc h6::before {
-  content: "-";
+  content: '-';
   color: var(--head-title-color);
   margin-right: 7px;
   display: inline-block;
@@ -251,170 +253,160 @@ h5 {
 }
 
 .sidebar-content {
-  counter-reset: h1
+  counter-reset: h1;
 }
 .outline-content {
-  counter-reset: h1
+  counter-reset: h1;
 }
 .outline-h1 {
-  counter-reset: h2
+  counter-reset: h2;
 }
 
 .outline-h2 {
-  counter-reset: h3
+  counter-reset: h3;
 }
 
 .outline-h3 {
-  counter-reset: h4
+  counter-reset: h4;
 }
 
 .outline-h4 {
-  counter-reset: h5
+  counter-reset: h5;
 }
 
 .outline-h5 {
-  counter-reset: h6
+  counter-reset: h6;
 }
 
-
-
 .md-toc-content {
-  counter-reset: h1toc
+  counter-reset: h1toc;
 }
 
 .md-toc-h1 {
-  counter-reset: h2toc
+  counter-reset: h2toc;
 }
 
 .md-toc-h2 {
-  counter-reset: h3toc
+  counter-reset: h3toc;
 }
 
 .md-toc-h3 {
-  counter-reset: h4toc
+  counter-reset: h4toc;
 }
 
 .md-toc-h4 {
-  counter-reset: h5toc
+  counter-reset: h5toc;
 }
 
 .md-toc-h5 {
-  counter-reset: h6toc
+  counter-reset: h6toc;
 }
-
 
 html.dark #app .vp-doc h1:before {
   counter-increment: h1;
   content: var(--autonum-h1);
 }
-#outline-content li.outline-h1>div>span.outline-label:before {
+#outline-content li.outline-h1 > div > span.outline-label:before {
   counter-increment: h1;
   content: var(--autonum-h1);
 }
-.outline-content .outline-h1>.outline-item>.outline-label:before{
+.outline-content .outline-h1 > .outline-item > .outline-label:before {
   counter-increment: h1;
   content: var(--autonum-h1);
 }
-html.dark #app .vp-doc span.md-toc-item.md-toc-h1>a:before {
+html.dark #app .vp-doc span.md-toc-item.md-toc-h1 > a:before {
   counter-increment: h1toc;
   content: var(--autonum-h1toc);
 }
-
 
 html.dark #app .vp-doc h2:before {
   counter-increment: h2;
   content: var(--autonum-h2);
 }
-#outline-content li.outline-h2>div>span.outline-label:before {
+#outline-content li.outline-h2 > div > span.outline-label:before {
   counter-increment: h2;
   content: var(--autonum-h2);
 }
-.outline-content .outline-h2>.outline-item>.outline-label:before {
+.outline-content .outline-h2 > .outline-item > .outline-label:before {
   counter-increment: h2;
   content: var(--autonum-h2);
 }
-html.dark #app .vp-doc span.md-toc-item.md-toc-h2>a:before {
+html.dark #app .vp-doc span.md-toc-item.md-toc-h2 > a:before {
   counter-increment: h2toc;
   content: var(--autonum-h2toc);
 }
-
 
 html.dark #app .vp-doc h3 > span::before {
   counter-increment: h3;
   content: var(--autonum-h3);
 }
-#outline-content li.outline-h3>div>span.outline-label:before {
+#outline-content li.outline-h3 > div > span.outline-label:before {
   counter-increment: h3;
   content: var(--autonum-h3);
 }
-.outline-content .outline-h3>.outline-item>.outline-label:before {
+.outline-content .outline-h3 > .outline-item > .outline-label:before {
   counter-increment: h3;
   content: var(--autonum-h3);
 }
-html.dark #app .vp-doc span.md-toc-item.md-toc-h3>a:before {
+html.dark #app .vp-doc span.md-toc-item.md-toc-h3 > a:before {
   counter-increment: h3toc;
   content: var(--autonum-h3toc);
 }
-
-
 
 html.dark #app .vp-doc h4 > span::before {
   counter-increment: h4;
   content: var(--autonum-h4);
 }
-#outline-content li.outline-h4>div>span.outline-label:before {
+#outline-content li.outline-h4 > div > span.outline-label:before {
   counter-increment: h4;
   content: var(--autonum-h4);
 }
-.outline-content .outline-h4>.outline-item>.outline-label:before {
+.outline-content .outline-h4 > .outline-item > .outline-label:before {
   counter-increment: h4;
   content: var(--autonum-h4);
 }
-html.dark #app .vp-doc span.md-toc-item.md-toc-h4>a:before {
+html.dark #app .vp-doc span.md-toc-item.md-toc-h4 > a:before {
   counter-increment: h4toc;
   content: var(--autonum-h4toc);
 }
-
 
 html.dark #app .vp-doc h5 > span::before {
   counter-increment: h5;
   content: var(--autonum-h5);
 }
-#outline-content li.outline-h5>div>span.outline-label:before {
+#outline-content li.outline-h5 > div > span.outline-label:before {
   counter-increment: h5;
   content: var(--autonum-h5);
 }
-.outline-content .outline-h5>.outline-item>.outline-label:before {
+.outline-content .outline-h5 > .outline-item > .outline-label:before {
   counter-increment: h5;
   content: var(--autonum-h5);
 }
-html.dark #app .vp-doc span.md-toc-item.md-toc-h5>a:before {
+html.dark #app .vp-doc span.md-toc-item.md-toc-h5 > a:before {
   counter-increment: h5toc;
   content: var(--autonum-h5toc);
 }
-
 
 html.dark #app .vp-doc h6 > span::before {
   counter-increment: h6;
   content: var(--autonum-h6);
 }
-#outline-content li.outline-h6>div>span.outline-label:before {
+#outline-content li.outline-h6 > div > span.outline-label:before {
   counter-increment: h6;
   content: var(--autonum-h6);
 }
-.outline-content .outline-h6>.outline-item>.outline-label:before {
+.outline-content .outline-h6 > .outline-item > .outline-label:before {
   counter-increment: h6;
   content: var(--autonum-h6);
 }
-html.dark #app .vp-doc span.md-toc-item.md-toc-h6>a:before {
+html.dark #app .vp-doc span.md-toc-item.md-toc-h6 > a:before {
   counter-increment: h6toc;
   content: var(--autonum-h6toc);
 }
 
-
 /* 列表 */
-::marker {
-  color: var(--dark-text-color);
+html.dark ::marker {
+  color: var(--dark-text-color) !important;
   font-weight: bold;
 }
 
@@ -466,7 +458,7 @@ html.dark #app .vp-doc li section {
 }
 
 html.dark #app .vp-doc li:before {
-  content: "";
+  content: '';
   height: calc(100% - 50px);
   top: 35px;
   position: absolute;
@@ -474,10 +466,9 @@ html.dark #app .vp-doc li:before {
   left: -14.5px;
 }
 
-
 /* 任务列表样式 */
 
-.task-list-item input{
+.task-list-item input {
   width: 1.25rem;
   height: 1.25rem;
   display: block;
@@ -486,12 +477,12 @@ html.dark #app .vp-doc li:before {
   left: 4px;
 }
 
-.task-list-item input:focus{
+.task-list-item input:focus {
   outline: none;
   box-shadow: none;
 }
 
-.task-list-item input:before{
+.task-list-item input:before {
   border: 1px solid var(--element-color-deep);
   border-radius: 1.2rem;
   width: 1.2rem;
@@ -503,10 +494,10 @@ html.dark #app .vp-doc li:before {
 }
 
 .task-list-item input:checked:before,
-.task-list-item input[checked]:before{
+.task-list-item input[checked]:before {
   background: #c6c6c6;
   border-width: 2px;
-  display:inline-block;
+  display: inline-block;
   transition: background-color 200ms ease-in-out;
 }
 
@@ -520,17 +511,17 @@ html.dark #app .vp-doc li:before {
   text-decoration-color:var(--element-color)
 } */
 
-.task-list-item input[type="checkbox"] + p span {
+.task-list-item input[type='checkbox'] + p span {
   position: relative;
   display: inline-block;
 }
 
-.task-list-item input[type="checkbox"] + p span::after {
-  content: "";
+.task-list-item input[type='checkbox'] + p span::after {
+  content: '';
   position: absolute;
   left: 0;
   top: 52%;
-  width: calc(100%*var(--check-line));
+  width: calc(100% * var(--check-line));
   height: 2px;
   background: var(--element-color);
   transform: scaleX(0);
@@ -538,11 +529,11 @@ html.dark #app .vp-doc li:before {
   transition: transform 0.2s ease-in-out;
 }
 
-.task-list-item input[type="checkbox"]:checked + p span::after {
+.task-list-item input[type='checkbox']:checked + p span::after {
   transform: scaleX(1);
 }
 
-.task-list-item input[type="checkbox"]:not(:checked) + p span::after {
+.task-list-item input[type='checkbox']:not(:checked) + p span::after {
   transform-origin: right center;
   transition-delay: 0.1s;
 }
@@ -683,7 +674,7 @@ html.dark #app .vp-doc p code {
   color: var(--element-color-linecode);
   background: var(--element-color-linecode-background);
   border-radius: 3px;
-  font-family: "CascadiaCode" monospace;
+  font-family: 'CascadiaCode' monospace;
   letter-spacing: 0.5px;
 }
 
@@ -692,9 +683,9 @@ html.dark #app .vp-doc li code {
 }
 
 /* 代码块 */
-.md-fences:not([lang="mermaid"])::before {
+html.dark #app div[class^='language'] pre:not(.language-bash)::before {
   content: attr(lang);
-  font-family: "CascadiaCode" monospace;
+  font-family: 'CascadiaCode' monospace;
   text-align: right;
   padding-right: 15px;
   color: #7e7e7e;
@@ -720,7 +711,7 @@ html.dark #app .vp-doc li code {
 .cm-s-inner.CodeMirror {
   padding: 1.2rem 0.8rem;
   color: #4f5467;
-  font-family: "CascadiaCode" monospace;
+  font-family: 'CascadiaCode' monospace;
   border-radius: 10px;
   background-color: #fa0303;
   line-height: 1.6rem;
@@ -742,7 +733,7 @@ pre.CodeMirror-line {
   color: #a3a3a3;
 }
 
-.cm-s-inner.CodeMirror {
+html.dark #app div[class^='language'] pre:not([lang='mermaid']) code {
   background: #222222;
   border-radius: 0 0 5px 5px;
   padding: 20px 10px 20px 10px;
@@ -757,12 +748,12 @@ pre.CodeMirror-line {
 
 /* 代码块颜色 */
 .cm-keyword {
-  color: #48CFE9 !important;
+  color: #48cfe9 !important;
   font-weight: 700 !important;
 }
 
 .cm-variable {
-  color: #C2EAFF !important;
+  color: #c2eaff !important;
 }
 
 .cm-tag {
@@ -772,7 +763,7 @@ pre.CodeMirror-line {
 
 .cm-variable-3,
 .cm-variable-2 {
-  color: #DEBBFB !important;
+  color: #debbfb !important;
   font-weight: 700 !important;
 }
 
@@ -832,7 +823,7 @@ pre.CodeMirror-line {
 kbd {
   padding: 2px 4px;
   font-size: 90%;
-  background:var(--element-color-linecode-background);
+  background: var(--element-color-linecode-background);
   color: var(--element-color-linecode);
   border: var(--element-color-shallow) solid 1px;
   border-radius: 3px;
@@ -891,7 +882,7 @@ html.dark #app .vp-doc .footnote-item em {
 /* 目录 */
 
 .md-toc * {
-  font-family: "HarmonyOS_Sans_SC";
+  font-family: 'HarmonyOS_Sans_SC';
 }
 .md-tooltip-hide > span {
   display: none;
@@ -901,7 +892,7 @@ html.dark #app .vp-doc .footnote-item em {
   display: inline-block;
   width: 100%;
   text-align: center;
-  content: "目录";
+  content: '目录';
   font-size: 20px;
   font-weight: 700;
   color: var(--dark-text-color);
@@ -929,7 +920,7 @@ html.dark #app .vp-doc .footnote-item em {
   font-size: 0.92rem;
   background-color: var(--dark-background-color);
 }
-.file-tree-node.active>.file-node-background{
+.file-tree-node.active > .file-node-background {
   background-color: #222222;
 }
 
@@ -1020,7 +1011,7 @@ span.file-node-title {
 }
 
 #outline-content .outline-h2 > .outline-item::before {
-  content: "";
+  content: '';
   width: 12px;
   height: 12px;
   background: var(--element-color);
@@ -1038,7 +1029,7 @@ span.file-node-title {
 }
 
 #outline-content .outline-h2::after {
-  content: "";
+  content: '';
   height: calc(100% - 24px);
   width: 1px;
   background: var(--element-color);
@@ -1065,7 +1056,7 @@ span.file-node-title {
 }
 
 .outline-item-active:not(.outline-item-wrapper)::after {
-  content: "";
+  content: '';
   position: relative;
   width: 11px;
   height: 8px;
@@ -1077,7 +1068,7 @@ span.file-node-title {
 }
 
 /* 导出HTML的样式 */
-.typora-export-content{
+.typora-export-content {
   background: var(--dark-background-color);
   color: var(--dark-text-color);
 }
@@ -1085,7 +1076,7 @@ body.typora-export {
   padding-left: 0px;
 }
 .typora-export-content .outline-content::before {
-  content: "目录";
+  content: '目录';
   font-size: 20px;
   font-weight: bold;
   position: absolute;
@@ -1111,7 +1102,7 @@ body.typora-export {
 }
 
 .typora-export-content .outline-item-active > .outline-item::after {
-  content: "";
+  content: '';
   position: relative;
   width: 11px;
   height: 8px;
@@ -1140,7 +1131,7 @@ body.typora-export {
 }
 
 .outline-content .outline-h2 > .outline-item::before {
-  content: "";
+  content: '';
   width: 12px;
   height: 12px;
   background: var(--element-color-deep);
@@ -1158,7 +1149,7 @@ body.typora-export {
 }
 
 .outline-content .outline-h2::after {
-  content: "";
+  content: '';
   height: calc(100% - 24px);
   width: 1px;
   background: var(--element-color);
