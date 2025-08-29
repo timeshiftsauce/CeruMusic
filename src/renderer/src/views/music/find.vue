@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch,WatchHandle, onUnmounted  } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 // 路由实例
@@ -13,9 +13,16 @@ const error = ref('')
 // 热门歌曲数据
 const hotSongs: any = ref([])
 
+
+let watchSource:WatchHandle |null = null
 // 获取热门歌单数据
 const fetchHotSonglist = async () => {
   const LocalUserDetail = LocalUserDetailStore()
+  watchSource =watch(LocalUserDetail.userSource,()=>{
+    if(LocalUserDetail.userSource.source){
+      fetchHotSonglist()
+    }
+  },{deep:true})
   try {
     loading.value = true
     error.value = ''
@@ -70,6 +77,11 @@ const playSong = (song: any): void => {
 // 组件挂载时获取数据
 onMounted(() => {
   fetchHotSonglist()
+})
+onUnmounted(()=>{
+  if(watchSource){
+    watchSource()
+  }
 })
 </script>
 

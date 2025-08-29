@@ -58,12 +58,10 @@ const applyTheme = (themeName) => {
 
 <template>
   <div class="page">
-    <router-view v-slot="{ Component, route }">
-      <Transition :enter-active-class="`animate__animated ${route.meta.transitionIn} pagesApp`"
-        :leave-active-class="`animate__animated ${route.meta.transitionOut} pagesApp`">
-        <KeepAlive>
+    <router-view v-slot="{ Component }">
+      <Transition :enter-active-class="`animate__animated animate__fadeIn  pagesApp`"
+        :leave-active-class="`animate__animated animate__fadeOut pagesApp`">
           <component :is="Component" />
-        </KeepAlive>
       </Transition>
     </router-view>
     <GlobalAudio />
