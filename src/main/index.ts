@@ -192,6 +192,11 @@ ipcMain.handle('service-music-request', async (_, api, args) => {
   return await musicService.request(api, args)
 })
 
+// 获取应用版本号
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
+
 aiEvents(mainWindow)
 import './events/musicCache'
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
@@ -199,18 +204,20 @@ import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/auto
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
   // Set app user model id for windows
 
   electronApp.setAppUserModelId('com.cerulean.music')
 
-  // 初始化插件系统
-  try {
-    await pluginService.initializePlugins()
-    console.log('插件系统初始化完成')
-  } catch (error) {
-    console.error('插件系统初始化失败:', error)
-  }
+  setTimeout(async () => {
+    // 初始化插件系统
+    try {
+      await pluginService.initializePlugins()
+      console.log('插件系统初始化完成')
+    } catch (error) {
+      console.error('插件系统初始化失败:', error)
+    }
+  },1000)
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

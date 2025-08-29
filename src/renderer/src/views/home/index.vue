@@ -89,75 +89,78 @@ const handleKeyDown = () => {
 </script>
 
 <template>
-  <t-layout class="home-container">
-    <!-- sidebar -->
-    <t-aside class="sidebar">
-      <div class="sidebar-content">
-        <div class="logo-section">
-          <div class="logo-icon">
-            <i class="iconfont icon-music"></i>
+  <div class="home">
+    <t-layout class="home-container">
+      <!-- sidebar -->
+      <t-aside class="sidebar">
+        <div class="sidebar-content">
+          <div class="logo-section">
+            <div class="logo-icon">
+              <i class="iconfont icon-music"></i>
+            </div>
+            <p class="app-title">
+              <span style="color: #000; font-weight: 800">Ceru Music</span>
+            </p>
           </div>
-          <p class="app-title">
-            <span style="color: #000; font-weight: 800">Ceru Music</span>
-          </p>
+
+          <nav class="nav-section">
+            <t-button v-for="(item, index) in menuList" :key="index" :variant="menuActive == index ? 'base' : 'text'"
+              :class="menuActive == index ? 'nav-button active' : 'nav-button'" block @click="handleClick(index)">
+              <i :class="`iconfont ${item.icon} nav-icon`"></i>
+              {{ item.name }}
+            </t-button>
+          </nav>
         </div>
+      </t-aside>
 
-        <nav class="nav-section">
-          <t-button v-for="(item, index) in menuList" :key="index" :variant="menuActive == index ? 'base' : 'text'"
-            :class="menuActive == index ? 'nav-button active' : 'nav-button'" block @click="handleClick(index)">
-            <i :class="`iconfont ${item.icon} nav-icon`"></i>
-            {{ item.name }}
-          </t-button>
-        </nav>
-      </div>
-    </t-aside>
+      <t-layout style="flex: 1">
+        <t-content>
+          <div class="content">
+            <!-- Header -->
+            <div class="header">
+              <t-button shape="circle" theme="default" class="nav-btn" @click="goBack">
+                <i class="iconfont icon-xiangzuo"></i>
+              </t-button>
+              <t-button shape="circle" theme="default" class="nav-btn" @click="goForward">
+                <i class="iconfont icon-xiangyou"></i>
+              </t-button>
 
-    <t-layout style="flex: 1">
-      <t-content>
-        <div class="content">
-          <!-- Header -->
-          <div class="header">
-            <t-button shape="circle" theme="default" class="nav-btn" @click="goBack">
-              <i class="iconfont icon-xiangzuo"></i>
-            </t-button>
-            <t-button shape="circle" theme="default" class="nav-btn" @click="goForward">
-              <i class="iconfont icon-xiangyou"></i>
-            </t-button>
+              <div class="search-container">
+                <div class="search-input">
+                  <svg class="icon" aria-hidden="true">
+                    <use :xlink:href="`#icon-${source}`"></use>
+                  </svg>
+                  <t-input v-model="keyword" placeholder="搜索音乐、歌手" style="width: 100%" @enter="handleKeyDown">
+                    <template #suffix>
+                      <t-button theme="primary" variant="text" shape="circle"
+                        style="display: flex; align-items: center; justify-content: center" @click="handleSearch">
+                        <SearchIcon style="font-size: 16px; color: #000" />
+                      </t-button>
+                    </template>
+                  </t-input>
+                </div>
 
-            <div class="search-container">
-              <div class="search-input">
-                <svg class="icon" aria-hidden="true">
-                  <use :xlink:href="`#icon-${source}`"></use>
-                </svg>
-                <t-input v-model="keyword" placeholder="搜索音乐、歌手" style="width: 100%" @enter="handleKeyDown">
-                  <template #suffix>
-                    <t-button theme="primary" variant="text" shape="circle"
-                      style="display: flex; align-items: center; justify-content: center" @click="handleSearch">
-                      <SearchIcon style="font-size: 16px; color: #000" />
-                    </t-button>
-                  </template>
-                </t-input>
+                <TitleBarControls :color="'#000'"></TitleBarControls>
               </div>
+            </div>
 
-              <TitleBarControls :color="'#000'"></TitleBarControls>
+            <div class="mainContent">
+              <router-view v-slot="{ Component, route }">
+                <Transition name="page"
+                  :enter-active-class="`animate__animated ${route.meta.transitionIn} animate__fast`"
+                  :leave-active-class="`animate__animated ${route.meta.transitionOut} animate__fast`">
+                  <KeepAlive exclude="list">
+                    <component :is="Component" />
+                  </KeepAlive>
+                </Transition>
+              </router-view>
             </div>
           </div>
-
-          <div class="mainContent">
-            <router-view v-slot="{ Component, route }">
-              <Transition name="page" :enter-active-class="`animate__animated ${route.meta.transitionIn} animate__fast`"
-                :leave-active-class="`animate__animated ${route.meta.transitionOut} animate__fast`">
-                <KeepAlive exclude="list">
-                  <component :is="Component" />
-                </KeepAlive>
-              </Transition>
-            </router-view>
-          </div>
-        </div>
-      </t-content>
+        </t-content>
+      </t-layout>
     </t-layout>
-  </t-layout>
-  <PlayMusic />
+    <PlayMusic />
+  </div>
 </template>
 
 <style lang="scss" scoped>
