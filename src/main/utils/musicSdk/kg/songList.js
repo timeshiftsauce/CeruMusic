@@ -407,6 +407,7 @@ export default {
     return result.list[0].global_collection_id
   },
 
+  
   async getUserListDetailByLink({ info }, link) {
     let listInfo = info['0']
     let total = listInfo.count

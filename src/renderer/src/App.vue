@@ -17,7 +17,7 @@ import './assets/theme/cyan.css'
 onMounted(() => {
   userInfo.init()
   loadSavedTheme()
-  
+
   // 应用启动后延迟3秒检查更新，避免影响启动速度
   setTimeout(() => {
     checkForUpdates()
@@ -42,23 +42,38 @@ const loadSavedTheme = () => {
 
 const applyTheme = (themeName) => {
   const documentElement = document.documentElement
-  
+
   // 移除之前的主题
   documentElement.removeAttribute('theme-mode')
-  
+
   // 应用新主题（如果不是默认主题）
   if (themeName !== 'default') {
     documentElement.setAttribute('theme-mode', themeName)
   }
-  
+
   // 保存到本地存储
   localStorage.setItem('selected-theme', themeName)
 }
 </script>
 
 <template>
-  <router-view />
-  <GlobalAudio />
-  <FloatBall />
-  <UpdateProgress />
+  <div class="page">
+    <router-view v-slot="{ Component, route }">
+      <Transition :enter-active-class="`animate__animated ${route.meta.transitionIn} pagesApp`"
+        :leave-active-class="`animate__animated ${route.meta.transitionOut} pagesApp`">
+        <KeepAlive>
+          <component :is="Component" />
+        </KeepAlive>
+      </Transition>
+    </router-view>
+    <GlobalAudio />
+    <FloatBall />
+    <UpdateProgress />
+  </div>
 </template>
+<style>
+.pagesApp {
+  width: 100vw;
+  position: fixed;
+}
+</style>

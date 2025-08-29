@@ -186,6 +186,7 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .list-container {
+  box-sizing: border-box;
   background: #fafafa;
   box-sizing: border-box;
   width: 100%;
