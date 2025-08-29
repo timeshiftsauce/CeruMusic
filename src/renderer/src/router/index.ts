@@ -1,6 +1,6 @@
 import { createWebHashHistory, createRouter, RouteRecordRaw, RouterOptions } from 'vue-router'
 
-const routes: RouteRecordRaw[] = [
+let routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'welcome',
@@ -11,10 +11,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/home/find',
     component: () => import('@renderer/views/home/index.vue'),
     children: [
-      {
-        path: '',
-        redirect: '/home/find'
-      },
       {
         path: 'find',
         name: 'find',
@@ -45,6 +41,10 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/settings',
     name: 'settings',
+    meta: {
+      transitionIn: "animate__fadeIn",
+      transitionOut: "animate__fadeOut",
+    },
     component: () => import('@renderer/views/settings/index.vue')
   },
   {
@@ -53,9 +53,30 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@renderer/views/settings/plugins.vue')
   }
 ]
+function setAnimate(routerObj: RouteRecordRaw[]) {
+  for (let i = 0; i < routerObj.length; i++) {
+    let item = routerObj[i];
+    if (item.children && item.children.length > 0) {
+      setAnimate(item.children);
+    } else {
+      if (item.meta) continue
+      item.meta = item.meta || {};
+      item.meta.transitionIn = 'animate__fadeInRight';
+      item.meta.transitionOut = 'animate__fadeOutLeft';
+    }
+  }
+}
+setAnimate(routes)
 const option: RouterOptions = {
   history: createWebHashHistory(),
-  routes
+  routes,
+  scrollBehavior(_to_, _from_, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    } else {
+      return { top: 0 };
+    }
+  },
 }
 
 const router = createRouter(option)

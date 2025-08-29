@@ -106,11 +106,12 @@ const handleMouseMove = (e: MouseEvent) => {
 
   // 限制在屏幕范围内，底部边界为 height - 196，考虑外层容器尺寸120px
   const maxX = windowSize.value.width - 120
-  const maxY = windowSize.value.height - 196
+  const maxY = windowSize.value.height - 176
+  const minY = 90 // 顶部边界限制，不允许进入顶部90px区域
 
   ballPosition.value = {
     x: Math.max(0, Math.min(x, maxX)),
-    y: Math.max(0, Math.min(y, maxY))
+    y: Math.max(minY, Math.min(y, maxY))
   }
 }
 
@@ -134,7 +135,7 @@ const handleMouseUp = () => {
       ballClass.value = 'hidden-left'
     } else {
       // 吸附到右边
-      ballPosition.value.x = windowSize.value.width - 126
+      ballPosition.value.x = windowSize.value.width - 106
       isOnLeft.value = false
       ballClass.value = 'hidden-right'
     }
@@ -374,7 +375,7 @@ const setDefaultPosition = () => {
   updateWindowSize()
   ballPosition.value = {
     x: windowSize.value.width - 126, // 考虑外层容器尺寸120px
-    y: windowSize.value.height - 196
+    y: windowSize.value.height - 176
   }
   isOnLeft.value = false
 }
@@ -390,14 +391,24 @@ const handleResize = () => {
   updateWindowSize()
   // 保证悬浮球不超出边界
   const maxX = windowSize.value.width - 120
-  const maxY = windowSize.value.height - 196
+  const maxY = windowSize.value.height - 176
+  const minY = 90 // 顶部边界限制
+  
+  // 如果悬浮球在右侧，随窗口宽度变化更新位置
+  if (!isOnLeft.value) {
+    // 重新计算右侧位置
+    ballPosition.value.x = windowSize.value.width - 106
+  }
+  
+  // 确保位置在有效范围内
   ballPosition.value.x = Math.max(0, Math.min(ballPosition.value.x, maxX))
-  ballPosition.value.y = Math.max(0, Math.min(ballPosition.value.y, maxY))
+  ballPosition.value.y = Math.max(minY, Math.min(ballPosition.value.y, maxY))
 }
 
 onMounted(() => {
   initBallPosition()
   startAutoHide()
+  handleResize()
   window.addEventListener('resize', handleResize)
 })
 
@@ -454,7 +465,7 @@ onBeforeUnmount(() => {
         :style="{
           left: isOnLeft ? ballPosition.x + 120 + 'px' : 'auto',
           right: isOnLeft ? 'auto' : windowSize.width - ballPosition.x + 20 + 'px',
-          bottom: Math.max(20, 196) + 'px'
+          bottom: Math.max(20, 176) + 'px'
         }"
       >
         <div class="ask-header">
@@ -508,8 +519,8 @@ onBeforeUnmount(() => {
 }
 
 .float-ball {
-  width: 100px;
-  height: 100px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   background: #409eff;
   display: flex;
