@@ -21,8 +21,11 @@ const api = {
     ipcRenderer.send('window-mini-mode', isMini)
   },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
-  onMusicCtrl: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) =>
-    ipcRenderer.on('music-control', callback),
+  onMusicCtrl: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => {
+    const handler = (event: Electron.IpcRendererEvent) => callback(event)
+    ipcRenderer.on('music-control', handler)
+    return () => ipcRenderer.removeListener('music-control', handler)
+  },
 
   music: {
     request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args),

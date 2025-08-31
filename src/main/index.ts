@@ -40,6 +40,7 @@ function createTray(): void {
       label: '播放/暂停',
       click: () => {
         // 这里可以添加播放控制逻辑
+        console.log('music-control')
         mainWindow?.webContents.send('music-control')
       }
     },
