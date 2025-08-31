@@ -34,7 +34,7 @@ const { setCurrentTime, start, stop, setVolume, setUrl } = controlAudio
 const showFullPlay = ref(false)
 document.addEventListener('keydown', KeyEvent)
 // 处理最小化右键的事件
-window.api.onMusicCtrl(() => {
+const removeMusicCtrlListener = window.api.onMusicCtrl(() => {
   togglePlayPause()
 })
 let timer: any = null
@@ -172,7 +172,7 @@ const playSong = async (song: SongList) => {
         // 同时更新播放列表中对应歌曲的URL
         const playlistIndex = list.value.findIndex((item) => item.songmid === song.songmid)
         if (playlistIndex !== -1) {
-          ;(list.value[playlistIndex] as any).url = urlToPlay
+          ; (list.value[playlistIndex] as any).url = urlToPlay
         }
       } catch (error) {
         throw error
@@ -377,13 +377,10 @@ const playNext = async () => {
         if (Audio.value.audio) {
           Audio.value.audio.currentTime = 0
         }
-
         // 如果当前正在播放，继续播放；如果暂停，保持暂停
-        if (Audio.value.isPlay) {
-          const startResult = start()
-          if (startResult && typeof startResult.then === 'function') {
-            await startResult
-          }
+        const startResult = start()
+        if (startResult && typeof startResult.then === 'function') {
+          await startResult
         }
         return
       }
@@ -412,7 +409,7 @@ const playNext = async () => {
 
 // 定期保存当前播放位置
 let savePositionInterval: number | null = null
-let unEnded: () => any = () => {}
+let unEnded: () => any = () => { }
 // 初始化播放器
 onMounted(async () => {
   console.log('加载')
@@ -422,6 +419,7 @@ onMounted(async () => {
   // 监听音频结束事件，根据播放模式播放下一首
   unEnded = controlAudio.subscribe('ended', () => {
     window.requestAnimationFrame(() => {
+      console.log('播放结束')
       playNext()
     })
   })
@@ -472,6 +470,9 @@ onUnmounted(() => {
   document.removeEventListener('keydown', KeyEvent)
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)
+  }
+  if (removeMusicCtrlListener) {
+    removeMusicCtrlListener()
   }
   unEnded()
 })
@@ -716,12 +717,8 @@ watch(
   <div class="player-container" @click.stop="toggleFullPlay">
     <!-- 进度条 -->
     <div class="progress-bar-container">
-      <div
-        ref="progressRef"
-        class="progress-bar"
-        @mousedown="handleProgressDragStart($event)"
-        @click.stop="handleProgressClick"
-      >
+      <div ref="progressRef" class="progress-bar" @mousedown="handleProgressDragStart($event)"
+        @click.stop="handleProgressClick">
         <div class="progress-background"></div>
         <div class="progress-filled" :style="{ width: `${progressPercentage}%` }"></div>
         <div class="progress-handle" :style="{ left: `${progressPercentage}%` }"></div>
@@ -764,22 +761,13 @@ watch(
         <div class="extra-controls">
           <!-- 播放模式按钮 -->
           <t-tooltip :content="playModeTip">
-            <t-button
-              class="control-btn"
-              shape="circle"
-              variant="text"
-              @click.stop="updatePlayMode"
-            >
+            <t-button class="control-btn" shape="circle" variant="text" @click.stop="updatePlayMode">
               <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.5em"></i>
             </t-button>
           </t-tooltip>
 
           <!-- 音量控制 -->
-          <div
-            class="volume-control"
-            @mouseenter="showVolumeSlider = true"
-            @mouseleave="showVolumeSlider = false"
-          >
+          <div class="volume-control" @mouseenter="showVolumeSlider = true" @mouseleave="showVolumeSlider = false">
             <button class="control-btn">
               <shengyin style="width: 1.5em; height: 1.5em" />
             </button>
@@ -788,12 +776,8 @@ watch(
             <transition name="volume-popup">
               <div v-show="showVolumeSlider" class="volume-slider-container" @click.stop>
                 <div class="volume-slider">
-                  <div
-                    ref="volumeBarRef"
-                    class="volume-bar"
-                    @click="handleVolumeClick"
-                    @mousedown="handleVolumeDragStart"
-                  >
+                  <div ref="volumeBarRef" class="volume-bar" @click="handleVolumeClick"
+                    @mousedown="handleVolumeDragStart">
                     <div class="volume-background"></div>
                     <div class="volume-filled" :style="{ height: `${volumeValue}%` }"></div>
                     <div class="volume-handle" :style="{ bottom: `${volumeValue}%` }"></div>
@@ -807,12 +791,7 @@ watch(
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
             <t-badge :count="list.length" :maxCount="99" color="#aaa">
-              <t-button
-                class="control-btn"
-                shape="circle"
-                variant="text"
-                @click.stop="togglePlaylist"
-              >
+              <t-button class="control-btn" shape="circle" variant="text" @click.stop="togglePlaylist">
                 <liebiao style="width: 1.5em; height: 1.5em" />
               </t-button>
             </t-badge>
@@ -822,24 +801,14 @@ watch(
     </div>
   </div>
   <div class="fullbox">
-    <FullPlay
-      :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
-      :show="showFullPlay"
-      :cover-image="songInfo.img"
-      @toggle-fullscreen="toggleFullPlay"
-      :song-info="songInfo"
-    />
+    <FullPlay :song-id="songInfo.songmid ? songInfo.songmid.toString() : null" :show="showFullPlay"
+      :cover-image="songInfo.img" @toggle-fullscreen="toggleFullPlay" :song-info="songInfo" />
   </div>
 
   <!-- 播放列表 -->
   <div v-show="showPlaylist" class="cover" @click="showPlaylist = false"></div>
   <transition name="playlist-drawer">
-    <div
-      v-show="showPlaylist"
-      class="playlist-container"
-      :class="{ 'full-screen-mode': showFullPlay }"
-      @click.stop
-    >
+    <div v-show="showPlaylist" class="playlist-container" :class="{ 'full-screen-mode': showFullPlay }" @click.stop>
       <div class="playlist-header">
         <div class="playlist-title">播放列表 ({{ list.length }})</div>
         <button class="playlist-close" @click.stop="showPlaylist = false">
@@ -853,13 +822,8 @@ watch(
           <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
         </div>
         <div v-else class="playlist-songs">
-          <div
-            v-for="song in list"
-            :key="song.songmid"
-            class="playlist-song"
-            :class="{ active: song.songmid === currentSongId }"
-            @click="playSong(song)"
-          >
+          <div v-for="song in list" :key="song.songmid" class="playlist-song"
+            :class="{ active: song.songmid === currentSongId }" @click="playSong(song)">
             <div class="song-info">
               <div class="song-name">{{ song.name }}</div>
               <div class="song-artist">{{ song.singer }}</div>

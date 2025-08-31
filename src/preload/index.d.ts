@@ -8,7 +8,7 @@ interface CustomAPI {
   close: () => void
   setMiniMode: (isMini: boolean) => void
   toggleFullscreen: () => void
-  onMusicCtrl: (callback: (event: Event, args: any) => void) => void
+  onMusicCtrl: (callback: (event: Event, args: any) => void) => () => void
 
   music: {
     request: (api: string, args: any) => Promise<any>
