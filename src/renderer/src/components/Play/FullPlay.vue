@@ -1,6 +1,7 @@
 <!-- eslint-disable vue/require-toggle-inside-transition -->
 <script lang="ts" setup>
 import TitleBarControls from '../TitleBarControls.vue'
+import AudioVisualizer from './AudioVisualizer.vue'
 // import ShaderBackground from './ShaderBackground.vue'
 import {
   BackgroundRender,
@@ -23,13 +24,15 @@ interface Props {
   show?: boolean
   coverImage?: string
   songId?: string | null
-  songInfo: SongList | { songmid: number | null }
+  songInfo: SongList | { songmid: number | null },
+  mainColor:string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   show: false,
   coverImage: '@assets/images/Default.jpg',
-  songId: ''
+  songId: '',
+  mainColor: '#fff'
 })
 // 定义事件
 const emit = defineEmits(['toggle-fullscreen'])
@@ -76,7 +79,8 @@ const state = reactive({
   albumUrl: props.coverImage,
   albumIsVideo: false,
   currentTime: 0,
-  lyricLines: [] as LyricLine[]
+  lyricLines: [] as LyricLine[],
+  lowFreqVolume: 1.0
 })
 
 // 监听歌曲ID变化，获取歌词
@@ -242,92 +246,66 @@ watch(
     state.currentTime = Math.round(newTime * 1000)
   }
 )
+
+// 处理低频音量更新
+const handleLowFreqUpdate = (volume: number) => {
+  state.lowFreqVolume = volume
+}
 </script>
 
 <template>
   <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
-    <BackgroundRender
-      ref="bgRef"
-      :album="actualCoverImage"
-      :album-is-video="false"
-      :fps="30"
-      :flow-speed="4"
-      :low-freq-volume="1"
-      :has-lyric="state.lyricLines.length > 10"
-      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
-    />
+    <BackgroundRender ref="bgRef" :album="actualCoverImage" :album-is-video="false" :fps="30" :flow-speed="4"
+     :has-lyric="state.lyricLines.length > 10"
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1" />
     <!-- 全屏按钮 -->
-    <button
-      class="fullscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="toggleFullscreen"
-    >
+    <button class="fullscreen-btn" :class="{ 'black-text': useBlackText }" @click="toggleFullscreen">
       <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
       <FullscreenExit1Icon v-else class="icon" />
     </button>
-    <button
-      class="putawayscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="emit('toggle-fullscreen')"
-    >
+    <button class="putawayscreen-btn" :class="{ 'black-text': useBlackText }" @click="emit('toggle-fullscreen')">
       <ChevronDownIcon class="icon" />
     </button>
     <Transition name="fade-nav">
-      <TitleBarControls
-        v-if="props.show"
-        class="top"
-        style="-webkit-app-region: drag"
-        :color="useBlackText ? 'black' : 'white'"
-      />
+      <TitleBarControls v-if="props.show" class="top" style="-webkit-app-region: drag"
+        :color="useBlackText ? 'black' : 'white'" />
     </Transition>
     <div class="playbox">
-      <!-- 播放控件内容
-      <div v-if="props.show" class="song-info">
-        <h1>当前播放</h1>
-        <p>这里将显示歌曲信息</p>
-      </div> -->
       <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
-        <div
-          class="box"
-          :style="
-            !Audio.isPlay
-              ? 'animation-play-state: paused;'
-              : '' +
-                (state.lyricLines.length <= 0
-                  ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
-                  : '')
-          "
-        >
-          <t-image
-            :src="coverImage"
-            :style="
-              state.lyricLines.length > 0
-                ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
-                : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
-            "
-            shape="circle"
-            class="cover"
-          />
+        <div class="box" :style="!Audio.isPlay
+            ? 'animation-play-state: paused;'
+            : '' +
+            (state.lyricLines.length <= 0
+              ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
+              : '')
+          ">
+          <t-image :src="coverImage" :style="state.lyricLines.length > 0
+              ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
+              : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
+            " shape="circle" class="cover" />
         </div>
       </div>
       <div v-show="state.lyricLines.length > 0" class="right">
-        <LyricPlayer
-          ref="lyricPlayerRef"
-          :lyric-lines="props.show ? state.lyricLines : []"
-          :current-time="state.currentTime"
-          :align-position="0.38"
-          style="mix-blend-mode: plus-lighter"
-          class="lyric-player"
-          @line-click="
+        <LyricPlayer ref="lyricPlayerRef" :lyric-lines="props.show ? state.lyricLines : []"
+          :current-time="state.currentTime"  class="lyric-player" @line-click="
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
             }
-          "
-        >
+          ">
           <template #bottom-line> Test Bottom Line </template>
         </LyricPlayer>
       </div>
+    </div>
+    <!-- 音频可视化组件 -->
+    <div class="audio-visualizer-container" v-if="props.show&&coverImage">
+      <AudioVisualizer 
+        :show="props.show && Audio.isPlay" 
+        :height="60" 
+        :bar-count="80"
+        :color='mainColor'
+        @low-freq-update="handleLowFreqUpdate"
+      />
     </div>
   </div>
 </template>
@@ -429,16 +407,14 @@ watch(
   .playbox {
     width: 100%;
     height: 100%;
-    // background-color: rgba(0, 0, 0, 0.256);
+    background-color: rgba(0, 0, 0, 0.256);
+    drop-filter: blur(10px);
+    -webkit-drop-filter: blur(10px);
+    overflow: hidden;
     display: flex;
     position: relative;
 
-    :deep(.lyric-player) {
-      --amll-lyric-player-font-size: max(2vw, 29px);
-      box-sizing: border-box;
-      width: 100%;
-      height: 100%;
-    }
+
 
     .left {
       width: 40%;
@@ -473,9 +449,45 @@ watch(
     }
 
     .right {
+      :deep(.lyric-player) {
+        font-family: lyricfont;
+        --amll-lyric-player-font-size: max(2vw, 29px);
+
+        // bottom: max(2vw, 29px);
+
+        height: 100%;
+        &>div{
+          padding-bottom: 0;
+          overflow: hidden;
+          transform: translateY(-20px);
+        }
+      }
+      
       padding: 0 20px;
-      padding-top: 90px;
+      
+      margin: 80px 0 calc(var(--play-bottom-height)) 0;
+      overflow: hidden;
+
     }
+  }
+
+  .audio-visualizer-container {
+    position: absolute;
+    bottom: var(--play-bottom-height);
+    z-index: 9999;
+    left: 0;
+    right: 0;
+    height: 60px;
+    // background: linear-gradient(to top, rgba(0, 0, 0, 0.3), transparent);
+    filter: blur(6px);
+    // max-width: 1000px;
+    // -webkit-backdrop-filter: blur(10px);
+    // border-top: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 5;
+    // padding: 0 20px;
+    display: flex;
+    align-items: center;
+    
   }
 }
 

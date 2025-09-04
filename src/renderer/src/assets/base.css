@@ -2,7 +2,11 @@
 :root {
   --play-bottom-height: max(min(10vh, 86px), 70px);
 }
-
+@font-face {
+  font-family: 'lyricfont';
+  src: url('./lyricfont.ttf');
+  font-weight: 500;
+}
 *,
 *::before,
 *::after {

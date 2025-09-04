@@ -182,7 +182,7 @@ const handleKeyDown = () => {
 
 .sidebar {
   width: 15rem;
-  background-color: #fff;
+  background-image: linear-gradient(to bottom,var(--td-brand-color-4) -140vh, #ffffff 30vh);
   border-right: 0.0625rem solid #e5e7eb;
   flex-shrink: 0;
 
@@ -270,7 +270,8 @@ const handleKeyDown = () => {
 
 .content {
   padding: 0;
-  background: #f6f6f6;
+  background-image: linear-gradient(to bottom,var(--td-brand-color-4) -110vh, #ffffff 15vh);
+
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -309,12 +310,16 @@ const handleKeyDown = () => {
         -webkit-app-region: no-drag;
         display: flex;
         align-items: center;
+        transition: width 0.3s;
         padding: 0 0.5rem;
-        width: 18.75rem;
+        width: min(18.75rem,400px);
         margin-right: 0.5rem;
         border-radius: 1.25rem !important;
         background-color: #fff;
         overflow: hidden;
+        &:has(input:focus){
+          width: max(18.75rem,400px);
+        }
       }
 
       :deep(.t-input) {

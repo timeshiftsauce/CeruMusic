@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AIFloatBallSettings: typeof import('./src/components/Settings/AIFloatBallSettings.vue')['default']
+    AudioVisualizer: typeof import('./src/components/Play/AudioVisualizer.vue')['default']
     FloatBall: typeof import('./src/components/AI/FloatBall.vue')['default']
     FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
@@ -28,7 +29,6 @@ declare module 'vue' {
     TCard: typeof import('tdesign-vue-next')['Card']
     TContent: typeof import('tdesign-vue-next')['Content']
     TDialog: typeof import('tdesign-vue-next')['Dialog']
-    TDropdown: typeof import('tdesign-vue-next')['Dropdown']
     ThemeSelector: typeof import('./src/components/ThemeSelector.vue')['default']
     TIcon: typeof import('tdesign-vue-next')['Icon']
     TImage: typeof import('tdesign-vue-next')['Image']
@@ -36,8 +36,6 @@ declare module 'vue' {
     TitleBarControls: typeof import('./src/components/TitleBarControls.vue')['default']
     TLayout: typeof import('tdesign-vue-next')['Layout']
     TLoading: typeof import('tdesign-vue-next')['Loading']
-    TRadioButton: typeof import('tdesign-vue-next')['RadioButton']
-    TRadioGroup: typeof import('tdesign-vue-next')['RadioGroup']
     TSlider: typeof import('tdesign-vue-next')['Slider']
     TSwitch: typeof import('tdesign-vue-next')['Switch']
     TTooltip: typeof import('tdesign-vue-next')['Tooltip']
