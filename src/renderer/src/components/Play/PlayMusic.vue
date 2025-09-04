@@ -802,7 +802,7 @@ watch(
   </div>
   <div class="fullbox">
     <FullPlay :song-id="songInfo.songmid ? songInfo.songmid.toString() : null" :show="showFullPlay"
-      :cover-image="songInfo.img" @toggle-fullscreen="toggleFullPlay" :song-info="songInfo" />
+      :cover-image="songInfo.img" @toggle-fullscreen="toggleFullPlay" :song-info="songInfo" :main-color="maincolor" />
   </div>
 
   <!-- 播放列表 -->
