@@ -273,17 +273,25 @@ const handleLowFreqUpdate = (volume: number) => {
     </Transition>
     <div class="playbox">
       <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
-        <div class="box" :style="!Audio.isPlay
+        <div class="cd-container" 
+          :class="{ playing: Audio.isPlay }"
+          :style="!Audio.isPlay
             ? 'animation-play-state: paused;'
             : '' +
             (state.lyricLines.length <= 0
               ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
               : '')
           ">
-          <t-image :src="coverImage" :style="state.lyricLines.length > 0
-              ? 'width: min(20vw, 380px); height: min(20vw, 380px)'
-              : 'width: 45vh; height: 45vh;transition: width 0.3s ease, height 0.3s ease; transition-delay: 1s;'
-            " shape="circle" class="cover" />
+          <!-- 黑胶唱片 -->
+          <div class="vinyl-record"></div>
+          <!-- 唱片标签 -->
+          <div class="vinyl-label">
+            <t-image :src="coverImage" shape="circle" class="cover" />
+            <div class="label-shine"></div>
+          </div>
+          <!-- 中心孔 -->
+          <div class="center-hole"></div>
+
         </div>
       </div>
       <div v-show="state.lyricLines.length > 0" class="right">
@@ -292,7 +300,9 @@ const handleLowFreqUpdate = (volume: number) => {
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
             }
-          ">
+          "
+          
+          >
           <template #bottom-line> Test Bottom Line </template>
         </LyricPlayer>
       </div>
@@ -301,7 +311,7 @@ const handleLowFreqUpdate = (volume: number) => {
     <div class="audio-visualizer-container" v-if="props.show&&coverImage">
       <AudioVisualizer 
         :show="props.show && Audio.isPlay" 
-        :height="60" 
+        :height="70" 
         :bar-count="80"
         :color='mainColor'
         @low-freq-update="handleLowFreqUpdate"
@@ -409,6 +419,7 @@ const handleLowFreqUpdate = (volume: number) => {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.256);
     drop-filter: blur(10px);
+    padding: 0 10vw;
     -webkit-drop-filter: blur(10px);
     overflow: hidden;
     display: flex;
@@ -430,20 +441,164 @@ const handleLowFreqUpdate = (volume: number) => {
       justify-content: center;
       align-items: center;
       margin: 0 0 var(--play-bottom-height) 0;
+      perspective: 1000px;
 
-      .box {
+      .cd-container {
         width: min(30vw, 700px);
         height: min(30vw, 700px);
-        background-color: #000000;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 1000%;
-        animation: rotateRecord 10s linear infinite;
+        animation: rotateRecord 33s linear infinite;
+        transition: filter .3s ease;
+        filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.6));
 
-        :deep(.cover) img {
-          user-select: none;
-          -webkit-user-drag: none;
+        &:hover {
+          filter: drop-shadow(0 20px 45px rgba(0, 0, 0, 0.7));
+        }
+
+        /* 黑胶唱片主体 */
+        .vinyl-record {
+          width: 100%;
+          height: 100%;
+          position: relative;
+          border-radius: 50%;
+          background: 
+            radial-gradient(circle at 50% 50%, #1a1a1a 0%, #0d0d0d 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          
+          /* 唱片纹理轨道 */
+          &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: 
+              repeating-conic-gradient(
+                from 0deg,
+                transparent 0deg,
+                rgba(255, 255, 255, 0.02) 0.5deg,
+                transparent 1deg,
+                rgba(255, 255, 255, 0.01) 1.5deg,
+                transparent 2deg
+              ),
+              repeating-radial-gradient(
+                circle at 50% 50%,
+                transparent 0px,
+                rgba(255, 255, 255, 0.03) 1px,
+                transparent 2px,
+                transparent 8px
+              );
+            z-index: 1;
+          }
+
+          /* 唱片光泽效果 */
+          &::after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            width: 30%;
+            height: 30%;
+            background: 
+              radial-gradient(ellipse at 30% 30%, 
+                rgba(255, 255, 255, 0.15) 0%, 
+                rgba(255, 255, 255, 0.05) 40%, 
+                transparent 70%
+              );
+            border-radius: 50%;
+            z-index: 2;
+            animation: vinylShine 6s ease-in-out infinite;
+          }
+        }
+
+        /* 唱片标签区域 */
+        .vinyl-label {
+          position: absolute;
+          width: 60%;
+          height: 60%;
+          background: 
+            radial-gradient(circle at 50% 50%, 
+              rgba(40, 40, 40, 0.95) 0%, 
+              rgba(25, 25, 25, 0.98) 70%, 
+              rgba(15, 15, 15, 1) 100%
+            );
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 3;
+          box-shadow: 
+            inset 0 0 20px rgba(0, 0, 0, 0.8),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+            0 0 10px rgba(0, 0, 0, 0.5);
+
+          :deep(.cover) {
+            position: relative;
+            z-index: 4;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 
+              0 0 20px rgba(0, 0, 0, 0.4),
+              inset 0 0 0 2px rgba(255, 255, 255, 0.1);
+            width: 95% !important;
+            height: 95% !important;
+            aspect-ratio: 1 / 1;
+
+            img {
+              user-select: none;
+              -webkit-user-drag: none;
+              border-radius: 50%;
+              filter: brightness(0.85) contrast(1.15) saturate(1.1);
+              width: 100% !important;
+              height: 100% !important;
+              object-fit: cover;
+            }
+          }
+
+          /* 标签光泽 */
+          .label-shine {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+              radial-gradient(ellipse at 25% 25%, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                transparent 50%
+              );
+            border-radius: 50%;
+            z-index: 5;
+            pointer-events: none;
+            animation: labelShine 8s ease-in-out infinite;
+          }
+        }
+
+        /* 中心孔 */
+        .center-hole {
+          position: absolute;
+          width: 8%;
+          height: 8%;
+          background: 
+            radial-gradient(circle, 
+              #000 0%, 
+              #111 30%, 
+              #222 70%, 
+              #333 100%
+            );
+          border-radius: 50%;
+          z-index: 10;
+          box-shadow: 
+            inset 0 0 8px rgba(0, 0, 0, 0.9),
+            0 0 3px rgba(0, 0, 0, 0.8);
         }
       }
     }
@@ -451,11 +606,12 @@ const handleLowFreqUpdate = (volume: number) => {
     .right {
       :deep(.lyric-player) {
         font-family: lyricfont;
-        --amll-lyric-player-font-size: max(2vw, 29px);
+        --amll-lyric-player-font-size: min(2.6vw, 32px);
 
         // bottom: max(2vw, 29px);
 
-        height: 100%;
+        height: 120%;
+        transform: translateY(-10%);
         &>div{
           padding-bottom: 0;
           overflow: hidden;
@@ -473,7 +629,7 @@ const handleLowFreqUpdate = (volume: number) => {
 
   .audio-visualizer-container {
     position: absolute;
-    bottom: var(--play-bottom-height);
+    bottom: calc(var(--play-bottom-height) - 10px);
     z-index: 9999;
     left: 0;
     right: 0;
@@ -492,7 +648,46 @@ const handleLowFreqUpdate = (volume: number) => {
 }
 
 @keyframes rotateRecord {
-  to {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vinylShine {
+  0% {
+    opacity: 0.1;
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    opacity: 0.2;
+    transform: rotate(180deg) scale(1.1);
+  }
+  100% {
+    opacity: 0.1;
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes labelShine {
+  0% {
+    opacity: 0.05;
+    transform: rotate(0deg);
+  }
+  25% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.1;
+    transform: rotate(180deg);
+  }
+  75% {
+    opacity: 0.15;
+  }
+  100% {
+    opacity: 0.05;
     transform: rotate(360deg);
   }
 }

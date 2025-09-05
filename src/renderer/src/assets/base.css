@@ -1,6 +1,6 @@
 @import './icon_font/iconfont.css';
 :root {
-  --play-bottom-height: max(min(10vh, 86px), 70px);
+  --play-bottom-height: max(min(10vh, 80px), 70px);
 }
 @font-face {
   font-family: 'lyricfont';
