@@ -533,6 +533,7 @@ watch(
 const toggleFullPlay = () => {
   if (!songInfo.value.songmid) return
   showFullPlay.value = !showFullPlay.value
+
 }
 
 // 进度条相关
@@ -710,6 +711,16 @@ watch(
   },
   { deep: true, immediate: true }
 )
+
+const bg = ref('#ffffff46')
+watch(showFullPlay,(val)=>{
+  if(val){
+    console.log('背景hei')
+    bg.value = '#00000000'
+  }else{
+    bg.value = '#ffffff46'
+  }
+})
 // onMounted(setColor)
 </script>
 
@@ -869,7 +880,8 @@ watch(
   bottom: 0;
   left: 0;
   right: 0;
-  background: #ffffff31;
+  transition: background .3s;
+  background: v-bind(bg);
   // border-top: 1px solid #e5e7eb;
   backdrop-filter: blur(1000px);
   z-index: 1000;
@@ -903,7 +915,7 @@ watch(
       left: 0;
       right: 0;
       height: 100%;
-      background: #ffffff71;
+      background: transparent;
     }
 
     .progress-filled {
@@ -955,6 +967,7 @@ watch(
   align-items: center;
   min-width: 0;
   flex: 1;
+  padding-top: 2px;
 
   .album-cover {
     width: 50px;

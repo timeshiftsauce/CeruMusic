@@ -1,4 +1,92 @@
-import { extractDominantColor } from './colorExtractor'
+import DefaultCover from '@renderer/assets/images/Default.jpg'
+import CoverImage from '@renderer/assets/images/cover.png'
+
+/**
+ * 直接从图片分析平均亮度，不依赖颜色提取器
+ * @param imageSrc 图片路径
+ * @returns 返回平均亮度值 (0-1)
+ */
+async function getImageAverageLuminance(imageSrc: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    // 处理相对路径
+    let actualSrc = imageSrc
+    if (
+      imageSrc.includes('@assets/images/Default.jpg') ||
+      imageSrc.includes('@renderer/assets/images/Default.jpg')
+    ) {
+      actualSrc = DefaultCover
+    } else if (
+      imageSrc.includes('@assets/images/cover.png') ||
+      imageSrc.includes('@renderer/assets/images/cover.png')
+    ) {
+      actualSrc = CoverImage
+    }
+
+    // 如果仍然是相对路径，使用默认亮度
+    if (actualSrc.startsWith('@')) {
+      console.warn('无法解析相对路径，使用默认亮度')
+      resolve(0.5) // 中等亮度
+      return
+    }
+
+    const img = new Image()
+    img.crossOrigin = 'Anonymous'
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('无法创建canvas上下文'))
+          return
+        }
+
+        // 使用较小的采样尺寸提高性能
+        const size = 50
+        canvas.width = size
+        canvas.height = size
+
+        ctx.drawImage(img, 0, 0, size, size)
+        const imageData = ctx.getImageData(0, 0, size, size).data
+
+        let totalLuminance = 0
+        let pixelCount = 0
+
+        // 计算所有非透明像素的平均亮度
+        for (let i = 0; i < imageData.length; i += 4) {
+          // 忽略透明像素
+          if (imageData[i + 3] < 128) continue
+
+          const r = imageData[i] / 255
+          const g = imageData[i + 1] / 255
+          const b = imageData[i + 2] / 255
+
+          // 使用WCAG 2.0相对亮度公式
+          const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
+          const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
+          const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
+
+          const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
+          totalLuminance += luminance
+          pixelCount++
+        }
+
+        const averageLuminance = pixelCount > 0 ? totalLuminance / pixelCount : 0.5
+        resolve(averageLuminance)
+      } catch (error) {
+        console.error('分析图片亮度失败:', error)
+        resolve(0.5) // 默认中等亮度
+      }
+    }
+
+    img.onerror = () => {
+      console.error('图片加载失败:', actualSrc)
+      resolve(0.5) // 默认中等亮度
+    }
+
+    img.src = actualSrc
+  })
+}
 
 /**
  * 判断图片应该使用黑色还是白色作为对比色
@@ -7,46 +95,24 @@ import { extractDominantColor } from './colorExtractor'
  */
 export async function shouldUseBlackText(imageSrc: string): Promise<boolean> {
   try {
-    // 提取主要颜色
-    const dominantColor = await extractDominantColor(imageSrc)
-
-    // 使用更准确的相对亮度计算公式 (sRGB相对亮度)
-    // 先将RGB值标准化到0-1范围
-    const r = dominantColor.r / 255
-    const g = dominantColor.g / 255
-    const b = dominantColor.b / 255
-
-    // 应用sRGB转换
-    const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
-    const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
-    const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
-
-    // 计算相对亮度 (WCAG 2.0公式)
-    const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
-
-    // 计算与黑色和白色的对比度
-    // 对比度计算公式: (L1 + 0.05) / (L2 + 0.05)，其中L1是较亮的颜色，L2是较暗的颜色
-    const contrastWithBlack = (luminance + 0.05) / 0.05
-    const contrastWithWhite = 1.05 / (luminance + 0.05)
+    // 直接分析图片的平均亮度
+    const averageLuminance = await getImageAverageLuminance(imageSrc)
 
     console.log(
-      `颜色: RGB(${dominantColor.r},${dominantColor.g},${dominantColor.b}), ` +
-        `亮度: ${luminance.toFixed(3)}, ` +
-        `与黑色对比度: ${contrastWithBlack.toFixed(2)}, ` +
-        `与白色对比度: ${contrastWithWhite.toFixed(2)}`
+      `图片: ${imageSrc}, ` +
+        `平均亮度: ${averageLuminance.toFixed(3)} ` +
+        `(考虑半透明黑色背景覆盖效果)`
     )
 
-    // 不仅考虑亮度，还要考虑对比度
-    // 如果与黑色的对比度更高，说明背景较亮，应该使用黑色文字
-    // 如果与白色的对比度更高，说明背景较暗，应该使用白色文字
-    // 但对于中等亮度的颜色，我们需要更精细的判断
-
-    // 对于中等亮度的颜色(0.3-0.6)，我们更倾向于使用黑色文本，因为黑色文本通常更易读
-    if (luminance > 0.3) {
-      return true // 使用黑色文本
-    } else {
-      return false // 使用白色文本
-    }
+    // 考虑到图片会受到rgba(0, 0, 0, 0.256)背景覆盖，实际显示会更暗
+    // 大幅提高阈值，让白色文字在更多情况下被选择
+    // 只有非常明亮的图片才使用黑色文字
+    
+    const shouldUseBlack = averageLuminance >= 0.6
+    
+    console.log(`决定使用${shouldUseBlack ? '黑色' : '白色'}文字`)
+    
+    return shouldUseBlack
   } catch (error) {
     console.error('计算对比色失败:', error)
     // 默认返回白色作为安全选择
@@ -75,24 +141,11 @@ export async function getBestContrastTextColorWithOpacity(
   opacity: number = 1
 ): Promise<string> {
   try {
-    // 提取主要颜色
-    const dominantColor = await extractDominantColor(imageSrc)
+    // 使用相同的亮度分析逻辑
+    const averageLuminance = await getImageAverageLuminance(imageSrc)
 
-    // 使用更准确的相对亮度计算公式 (sRGB相对亮度)
-    const r = dominantColor.r / 255
-    const g = dominantColor.g / 255
-    const b = dominantColor.b / 255
-
-    // 应用sRGB转换
-    const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
-    const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
-    const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
-
-    // 计算相对亮度
-    const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
-
-    // 根据亮度决定文本颜色，使用更低的阈值
-    if (luminance > 0.3) {
+    // 使用与shouldUseBlackText相同的逻辑
+    if (averageLuminance >= 0.6) {
       // 背景较亮，使用黑色文本
       return `rgba(0, 0, 0, ${opacity})`
     } else {
