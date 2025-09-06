@@ -67,10 +67,10 @@ jobs:
                 
                 # 使用 AList API 上传
                 remote_path="/$tag_name/$asset_name"
-                echo "上传到 AListPath: /yd/ceru/$(echo -n "$remote_path" | base64 -w 0)"
+                echo "上传到 AListPath: /yd/ceru/$asset_name"
                 response=$(curl -s -X PUT \
                   -H "Authorization: ${{ secrets.ALIST_TOKEN }}" \
-                  -H "File-Path: /yd/ceru/$(echo -n "$remote_path" | base64 -w 0)" \
+                  -H "File-Path: /yd/ceru/$asset_name" \
                   -H "Content-Type: application/octet-stream" \
                   --data-binary "@$asset_name" \
                   "${{ secrets.ALIST_BASE_URL }}/api/fs/put")
