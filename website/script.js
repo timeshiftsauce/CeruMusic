@@ -12,7 +12,7 @@ function scrollToFeatures() {
 }
 
 // Alist API configuration
-const ALIST_BASE_URL = 'http://47.96.72.224:5244';
+const ALIST_BASE_URL = 'https://alist.shiqianjiang.cn';
 const ALIST_USERNAME = 'ceruupdate';
 const ALIST_PASSWORD = '123456';
 
