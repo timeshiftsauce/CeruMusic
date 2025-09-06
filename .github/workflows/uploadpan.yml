@@ -73,8 +73,10 @@ jobs:
               
               echo "下载资源: $asset_name (大小: $asset_size bytes)"
 
-              # 下载资源文件
-              if ! curl -sL -o "$asset_name" \
+              # 下载资源文件 - 使用安全的文件名处理
+              safe_filename="./downloaded_file"
+              
+              if ! curl -sL -o "$safe_filename" \
                 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/octet-stream" \
                 "$asset_url"; then
@@ -82,17 +84,17 @@ jobs:
                 continue
               fi
               
-              if [ -f "$asset_name" ]; then
-                actual_size=$(wc -c < "$asset_name")
+              if [ -f "$safe_filename" ]; then
+                actual_size=$(wc -c < "$safe_filename")
                 if [ "$actual_size" -ne "$asset_size" ]; then
                   echo "❌ 文件大小不匹配: $asset_name (期望: $asset_size, 实际: $actual_size)"
-                  rm -f "$asset_name"
+                  rm -f "$safe_filename"
                   continue
                 fi
 
                 echo "上传到 AList: $asset_name"
                 
-                # 使用 AList API 上传 - 完全符合API文档要求
+                # 使用 AList API 上传
                 remote_path="/yd/ceru/$tag_name/$asset_name"
                 encoded_path=$(printf %s "$remote_path" | jq -s -R -r @uri)
                 
@@ -103,7 +105,7 @@ jobs:
                   -H "As-Task: true" \
                   -H "Content-Type: application/octet-stream" \
                   -H "Content-Length: $actual_size" \
-                  --data-binary "@$asset_name" \
+                  --data-binary "@$safe_filename" \
                   "${{ secrets.ALIST_BASE_URL }}/api/fs/put")
                 
                 # 检查上传结果
@@ -116,10 +118,10 @@ jobs:
                   echo "详细响应: $response"
                 fi
                 
-                # 删除临时文件
-                rm -f "$asset_name"
+                # 安全删除临时文件
+                rm -f "$safe_filename"
               else
-                echo "❌ 文件不存在: $asset_name"
+                echo "❌ 文件不存在: $safe_filename"
               fi
             done
           done
