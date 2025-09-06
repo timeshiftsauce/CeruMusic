@@ -1,4 +1,4 @@
-name: Sync Existing Releases to AList
+name: Sync Existing Releases to WebDAV
 
 on:
   workflow_dispatch:
@@ -12,13 +12,13 @@ permissions:
   contents: read
 
 jobs:
-  sync-releases-to-alist:
+  sync-releases-to-webdav:
     runs-on: ubuntu-latest
     steps:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl jq
+          sudo apt-get install -y curl
 
       - name: Get all releases
         id: get-releases
@@ -29,7 +29,7 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/releases")
           echo "releases_json=$(echo "$response" | jq -c '.')" >> $GITHUB_OUTPUT
 
-      - name: Sync releases to AList
+      - name: Sync releases to WebDAV
         run: |
           # 读取输入参数
           SPECIFIC_TAG="${{ github.event.inputs.tag_name }}"
@@ -37,7 +37,7 @@ jobs:
           
           echo "开始同步 releases..."
           echo "特定标签: ${SPECIFIC_TAG:-所有版本}"
-          echo "根路径: /yd/ceru"
+          echo "WebDAV 根路径: ${{ secrets.WEBDAV_BASE_URL }}/yd/ceru"
 
           # 处理每个 release
           releases_count=$(echo "$RELEASES_JSON" | jq '. | length')
@@ -92,48 +92,60 @@ jobs:
                   continue
                 fi
 
-                echo "上传到 AList: $asset_name"
+                echo "上传到 WebDAV: $asset_name"
                 
-                # 使用 AList API 上传 - 路径以 /yd/ceru 开头
+                # 构建远程路径
                 remote_path="/yd/ceru/$tag_name/$asset_name"
-                encoded_path=$(printf %s "$remote_path" | jq -s -R -r @uri)
+                full_url="${{ secrets.WEBDAV_BASE_URL }}$remote_path"
                 
-                echo "完整路径: $remote_path"
-                echo "编码路径: $encoded_path"
+                echo "完整路径: $full_url"
                 
-                # 直接上传，不使用任务模式
-                response=$(curl -s -X PUT \
-                  -H "Authorization: ${{ secrets.ALIST_TOKEN }}" \
-                  -H "File-Path: $encoded_path" \
-                  -H "Content-Type: application/octet-stream" \
-                  -H "Content-Length: $actual_size" \
-                  --data-binary "@$safe_filename" \
-                  "${{ secrets.ALIST_BASE_URL }}/api/fs/put")
-                
-                echo "API响应: $response"
-                
-                # 检查上传结果
-                if echo "$response" | jq -e '.code == 200' > /dev/null 2>&1; then
-                  echo "✅ 上传成功: $asset_name"
+                # 使用 WebDAV PUT 方法上传文件
+                if curl -s -f -X PUT \
+                  -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+                  -T "$safe_filename" \
+                  "$full_url"; then
                   
-                  # 立即验证文件是否存在
+                  echo "✅ WebDAV 上传成功: $asset_name"
+                  
+                  # 验证文件是否存在
                   echo "验证文件是否存在..."
                   sleep 2
                   
-                  check_response=$(curl -s \
-                    -H "Authorization: ${{ secrets.ALIST_TOKEN }}" \
-                    "${{ secrets.ALIST_BASE_URL }}/api/fs/get?path=$encoded_path")
-                  
-                  if echo "$check_response" | jq -e '.code == 200' > /dev/null 2>&1; then
-                    file_size=$(echo "$check_response" | jq -r '.data.size')
-                    echo "✅ 文件确认存在: $asset_name (大小: $file_size bytes)"
+                  if curl -s -f -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+                    -X PROPFIND \
+                    -H "Depth: 0" \
+                    "$full_url" > /dev/null 2>&1; then
+                    echo "✅ 文件确认存在: $asset_name"
                   else
-                    echo "❌ 文件验证失败: $asset_name"
-                    echo "验证响应: $check_response"
+                    echo "⚠️  文件验证失败，但上传可能成功"
                   fi
+                  
                 else
-                  error_msg=$(echo "$response" | jq -r '.message // "未知错误"')
-                  echo "❌ 上传失败: $asset_name - $error_msg"
+                  echo "❌ WebDAV 上传失败: $asset_name"
+                  echo "尝试创建目录后重新上传..."
+                  
+                  # 尝试先创建目录
+                  dir_path="/yd/ceru/$tag_name"
+                  dir_url="${{ secrets.WEBDAV_BASE_URL }}$dir_path"
+                  
+                  if curl -s -f -X MKCOL \
+                    -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+                    "$dir_url"; then
+                    echo "✅ 目录创建成功: $dir_path"
+                    
+                    # 重新尝试上传文件
+                    if curl -s -f -X PUT \
+                      -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+                      -T "$safe_filename" \
+                      "$full_url"; then
+                      echo "✅ 重新上传成功: $asset_name"
+                    else
+                      echo "❌ 重新上传失败: $asset_name"
+                    fi
+                  else
+                    echo "❌ 目录创建失败: $dir_path"
+                  fi
                 fi
                 
                 # 安全删除临时文件
@@ -145,4 +157,4 @@ jobs:
             done
           done
           
-          echo "🎉 同步完成"
+          echo "🎉 WebDAV 同步完成"
