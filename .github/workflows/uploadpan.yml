@@ -1,0 +1,91 @@
+name: Sync Existing Releases to Cloudreve
+
+on:
+  workflow_dispatch: # 允许手动触发
+    inputs:
+      tag_name:
+        description: '要同步的特定标签（如 v1.0.0），留空则同步所有版本'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  sync-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (for utility scripts if needed)
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Get all releases
+        id: get-releases
+        run: |
+          # 获取仓库的所有release信息
+          response=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          
+          echo "releases_json=$(echo $response | jq -c '.')" >> $GITHUB_OUTPUT
+
+      - name: Sync releases to Cloudreve
+        run: |
+          RELEASES_JSON='${{ steps.get-releases.outputs.releases_json }}'
+          SPECIFIC_TAG='${{ github.event.inputs.tag_name }}'
+
+          # 遍历所有release
+          echo "$RELEASES_JSON" | jq -c '.[]' | while read release; do
+            tag_name=$(echo "$release" | jq -r '.tag_name')
+            release_id=$(echo "$release" | jq -r '.id')
+            
+            # 如果指定了特定标签，只处理该标签
+            if [ -n "$SPECIFIC_TAG" ] && [ "$tag_name" != "$SPECIFIC_TAG" ]; then
+              echo "跳过 $tag_name，不是指定的标签 $SPECIFIC_TAG"
+              continue
+            fi
+
+            echo "正在处理版本: $tag_name (ID: $release_id)"
+
+            # 获取该release的所有资源文件
+            assets=$(curl -s \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$release_id/assets")
+
+            # 遍历所有资源文件
+            echo "$assets" | jq -c '.[]' | while read asset; do
+              asset_name=$(echo "$asset" | jq -r '.name')
+              asset_url=$(echo "$asset" | jq -r '.url')
+              browser_download_url=$(echo "$asset" | jq -r '.browser_download_url')
+              
+              echo "下载资源: $asset_name"
+              
+              # 下载资源文件
+              curl -sL -o "$asset_name" \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/octet-stream" \
+                "$asset_url"
+              
+              if [ -f "$asset_name" ]; then
+                echo "上传到 Cloudreve: $asset_name"
+                
+                # 上传到Cloudreve WebDAV，按版本号组织目录
+                curl -T "$asset_name" \
+                  -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+                  "${{ secrets.WEBDAV_URL }}/$tag_name/$asset_name"
+                
+                # 删除临时文件
+                rm "$asset_name"
+              else
+                echo "下载失败: $asset_name"
+              fi
+            done
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
