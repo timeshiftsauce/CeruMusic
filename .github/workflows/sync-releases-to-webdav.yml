@@ -36,7 +36,7 @@ jobs:
           RELEASES_JSON='${{ steps.get-releases.outputs.releases_json }}'
 
           # ========== 2. Alist 连接信息 ==========
-          ALIST_URL="${{ secrets.ALIST_BASE_URL }}"          # https://pan.example.com
+          ALIST_URL="${{ secrets.ALIST_URL }}"          # https://pan.example.com
           ALIST_USER="${{ secrets.WEBDAV_USERNAME }}"    # Alist 登录账号
           ALIST_PASS="${{ secrets.WEBDAV_PASSWORD }}"    # Alist 登录密码
           ALIST_DIR="/lz/ceru"                          # 目标根目录
