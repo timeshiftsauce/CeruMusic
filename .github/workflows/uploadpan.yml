@@ -27,64 +27,101 @@ jobs:
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/releases")
-          echo "releases_json=$(echo $response | jq -c '.')" >> $GITHUB_OUTPUT
+          echo "releases_json=$(echo "$response" | jq -c '.')" >> $GITHUB_OUTPUT
 
       - name: Sync releases to AList
         run: |
+          # 读取输入参数
+          SPECIFIC_TAG="${{ github.event.inputs.tag_name }}"
           RELEASES_JSON='${{ steps.get-releases.outputs.releases_json }}'
-          SPECIFIC_TAG='${{ github.event.inputs.tag_name }}'
+          
+          echo "开始同步 releases..."
+          echo "特定标签: ${SPECIFIC_TAG:-所有版本}"
 
-          echo "$RELEASES_JSON" | jq -c '.[]' | while read release; do
+          # 处理每个 release
+          releases_count=$(echo "$RELEASES_JSON" | jq '. | length')
+          echo "找到 $releases_count 个 releases"
+
+          for i in $(seq 0 $(($releases_count - 1))); do
+            release=$(echo "$RELEASES_JSON" | jq -c ".[$i]")
             tag_name=$(echo "$release" | jq -r '.tag_name')
             release_id=$(echo "$release" | jq -r '.id')
             
+            # 如果指定了特定标签，只处理该标签
             if [ -n "$SPECIFIC_TAG" ] && [ "$tag_name" != "$SPECIFIC_TAG" ]; then
               echo "跳过 $tag_name，不是指定的标签 $SPECIFIC_TAG"
               continue
             fi
 
-            echo "正在处理版本: $tag_name"
+            echo "正在处理版本: $tag_name (ID: $release_id)"
 
-            assets=$(curl -s \
+            # 获取该release的所有资源文件
+            assets_json=$(curl -s \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/releases/$release_id/assets")
 
-            echo "$assets" | jq -c '.[]' | while read asset; do
+            assets_count=$(echo "$assets_json" | jq '. | length')
+            echo "找到 $assets_count 个资源文件"
+
+            # 处理每个asset
+            for j in $(seq 0 $(($assets_count - 1))); do
+              asset=$(echo "$assets_json" | jq -c ".[$j]")
               asset_name=$(echo "$asset" | jq -r '.name')
               asset_url=$(echo "$asset" | jq -r '.url')
+              asset_size=$(echo "$asset" | jq -r '.size')
               
-              echo "下载资源: $asset_name"
-              
+              echo "下载资源: $asset_name (大小: $asset_size bytes)"
+
               # 下载资源文件
-              curl -sL -o "$asset_name" \
+              if ! curl -sL -o "$asset_name" \
                 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/octet-stream" \
-                "$asset_url"
+                "$asset_url"; then
+                echo "❌ 下载失败: $asset_name"
+                continue
+              fi
               
               if [ -f "$asset_name" ]; then
+                actual_size=$(wc -c < "$asset_name")
+                if [ "$actual_size" -ne "$asset_size" ]; then
+                  echo "❌ 文件大小不匹配: $asset_name (期望: $asset_size, 实际: $actual_size)"
+                  rm -f "$asset_name"
+                  continue
+                fi
+
                 echo "上传到 AList: $asset_name"
                 
-                # 使用 AList API 上传
+                # 使用 AList API 上传 - 完全符合API文档要求
                 remote_path="/$tag_name/$asset_name"
-                echo "上传到 AListPath: /yd/ceru/$asset_name"
+                encoded_path=$(printf %s "$remote_path" | jq -s -R -r @uri)
+                
+                # 构建完整的请求
                 response=$(curl -s -X PUT \
                   -H "Authorization: ${{ secrets.ALIST_TOKEN }}" \
-                  -H "File-Path: /yd/ceru/$asset_name" \
+                  -H "File-Path: $encoded_path" \
+                  -H "As-Task: true" \
                   -H "Content-Type: application/octet-stream" \
+                  -H "Content-Length: $actual_size" \
                   --data-binary "@$asset_name" \
                   "${{ secrets.ALIST_BASE_URL }}/api/fs/put")
                 
-                if echo "$response" | jq -e '.code == 200' > /dev/null; then
-                  echo "✅ 上传成功: $asset_name"
+                # 检查上传结果
+                if echo "$response" | jq -e '.code == 200' > /dev/null 2>&1; then
+                  task_id=$(echo "$response" | jq -r '.data.task.id')
+                  echo "✅ 上传成功: $asset_name (任务ID: $task_id)"
                 else
-                  echo "❌ 上传失败: $asset_name"
-                  echo "响应: $response"
+                  error_msg=$(echo "$response" | jq -r '.message // "未知错误"')
+                  echo "❌ 上传失败: $asset_name - $error_msg"
+                  echo "详细响应: $response"
                 fi
                 
-                rm "$asset_name"
+                # 删除临时文件
+                rm -f "$asset_name"
               else
-                echo "下载失败: $asset_name"
+                echo "❌ 文件不存在: $asset_name"
               fi
             done
           done
+          
+          echo "🎉 同步完成"
