@@ -37,7 +37,7 @@ jobs:
           
           echo "开始同步 releases..."
           echo "特定标签: ${SPECIFIC_TAG:-所有版本}"
-          echo "WebDAV 根路径: ${{ secrets.WEBDAV_BASE_URL }}/yd/ceru"
+          echo "WebDAV 根路径: ${{ secrets.WEBDAV_BASE_URL }}/lz/ceru"
 
           # 处理每个 release
           releases_count=$(echo "$RELEASES_JSON" | jq '. | length')
@@ -95,13 +95,13 @@ jobs:
                 echo "上传到 WebDAV: $asset_name"
                 
                 # 构建远程路径
-                remote_path="/yd/ceru/$tag_name/$asset_name"
+                remote_path="/lz/ceru/$tag_name/$asset_name"
                 full_url="${{ secrets.WEBDAV_BASE_URL }}$remote_path"
                 
                 echo "完整路径: $full_url"
                 
                 # 先尝试创建目录
-                dir_path="/yd/ceru/$tag_name"
+                dir_path="/lz/ceru/$tag_name"
                 dir_url="${{ secrets.WEBDAV_BASE_URL }}$dir_path"
                 
                 echo "创建目录: $dir_path"
