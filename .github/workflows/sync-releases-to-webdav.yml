@@ -37,8 +37,8 @@ jobs:
 
           # ========== 2. Alist 连接信息 ==========
           ALIST_URL="${{ secrets.ALIST_URL }}"          # https://pan.example.com
-          ALIST_USER="admin"    # Alist 登录账号
-          ALIST_PASS="20081005zcl"    # Alist 登录密码
+          ALIST_USER="${{ secrets.WEBDAV_USERNAME }}"    # Alist 登录账号
+          ALIST_PASS="${{ secrets.WEBDAV_PASSWORD }}"    # Alist 登录密码
           ALIST_DIR="/lz/ceru"                          # 目标根目录
 
           # ========== 3. 登录拿 token ==========
