@@ -93,7 +93,7 @@ jobs:
                 echo "上传到 AList: $asset_name"
                 
                 # 使用 AList API 上传 - 完全符合API文档要求
-                remote_path="/$tag_name/$asset_name"
+                remote_path="/yd/ceru/$tag_name/$asset_name"
                 encoded_path=$(printf %s "$remote_path" | jq -s -R -r @uri)
                 
                 # 构建完整的请求
