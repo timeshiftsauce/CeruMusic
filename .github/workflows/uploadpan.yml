@@ -74,14 +74,18 @@ jobs:
               
               echo "下载资源: $asset_name (大小: $(($asset_size/1024/1024))MB)"
               
+              # 使用安全的方式下载文件（处理以-开头的文件名）
+              safe_asset_name="./$asset_name"
+              
               # 下载资源文件，添加超时设置
-              if curl -sL --connect-timeout 30 --max-time 600 -o "$asset_name" \
+              if curl -sL --connect-timeout 30 --max-time 600 -o "$safe_asset_name" \
                 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/octet-stream" \
                 "$asset_url"; then
                 
-                if [ -f "$asset_name" ]; then
-                  file_size=$(stat -c%s "$asset_name")
+                if [ -f "$safe_asset_name" ]; then
+                  # 使用安全的方式获取文件大小（处理以-开头的文件名）
+                  file_size=$(stat -c%s -- "$safe_asset_name" 2>/dev/null || ls -l "$safe_asset_name" | awk '{print $5}')
                   echo "下载成功: $asset_name (本地大小: $(($file_size/1024/1024))MB)"
                   
                   # 创建版本目录（如果WebDAV支持MKCOL）
@@ -93,7 +97,7 @@ jobs:
                   # 上传到Cloudreve WebDAV，按版本号组织目录
                   echo "上传到 Cloudreve: $asset_name"
                   
-                  if curl --connect-timeout 30 --max-time 600 -T "$asset_name" \
+                  if curl --connect-timeout 30 --max-time 600 -T "$safe_asset_name" \
                     -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
                     "${{ secrets.WEBDAV_URL }}/$tag_name/$asset_name"; then
                     
@@ -102,8 +106,8 @@ jobs:
                     echo "上传失败: $asset_name"
                   fi
                   
-                  # 修复：安全地删除可能以破折号开头的文件
-                  rm -- "$asset_name"
+                  # 安全地删除文件
+                  rm -f -- "$safe_asset_name"
                   echo "已删除临时文件: $asset_name"
                 else
                   echo "下载失败: 文件 $asset_name 不存在"
