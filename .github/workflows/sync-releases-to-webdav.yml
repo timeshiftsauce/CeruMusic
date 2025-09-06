@@ -39,7 +39,7 @@ jobs:
           ALIST_URL="https://alist.shiqianjiang.cn"          # https://pan.example.com
           ALIST_USER="${{ secrets.WEBDAV_USERNAME }}"    # Alist 登录账号
           ALIST_PASS="${{ secrets.WEBDAV_PASSWORD }}"    # Alist 登录密码
-          ALIST_DIR="/yd/ceru/test"                          # 目标根目录
+          ALIST_DIR="/yd/ceru"                          # 目标根目录
 
           # ========== 3. 登录拿 token ==========
           echo "正在登录 Alist ..."
