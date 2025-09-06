@@ -20,6 +20,101 @@ interface UpdateInfo {
 const UPDATE_SERVER = 'https://update.ceru.shiqianjiang.cn';
 const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${app.getVersion()}`;
 
+// Alist API 配置
+const ALIST_BASE_URL = 'http://47.96.72.224:5244'; // 请替换为实际的 alist 域名
+const ALIST_USERNAME = 'ceruupdate';
+const ALIST_PASSWORD = '123456';
+
+// Alist 认证 token
+let alistToken: string | null = null;
+
+// 获取 Alist 认证 token
+async function getAlistToken(): Promise<string> {
+  if (alistToken) {
+    return alistToken;
+  }
+
+  try {
+    console.log('Authenticating with Alist...');
+    const response = await axios.post(`${ALIST_BASE_URL}/api/auth/login`, {
+      username: ALIST_USERNAME,
+      password: ALIST_PASSWORD
+    }, {
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Alist auth response:', response.data);
+
+    if (response.data.code === 200) {
+      alistToken = response.data.data.token;
+      console.log('Alist authentication successful');
+      return alistToken!; // 我们已经确认 token 存在
+    } else {
+      throw new Error(`Alist authentication failed: ${response.data.message || 'Unknown error'}`);
+    }
+  } catch (error: any) {
+    console.error('Alist authentication error:', error);
+    if (error.response) {
+      throw new Error(`Failed to authenticate with Alist: HTTP ${error.response.status} - ${error.response.data?.message || error.response.statusText}`);
+    } else {
+      throw new Error(`Failed to authenticate with Alist: ${error.message}`);
+    }
+  }
+}
+
+// 获取 Alist 文件下载链接
+async function getAlistDownloadUrl(version: string, fileName: string): Promise<string> {
+  const token = await getAlistToken();
+  const filePath = `/${version}/${fileName}`;
+
+  try {
+    console.log(`Getting file info for: ${filePath}`);
+    const response = await axios.post(`${ALIST_BASE_URL}/api/fs/get`, {
+      path: filePath
+    }, {
+      timeout: 10000,
+      headers: {
+        'Authorization': token,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Alist file info response:', response.data);
+
+    if (response.data.code === 200) {
+      const fileInfo = response.data.data;
+      
+      // 检查文件是否存在且有下载链接
+      if (fileInfo && fileInfo.raw_url) {
+        console.log('Using raw_url for download:', fileInfo.raw_url);
+        return fileInfo.raw_url;
+      } else if (fileInfo && fileInfo.sign) {
+        // 使用签名构建下载链接
+        const downloadUrl = `${ALIST_BASE_URL}/d${filePath}?sign=${fileInfo.sign}`;
+        console.log('Using signed download URL:', downloadUrl);
+        return downloadUrl;
+      } else {
+        // 尝试直接下载链接（无签名）
+        const directUrl = `${ALIST_BASE_URL}/d${filePath}`;
+        console.log('Using direct download URL:', directUrl);
+        return directUrl;
+      }
+    } else {
+      throw new Error(`Failed to get file info: ${response.data.message || 'Unknown error'}`);
+    }
+  } catch (error: any) {
+    console.error('Alist file info error:', error);
+    if (error.response) {
+      throw new Error(`Failed to get download URL from Alist: HTTP ${error.response.status} - ${error.response.data?.message || error.response.statusText}`);
+    } else {
+      throw new Error(`Failed to get download URL from Alist: ${error.message}`);
+    }
+  }
+}
+
 // 初始化自动更新器
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window;
@@ -128,8 +223,8 @@ export async function downloadUpdate() {
 }
 
 // 下载文件
-async function downloadFile(url: string): Promise<string> {
-  const fileName = path.basename(url);
+async function downloadFile(originalUrl: string): Promise<string> {
+  const fileName = path.basename(originalUrl);
   const downloadPath = path.join(app.getPath('temp'), fileName);
 
   // 进度节流变量
@@ -139,9 +234,24 @@ async function downloadFile(url: string): Promise<string> {
   const PROGRESS_THRESHOLD = 1; // 进度变化超过1%才发送
 
   try {
+    let downloadUrl = originalUrl;
+    
+    try {
+      // 从当前更新信息中提取版本号
+      const version = currentUpdateInfo?.name || app.getVersion();
+      
+      // 尝试使用 alist API 获取下载链接
+      downloadUrl = await getAlistDownloadUrl(version, fileName);
+      console.log('Using Alist download URL:', downloadUrl);
+    } catch (alistError) {
+      console.warn('Alist download failed, falling back to original URL:', alistError);
+      console.log('Using original download URL:', originalUrl);
+      downloadUrl = originalUrl;
+    }
+
     const response = await axios({
       method: 'GET',
-      url: url,
+      url: downloadUrl,
       responseType: 'stream',
       timeout: 30000, // 30秒超时
       onDownloadProgress: (progressEvent) => {
