@@ -25,6 +25,7 @@ import {
   destroyPlaylistEventListeners,
   getSongRealUrl
 } from '@renderer/utils/playlistManager'
+import defaultCoverImg from '/default-cover.png'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -702,22 +703,31 @@ async function setColor() {
   playbg.value = 'rgba(255,255,255,0.2)'
   playbghover.value = 'rgba(255,255,255,0.33)'
 }
+const bg = ref('#ffffff46')
+
 watch(
   songInfo,
   async (newVal) => {
+    bg.value = bg.value==='#ffffff'?'#ffffff46':toRaw(bg.value)
     if (newVal.img) {
       await setColor()
+    } else if(songInfo.value.songmid) {
+      songInfo.value.img = defaultCoverImg
+      await setColor()
+    }else{
+      bg.value='#ffffff'
     }
+
   },
   { deep: true, immediate: true }
 )
 
-const bg = ref('#ffffff46')
-watch(showFullPlay,(val)=>{
-  if(val){
+
+watch(showFullPlay, (val) => {
+  if (val) {
     console.log('背景hei')
-    bg.value = '#00000000'
-  }else{
+    bg.value = '#00000020'
+  } else {
     bg.value = '#ffffff46'
   }
 })
@@ -739,8 +749,9 @@ watch(showFullPlay,(val)=>{
     <div class="player-content">
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
-        <div class="album-cover" v-show="songInfo.img">
-          <img :src="songInfo.img" alt="专辑封面" />
+        <div class="album-cover" v-if="songInfo.albumId">
+          <img :src="songInfo.img" alt="专辑封面" v-if="songInfo.img" />
+          <img :src="defaultCoverImg" alt="默认封面" />
         </div>
 
         <div class="song-info">
@@ -813,7 +824,8 @@ watch(showFullPlay,(val)=>{
   </div>
   <div class="fullbox">
     <FullPlay :song-id="songInfo.songmid ? songInfo.songmid.toString() : null" :show="showFullPlay"
-      :cover-image="songInfo.img" @toggle-fullscreen="toggleFullPlay" :song-info="songInfo" :main-color="maincolor" />
+      :cover-image="songInfo.img" @toggle-fullscreen="toggleFullPlay"
+      :song-info="songInfo" :main-color="maincolor" />
   </div>
 
   <!-- 播放列表 -->

@@ -52,7 +52,7 @@ class AudioManager {
       // 创建分析器
       const analyser = context.createAnalyser()
       analyser.fftSize = fftSize
-      analyser.smoothingTimeConstant = 0.9
+      analyser.smoothingTimeConstant = 0.6
 
       // 创建增益节点作为中介，避免直接断开主音频链
       const gainNode = context.createGain()

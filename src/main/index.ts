@@ -8,6 +8,24 @@ import pluginService from './services/plugin'
 import aiEvents from './events/ai'
 import './services/musicSdk/index'
 
+// 获取单实例锁
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  // 如果没有获得锁，说明已经有实例在运行，退出当前实例
+  app.quit()
+} else {
+  // 当第二个实例尝试启动时，聚焦到第一个实例的窗口
+  app.on('second-instance', () => {
+    // 如果有窗口存在，聚焦到该窗口
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
+
 // import wy from './utils/musicSdk/wy/index'
 // import kg from './utils/musicSdk/kg/index'
 // wy.hotSearch.getList().then((res) => {

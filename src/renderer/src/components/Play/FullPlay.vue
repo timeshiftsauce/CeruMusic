@@ -503,15 +503,17 @@ const handleLowFreqUpdate = (volume: number) => {
           &::after {
             content: '';
             position: absolute;
-            top: 10%;
-            left: 10%;
-            width: 30%;
-            height: 30%;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background: 
               radial-gradient(ellipse at 30% 30%, 
-                rgba(255, 255, 255, 0.15) 0%, 
-                rgba(255, 255, 255, 0.05) 40%, 
-                transparent 70%
+                rgba(255, 255, 255, 0.08) 0%, 
+                rgba(255, 255, 255, 0.04) 25%, 
+                rgba(255, 255, 255, 0.02) 50%,
+                rgba(255, 255, 255, 0.01) 75%,
+                transparent 100%
               );
             border-radius: 50%;
             z-index: 2;

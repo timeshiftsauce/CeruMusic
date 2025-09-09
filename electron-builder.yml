@@ -19,6 +19,7 @@ win:
     - target: nsis
       arch:
         - x64
+        - ia32
   # 简化版本信息设置，避免rcedit错误
   fileAssociations:
     - ext: cerumusic
@@ -30,7 +31,7 @@ win:
   # 或者使用证书存储
   # certificateSubjectName: "Your Company Name"
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
