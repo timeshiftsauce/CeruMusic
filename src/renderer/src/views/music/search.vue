@@ -105,7 +105,7 @@ async function setPic(offset: number, source: string) {
       if (typeof url !== 'object') {
         searchResults.value[i].img = url
       } else {
-        searchResults.value[i].img = 'resources/logo.png'
+        searchResults.value[i].img = ''
       }
     } catch (e) {
       searchResults.value[i].img = 'logo.svg'
