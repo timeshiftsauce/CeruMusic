@@ -161,6 +161,26 @@ function main(source: string) {
         message: '下载成功',
         path: songPath
       }
+    },
+
+    async parsePlaylistId({url}: {url: string}) {
+      try {
+        return await Api.songList.handleParseId(url) 
+      } catch (e: any) {
+        return {
+          error: '解析歌单链接失败 ' + (e.error || e.message || e)
+        }
+      }
+    },
+
+    async getPlaylistDetailById(id: string, page: number = 1) {
+      try {
+        return await Api.songList.getListDetail(id, page)
+      } catch (e: any) {
+        return {
+          error: '获取歌单详情失败 ' + (e.error || e.message || e)
+        }
+      }
     }
   }
 }

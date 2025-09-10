@@ -26,6 +26,36 @@ interface CustomAPI {
     getSize: () => Promise<string>
   },
 
+  // 歌单管理 API
+  songList: {
+    // === 歌单管理 ===
+    create: (name: string, description?: string, source?: string) => Promise<any>
+    getAll: () => Promise<any>
+    getById: (hashId: string) => Promise<any>
+    delete: (hashId: string) => Promise<any>
+    batchDelete: (hashIds: string[]) => Promise<any>
+    edit: (hashId: string, updates: any) => Promise<any>
+    updateCover: (hashId: string, coverImgUrl: string) => Promise<any>
+    search: (keyword: string, source?: string) => Promise<any>
+    getStatistics: () => Promise<any>
+    exists: (hashId: string) => Promise<any>
+
+    // === 歌曲管理 ===
+    addSongs: (hashId: string, songs: any[]) => Promise<any>
+    removeSong: (hashId: string, songmid: string | number) => Promise<any>
+    removeSongs: (hashId: string, songmids: (string | number)[]) => Promise<any>
+    clearSongs: (hashId: string) => Promise<any>
+    getSongs: (hashId: string) => Promise<any>
+    getSongCount: (hashId: string) => Promise<any>
+    hasSong: (hashId: string, songmid: string | number) => Promise<any>
+    getSong: (hashId: string, songmid: string | number) => Promise<any>
+    searchSongs: (hashId: string, keyword: string) => Promise<any>
+    getSongStatistics: (hashId: string) => Promise<any>
+    validateIntegrity: (hashId: string) => Promise<any>
+    repairData: (hashId: string) => Promise<any>
+    forceSave: (hashId: string) => Promise<any>
+  },
+
   ai: {
     ask: (prompt: string) => Promise<any>
     askStream: (prompt: string, streamId: string) => Promise<any>

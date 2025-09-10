@@ -108,7 +108,7 @@ async function setPic(offset: number, source: string) {
         searchResults.value[i].img = ''
       }
     } catch (e) {
-      searchResults.value[i].img = 'logo.svg'
+      searchResults.value[i].img = ''
       console.log('获取失败 index' + i, e)
     }
   }

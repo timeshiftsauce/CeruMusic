@@ -8,7 +8,8 @@ import {
   nextTick,
   onActivated,
   onDeactivated,
-  toRaw
+  toRaw,
+  provide
 } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -119,7 +120,7 @@ const waitForAudioReady = (): Promise<void> => {
 
 // 存储待恢复的播放位置
 let pendingRestorePosition = 0
-let pendingRestoreSongId: number | null = null
+let pendingRestoreSongId: number | string | null = null
 
 // 记录组件被停用前的播放状态
 let wasPlaying = false
@@ -227,7 +228,7 @@ const playSong = async (song: SongList) => {
     MessagePlugin.error('播放失败，原因：' + error.message)
   }
 }
-
+provide('PlaySong', playSong)
 // 歌曲信息
 // const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
 const playMode = ref(PlayMode.SEQUENCE)
@@ -671,13 +672,13 @@ const handleProgressDragStart = (event: MouseEvent) => {
 }
 
 // 歌曲信息
-const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number }>({
+const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number | string }>({
   songmid: null,
   hash: '',
   name: '欢迎使用CeruMusic 🎉',
   singer: '可以配置音源插件来播放你的歌曲',
   albumName: '',
-  albumId: 0,
+  albumId: '0',
   source: '',
   interval: '00:00',
   img: '',

@@ -70,6 +70,47 @@ const api = {
     getSize: () => ipcRenderer.invoke('music-cache:get-size')
   },
 
+  // 歌单管理 API
+  songList: {
+    // === 歌单管理 ===
+    create: (name: string, description?: string, source?: string) =>
+      ipcRenderer.invoke('songlist:create', name, description, source),
+    getAll: () => ipcRenderer.invoke('songlist:get-all'),
+    getById: (hashId: string) => ipcRenderer.invoke('songlist:get-by-id', hashId),
+    delete: (hashId: string) => ipcRenderer.invoke('songlist:delete', hashId),
+    batchDelete: (hashIds: string[]) => ipcRenderer.invoke('songlist:batch-delete', hashIds),
+    edit: (hashId: string, updates: any) => ipcRenderer.invoke('songlist:edit', hashId, updates),
+    updateCover: (hashId: string, coverImgUrl: string) =>
+      ipcRenderer.invoke('songlist:update-cover', hashId, coverImgUrl),
+    search: (keyword: string, source?: string) =>
+      ipcRenderer.invoke('songlist:search', keyword, source),
+    getStatistics: () => ipcRenderer.invoke('songlist:get-statistics'),
+    exists: (hashId: string) => ipcRenderer.invoke('songlist:exists', hashId),
+
+    // === 歌曲管理 ===
+    addSongs: (hashId: string, songs: any[]) =>
+      ipcRenderer.invoke('songlist:add-songs', hashId, songs),
+    removeSong: (hashId: string, songmid: string | number) =>
+      ipcRenderer.invoke('songlist:remove-song', hashId, songmid),
+    removeSongs: (hashId: string, songmids: (string | number)[]) =>
+      ipcRenderer.invoke('songlist:remove-songs', hashId, songmids),
+    clearSongs: (hashId: string) => ipcRenderer.invoke('songlist:clear-songs', hashId),
+    getSongs: (hashId: string) => ipcRenderer.invoke('songlist:get-songs', hashId),
+    getSongCount: (hashId: string) => ipcRenderer.invoke('songlist:get-song-count', hashId),
+    hasSong: (hashId: string, songmid: string | number) =>
+      ipcRenderer.invoke('songlist:has-song', hashId, songmid),
+    getSong: (hashId: string, songmid: string | number) =>
+      ipcRenderer.invoke('songlist:get-song', hashId, songmid),
+    searchSongs: (hashId: string, keyword: string) =>
+      ipcRenderer.invoke('songlist:search-songs', hashId, keyword),
+    getSongStatistics: (hashId: string) =>
+      ipcRenderer.invoke('songlist:get-song-statistics', hashId),
+    validateIntegrity: (hashId: string) =>
+      ipcRenderer.invoke('songlist:validate-integrity', hashId),
+    repairData: (hashId: string) => ipcRenderer.invoke('songlist:repair-data', hashId),
+    forceSave: (hashId: string) => ipcRenderer.invoke('songlist:force-save', hashId)
+  },
+
   getUserConfig: () => ipcRenderer.invoke('get-user-config'),
 
   // 自动更新相关
