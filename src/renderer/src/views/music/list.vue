@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, toRaw } from 'vue'
 import { useRoute } from 'vue-router'
+import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { downloadSingleSong } from '@renderer/utils/download'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
@@ -53,12 +54,79 @@ const fetchPlaylistSongs = async () => {
       source: (route.query.source as string) || (LocalUserDetail.userSource.source as any)
     }
 
+    // 检查是否是本地歌单
+    const isLocalPlaylist = route.query.type === 'local' || route.query.source === 'local'
+
+    if (isLocalPlaylist) {
+      // 处理本地歌单
+      await fetchLocalPlaylistSongs()
+    } else {
+      // 处理网络歌单
+      await fetchNetworkPlaylistSongs()
+    }
+  } catch (error) {
+    console.error('获取歌单歌曲失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取本地歌单歌曲
+const fetchLocalPlaylistSongs = async () => {
+  try {
+    // 调用本地歌单API获取歌曲列表
+    const result = await window.api.songList.getSongs(playlistInfo.value.id)
+    
+    if (result.success && result.data) {
+      songs.value = result.data.map((song: any) => ({
+        singer: song.singer || '未知歌手',
+        name: song.name || '未知歌曲',
+        albumName: song.albumName || '未知专辑',
+        albumId: song.albumId || 0,
+        source: song.source || 'local',
+        interval: song.interval || '0:00',
+        songmid: song.songmid,
+        img: song.img || '',
+        lrc: song.lrc || null,
+        types: song.types || [],
+        _types: song._types || {},
+        typeUrl: song.typeUrl || {}
+      }))
+
+      // 更新歌单信息中的歌曲总数
+      playlistInfo.value.total = songs.value.length
+
+      // 获取歌单详细信息
+      const playlistResult = await window.api.songList.getById(playlistInfo.value.id)
+      if (playlistResult.success && playlistResult.data) {
+        const playlist = playlistResult.data
+        playlistInfo.value = {
+          ...playlistInfo.value,
+          title: playlist.name,
+          cover: playlist.coverImgUrl || playlistInfo.value.cover,
+          total: songs.value.length
+        }
+      }
+    } else {
+      console.error('获取本地歌单失败:', result.error)
+      songs.value = []
+    }
+  } catch (error) {
+    console.error('获取本地歌单歌曲失败:', error)
+    songs.value = []
+  }
+}
+
+// 获取网络歌单歌曲
+const fetchNetworkPlaylistSongs = async () => {
+  try {
     // 调用API获取歌单详情和歌曲列表
     const result = await window.api.music.requestSdk('getPlaylistDetail', {
       source: playlistInfo.value.source,
       id: playlistInfo.value.id,
       page: 1
     }) as any
+    
     console.log(result)
     if (result && result.list) {
       songs.value = result.list
@@ -78,9 +146,8 @@ const fetchPlaylistSongs = async () => {
       }
     }
   } catch (error) {
-    console.error('获取歌单歌曲失败:', error)
-  } finally {
-    loading.value = false
+    console.error('获取网络歌单失败:', error)
+    songs.value = []
   }
 }
 
@@ -134,6 +201,89 @@ const handleAddToPlaylist = (song: MusicItem) => {
     ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(song))
   }
 }
+
+// 替换播放列表的通用函数
+const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => {
+  if (!(window as any).musicEmitter) {
+    MessagePlugin.error('播放器未初始化')
+    return
+  }
+
+  let finalSongs = [...songsToReplace]
+  
+  if (shouldShuffle) {
+    // 创建歌曲索引数组并打乱
+    const shuffledIndexes = Array.from({ length: songsToReplace.length }, (_, i) => i)
+    for (let i = shuffledIndexes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[shuffledIndexes[i], shuffledIndexes[j]] = [shuffledIndexes[j], shuffledIndexes[i]]
+    }
+    
+    // 按打乱的顺序重新排列歌曲
+    finalSongs = shuffledIndexes.map(index => songsToReplace[index])
+  }
+  
+  // 使用自定义事件替换整个播放列表
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('replacePlaylist', finalSongs.map(song => toRaw(song)))
+  }
+  
+  // // 更新当前播放状态
+  // if (finalSongs[0]) {
+  //   currentSong.value = finalSongs[0]
+  //   isPlaying.value = true
+  // }
+  // const playerSong = inject('PlaySong',(...args:any)=>args)
+  // nextTick(()=>{
+  //   playerSong(finalSongs[0])
+  // })
+  MessagePlugin.success(`请稍等歌曲加载完成播放`)
+}
+
+// 播放整个歌单
+const handlePlayPlaylist = () => {
+  if (songs.value.length === 0) {
+    MessagePlugin.warning('歌单为空，无法播放')
+    return
+  }
+
+  const dialog = DialogPlugin.confirm({
+    header: '播放歌单',
+    body: `确定要用歌单"${playlistInfo.value.title}"中的 ${songs.value.length} 首歌曲替换当前播放列表吗？`,
+    confirmBtn: '确定替换',
+    cancelBtn: '取消',
+    onConfirm: () => {
+      console.log('播放歌单:', playlistInfo.value.title)
+      replacePlaylist(songs.value, false)
+      dialog.destroy()
+    },
+    onCancel: () => {
+      dialog.destroy()
+    }
+  })
+}
+// 随机播放歌单
+const handleShufflePlaylist = () => {
+  if (songs.value.length === 0) {
+    MessagePlugin.warning('歌单为空，无法播放')
+    return
+  }
+
+  const dialog = DialogPlugin.confirm({
+    header: '随机播放歌单',
+    body: `确定要用歌单"${playlistInfo.value.title}"中的 ${songs.value.length} 首歌曲随机替换当前播放列表吗？`,
+    confirmBtn: '确定替换',
+    cancelBtn: '取消',
+    onConfirm: () => {
+      console.log('随机播放歌单:', playlistInfo.value.title)
+      replacePlaylist(songs.value, true)
+      dialog.destroy()
+    },
+    onCancel: () => {
+      dialog.destroy()
+    }
+  })
+}
 // 组件挂载时获取数据
 onMounted(() => {
   fetchPlaylistSongs()
@@ -153,6 +303,39 @@ onMounted(() => {
           <h1 class="playlist-title">{{ playlistInfo.title }}</h1>
           <p class="playlist-author">by {{ playlistInfo.author }}</p>
           <p class="playlist-stats">{{ playlistInfo.total }} 首歌曲</p>
+          
+          <!-- 播放控制按钮 -->
+          <div class="playlist-actions">
+            <t-button 
+              theme="primary"
+              size="medium"
+              @click="handlePlayPlaylist"
+              :disabled="songs.length === 0 || loading"
+              class="play-btn"
+            >
+              <template #icon>
+                <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </template>
+              播放全部
+            </t-button>
+            
+            <t-button 
+              variant="outline"
+              size="medium"
+              @click="handleShufflePlaylist"
+              :disabled="songs.length === 0 || loading"
+              class="shuffle-btn"
+            >
+              <template #icon>
+                <svg class="shuffle-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                </svg>
+              </template>
+              随机播放
+            </t-button>
+          </div>
         </div>
       </div>
     </div>
@@ -290,7 +473,24 @@ onMounted(() => {
     .playlist-stats {
       font-size: 0.875rem;
       color: #9ca3af;
-      margin: 0;
+      margin: 0 0 1rem 0;
+    }
+
+    .playlist-actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+
+      .play-btn,
+      .shuffle-btn {
+        min-width: 120px;
+
+        .play-icon,
+        .shuffle-icon {
+          width: 16px;
+          height: 16px;
+        }
+      }
     }
   }
 }
@@ -315,6 +515,36 @@ onMounted(() => {
     .playlist-cover {
       width: 100px;
       height: 100px;
+    }
+
+    .playlist-details {
+      .playlist-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+
+        .play-btn,
+        .shuffle-btn {
+          width: 100%;
+          min-width: auto;
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .playlist-header {
+    .playlist-details {
+      .playlist-actions {
+        .play-btn,
+        .shuffle-btn {
+          .play-icon,
+          .shuffle-icon {
+            width: 14px;
+            height: 14px;
+          }
+        }
+      }
     }
   }
 }

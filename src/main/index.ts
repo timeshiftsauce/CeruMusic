@@ -218,6 +218,7 @@ ipcMain.handle('get-app-version', () => {
 
 aiEvents(mainWindow)
 import './events/musicCache'
+import './events/songList'
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
 
 // This method will be called when Electron has finished

@@ -7,6 +7,7 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 type PlaylistEvents = {
   addToPlaylistAndPlay: SongList
   addToPlaylistEnd: SongList
+  replacePlaylist: SongList[]
 }
 
 // 创建全局事件总线
@@ -46,7 +47,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const urlData = await window.api.music.requestSdk('getMusicUrl', {
       pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
       source: song.source,
-      songInfo: song,
+      songInfo: song as any,
       quality
     })
     console.log(urlData)
@@ -125,6 +126,52 @@ export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
 }
 
 /**
+ * 替换整个播放列表
+ * @param songs 要替换的歌曲列表
+ * @param localUserStore LocalUserDetail store实例
+ * @param playSongCallback 播放歌曲的回调函数
+ */
+export async function replacePlaylist(
+  songs: SongList[],
+  localUserStore: any,
+  playSongCallback: (song: SongList) => Promise<void>
+) {
+  try {
+    if (songs.length === 0) {
+      await MessagePlugin.warning('歌曲列表为空')
+      return
+    }
+
+    // 清空当前播放列表
+    localUserStore.list.length = 0
+
+    // 添加所有歌曲到播放列表
+    songs.forEach(song => {
+      localUserStore.addSong(song)
+    })
+
+    // 播放第一首歌曲
+    if (songs[0]) {
+      await getSongRealUrl(songs[0])
+      const playResult = playSongCallback(songs[0])
+      
+      if (playResult && typeof playResult.then === 'function') {
+        await playResult
+      }
+    }
+
+    await MessagePlugin.success(`已用 ${songs.length} 首歌曲替换播放列表`)
+  } catch (error: any) {
+    console.error('替换播放列表失败:', error)
+    if (error.message) {
+      await MessagePlugin.error('替换失败: ' + error.message)
+      return
+    }
+    await MessagePlugin.error('替换播放列表失败，请重试')
+  }
+}
+
+/**
  * 初始化播放列表事件监听器
  * @param localUserStore LocalUserDetail store实例
  * @param playSongCallback 播放歌曲的回调函数
@@ -142,6 +189,11 @@ export function initPlaylistEventListeners(
   emitter.on('addToPlaylistEnd', async (song: SongList) => {
     await addToPlaylistEnd(song, localUserStore)
   })
+
+  // 监听替换播放列表的事件
+  emitter.on('replacePlaylist', async (songs: SongList[]) => {
+    await replacePlaylist(songs, localUserStore, playSongCallback)
+  })
 }
 
 /**
@@ -150,6 +202,7 @@ export function initPlaylistEventListeners(
 export function destroyPlaylistEventListeners() {
   emitter.off('addToPlaylistAndPlay')
   emitter.off('addToPlaylistEnd')
+  emitter.off('replacePlaylist')
 }
 
 /**

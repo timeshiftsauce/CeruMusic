@@ -2,7 +2,7 @@ import { PlayMode } from './audio'
 import { Sources } from './Sources'
 
 export interface UserInfo {
-  lastPlaySongId?: number | null
+  lastPlaySongId?: number | string | null
   currentTime?: number
   volume?: number
   topBarStyle?: boolean

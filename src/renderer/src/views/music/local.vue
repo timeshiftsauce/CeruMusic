@@ -1,59 +1,107 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { ref, onMounted, computed, toRaw } from 'vue'
+import { useRouter } from 'vue-router'
+import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import songListAPI from '@renderer/api/songList'
+import type { SongList, Songs } from '@common/types/songList'
+import defaultCover from '/default-cover.png'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
-// 本地音乐数据
-const localSongs = ref([
+// 扩展 Songs 类型以包含本地音乐的额外属性
+interface LocalSong extends Songs {
+  path?: string
+  size?: string
+  format?: string
+  bitrate?: string
+}
+
+// 本地音乐数据（示例数据，实际应该从本地文件系统获取）
+const localSongs = ref<LocalSong[]>([
   {
-    id: 1,
-    title: '夜曲',
-    artist: '周杰伦',
-    album: '十一月的萧邦',
-    duration: '3:37',
+    songmid: 'local_001',
+    name: '夜曲',
+    singer: '周杰伦',
+    albumName: '十一月的萧邦',
+    albumId: 'album_001',
+    interval: '3:37', // 使用 interval 而不是 duration
+    source: 'local',
+    img: '',
+    lrc: null,
+    types: ['mp3'],
+    _types: {},
+    typeUrl: {},
     path: '/music/夜曲.mp3',
     size: '8.5 MB',
     format: 'MP3',
     bitrate: '320 kbps'
   },
   {
-    id: 2,
-    title: '青花瓷',
-    artist: '周杰伦',
-    album: '我很忙',
-    duration: '3:58',
+    songmid: 'local_002',
+    name: '青花瓷',
+    singer: '周杰伦',
+    albumName: '我很忙',
+    albumId: 'album_002',
+    interval: '3:58',
+    source: 'local',
+    img: '',
+    lrc: null,
+    types: ['mp3'],
+    _types: {},
+    typeUrl: {},
     path: '/music/青花瓷.mp3',
     size: '9.2 MB',
     format: 'MP3',
     bitrate: '320 kbps'
   },
   {
-    id: 3,
-    title: '稻香',
-    artist: '周杰伦',
-    album: '魔杰座',
-    duration: '3:43',
+    songmid: 'local_003',
+    name: '稻香',
+    singer: '周杰伦',
+    albumName: '魔杰座',
+    albumId: 'album_003',
+    interval: '3:43',
+    source: 'local',
+    img: '',
+    lrc: null,
+    types: ['mp3'],
+    _types: {},
+    typeUrl: {},
     path: '/music/稻香.mp3',
     size: '8.8 MB',
     format: 'MP3',
     bitrate: '320 kbps'
   },
   {
-    id: 4,
-    title: '告白气球',
-    artist: '周杰伦',
-    album: '周杰伦的床边故事',
-    duration: '3:34',
+    songmid: 'local_004',
+    name: '告白气球',
+    singer: '周杰伦',
+    albumName: '周杰伦的床边故事',
+    albumId: 'album_004',
+    interval: '3:34',
+    source: 'local',
+    img: '',
+    lrc: null,
+    types: ['mp3'],
+    _types: {},
+    typeUrl: {},
     path: '/music/告白气球.mp3',
     size: '8.4 MB',
     format: 'MP3',
     bitrate: '320 kbps'
   },
   {
-    id: 5,
-    title: '七里香',
-    artist: '周杰伦',
-    album: '七里香',
-    duration: '4:05',
+    songmid: 'local_005',
+    name: '七里香',
+    singer: '周杰伦',
+    albumName: '七里香',
+    albumId: 'album_005',
+    interval: '4:05',
+    source: 'local',
+    img: '',
+    lrc: null,
+    types: ['mp3'],
+    _types: {},
+    typeUrl: {},
     path: '/music/七里香.mp3',
     size: '9.6 MB',
     format: 'MP3',
@@ -61,151 +109,420 @@ const localSongs = ref([
   }
 ])
 
-// 统计信息
-const stats = ref({
-  totalSongs: localSongs.value.length,
-  totalDuration: '19:17',
-  totalSize: '44.5 MB'
+// 歌单列表
+const playlists = ref<SongList[]>([])
+const loading = ref(false)
+
+// 对话框状态
+const showCreatePlaylistDialog = ref(false)
+const showImportDialog = ref(false)
+
+// 表单数据
+const newPlaylistForm = ref({
+  name: '我的歌单',
+  description: '这是我创建的歌单'
 })
 
-const playSong = (song: any): void => {
-  console.log('播放本地歌曲:', song.title)
-}
-
-const importMusic = (): void => {
-  console.log('导入音乐文件')
-  // 这里可以调用 Electron 的文件选择对话框
-}
-
-const openMusicFolder = (): void => {
-  console.log('打开音乐文件夹')
-  // 这里可以调用 Electron 的文件夹打开功能
-}
-
-const deleteSong = (song: any): void => {
-  console.log('删除歌曲:', song.title)
-  // 这里可以添加删除确认和实际删除逻辑
-}
-
-// 歌单相关功能
-interface Playlist {
-  id: number
-  name: string
-  songs: any[]
-  createdAt: string
-  updatedAt: string
-}
-
-const playlists = ref<Playlist[]>([
-  {
-    id: 1,
-    name: '我喜欢的音乐',
-    songs: [localSongs.value[0], localSongs.value[2]],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 2,
-    name: '周杰伦精选',
-    songs: [localSongs.value[1], localSongs.value[3], localSongs.value[4]],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+// 将时长字符串转换为秒数
+const parseInterval = (interval: string): number => {
+  if (!interval) return 0
+  const parts = interval.split(':')
+  if (parts.length === 2) {
+    const minutes = parseInt(parts[0]) || 0
+    const seconds = parseInt(parts[1]) || 0
+    return minutes * 60 + seconds
   }
-])
+  return 0
+}
 
-// 当前选中的歌单
-const currentPlaylist = ref<Playlist | null>(null)
+// 格式化时长（从秒数转换为 mm:ss 格式）
+const formatDuration = (seconds: number): string => {
+  if (!seconds) return '0:00'
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
 
-// 显示歌单对话框
-const showPlaylistDialog = ref(false)
-const showCreatePlaylistDialog = ref(false)
-const newPlaylistName = ref('')
+// 统计信息
+const stats = computed(() => {
+  const totalDurationSeconds = localSongs.value.reduce((sum, song) => {
+    return sum + parseInterval(song.interval || '0:00')
+  }, 0)
+
+  const totalSize = localSongs.value.reduce((sum, song) => {
+    const sizeStr = song.size || '0 MB'
+    const sizeNum = parseFloat(sizeStr.replace(/[^\d.]/g, ''))
+    return sum + sizeNum
+  }, 0)
+
+  return {
+    totalSongs: localSongs.value.length,
+    totalDuration: formatDuration(totalDurationSeconds),
+    totalSize: `${totalSize.toFixed(1)} MB`
+  }
+})
+
+// 加载歌单列表
+const loadPlaylists = async () => {
+  loading.value = true
+  try {
+    const result = await songListAPI.getAll()
+    if (result.success) {
+      playlists.value = result.data || []
+    } else {
+      MessagePlugin.error(result.error || '加载歌单失败')
+    }
+  } catch (error) {
+    console.error('加载歌单失败:', error)
+    MessagePlugin.error('加载歌单失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 // 创建新歌单
-const createPlaylist = () => {
-  if (!newPlaylistName.value.trim()) {
+const createPlaylist = async () => {
+  if (!newPlaylistForm.value.name.trim()) {
     MessagePlugin.warning('歌单名称不能为空')
     return
   }
 
-  const newPlaylist: Playlist = {
-    id: playlists.value.length + 1,
-    name: newPlaylistName.value,
-    songs: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
+  try {
+    const result = await songListAPI.create(
+      newPlaylistForm.value.name,
+      newPlaylistForm.value.description,
+      'local'
+    )
 
-  playlists.value.push(newPlaylist)
-  newPlaylistName.value = ''
-  showCreatePlaylistDialog.value = false
-  MessagePlugin.success('歌单创建成功')
-}
-
-// 将当前播放列表保存为歌单
-const saveCurrentPlaylistAs = () => {
-  showCreatePlaylistDialog.value = true
-}
-
-// 一键播放歌单
-const playPlaylist = (playlist: Playlist) => {
-  if (playlist.songs.length === 0) {
-    MessagePlugin.warning('歌单中没有歌曲')
-    return
-  }
-
-  // 这里应该调用播放器的方法替换播放列表
-  console.log('播放歌单:', playlist.name, '共', playlist.songs.length, '首歌曲')
-  MessagePlugin.success(`已将播放列表替换为歌单"${playlist.name}"`)
-}
-
-// 查看歌单详情
-const viewPlaylist = (playlist: Playlist) => {
-  currentPlaylist.value = playlist
-  showPlaylistDialog.value = true
-}
-
-// 添加歌曲到歌单
-const addToPlaylist = (song: any, playlist: Playlist) => {
-  // 检查歌曲是否已在歌单中
-  const exists = playlist.songs.some((s) => s.id === song.id)
-  if (exists) {
-    MessagePlugin.warning(`歌曲"${song.title}"已在歌单中`)
-    return
-  }
-
-  playlist.songs.push(song)
-  playlist.updatedAt = new Date().toISOString()
-  MessagePlugin.success(`已将"${song.title}"添加到歌单"${playlist.name}"`)
-}
-
-// 从歌单中移除歌曲
-const removeFromPlaylist = (songId: number, playlist: Playlist) => {
-  const index = playlist.songs.findIndex((s) => s.id === songId)
-  if (index !== -1) {
-    const songTitle = playlist.songs[index].title
-    playlist.songs.splice(index, 1)
-    playlist.updatedAt = new Date().toISOString()
-    MessagePlugin.success(`已从歌单"${playlist.name}"中移除"${songTitle}"`)
+    if (result.success) {
+      MessagePlugin.success('歌单创建成功')
+      showCreatePlaylistDialog.value = false
+      newPlaylistForm.value = {
+        name: '我的歌单',
+        description: '这是我创建的歌单'
+      }
+      await loadPlaylists()
+    } else {
+      MessagePlugin.error(result.error || '创建歌单失败')
+    }
+  } catch (error) {
+    console.error('创建歌单失败:', error)
+    MessagePlugin.error('创建歌单失败')
   }
 }
 
 // 删除歌单
-const deletePlaylist = (playlistId: number) => {
-  const index = playlists.value.findIndex((p) => p.id === playlistId)
-  if (index !== -1) {
-    const playlistName = playlists.value[index].name
-    playlists.value.splice(index, 1)
+const deletePlaylist = async (playlist: SongList) => {
+  const confirmDialog = DialogPlugin.confirm({
+    header: '确认删除',
+    body: `确定要删除歌单"${playlist.name}"吗？此操作不可撤销。`,
+    confirmBtn: '删除',
+    cancelBtn: '取消',
+    theme: 'danger',
+    onConfirm: async () => {
+      try {
+        const result = await songListAPI.delete(playlist.id)
+        if (result.success) {
+          MessagePlugin.success('歌单删除成功')
+          await loadPlaylists()
 
-    // 如果正在查看的歌单被删除，关闭对话框
-    if (currentPlaylist.value && currentPlaylist.value.id === playlistId) {
-      currentPlaylist.value = null
-      showPlaylistDialog.value = false
+          // 歌单删除成功，无需额外处理
+        } else {
+          MessagePlugin.error(result.error || '删除歌单失败')
+        }
+      } catch (error) {
+        console.error('删除歌单失败:', error)
+        MessagePlugin.error('删除歌单失败')
+      }
+      confirmDialog.destroy()
+    },
+    onCancel: () => {
+      confirmDialog.destroy()
     }
+  })
+}
 
-    MessagePlugin.success(`已删除歌单"${playlistName}"`)
+// 初始化路由
+const router = useRouter()
+
+// 查看歌单详情
+const viewPlaylist = (playlist: SongList) => {
+  // 跳转到 list 页面，传递歌单信息作为查询参数
+  router.push({
+    name: 'list',
+    params: { id: playlist.id },
+    query: {
+      title: playlist.name,
+      author: 'local',
+      cover: playlist.coverImgUrl || '',
+      total: '0', // 这里可以后续优化为实际歌曲数量
+      source: 'local',
+      type: 'local' // 标识这是本地歌单
+    }
+  })
+}
+
+// 播放歌单
+const playPlaylist = async (playlist: SongList) => {
+  try {
+    const result = await songListAPI.getSongs(playlist.id)
+    if (result.success) {
+      const songs = result.data || []
+      if (songs.length === 0) {
+        MessagePlugin.warning('歌单中没有歌曲')
+        return
+      }
+
+      // 调用播放器的方法替换播放列表
+      if ((window as any).musicEmitter) {
+        ; (window as any).musicEmitter.emit('replacePlaylist', songs.map(song => toRaw(song)))
+      }
+      console.log('播放歌单:', playlist.name, '共', songs.length, '首歌曲')
+      MessagePlugin.success(`已将播放列表替换为歌单"${playlist.name}"`)
+    } else {
+      MessagePlugin.error(result.error || '获取歌单歌曲失败')
+    }
+  } catch (error) {
+    console.error('播放歌单失败:', error)
+    MessagePlugin.error('播放歌单失败')
   }
 }
+
+// 添加歌曲到歌单
+const addToPlaylist = async (song: Songs, playlist: SongList) => {
+  try {
+    const result = await songListAPI.addSongs(playlist.id, [song])
+    if (result.success) {
+      MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
+    } else {
+      MessagePlugin.error(result.error || '添加歌曲失败')
+    }
+  } catch (error) {
+    console.error('添加歌曲失败:', error)
+    MessagePlugin.error('添加歌曲失败')
+  }
+}
+
+// 播放歌曲
+const playSong = (song: Songs): void => {
+  console.log('播放歌曲:', song.name)
+  // 调用播放器的方法添加到播放列表并播放
+  if ((window as any).musicEmitter) {
+    ; (window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
+  }
+}
+
+// 导入功能
+const handleImport = () => {
+  showImportDialog.value = true
+}
+
+// 从播放列表导入
+const importFromPlaylist = async () => {
+  showImportDialog.value = false
+
+  // 获取当前播放列表
+  const localUserStore = LocalUserDetailStore()
+  const currentPlaylist = JSON.parse(JSON.stringify(localUserStore.list))
+
+  if (!currentPlaylist || currentPlaylist.length === 0) {
+    MessagePlugin.warning('当前播放列表为空，无法导入')
+    return
+  }
+
+  try {
+    // 创建歌单名称（基于当前时间）
+    const now = new Date()
+    const playlistName = `播放列表 ${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+
+    // 创建新歌单
+    const createResult = await songListAPI.create(
+      playlistName,
+      `从播放列表导入，共 ${currentPlaylist.length} 首歌曲`,
+      'local'
+    )
+
+    if (!createResult.success || !createResult.data) {
+      MessagePlugin.error(createResult.error || '创建歌单失败')
+      return
+    }
+
+    // 等待一小段时间确保文件系统操作完成
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    // 将播放列表中的歌曲添加到新歌单
+    const addResult = await songListAPI.addSongs(createResult.data.id, currentPlaylist)
+
+    if (addResult.success) {
+      MessagePlugin.success(`成功从播放列表导入 ${currentPlaylist.length} 首歌曲到歌单"${playlistName}"`)
+      // 刷新歌单列表
+      await loadPlaylists()
+    } else {
+      MessagePlugin.error(addResult.error || '添加歌曲到歌单失败')
+    }
+  } catch (error) {
+    console.error('从播放列表导入失败:', error)
+    MessagePlugin.error('从播放列表导入失败')
+  }
+}
+
+// 网络歌单导入对话框状态
+const showNetworkImportDialog = ref(false)
+const networkPlaylistUrl = ref('')
+
+// 从网络歌单导入
+const importFromNetwork = () => {
+  showImportDialog.value = false
+  showNetworkImportDialog.value = true
+  networkPlaylistUrl.value = ''
+}
+
+// 确认网络歌单导入
+const confirmNetworkImport = async () => {
+  if (!networkPlaylistUrl.value || !networkPlaylistUrl.value.trim()) {
+    MessagePlugin.warning('请输入有效的歌单链接')
+    return
+  }
+
+  showNetworkImportDialog.value = false
+  await handleNetworkPlaylistImport(networkPlaylistUrl.value.trim())
+}
+
+// 取消网络歌单导入
+const cancelNetworkImport = () => {
+  showNetworkImportDialog.value = false
+  networkPlaylistUrl.value = ''
+}
+
+// 处理网络歌单导入
+const handleNetworkPlaylistImport = async (url: string) => {
+  try {
+    const load1 = MessagePlugin.loading('正在解析歌单链接...')
+
+    // 验证是否为网易云音乐链接
+    if (!url.includes('music.163.com')) {
+      MessagePlugin.error('目前仅支持网易云音乐歌单链接')
+      return
+    }
+
+    // 解析歌单ID
+    const parseResult = await window.api.music.requestSdk('parsePlaylistId', {
+      source: 'wy',
+      url: url
+    })
+
+    if (typeof parseResult === 'object' && parseResult.error) {
+      MessagePlugin.error('解析歌单链接失败：' + parseResult.error)
+      return
+    }
+    const playlistId = parseResult as string
+    load1.then(res=>res.close())
+
+    // 获取歌单详情
+    const load2 = MessagePlugin.loading('正在获取歌单信息...')
+    const detailResult = await window.api.music.requestSdk('getPlaylistDetail', {
+      source: 'wy',
+      id: playlistId,
+      page: 1
+    }) as any
+
+    if (detailResult.error) {
+      MessagePlugin.error('获取歌单详情失败：' + detailResult.error)
+      return
+    }
+    const playlistInfo = detailResult.info
+    const songs = detailResult.list || []
+
+    if (songs.length === 0) {
+      MessagePlugin.warning('该歌单没有歌曲')
+      return
+    }
+
+    const createResult = await songListAPI.create(
+      `${playlistInfo.name} (导入)`,
+      `从网易云音乐导入 - 原歌单：${playlistInfo.name}`,
+      'wy'
+    )
+
+    if (!createResult.success) {
+      MessagePlugin.error('创建本地歌单失败：' + createResult.error)
+      return
+    }
+
+    const newPlaylistId = createResult.data!.id
+
+    const addResult = await songListAPI.addSongs(newPlaylistId, songs)
+    
+    let successCount = 0
+    let failCount = 0
+    
+    if (addResult.success) {
+      successCount = songs.length
+      failCount = 0
+    } else {
+      successCount = 0
+      failCount = songs.length
+      console.error('批量添加歌曲失败:', addResult.error)
+    }
+    load2.then(res=>res.close())
+
+    // 刷新歌单列表
+    await loadPlaylists()
+
+    // 显示导入结果
+    if (successCount > 0) {
+      MessagePlugin.success(
+        `导入完成！成功导入 ${successCount} 首歌曲` +
+        (failCount > 0 ? `，${failCount} 首歌曲导入失败` : '')
+      )
+    } else {
+      MessagePlugin.error('导入失败，没有成功导入任何歌曲')
+    }
+
+  } catch (error) {
+    console.error('网络歌单导入失败:', error)
+    MessagePlugin.error('导入失败：' + (error instanceof Error ? error.message : '未知错误'))
+  }
+}
+
+// 打开音乐文件夹
+// const openMusicFolder = (): void => {
+//   console.log('打开音乐文件夹')
+//   // TODO: 调用 Electron 的文件夹打开功能
+//   MessagePlugin.info('打开音乐文件夹功能开发中...')
+// }
+
+// 导入音乐文件
+const importMusic = (): void => {
+  console.log('导入音乐文件')
+  // TODO: 调用 Electron 的文件选择对话框
+  MessagePlugin.info('导入音乐文件功能开发中...')
+}
+
+// 删除本地歌曲
+const deleteSong = (song: Songs): void => {
+  const confirmDialog = DialogPlugin.confirm({
+    header: '确认删除',
+    body: `确定要删除歌曲"${song.name}"吗？`,
+    confirmBtn: '删除',
+    cancelBtn: '取消',
+    theme: 'danger',
+    onConfirm: () => {
+      // TODO: 实现删除本地歌曲的功能
+      console.log('删除歌曲:', song.name)
+      MessagePlugin.success(`已删除歌曲"${song.name}"`)
+      confirmDialog.destroy()
+    },
+    onCancel: () => {
+      confirmDialog.destroy()
+    }
+  })
+}
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadPlaylists()
+})
 </script>
 
 <template>
@@ -214,25 +531,29 @@ const deletePlaylist = (playlistId: number) => {
       <!-- 页面标题和操作 -->
       <div class="page-header">
         <div class="header-left">
-          <h2>本地音乐</h2>
+          <h2>本地歌单</h2>
           <div class="stats">
-            <span>{{ stats.totalSongs }} 首歌曲</span>
+            <span>{{ stats.totalSongs }} 首本地歌曲</span>
             <span>总时长 {{ stats.totalDuration }}</span>
             <span>总大小 {{ stats.totalSize }}</span>
           </div>
         </div>
         <div class="header-actions">
-          <t-button theme="default" @click="openMusicFolder">
+          <!-- <t-button theme="default" @click="openMusicFolder">
             <i class="iconfont icon-shouye"></i>
             打开文件夹
           </t-button>
           <t-button theme="primary" @click="importMusic">
             <i class="iconfont icon-zengjia"></i>
             导入音乐
+          </t-button> -->
+          <t-button theme="primary" variant="outline" @click="showCreatePlaylistDialog = true">
+            <i class="iconfont icon-zengjia"></i>
+            新建歌单
           </t-button>
-          <t-button theme="default" @click="saveCurrentPlaylistAs">
-            <i class="iconfont icon-baocun"></i>
-            保存为歌单
+          <t-button theme="primary" @click="handleImport">
+            <i class="iconfont icon-daoru"></i>
+            导入
           </t-button>
         </div>
       </div>
@@ -240,252 +561,213 @@ const deletePlaylist = (playlistId: number) => {
       <!-- 歌单区域 -->
       <div class="playlists-section">
         <div class="section-header">
-          <h3>我的歌单</h3>
-          <t-button theme="primary" variant="text" @click="showCreatePlaylistDialog = true">
-            <i class="iconfont icon-zengjia"></i>
-            新建歌单
-          </t-button>
+          <h3>我的歌单 ({{ playlists.length }})</h3>
+          <div class="section-actions">
+            <t-button theme="primary" variant="text" size="small" :loading="loading" @click="loadPlaylists">
+              <i class="iconfont icon-shuaxin"></i>
+              刷新
+            </t-button>
+          </div>
         </div>
 
-        <div class="playlists-grid">
+        <!-- 加载状态 -->
+        <div v-if="loading" class="loading-state">
+          <t-loading size="large" text="加载中..." />
+        </div>
+
+        <!-- 歌单网格 -->
+        <div v-else-if="playlists.length > 0" class="playlists-grid">
           <div v-for="playlist in playlists" :key="playlist.id" class="playlist-card">
             <div class="playlist-cover" @click="viewPlaylist(playlist)">
+              <img v-if="playlist.coverImgUrl"
+                :src="playlist.coverImgUrl === 'default-cover' ? defaultCover : playlist.coverImgUrl" :alt="playlist.name"
+                class="cover-image" />
               <div class="cover-overlay">
                 <i class="iconfont icon-bofang"></i>
               </div>
             </div>
             <div class="playlist-info">
-              <div class="playlist-name" @click="viewPlaylist(playlist)">{{ playlist.name }}</div>
-              <div class="playlist-meta">{{ playlist.songs.length }}首歌曲</div>
+              <div class="playlist-name" @click="viewPlaylist(playlist)" :title="playlist.name">
+                {{ playlist.name }}
+              </div>
+              <div class="playlist-description" v-if="playlist.description" :title="playlist.description">
+                {{ playlist.description }}
+              </div>
+              <div class="playlist-meta">
+                <span>{{ playlist.source }}</span>
+                <span>创建于 {{ new Date(playlist.createTime).toLocaleDateString() }}</span>
+              </div>
             </div>
             <div class="playlist-actions">
-              <t-button
-                shape="circle"
-                theme="primary"
-                variant="text"
-                size="small"
-                title="播放歌单"
-                @click="playPlaylist(playlist)"
-              >
-                <i class="iconfont icon-a-tingzhiwukuang"></i>
+              <t-button shape="circle" theme="primary" variant="text" size="small" title="播放歌单"
+                @click="playPlaylist(playlist)">
+                <i class="iconfont icon-bofang"></i>
               </t-button>
-              <t-button
-                shape="circle"
-                theme="default"
-                variant="text"
-                size="small"
-                title="查看详情"
-                @click="viewPlaylist(playlist)"
-              >
+              <t-button shape="circle" theme="default" variant="text" size="small" title="查看详情"
+                @click="viewPlaylist(playlist)">
                 <i class="iconfont icon-liebiao"></i>
               </t-button>
-              <t-button
-                shape="circle"
-                theme="danger"
-                variant="text"
-                size="small"
-                title="删除歌单"
-                @click="deletePlaylist(playlist.id)"
-              >
+              <t-button shape="circle" theme="danger" variant="text" size="small" title="删除歌单"
+                @click="deletePlaylist(playlist)">
                 <i class="iconfont icon-shanchu"></i>
               </t-button>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 音乐列表 -->
-      <div class="music-list">
-        <div class="list-header">
-          <div class="header-item index">#</div>
-          <div class="header-item title">标题</div>
-          <div class="header-item artist">艺术家</div>
-          <div class="header-item album">专辑</div>
-          <div class="header-item duration">时长</div>
-          <div class="header-item size">大小</div>
-          <div class="header-item format">格式</div>
-          <div class="header-item actions">操作</div>
-        </div>
-
-        <div class="list-body">
-          <div
-            v-for="(song, index) in localSongs"
-            :key="song.id"
-            class="song-row"
-            @dblclick="playSong(song)"
-          >
-            <div class="row-item index">{{ index + 1 }}</div>
-            <div class="row-item title">
-              <div class="song-title">{{ song.title }}</div>
-            </div>
-            <div class="row-item artist">{{ song.artist }}</div>
-            <div class="row-item album">{{ song.album }}</div>
-            <div class="row-item duration">{{ song.duration }}</div>
-            <div class="row-item size">{{ song.size }}</div>
-            <div class="row-item format">
-              <span class="format-badge">{{ song.format }}</span>
-              <span class="bitrate">{{ song.bitrate }}</span>
-            </div>
-            <div class="row-item actions">
-              <t-button
-                shape="circle"
-                theme="primary"
-                variant="text"
-                size="small"
-                title="播放"
-                @click="playSong(song)"
-              >
-                <i class="iconfont icon-a-tingzhiwukuang"></i>
-              </t-button>
-              <t-dropdown
-                :options="[
-                  {
-                    content: '添加到歌单',
-                    value: 'addToPlaylist',
-                    children: playlists.map((p) => ({ content: p.name, value: `playlist-${p.id}` }))
-                  }
-                ]"
-                @click="
-                  (data) => {
-                    if (data.startsWith('playlist-')) {
-                      const playlistId = parseInt(data.split('-')[1])
-                      const targetPlaylist = playlists.find((p) => p.id === playlistId)
-                      if (targetPlaylist) {
-                        addToPlaylist(song, targetPlaylist)
-                      }
-                    }
-                  }
-                "
-              >
-                <t-button shape="circle" theme="default" variant="text" size="small" title="更多">
-                  <i class="iconfont icon-gengduo"></i>
-                </t-button>
-              </t-dropdown>
-              <t-button
-                shape="circle"
-                theme="danger"
-                variant="text"
-                size="small"
-                title="删除"
-                @click="deleteSong(song)"
-              >
-                <i class="iconfont icon-shanchu"></i>
-              </t-button>
-            </div>
+        <!-- 歌单空状态 -->
+        <div v-else class="empty-playlists">
+          <div class="empty-icon">
+            <i class="iconfont icon-gedan"></i>
           </div>
+          <h4>暂无歌单</h4>
+          <p>创建您的第一个歌单来管理音乐</p>
+          <t-button theme="primary" @click="showCreatePlaylistDialog = true">
+            <i class="iconfont icon-zengjia"></i>
+            创建歌单
+          </t-button>
         </div>
       </div>
 
-      <!-- 空状态 -->
-      <div v-if="localSongs.length === 0" class="empty-state">
-        <div class="empty-icon">
-          <i class="iconfont icon-music"></i>
-        </div>
-        <h3>暂无本地音乐</h3>
-        <p>点击"导入音乐"按钮添加您的音乐文件</p>
-        <t-button theme="primary" @click="importMusic">
-          <i class="iconfont icon-zengjia"></i>
-          导入音乐
-        </t-button>
-      </div>
-    </div>
-
-    <!-- 创建歌单对话框 -->
-    <t-dialog
-      v-model:visible="showCreatePlaylistDialog"
-      header="创建新歌单"
-      :confirm-btn="{ content: '创建', theme: 'primary' }"
-      :cancel-btn="{ content: '取消' }"
-      @confirm="createPlaylist"
-    >
-      <t-input
-        v-model="newPlaylistName"
-        placeholder="请输入歌单名称"
-        clearable
-        @keyup.enter="createPlaylist"
-      />
-    </t-dialog>
-
-    <!-- 歌单详情对话框 -->
-    <t-dialog
-      v-model:visible="showPlaylistDialog"
-      :header="currentPlaylist?.name || '歌单详情'"
-      width="800px"
-      :footer="false"
-    >
-      <template v-if="currentPlaylist">
-        <div class="playlist-header">
-          <div class="playlist-info">
-            <h3>{{ currentPlaylist.name }}</h3>
-            <div class="playlist-meta">
-              <span>{{ currentPlaylist.songs.length }} 首歌曲</span>
-              <span>创建于 {{ new Date(currentPlaylist.createdAt).toLocaleDateString() }}</span>
-            </div>
-          </div>
-          <div class="playlist-actions">
-            <t-button theme="primary" @click="playPlaylist(currentPlaylist)">
-              <i class="iconfont icon-a-tingzhiwukuang"></i>
-              一键播放
-            </t-button>
-          </div>
+      <!-- 本地音乐列表 -->
+      <div class="music-section">
+        <div class="section-header">
+          <h3>本地音乐库</h3>
         </div>
 
-        <div class="playlist-songs">
+        <div v-if="localSongs.length > 0" class="music-list">
           <div class="list-header">
             <div class="header-item index">#</div>
             <div class="header-item title">标题</div>
             <div class="header-item artist">艺术家</div>
             <div class="header-item album">专辑</div>
             <div class="header-item duration">时长</div>
+            <div class="header-item size">大小</div>
+            <div class="header-item format">格式</div>
             <div class="header-item actions">操作</div>
           </div>
 
           <div class="list-body">
-            <div
-              v-for="(song, index) in currentPlaylist.songs"
-              :key="song.id"
-              class="song-row"
-              @dblclick="playSong(song)"
-            >
+            <div v-for="(song, index) in localSongs" :key="song.songmid" class="song-row" @dblclick="playSong(song)">
               <div class="row-item index">{{ index + 1 }}</div>
               <div class="row-item title">
-                <div class="song-title">{{ song.title }}</div>
+                <div class="song-title">{{ song.name }}</div>
               </div>
-              <div class="row-item artist">{{ song.artist }}</div>
-              <div class="row-item album">{{ song.album }}</div>
-              <div class="row-item duration">{{ song.duration }}</div>
+              <div class="row-item artist">{{ song.singer }}</div>
+              <div class="row-item album">{{ song.albumName }}</div>
+              <div class="row-item duration">{{ song.interval || '0:00' }}</div>
+              <div class="row-item size">{{ (song as any).size || '-' }}</div>
+              <div class="row-item format">
+                <span class="format-badge">{{ (song as any).format || 'MP3' }}</span>
+                <span class="bitrate">{{ (song as any).bitrate || '320kbps' }}</span>
+              </div>
               <div class="row-item actions">
-                <t-button
-                  shape="circle"
-                  theme="primary"
-                  variant="text"
-                  size="small"
-                  title="播放"
-                  @click="playSong(song)"
-                >
-                  <i class="iconfont icon-a-tingzhiwukuang"></i>
+                <t-button shape="circle" theme="primary" variant="text" size="small" title="播放" @click="playSong(song)">
+                  <i class="iconfont icon-bofang"></i>
                 </t-button>
-                <t-button
-                  shape="circle"
-                  theme="danger"
-                  variant="text"
-                  size="small"
-                  title="从歌单中移除"
-                  @click="removeFromPlaylist(song.id, currentPlaylist)"
-                >
+                <t-dropdown v-if="playlists.length > 0"
+                  :options="playlists.map((p) => ({ content: p.name, value: p.id }))"
+                  @click="(playlistId) => addToPlaylist(song, playlists.find(p => p.id === playlistId)!)">
+                  <t-button shape="circle" theme="default" variant="text" size="small" title="添加到歌单">
+                    <i class="iconfont icon-zengjia"></i>
+                  </t-button>
+                </t-dropdown>
+                <t-button shape="circle" theme="danger" variant="text" size="small" title="删除"
+                  @click="deleteSong(song)">
                   <i class="iconfont icon-shanchu"></i>
                 </t-button>
               </div>
             </div>
           </div>
+        </div>
 
-          <div v-if="currentPlaylist.songs.length === 0" class="empty-playlist">
-            <p>歌单中暂无歌曲</p>
+        <!-- 本地音乐空状态 -->
+        <div v-else class="empty-state">
+          <div class="empty-icon">
+            <i class="iconfont icon-music"></i>
+          </div>
+          <h3>暂无本地音乐</h3>
+          <p>点击"导入音乐"按钮添加您的音乐文件</p>
+          <t-button theme="primary" @click="importMusic">
+            <i class="iconfont icon-zengjia"></i>
+            导入音乐
+          </t-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建歌单对话框 -->
+    <t-dialog v-model:visible="showCreatePlaylistDialog" header="创建新歌单" width="500px"
+      :confirm-btn="{ content: '创建', theme: 'primary' }" :cancel-btn="{ content: '取消' }" @confirm="createPlaylist">
+      <div class="create-form">
+        <t-form :data="newPlaylistForm" layout="vertical">
+          <t-form-item label="歌单名称" name="name" required>
+            <t-input v-model="newPlaylistForm.name" placeholder="请输入歌单名称" clearable @keyup.enter="createPlaylist" />
+          </t-form-item>
+          <t-form-item label="歌单描述" name="description">
+            <t-textarea v-model="newPlaylistForm.description" placeholder="请输入歌单描述（可选）" :maxlength="200"
+              :autosize="{ minRows: 3, maxRows: 5 }" />
+          </t-form-item>
+        </t-form>
+      </div>
+    </t-dialog>
+
+    <!-- 导入选择对话框 -->
+    <t-dialog v-model:visible="showImportDialog" header="选择导入方式" width="400px" :footer="false">
+      <div class="import-options">
+        <div class="import-option" @click="importFromPlaylist">
+          <div class="option-icon">
+            <i class="iconfont icon-liebiao"></i>
+          </div>
+          <div class="option-content">
+            <h4>从播放列表</h4>
+            <p>将当前播放列表保存为歌单</p>
+          </div>
+          <div class="option-arrow">
+            <i class="iconfont icon-youjiantou"></i>
           </div>
         </div>
-      </template>
+        <div class="import-option" @click="importFromNetwork">
+          <div class="option-icon">
+            <i class="iconfont icon-wangluo"></i>
+          </div>
+          <div class="option-content">
+            <h4>从网络歌单</h4>
+            <p>导入网易云、QQ音乐等平台歌单</p>
+            <span class="coming-soon">实验性功能</span>
+          </div>
+          <div class="option-arrow">
+            <i class="iconfont icon-youjiantou"></i>
+          </div>
+        </div>
+      </div>
     </t-dialog>
+    <!-- 网络歌单导入对话框 -->
+    <t-dialog v-model:visible="showNetworkImportDialog" header="从网络歌单导入-目前仅支持网易云歌单"
+      :confirm-btn="{ content: '开始导入', theme: 'primary' }" :cancel-btn="{ content: '取消', variant: 'outline' }"
+      @confirm="confirmNetworkImport" @cancel="cancelNetworkImport" width="500px">
+      <div class="network-import-content">
+        <p class="import-description">
+          请输入网易云音乐歌单链接，系统将自动解析并导入歌单中的所有歌曲到本地歌单。
+        </p>
+
+        <t-input v-model="networkPlaylistUrl" placeholder="例如：https://music.163.com/playlist?id=123456789" clearable
+          autofocus class="url-input" @enter="confirmNetworkImport" />
+
+        <div class="import-tips">
+          <p class="tip-title">支持的链接格式：</p>
+          <ul class="tip-list">
+            <li>https://music.163.com/playlist?id=xxxxxxx</li>
+            <li>https://music.163.com/m/playlist?id=xxxxxxx</li>
+          </ul>
+          <p class="tip-note">注意：目前仅支持网易云音乐歌单</p>
+        </div>
+      </div>
+    </t-dialog>
+
   </div>
+
+
 </template>
 
 <style lang="scss" scoped>
@@ -494,6 +776,53 @@ const deletePlaylist = (playlistId: number) => {
   margin: 0 auto;
   width: 100%;
   position: relative;
+}
+
+// 网络歌单导入对话框样式
+.network-import-content {
+  .import-description {
+    margin-bottom: 1rem;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .url-input {
+    margin-bottom: 1.5rem;
+  }
+
+  .import-tips {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 1rem;
+    border-left: 3px solid #507daf;
+
+    .tip-title {
+      margin: 0 0 0.5rem 0;
+      font-weight: 500;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .tip-list {
+      margin: 0 0 0.5rem 0;
+      padding-left: 1.2rem;
+
+      li {
+        color: #666;
+        font-size: 13px;
+        margin-bottom: 0.25rem;
+        font-family: 'Consolas', 'Monaco', monospace;
+      }
+    }
+
+    .tip-note {
+      margin: 0;
+      color: #999;
+      font-size: 12px;
+      font-style: italic;
+    }
+  }
 }
 
 .page-header {
@@ -532,6 +861,182 @@ const deletePlaylist = (playlistId: number) => {
   }
 }
 
+/* 歌单区域样式 */
+.playlists-section {
+  margin-bottom: 3rem;
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .section-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+  }
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+}
+
+.playlists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.playlist-card {
+  background: #fff;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+
+    .playlist-cover .cover-overlay {
+      opacity: 1;
+    }
+  }
+
+  .playlist-cover {
+    height: 180px;
+    background: linear-gradient(135deg, var(--td-brand-color-4) 0%, var(--td-brand-color-6) 100%);
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+
+    .cover-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .cover-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+
+      .iconfont {
+        font-size: 3rem;
+        color: #fff;
+      }
+    }
+  }
+
+  .playlist-info {
+    padding: 1rem;
+
+    .playlist-name {
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      font-size: 1rem;
+
+      &:hover {
+        color: #4f46e5;
+      }
+    }
+
+    .playlist-description {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-bottom: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .playlist-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
+
+      span {
+        &:first-child {
+          text-transform: uppercase;
+          font-weight: 500;
+          color: #4f46e5;
+        }
+      }
+    }
+  }
+
+  .playlist-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 1rem 1rem;
+    gap: 0.5rem;
+  }
+}
+
+.empty-playlists {
+  text-align: center;
+  padding: 4rem 2rem;
+
+  .empty-icon {
+    margin-bottom: 1.5rem;
+
+    .iconfont {
+      font-size: 4rem;
+      color: #d1d5db;
+    }
+  }
+
+  h4 {
+    color: #111827;
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  p {
+    color: #6b7280;
+    margin-bottom: 2rem;
+  }
+}
+
+/* 本地音乐区域 */
+.music-section {
+  .section-header {
+    margin-bottom: 1rem;
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #111827;
+    }
+  }
+}
+
 .music-list {
   width: 100%;
   background: #fff;
@@ -543,8 +1048,7 @@ const deletePlaylist = (playlistId: number) => {
 .list-header {
   display: grid;
   width: 100%;
-  grid-template-columns: 0.5fr 2fr 1fr 3fr 1fr 1fr 1fr 1fr;
-
+  grid-template-columns: 0.5fr 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
   gap: 1rem;
   padding: 1rem 1.5rem;
   background: #f9fafb;
@@ -562,8 +1066,7 @@ const deletePlaylist = (playlistId: number) => {
 .list-body {
   .song-row {
     display: grid;
-    grid-template-columns: 0.5fr 2fr 1fr 3fr 1fr 1fr 1fr 1fr;
-
+    grid-template-columns: 0.5fr 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
     gap: 1rem;
     padding: 1rem 1.5rem;
     border-bottom: 1px solid #f3f4f6;
@@ -672,151 +1175,74 @@ const deletePlaylist = (playlistId: number) => {
   }
 }
 
-/* 歌单区域样式 */
-.playlists-section {
-  margin-bottom: 2rem;
-
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-
-    h3 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: #111827;
-    }
-  }
+/* 创建歌单表单 */
+.create-form {
+  padding: 1rem 0;
 }
 
-.playlists-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+/* 导入选择对话框 */
+.import-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.playlist-card {
-  background: #fff;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+.import-option {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-color: var(--td-brand-color-4);
+    background-color: #f8fafc;
+  }
 
-    .playlist-cover .cover-overlay {
-      opacity: 1;
+  .option-icon {
+    margin-right: 1rem;
+
+    .iconfont {
+      font-size: 1.5rem;
+      color: var(--td-brand-color-4);
     }
   }
 
-  .playlist-cover {
-    height: 160px;
-    background: linear-gradient(135deg, #4f46e5, #7c3aed);
-    position: relative;
-    cursor: pointer;
+  .option-content {
+    flex: 1;
 
-    .cover-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-
-      .iconfont {
-        font-size: 3rem;
-        color: #fff;
-      }
-    }
-  }
-
-  .playlist-info {
-    padding: 1rem;
-
-    .playlist-name {
+    h4 {
+      font-size: 1rem;
       font-weight: 600;
       color: #111827;
       margin-bottom: 0.25rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      cursor: pointer;
-
-      &:hover {
-        color: #4f46e5;
-      }
     }
 
-    .playlist-meta {
-      font-size: 0.75rem;
-      color: #6b7280;
-    }
-  }
-
-  .playlist-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 1rem 1rem;
-    gap: 0.5rem;
-  }
-}
-
-/* 歌单详情对话框样式 */
-.playlist-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-
-  .playlist-info {
-    h3 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: #111827;
-      margin-bottom: 0.5rem;
-    }
-
-    .playlist-meta {
-      display: flex;
-      gap: 1rem;
+    p {
       font-size: 0.875rem;
       color: #6b7280;
+      margin: 0;
+    }
 
-      span {
-        &:not(:last-child)::after {
-          content: '•';
-          margin-left: 1rem;
-          color: #d1d5db;
-        }
-      }
+    .coming-soon {
+      display: inline-block;
+      background: #fef3c7;
+      color: #d97706;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin-top: 0.5rem;
     }
   }
-}
 
-.playlist-songs {
-  .list-header {
-    grid-template-columns: 0.5fr 2fr 1fr 3fr 1fr 1fr;
+  .option-arrow {
+    .iconfont {
+      font-size: 1rem;
+      color: #9ca3af;
+    }
   }
-
-  .list-body .song-row {
-    grid-template-columns: 0.5fr 2fr 1fr 3fr 1fr 1fr;
-  }
-}
-
-.empty-playlist {
-  text-align: center;
-  padding: 2rem;
-  color: #6b7280;
 }
 </style>

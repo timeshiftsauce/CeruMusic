@@ -24,7 +24,7 @@ interface Props {
   show?: boolean
   coverImage?: string
   songId?: string | null
-  songInfo: SongList | { songmid: number | null },
+  songInfo: SongList | { songmid: number | null | string },
   mainColor:string
 }
 
