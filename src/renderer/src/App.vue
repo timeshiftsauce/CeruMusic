@@ -35,7 +35,7 @@ const themes = [
 
 const loadSavedTheme = () => {
   const savedTheme = localStorage.getItem('selected-theme')
-  if (savedTheme && themes.some(t => t.name === savedTheme)) {
+  if (savedTheme && themes.some((t) => t.name === savedTheme)) {
     applyTheme(savedTheme)
   }
 }
@@ -59,9 +59,11 @@ const applyTheme = (themeName) => {
 <template>
   <div class="page">
     <router-view v-slot="{ Component }">
-      <Transition :enter-active-class="`animate__animated animate__fadeIn  pagesApp`"
-        :leave-active-class="`animate__animated animate__fadeOut pagesApp`">
-          <component :is="Component" />
+      <Transition
+        :enter-active-class="`animate__animated animate__fadeIn  pagesApp`"
+        :leave-active-class="`animate__animated animate__fadeOut pagesApp`"
+      >
+        <component :is="Component" />
       </Transition>
     </router-view>
     <GlobalAudio />

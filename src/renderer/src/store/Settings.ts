@@ -16,7 +16,7 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch (error) {
       console.error('加载设置失败:', error)
     }
-    
+
     // 默认设置
     return {
       showFloatBall: true

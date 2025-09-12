@@ -24,8 +24,8 @@ interface Props {
   show?: boolean
   coverImage?: string
   songId?: string | null
-  songInfo: SongList | { songmid: number | null | string },
-  mainColor:string
+  songInfo: SongList | { songmid: number | null | string }
+  mainColor: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -256,32 +256,53 @@ const handleLowFreqUpdate = (volume: number) => {
 <template>
   <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
-    <BackgroundRender ref="bgRef" :album="actualCoverImage" :album-is-video="false" :fps="30" :flow-speed="4"
-     :has-lyric="state.lyricLines.length > 10"
-      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1" />
+    <BackgroundRender
+      ref="bgRef"
+      :album="actualCoverImage"
+      :album-is-video="false"
+      :fps="30"
+      :flow-speed="4"
+      :has-lyric="state.lyricLines.length > 10"
+      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
+    />
     <!-- 全屏按钮 -->
-    <button class="fullscreen-btn" :class="{ 'black-text': useBlackText }" @click="toggleFullscreen">
+    <button
+      class="fullscreen-btn"
+      :class="{ 'black-text': useBlackText }"
+      @click="toggleFullscreen"
+    >
       <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
       <FullscreenExit1Icon v-else class="icon" />
     </button>
-    <button class="putawayscreen-btn" :class="{ 'black-text': useBlackText }" @click="emit('toggle-fullscreen')">
+    <button
+      class="putawayscreen-btn"
+      :class="{ 'black-text': useBlackText }"
+      @click="emit('toggle-fullscreen')"
+    >
       <ChevronDownIcon class="icon" />
     </button>
     <Transition name="fade-nav">
-      <TitleBarControls v-if="props.show" class="top" style="-webkit-app-region: drag"
-        :color="useBlackText ? 'black' : 'white'" />
+      <TitleBarControls
+        v-if="props.show"
+        class="top"
+        style="-webkit-app-region: drag"
+        :color="useBlackText ? 'black' : 'white'"
+      />
     </Transition>
     <div class="playbox">
       <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
-        <div class="cd-container" 
+        <div
+          class="cd-container"
           :class="{ playing: Audio.isPlay }"
-          :style="!Audio.isPlay
-            ? 'animation-play-state: paused;'
-            : '' +
-            (state.lyricLines.length <= 0
-              ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
-              : '')
-          ">
+          :style="
+            !Audio.isPlay
+              ? 'animation-play-state: paused;'
+              : '' +
+                (state.lyricLines.length <= 0
+                  ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
+                  : '')
+          "
+        >
           <!-- 黑胶唱片 -->
           <div class="vinyl-record"></div>
           <!-- 唱片标签 -->
@@ -291,29 +312,31 @@ const handleLowFreqUpdate = (volume: number) => {
           </div>
           <!-- 中心孔 -->
           <div class="center-hole"></div>
-
         </div>
       </div>
       <div v-show="state.lyricLines.length > 0" class="right">
-        <LyricPlayer ref="lyricPlayerRef" :lyric-lines="props.show ? state.lyricLines : []"
-          :current-time="state.currentTime"  class="lyric-player" @line-click="
+        <LyricPlayer
+          ref="lyricPlayerRef"
+          :lyric-lines="props.show ? state.lyricLines : []"
+          :current-time="state.currentTime"
+          class="lyric-player"
+          @line-click="
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
             }
           "
-          
-          >
+        >
           <template #bottom-line> Test Bottom Line </template>
         </LyricPlayer>
       </div>
     </div>
     <!-- 音频可视化组件 -->
-    <div class="audio-visualizer-container" v-if="props.show&&coverImage">
-      <AudioVisualizer 
-        :show="props.show && Audio.isPlay" 
-        :height="70" 
+    <div class="audio-visualizer-container" v-if="props.show && coverImage">
+      <AudioVisualizer
+        :show="props.show && Audio.isPlay"
+        :height="70"
         :bar-count="80"
-        :color='mainColor'
+        :color="mainColor"
         @low-freq-update="handleLowFreqUpdate"
       />
     </div>
@@ -425,8 +448,6 @@ const handleLowFreqUpdate = (volume: number) => {
     display: flex;
     position: relative;
 
-
-
     .left {
       width: 40%;
       transition: all 0.3s ease;
@@ -451,7 +472,7 @@ const handleLowFreqUpdate = (volume: number) => {
         align-items: center;
         justify-content: center;
         animation: rotateRecord 33s linear infinite;
-        transition: filter .3s ease;
+        transition: filter 0.3s ease;
         filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.6));
 
         &:hover {
@@ -464,13 +485,12 @@ const handleLowFreqUpdate = (volume: number) => {
           height: 100%;
           position: relative;
           border-radius: 50%;
-          background: 
-            radial-gradient(circle at 50% 50%, #1a1a1a 0%, #0d0d0d 100%);
+          background: radial-gradient(circle at 50% 50%, #1a1a1a 0%, #0d0d0d 100%);
           display: flex;
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          
+
           /* 唱片纹理轨道 */
           &::before {
             content: '';
@@ -480,7 +500,7 @@ const handleLowFreqUpdate = (volume: number) => {
             width: 100%;
             height: 100%;
             border-radius: 50%;
-            background: 
+            background:
               repeating-conic-gradient(
                 from 0deg,
                 transparent 0deg,
@@ -507,14 +527,14 @@ const handleLowFreqUpdate = (volume: number) => {
             left: 0;
             width: 100%;
             height: 100%;
-            background: 
-              radial-gradient(ellipse at 30% 30%, 
-                rgba(255, 255, 255, 0.08) 0%, 
-                rgba(255, 255, 255, 0.04) 25%, 
-                rgba(255, 255, 255, 0.02) 50%,
-                rgba(255, 255, 255, 0.01) 75%,
-                transparent 100%
-              );
+            background: radial-gradient(
+              ellipse at 30% 30%,
+              rgba(255, 255, 255, 0.08) 0%,
+              rgba(255, 255, 255, 0.04) 25%,
+              rgba(255, 255, 255, 0.02) 50%,
+              rgba(255, 255, 255, 0.01) 75%,
+              transparent 100%
+            );
             border-radius: 50%;
             z-index: 2;
             animation: vinylShine 6s ease-in-out infinite;
@@ -526,18 +546,18 @@ const handleLowFreqUpdate = (volume: number) => {
           position: absolute;
           width: 60%;
           height: 60%;
-          background: 
-            radial-gradient(circle at 50% 50%, 
-              rgba(40, 40, 40, 0.95) 0%, 
-              rgba(25, 25, 25, 0.98) 70%, 
-              rgba(15, 15, 15, 1) 100%
-            );
+          background: radial-gradient(
+            circle at 50% 50%,
+            rgba(40, 40, 40, 0.95) 0%,
+            rgba(25, 25, 25, 0.98) 70%,
+            rgba(15, 15, 15, 1) 100%
+          );
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 3;
-          box-shadow: 
+          box-shadow:
             inset 0 0 20px rgba(0, 0, 0, 0.8),
             inset 0 0 0 1px rgba(255, 255, 255, 0.05),
             0 0 10px rgba(0, 0, 0, 0.5);
@@ -547,7 +567,7 @@ const handleLowFreqUpdate = (volume: number) => {
             z-index: 4;
             border-radius: 50%;
             overflow: hidden;
-            box-shadow: 
+            box-shadow:
               0 0 20px rgba(0, 0, 0, 0.4),
               inset 0 0 0 2px rgba(255, 255, 255, 0.1);
             width: 95% !important;
@@ -572,11 +592,11 @@ const handleLowFreqUpdate = (volume: number) => {
             left: 0;
             width: 100%;
             height: 100%;
-            background: 
-              radial-gradient(ellipse at 25% 25%, 
-                rgba(255, 255, 255, 0.1) 0%, 
-                transparent 50%
-              );
+            background: radial-gradient(
+              ellipse at 25% 25%,
+              rgba(255, 255, 255, 0.1) 0%,
+              transparent 50%
+            );
             border-radius: 50%;
             z-index: 5;
             pointer-events: none;
@@ -589,16 +609,10 @@ const handleLowFreqUpdate = (volume: number) => {
           position: absolute;
           width: 8%;
           height: 8%;
-          background: 
-            radial-gradient(circle, 
-              #000 0%, 
-              #111 30%, 
-              #222 70%, 
-              #333 100%
-            );
+          background: radial-gradient(circle, #000 0%, #111 30%, #222 70%, #333 100%);
           border-radius: 50%;
           z-index: 10;
-          box-shadow: 
+          box-shadow:
             inset 0 0 8px rgba(0, 0, 0, 0.9),
             0 0 3px rgba(0, 0, 0, 0.8);
         }
@@ -612,20 +626,19 @@ const handleLowFreqUpdate = (volume: number) => {
 
         // bottom: max(2vw, 29px);
 
-        height: 120%;
-        transform: translateY(-10%);
-        &>div{
+        height: 200%;
+        transform: translateY(-25%);
+        & > div {
           padding-bottom: 0;
           overflow: hidden;
           transform: translateY(-20px);
         }
       }
-      
+
       padding: 0 20px;
-      
+
       margin: 80px 0 calc(var(--play-bottom-height)) 0;
       overflow: hidden;
-
     }
   }
 
@@ -645,7 +658,6 @@ const handleLowFreqUpdate = (volume: number) => {
     // padding: 0 20px;
     display: flex;
     align-items: center;
-    
   }
 }
 

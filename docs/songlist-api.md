@@ -46,7 +46,9 @@ if (playlists.success) {
 }
 
 // 添加歌曲到歌单
-const songs = [/* 歌曲数据 */]
+const songs = [
+  /* 歌曲数据 */
+]
 await songListAPI.addSongs(playlistId, songs)
 ```
 
@@ -65,6 +67,7 @@ const stats: IPCResponse<SongListStatistics> = await songListAPI.getStatistics()
 ### 歌单管理
 
 #### `create(name, description?, source?)`
+
 创建新歌单
 
 ```typescript
@@ -73,6 +76,7 @@ const result = await songListAPI.create('我的收藏', '描述', 'local')
 ```
 
 #### `getAll()`
+
 获取所有歌单
 
 ```typescript
@@ -81,6 +85,7 @@ const result = await songListAPI.getAll()
 ```
 
 #### `getById(hashId)`
+
 根据ID获取歌单
 
 ```typescript
@@ -89,6 +94,7 @@ const result = await songListAPI.getById('playlist-id')
 ```
 
 #### `delete(hashId)`
+
 删除歌单
 
 ```typescript
@@ -97,6 +103,7 @@ const result = await songListAPI.delete('playlist-id')
 ```
 
 #### `batchDelete(hashIds)`
+
 批量删除歌单
 
 ```typescript
@@ -105,6 +112,7 @@ const result = await songListAPI.batchDelete(['id1', 'id2'])
 ```
 
 #### `edit(hashId, updates)`
+
 编辑歌单信息
 
 ```typescript
@@ -115,6 +123,7 @@ const result = await songListAPI.edit('playlist-id', {
 ```
 
 #### `search(keyword, source?)`
+
 搜索歌单
 
 ```typescript
@@ -125,14 +134,18 @@ const result = await songListAPI.search('关键词', 'local')
 ### 歌曲管理
 
 #### `addSongs(hashId, songs)`
+
 添加歌曲到歌单
 
 ```typescript
-const songs: Songs[] = [/* 歌曲数据 */]
+const songs: Songs[] = [
+  /* 歌曲数据 */
+]
 const result = await songListAPI.addSongs('playlist-id', songs)
 ```
 
 #### `removeSong(hashId, songmid)`
+
 移除单首歌曲
 
 ```typescript
@@ -141,6 +154,7 @@ const result = await songListAPI.removeSong('playlist-id', 'song-id')
 ```
 
 #### `removeSongs(hashId, songmids)`
+
 批量移除歌曲
 
 ```typescript
@@ -149,6 +163,7 @@ const result = await songListAPI.removeSongs('playlist-id', ['song1', 'song2'])
 ```
 
 #### `getSongs(hashId)`
+
 获取歌单中的歌曲
 
 ```typescript
@@ -157,6 +172,7 @@ const result = await songListAPI.getSongs('playlist-id')
 ```
 
 #### `searchSongs(hashId, keyword)`
+
 搜索歌单中的歌曲
 
 ```typescript
@@ -167,6 +183,7 @@ const result = await songListAPI.searchSongs('playlist-id', '关键词')
 ### 统计信息
 
 #### `getStatistics()`
+
 获取歌单统计信息
 
 ```typescript
@@ -182,6 +199,7 @@ const result = await songListAPI.getStatistics()
 ```
 
 #### `getSongStatistics(hashId)`
+
 获取歌单歌曲统计信息
 
 ```typescript
@@ -200,6 +218,7 @@ const result = await songListAPI.getSongStatistics('playlist-id')
 ### 数据维护
 
 #### `validateIntegrity(hashId)`
+
 验证歌单数据完整性
 
 ```typescript
@@ -208,6 +227,7 @@ const result = await songListAPI.validateIntegrity('playlist-id')
 ```
 
 #### `repairData(hashId)`
+
 修复歌单数据
 
 ```typescript
@@ -218,6 +238,7 @@ const result = await songListAPI.repairData('playlist-id')
 ### 便捷方法
 
 #### `getPlaylistDetail(hashId)`
+
 获取歌单详细信息（包含歌曲列表）
 
 ```typescript
@@ -231,6 +252,7 @@ const result = await songListAPI.getPlaylistDetail('playlist-id')
 ```
 
 #### `checkAndRepair(hashId)`
+
 检查并修复歌单数据
 
 ```typescript
@@ -249,26 +271,26 @@ const result = await songListAPI.checkAndRepair('playlist-id')
 
 ```typescript
 interface IPCResponse<T = any> {
-  success: boolean    // 操作是否成功
-  data?: T           // 返回的数据
-  error?: string     // 错误信息
-  message?: string   // 附加消息
-  code?: string      // 错误码
+  success: boolean // 操作是否成功
+  data?: T // 返回的数据
+  error?: string // 错误信息
+  message?: string // 附加消息
+  code?: string // 错误码
 }
 ```
 
 ### 错误码说明
 
-| 错误码 | 说明 |
-|--------|------|
-| `INVALID_HASH_ID` | 无效的歌单ID |
-| `PLAYLIST_NOT_FOUND` | 歌单不存在 |
-| `EMPTY_NAME` | 歌单名称为空 |
-| `CREATE_FAILED` | 创建失败 |
-| `DELETE_FAILED` | 删除失败 |
-| `EDIT_FAILED` | 编辑失败 |
-| `READ_FAILED` | 读取失败 |
-| `WRITE_FAILED` | 写入失败 |
+| 错误码               | 说明         |
+| -------------------- | ------------ |
+| `INVALID_HASH_ID`    | 无效的歌单ID |
+| `PLAYLIST_NOT_FOUND` | 歌单不存在   |
+| `EMPTY_NAME`         | 歌单名称为空 |
+| `CREATE_FAILED`      | 创建失败     |
+| `DELETE_FAILED`      | 删除失败     |
+| `EDIT_FAILED`        | 编辑失败     |
+| `READ_FAILED`        | 读取失败     |
+| `WRITE_FAILED`       | 写入失败     |
 
 ## 使用示例
 
@@ -284,9 +306,9 @@ async function managePlaylist() {
     if (!createResult.success) {
       throw new Error(createResult.error)
     }
-    
+
     const playlistId = createResult.data!.id
-    
+
     // 2. 添加歌曲
     const songs = [
       {
@@ -299,22 +321,21 @@ async function managePlaylist() {
         source: 'local'
       }
     ]
-    
+
     await songListAPI.addSongs(playlistId, songs)
-    
+
     // 3. 获取歌单详情
     const detail = await songListAPI.getPlaylistDetail(playlistId)
     console.log('歌单信息:', detail.playlist)
     console.log('歌曲列表:', detail.songs)
-    
+
     // 4. 搜索歌曲
     const searchResult = await songListAPI.searchSongs(playlistId, '歌曲')
     console.log('搜索结果:', searchResult.data)
-    
+
     // 5. 获取统计信息
     const stats = await songListAPI.getSongStatistics(playlistId)
     console.log('统计信息:', stats.data)
-    
   } catch (error) {
     console.error('操作失败:', error)
   }
@@ -360,7 +381,7 @@ const PlaylistManager: React.FC = () => {
     const result = await songListAPI.safeDelete(id, async () => {
       return confirm('确定要删除这个歌单吗？')
     })
-    
+
     if (result.success) {
       await loadPlaylists() // 重新加载列表
     }
@@ -410,6 +431,7 @@ const PlaylistManager: React.FC = () => {
 ## 更新日志
 
 ### v1.0.0 (2024-01-10)
+
 - ✨ 初始版本发布
 - ✨ 完整的歌单管理功能
 - ✨ 批量操作支持

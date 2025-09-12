@@ -28,7 +28,7 @@ jobs:
           TAG_NAME="${{ steps.release-info.outputs.tag_name }}"
           RELEASE_ID="${{ steps.release-info.outputs.release_id }}"
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          
+
           echo "🚀 开始同步新发布的版本到 WebDAV..."
           echo "版本标签: $TAG_NAME"
           echo "版本名称: $RELEASE_NAME"
@@ -52,7 +52,7 @@ jobs:
           # 先创建版本目录
           dir_path="/yd/ceru/$TAG_NAME"
           dir_url="${{ secrets.WEBDAV_BASE_URL }}$dir_path"
-          
+
           echo "创建版本目录: $dir_path"
           if curl -s -f -X MKCOL \
             -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
@@ -65,7 +65,7 @@ jobs:
           # 处理每个asset
           success_count=0
           failed_count=0
-          
+
           for i in $(seq 0 $(($assets_count - 1))); do
             asset=$(echo "$assets_json" | jq -c ".[$i]")
             asset_name=$(echo "$asset" | jq -r '.name')
@@ -134,13 +134,13 @@ jobs:
               failed_count=$((failed_count + 1))
             fi
           done
-          
+
           echo "========================================"
           echo "🎉 同步完成！"
           echo "成功: $success_count 个文件"
           echo "失败: $failed_count 个文件"
           echo "总计: $assets_count 个文件"
-          
+
           if [ "$failed_count" -gt 0 ]; then
             echo "⚠️  有文件同步失败，请检查日志"
             exit 1

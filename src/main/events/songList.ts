@@ -3,16 +3,23 @@ import ManageSongList, { SongListError } from '../services/songList/ManageSongLi
 import type { SongList, Songs } from '@common/types/songList'
 
 // 创建新歌单
-ipcMain.handle('songlist:create', async (_, name: string, description: string = '', source: SongList['source']) => {
-  try {
-    const result = ManageSongList.createPlaylist(name, description, source)
-    return { success: true, data: result, message: '歌单创建成功' }
-  } catch (error) {
-    console.error('创建歌单失败:', error)
-    const message = error instanceof SongListError ? error.message : '创建歌单失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+ipcMain.handle(
+  'songlist:create',
+  async (_, name: string, description: string = '', source: SongList['source']) => {
+    try {
+      const result = ManageSongList.createPlaylist(name, description, source)
+      return { success: true, data: result, message: '歌单创建成功' }
+    } catch (error) {
+      console.error('创建歌单失败:', error)
+      const message = error instanceof SongListError ? error.message : '创建歌单失败'
+      return {
+        success: false,
+        error: message,
+        code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+      }
+    }
   }
-})
+)
 
 // 获取所有歌单
 ipcMain.handle('songlist:get-all', async () => {
@@ -22,7 +29,11 @@ ipcMain.handle('songlist:get-all', async () => {
   } catch (error) {
     console.error('获取歌单列表失败:', error)
     const message = error instanceof SongListError ? error.message : '获取歌单列表失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -45,7 +56,11 @@ ipcMain.handle('songlist:delete', async (_, hashId: string) => {
   } catch (error) {
     console.error('删除歌单失败:', error)
     const message = error instanceof SongListError ? error.message : '删除歌单失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -53,10 +68,10 @@ ipcMain.handle('songlist:delete', async (_, hashId: string) => {
 ipcMain.handle('songlist:batch-delete', async (_, hashIds: string[]) => {
   try {
     const result = ManageSongList.batchDelete(hashIds)
-    return { 
-      success: true, 
-      data: result, 
-      message: `成功删除 ${result.success.length} 个歌单，失败 ${result.failed.length} 个` 
+    return {
+      success: true,
+      data: result,
+      message: `成功删除 ${result.success.length} 个歌单，失败 ${result.failed.length} 个`
     }
   } catch (error) {
     console.error('批量删除歌单失败:', error)
@@ -65,16 +80,23 @@ ipcMain.handle('songlist:batch-delete', async (_, hashIds: string[]) => {
 })
 
 // 编辑歌单信息
-ipcMain.handle('songlist:edit', async (_, hashId: string, updates: Partial<Omit<SongList, 'id' | 'createTime'>>) => {
-  try {
-    ManageSongList.editById(hashId, updates)
-    return { success: true, message: '歌单信息更新成功' }
-  } catch (error) {
-    console.error('编辑歌单失败:', error)
-    const message = error instanceof SongListError ? error.message : '编辑歌单失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+ipcMain.handle(
+  'songlist:edit',
+  async (_, hashId: string, updates: Partial<Omit<SongList, 'id' | 'createTime'>>) => {
+    try {
+      ManageSongList.editById(hashId, updates)
+      return { success: true, message: '歌单信息更新成功' }
+    } catch (error) {
+      console.error('编辑歌单失败:', error)
+      const message = error instanceof SongListError ? error.message : '编辑歌单失败'
+      return {
+        success: false,
+        error: message,
+        code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+      }
+    }
   }
-})
+)
 
 // 更新歌单封面
 ipcMain.handle('songlist:update-cover', async (_, hashId: string, coverImgUrl: string) => {
@@ -84,7 +106,11 @@ ipcMain.handle('songlist:update-cover', async (_, hashId: string, coverImgUrl: s
   } catch (error) {
     console.error('更新封面失败:', error)
     const message = error instanceof SongListError ? error.message : '更新封面失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -132,7 +158,11 @@ ipcMain.handle('songlist:add-songs', async (_, hashId: string, songs: Songs[]) =
   } catch (error) {
     console.error('添加歌曲失败:', error)
     const message = error instanceof SongListError ? error.message : '添加歌曲失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -141,34 +171,45 @@ ipcMain.handle('songlist:remove-song', async (_, hashId: string, songmid: string
   try {
     const instance = new ManageSongList(hashId)
     const removed = instance.removeSong(songmid)
-    return { 
-      success: true, 
-      data: removed, 
-      message: removed ? '歌曲移除成功' : '歌曲不存在' 
+    return {
+      success: true,
+      data: removed,
+      message: removed ? '歌曲移除成功' : '歌曲不存在'
     }
   } catch (error) {
     console.error('移除歌曲失败:', error)
     const message = error instanceof SongListError ? error.message : '移除歌曲失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
 // 批量移除歌曲
-ipcMain.handle('songlist:remove-songs', async (_, hashId: string, songmids: (string | number)[]) => {
-  try {
-    const instance = new ManageSongList(hashId)
-    const result = instance.removeSongs(songmids)
-    return { 
-      success: true, 
-      data: result, 
-      message: `成功移除 ${result.removed} 首歌曲，${result.notFound} 首未找到` 
+ipcMain.handle(
+  'songlist:remove-songs',
+  async (_, hashId: string, songmids: (string | number)[]) => {
+    try {
+      const instance = new ManageSongList(hashId)
+      const result = instance.removeSongs(songmids)
+      return {
+        success: true,
+        data: result,
+        message: `成功移除 ${result.removed} 首歌曲，${result.notFound} 首未找到`
+      }
+    } catch (error) {
+      console.error('批量移除歌曲失败:', error)
+      const message = error instanceof SongListError ? error.message : '批量移除歌曲失败'
+      return {
+        success: false,
+        error: message,
+        code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+      }
     }
-  } catch (error) {
-    console.error('批量移除歌曲失败:', error)
-    const message = error instanceof SongListError ? error.message : '批量移除歌曲失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
   }
-})
+)
 
 // 清空歌单
 ipcMain.handle('songlist:clear-songs', async (_, hashId: string) => {
@@ -179,7 +220,11 @@ ipcMain.handle('songlist:clear-songs', async (_, hashId: string) => {
   } catch (error) {
     console.error('清空歌单失败:', error)
     const message = error instanceof SongListError ? error.message : '清空歌单失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -192,7 +237,11 @@ ipcMain.handle('songlist:get-songs', async (_, hashId: string) => {
   } catch (error) {
     console.error('获取歌曲列表失败:', error)
     const message = error instanceof SongListError ? error.message : '获取歌曲列表失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -205,7 +254,11 @@ ipcMain.handle('songlist:get-song-count', async (_, hashId: string) => {
   } catch (error) {
     console.error('获取歌曲数量失败:', error)
     const message = error instanceof SongListError ? error.message : '获取歌曲数量失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -274,15 +327,19 @@ ipcMain.handle('songlist:repair-data', async (_, hashId: string) => {
   try {
     const instance = new ManageSongList(hashId)
     const result = instance.repairData()
-    return { 
-      success: true, 
-      data: result, 
-      message: result.fixed ? `数据修复完成: ${result.changes.join(', ')}` : '数据无需修复' 
+    return {
+      success: true,
+      data: result,
+      message: result.fixed ? `数据修复完成: ${result.changes.join(', ')}` : '数据无需修复'
     }
   } catch (error) {
     console.error('修复歌单数据失败:', error)
     const message = error instanceof SongListError ? error.message : '修复歌单数据失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })
 
@@ -295,6 +352,10 @@ ipcMain.handle('songlist:force-save', async (_, hashId: string) => {
   } catch (error) {
     console.error('强制保存歌单失败:', error)
     const message = error instanceof SongListError ? error.message : '强制保存歌单失败'
-    return { success: false, error: message, code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR' }
+    return {
+      success: false,
+      error: message,
+      code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+    }
   }
 })

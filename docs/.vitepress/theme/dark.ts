@@ -1,7 +1,10 @@
 import { nextTick, provide } from 'vue'
 // 判断是否能使用 startViewTransition
 const enableTransitions = () => {
-  return 'startViewTransition' in document && window.matchMedia('(prefers-reduced-motion: no-preference)').matches
+  return (
+    'startViewTransition' in document &&
+    window.matchMedia('(prefers-reduced-motion: no-preference)').matches
+  )
 }
 // 切换动画
 export const toggleDark = (isDark: any) => {

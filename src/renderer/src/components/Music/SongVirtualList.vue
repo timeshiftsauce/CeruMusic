@@ -128,7 +128,7 @@ const props = withDefaults(defineProps<Props>(), {
   showDuration: true
 })
 
-const emit = defineEmits(['play', 'pause', 'addToPlaylist', 'download','scroll'])
+const emit = defineEmits(['play', 'pause', 'addToPlaylist', 'download', 'scroll'])
 
 // 虚拟滚动相关状态
 const scrollContainer = ref<HTMLElement>()

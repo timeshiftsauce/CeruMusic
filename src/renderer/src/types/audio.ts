@@ -1,4 +1,4 @@
-import  playList from '@common/types/playList'
+import playList from '@common/types/playList'
 
 // 音频事件相关类型定义
 
@@ -45,6 +45,5 @@ export type ControlAudioState = {
   volume: number
   url: string
 }
-
 
 export type SongList = playList

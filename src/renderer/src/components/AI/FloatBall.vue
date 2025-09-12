@@ -393,13 +393,13 @@ const handleResize = () => {
   const maxX = windowSize.value.width - 120
   const maxY = windowSize.value.height - 176
   const minY = 90 // 顶部边界限制
-  
+
   // 如果悬浮球在右侧，随窗口宽度变化更新位置
   if (!isOnLeft.value) {
     // 重新计算右侧位置
     ballPosition.value.x = windowSize.value.width - 106
   }
-  
+
   // 确保位置在有效范围内
   ballPosition.value.x = Math.max(0, Math.min(ballPosition.value.x, maxX))
   ballPosition.value.y = Math.max(minY, Math.min(ballPosition.value.y, maxY))

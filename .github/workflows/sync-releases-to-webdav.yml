@@ -51,7 +51,7 @@ jobs:
                 }")
           echo "$login_resp"
           token=$(echo "$login_resp" | jq -r '.data.token // empty')
-          
+
           if [ -z "$token" ]; then
             echo "❌ 登录失败，返回：$login_resp"
             exit 1

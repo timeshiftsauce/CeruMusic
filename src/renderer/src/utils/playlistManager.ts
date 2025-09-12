@@ -13,8 +13,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-  // 将事件总线挂载到全局
-  ; (window as any).musicEmitter = emitter
+// 将事件总线挂载到全局
+;(window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -146,7 +146,7 @@ export async function replacePlaylist(
     localUserStore.list.length = 0
 
     // 添加所有歌曲到播放列表
-    songs.forEach(song => {
+    songs.forEach((song) => {
       localUserStore.addSong(song)
     })
 
@@ -154,7 +154,7 @@ export async function replacePlaylist(
     if (songs[0]) {
       await getSongRealUrl(songs[0])
       const playResult = playSongCallback(songs[0])
-      
+
       if (playResult && typeof playResult.then === 'function') {
         await playResult
       }

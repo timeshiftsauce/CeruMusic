@@ -3,7 +3,7 @@
 }
 
 ::view-transition-new(*) {
-  animation: globalDark .5s ease-in;
+  animation: globalDark 0.5s ease-in;
 }
 
 @keyframes globalDark {

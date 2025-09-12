@@ -3,9 +3,10 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   lang: 'zh-CN',
-  title: "Ceru Music",
+  title: 'Ceru Music',
   base: '/',
-  description: "Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。",
+  description:
+    'Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。',
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     logo: '/logo.svg',
@@ -37,7 +38,6 @@ export default defineConfig({
       { icon: 'qq', link: 'https://qm.qq.com/q/IDpQnbGd06' },
       { icon: 'beatsbydre', link: 'https://shiqianjiang.cn' },
       { icon: 'bilibili', link: 'https://space.bilibili.com/696709986' }
-
     ],
     footer: {
       message: 'Released under the Apache License 2.0 License.',
@@ -51,7 +51,7 @@ export default defineConfig({
     }
   },
   lastUpdated: true,
-  head: [['link', { rel: 'icon', href:  '/logo.svg' }]]
+  head: [['link', { rel: 'icon', href: '/logo.svg' }]]
 })
 console.log(process.env.BASE_URL_DOCS)
 // Smooth scrolling functions

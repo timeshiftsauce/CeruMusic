@@ -9,9 +9,7 @@
         </t-button>
 
         <!-- 测试按钮 -->
-        <t-button theme="default" @click="testProgress">
-          测试进度显示
-        </t-button>
+        <t-button theme="default" @click="testProgress"> 测试进度显示 </t-button>
       </div>
 
       <!-- 显示当前下载状态 -->

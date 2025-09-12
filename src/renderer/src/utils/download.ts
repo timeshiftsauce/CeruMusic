@@ -1,7 +1,7 @@
 import { NotifyPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { toRaw } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next';
+import { MessagePlugin } from 'tdesign-vue-next'
 
 interface MusicItem {
   singer: string
@@ -31,22 +31,23 @@ const qualityMap: Record<string, string> = {
 const qualityKey = Object.keys(qualityMap)
 
 async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
-  
   try {
     const LocalUserDetail = LocalUserDetailStore()
-     let quality = LocalUserDetail.userSource.quality as string
+    let quality = LocalUserDetail.userSource.quality as string
     if (
       qualityKey.indexOf(quality) >
-      qualityKey.indexOf((songInfo.types[songInfo.types.length - 1] as unknown as { type: any }).type)
+      qualityKey.indexOf(
+        (songInfo.types[songInfo.types.length - 1] as unknown as { type: any }).type
+      )
     ) {
       quality = (songInfo.types[songInfo.types.length - 1] as unknown as { type: any }).type
     }
-    const tip = MessagePlugin.success('开始下载歌曲：'+ songInfo.name)
-    const result = await window.api.music.requestSdk('downloadSingleSong',{
-      pluginId:LocalUserDetail.userSource.pluginId?.toString() || '',
-      source:songInfo.source,
+    const tip = MessagePlugin.success('开始下载歌曲：' + songInfo.name)
+    const result = await window.api.music.requestSdk('downloadSingleSong', {
+      pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
+      source: songInfo.source,
       quality,
-      songInfo:toRaw(songInfo)
+      songInfo: toRaw(songInfo)
     })
     ;(await tip).close()
     if (!Object.hasOwn(result, 'path')) {
@@ -61,7 +62,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     console.error('下载失败:', error)
     await NotifyPlugin.error({
       title: '下载失败',
-      content: `${error.message.includes('歌曲正在')? '歌曲正在下载中':'未知错误'}`
+      content: `${error.message.includes('歌曲正在') ? '歌曲正在下载中' : '未知错误'}`
     })
   }
 }

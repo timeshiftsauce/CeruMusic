@@ -4,7 +4,7 @@
     <div class="logo-section">
       <div class="image-container">
         <div class="image-bg"></div>
-        <img class="logo-image" src="/logo.svg" alt="Ceru Music Logo">
+        <img class="logo-image" src="/logo.svg" alt="Ceru Music Logo" />
       </div>
     </div>
 
@@ -181,7 +181,7 @@ onMounted(async () => {
 
 .tag {
   padding: 0.4rem 0.8rem;
-  background: #B8F1CE;
+  background: #b8f1ce;
   border: 1px solid #e9ecef;
   border-radius: 20px;
   font-size: 0.8rem;

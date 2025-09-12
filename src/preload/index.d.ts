@@ -24,7 +24,7 @@ interface CustomAPI {
     getInfo: () => Promise<any>
     clear: () => Promise
     getSize: () => Promise<string>
-  },
+  }
 
   // 歌单管理 API
   songList: {
@@ -54,7 +54,7 @@ interface CustomAPI {
     validateIntegrity: (hashId: string) => Promise<any>
     repairData: (hashId: string) => Promise<any>
     forceSave: (hashId: string) => Promise<any>
-  },
+  }
 
   ai: {
     ask: (prompt: string) => Promise<any>
@@ -76,7 +76,7 @@ interface CustomAPI {
   }
   ping: (callback: Function<any>) => undefined
   pingService: {
-    start: () => undefined,
+    start: () => undefined
     stop: () => undefined
   }
   // 用户配置API

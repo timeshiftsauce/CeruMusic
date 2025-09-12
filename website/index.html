@@ -1,258 +1,267 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ceru Music - 跨平台音乐播放器</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
     <!-- Navigation -->
     <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-logo">
-                <img src="./resources/logo.svg" alt="Ceru Music" class="logo-img">
-                <span class="logo-text">Ceru Music</span>
-            </div>
-            <div class="nav-links">
-                <a href="#features">功能特色</a>
-                <a href="#download">下载</a>
-                <a href="./CeruUse.html" target="_blank">文档</a>
-            </div>
+      <div class="nav-container">
+        <div class="nav-logo">
+          <img src="./resources/logo.svg" alt="Ceru Music" class="logo-img" />
+          <span class="logo-text">Ceru Music</span>
         </div>
+        <div class="nav-links">
+          <a href="#features">功能特色</a>
+          <a href="#download">下载</a>
+          <a href="./CeruUse.html" target="_blank">文档</a>
+        </div>
+      </div>
     </nav>
 
     <!-- Hero Section -->
     <section class="hero">
-        <div class="hero-container">
-            <div class="hero-content">
-                <h1 class="hero-title">
-                    <span class="gradient-text">Ceru Music</span>
-                    <br>跨平台音乐播放器
-                </h1>
-                <p class="hero-description">
-                    集成多平台音乐源，提供优雅的桌面音乐体验。支持网易云音乐、QQ音乐等多个平台，让你的音乐世界更加丰富。
-                </p>
-                <div class="hero-buttons">
-                    <button class="btn btn-primary" onclick="scrollToDownload()">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7,10 12,15 17,10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        立即下载
-                    </button>
-                    <button class="btn btn-secondary" onclick="scrollToFeatures()">
-                        了解更多
-                    </button>
-                </div>
-            </div>
-            <div class="hero-image">
-                <div class="app-preview">
-                    <div class="app-window">
-                        <div class="window-header">
-                            <div class="window-controls">
-                                <span class="control close"></span>
-                                <span class="control minimize"></span>
-                                <span class="control maximize"></span>
-                            </div>
-                        </div>
-                        <div class="window-content">
-                            <div class="music-player-preview">
-                                <div class="album-art"></div>
-                                <div class="player-info">
-                                    <div class="song-title"></div>
-                                    <div class="artist-name"></div>
-                                    <div class="progress-bar">
-                                        <div class="progress"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      <div class="hero-container">
+        <div class="hero-content">
+          <h1 class="hero-title">
+            <span class="gradient-text">Ceru Music</span>
+            <br />跨平台音乐播放器
+          </h1>
+          <p class="hero-description">
+            集成多平台音乐源，提供优雅的桌面音乐体验。支持网易云音乐、QQ音乐等多个平台，让你的音乐世界更加丰富。
+          </p>
+          <div class="hero-buttons">
+            <button class="btn btn-primary" onclick="scrollToDownload()">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7,10 12,15 17,10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              立即下载
+            </button>
+            <button class="btn btn-secondary" onclick="scrollToFeatures()">了解更多</button>
+          </div>
         </div>
+        <div class="hero-image">
+          <div class="app-preview">
+            <div class="app-window">
+              <div class="window-header">
+                <div class="window-controls">
+                  <span class="control close"></span>
+                  <span class="control minimize"></span>
+                  <span class="control maximize"></span>
+                </div>
+              </div>
+              <div class="window-content">
+                <div class="music-player-preview">
+                  <div class="album-art"></div>
+                  <div class="player-info">
+                    <div class="song-title"></div>
+                    <div class="artist-name"></div>
+                    <div class="progress-bar">
+                      <div class="progress"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Features Section -->
     <section id="features" class="features">
-        <div class="container">
-            <h2 class="section-title">功能特色</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M12 1v6m0 6v6"/>
-                            <path d="m21 12-6-3-6 3-6-3"/>
-                        </svg>
-                    </div>
-                    <h3>多平台音源</h3>
-                    <p>支持网易云音乐、QQ音乐等多个平台，一站式访问海量音乐资源</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                            <line x1="8" y1="21" x2="16" y2="21"/>
-                            <line x1="12" y1="17" x2="12" y2="21"/>
-                        </svg>
-                    </div>
-                    <h3>跨平台支持</h3>
-                    <p>原生桌面应用，支持 Windows、macOS、Linux 三大操作系统</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M9 18V5l12-2v13"/>
-                            <circle cx="6" cy="18" r="3"/>
-                            <circle cx="18" cy="16" r="3"/>
-                        </svg>
-                    </div>
-                    <h3>歌词显示</h3>
-                    <p>实时歌词显示，支持专辑信息获取，让音乐体验更加丰富</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                        </svg>
-                    </div>
-                    <h3>性能优化</h3>
-                    <p>虚拟滚动技术，轻松处理大型音乐列表，流畅的用户体验</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-                        </svg>
-                    </div>
-                    <h3>本地播放列表</h3>
-                    <p>创建和管理个人播放列表，本地数据存储，个性化音乐体验</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                    </div>
-                    <h3>优雅界面</h3>
-                    <p>现代化设计语言，流畅动画效果，为你带来愉悦的视觉体验</p>
-                </div>
+      <div class="container">
+        <h2 class="section-title">功能特色</h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 1v6m0 6v6" />
+                <path d="m21 12-6-3-6 3-6-3" />
+              </svg>
             </div>
+            <h3>多平台音源</h3>
+            <p>支持网易云音乐、QQ音乐等多个平台，一站式访问海量音乐资源</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+            </div>
+            <h3>跨平台支持</h3>
+            <p>原生桌面应用，支持 Windows、macOS、Linux 三大操作系统</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+            </div>
+            <h3>歌词显示</h3>
+            <p>实时歌词显示，支持专辑信息获取，让音乐体验更加丰富</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+            </div>
+            <h3>性能优化</h3>
+            <p>虚拟滚动技术，轻松处理大型音乐列表，流畅的用户体验</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <h3>本地播放列表</h3>
+            <p>创建和管理个人播放列表，本地数据存储，个性化音乐体验</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path
+                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                />
+              </svg>
+            </div>
+            <h3>优雅界面</h3>
+            <p>现代化设计语言，流畅动画效果，为你带来愉悦的视觉体验</p>
+          </div>
         </div>
+      </div>
     </section>
 
     <!-- Download Section -->
     <section id="download" class="download">
-        <div class="container">
-            <h2 class="section-title">立即下载</h2>
-            <p class="section-subtitle">选择适合你操作系统的版本</p>
-            <div class="download-cards">
-                <div class="download-card">
-                    <div class="platform-icon">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M0 12v-2h24v2H12.5c-.2 0-.5.2-.5.5s.3.5.5.5H24v2H0v-2h11.5c.2 0 .5-.2.5-.5s-.3-.5-.5-.5H0z"/>
-                        </svg>
-                    </div>
-                    <h3>Windows</h3>
-                    <p>Windows 10/11 (64-bit)</p>
-                    <button class="btn btn-download" onclick="downloadApp('windows')">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7,10 12,15 17,10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        下载 .exe
-                    </button>
-                </div>
-                <div class="download-card">
-                    <div class="platform-icon">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12.5 2C13.3 2 14 2.7 14 3.5S13.3 5 12.5 5 11 4.3 11 3.5 11.7 2 12.5 2M21 9H15L13.5 7.5C13.1 7.1 12.6 6.9 12 6.9S10.9 7.1 10.5 7.5L9 9H3C1.9 9 1 9.9 1 11V19C1 20.1 1.9 21 3 21H21C22.1 21 23 20.1 23 19V11C23 9.9 22.1 9 21 9Z"/>
-                        </svg>
-                    </div>
-                    <h3>macOS</h3>
-                    <p>macOS 10.15+ (Intel & Apple Silicon)</p>
-                    <button class="btn btn-download" onclick="downloadApp('macos')">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7,10 12,15 17,10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        下载 .dmg
-                    </button>
-                </div>
-                <div class="download-card">
-                    <div class="platform-icon">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2M21 9V7L15 1H5C3.9 1 3 1.9 3 3V21C3 22.1 3.9 23 5 23H19C20.1 23 21 22.1 21 21V9H21Z"/>
-                        </svg>
-                    </div>
-                    <h3>Linux</h3>
-                    <p>Ubuntu 18.04+ / Debian 10+</p>
-                    <button class="btn btn-download" onclick="downloadApp('linux')">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7,10 12,15 17,10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                        下载 .AppImage
-                    </button>
-                </div>
+      <div class="container">
+        <h2 class="section-title">立即下载</h2>
+        <p class="section-subtitle">选择适合你操作系统的版本</p>
+        <div class="download-cards">
+          <div class="download-card">
+            <div class="platform-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M0 12v-2h24v2H12.5c-.2 0-.5.2-.5.5s.3.5.5.5H24v2H0v-2h11.5c.2 0 .5-.2.5-.5s-.3-.5-.5-.5H0z"
+                />
+              </svg>
             </div>
-            <div class="version-info">
-                <p>当前版本: <span class="version">v1.0.0</span> | 更新时间: 2024年12月</p>
+            <h3>Windows</h3>
+            <p>Windows 10/11 (64-bit)</p>
+            <button class="btn btn-download" onclick="downloadApp('windows')">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7,10 12,15 17,10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              下载 .exe
+            </button>
+          </div>
+          <div class="download-card">
+            <div class="platform-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12.5 2C13.3 2 14 2.7 14 3.5S13.3 5 12.5 5 11 4.3 11 3.5 11.7 2 12.5 2M21 9H15L13.5 7.5C13.1 7.1 12.6 6.9 12 6.9S10.9 7.1 10.5 7.5L9 9H3C1.9 9 1 9.9 1 11V19C1 20.1 1.9 21 3 21H21C22.1 21 23 20.1 23 19V11C23 9.9 22.1 9 21 9Z"
+                />
+              </svg>
             </div>
+            <h3>macOS</h3>
+            <p>macOS 10.15+ (Intel & Apple Silicon)</p>
+            <button class="btn btn-download" onclick="downloadApp('macos')">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7,10 12,15 17,10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              下载 .dmg
+            </button>
+          </div>
+          <div class="download-card">
+            <div class="platform-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2M21 9V7L15 1H5C3.9 1 3 1.9 3 3V21C3 22.1 3.9 23 5 23H19C20.1 23 21 22.1 21 21V9H21Z"
+                />
+              </svg>
+            </div>
+            <h3>Linux</h3>
+            <p>Ubuntu 18.04+ / Debian 10+</p>
+            <button class="btn btn-download" onclick="downloadApp('linux')">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7,10 12,15 17,10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              下载 .AppImage
+            </button>
+          </div>
         </div>
+        <div class="version-info">
+          <p>当前版本: <span class="version">v1.0.0</span> | 更新时间: 2024年12月</p>
+        </div>
+      </div>
     </section>
 
     <!-- Footer -->
     <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <div class="footer-logo">
-                        <img src="./resources/logo.svg" alt="Ceru Music" class="logo-img">
-                        <span class="logo-text">Ceru Music</span>
-                    </div>
-                    <p>跨平台音乐播放器，为你带来优雅的音乐体验</p>
-                </div>
-                <div class="footer-section">
-                    <h4>产品</h4>
-                    <ul>
-                        <li><a href="#features">功能特色</a></li>
-                        <li><a href="#download">下载</a></li>
-                        <li><a href="./design.html">设计文档</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h4>开发者</h4>
-                    <ul>
-                        <!-- <li><a href="../docs/api.md">API 文档</a></li> -->
-                        <li><a href="./pluginDev.html">插件开发</a></li>
-                        <li><a href="https://github.com/timeshiftsauce">GitHub</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h4>支持</h4>
-                    <ul>
-                        <li><a href="./CeruUse.html">使用文档</a></li>
-                        <li><a href="#contact">联系我们</a></li>
-                        <li><a href="#feedback">反馈建议</a></li>
-                    </ul>
-                </div>
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-section">
+            <div class="footer-logo">
+              <img src="./resources/logo.svg" alt="Ceru Music" class="logo-img" />
+              <span class="logo-text">Ceru Music</span>
             </div>
-            <div class="footer-bottom">
-                <p>&copy; 2025 Ceru Music. All rights reserved.</p>
-            </div>
+            <p>跨平台音乐播放器，为你带来优雅的音乐体验</p>
+          </div>
+          <div class="footer-section">
+            <h4>产品</h4>
+            <ul>
+              <li><a href="#features">功能特色</a></li>
+              <li><a href="#download">下载</a></li>
+              <li><a href="./design.html">设计文档</a></li>
+            </ul>
+          </div>
+          <div class="footer-section">
+            <h4>开发者</h4>
+            <ul>
+              <!-- <li><a href="../docs/api.md">API 文档</a></li> -->
+              <li><a href="./pluginDev.html">插件开发</a></li>
+              <li><a href="https://github.com/timeshiftsauce">GitHub</a></li>
+            </ul>
+          </div>
+          <div class="footer-section">
+            <h4>支持</h4>
+            <ul>
+              <li><a href="./CeruUse.html">使用文档</a></li>
+              <li><a href="#contact">联系我们</a></li>
+              <li><a href="#feedback">反馈建议</a></li>
+            </ul>
+          </div>
         </div>
+        <div class="footer-bottom">
+          <p>&copy; 2025 Ceru Music. All rights reserved.</p>
+        </div>
+      </div>
     </footer>
 
     <script src="script.js"></script>
-</body>
+  </body>
 </html>

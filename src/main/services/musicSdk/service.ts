@@ -22,7 +22,6 @@ import { fileURLToPath } from 'url'
 
 const fileLock: Record<string, boolean> = {}
 
-
 function main(source: string) {
   const Api = musicSdk[source]
   return {
@@ -37,7 +36,6 @@ function main(source: string) {
 
         // 获取原始URL
         const originalUrlPromise = usePlugin.getMusicUrl(source, songInfo, quality)
-
 
         // 生成歌曲唯一标识
         const songId = `${songInfo.name}-${songInfo.singer}-${source}-${quality}`
@@ -163,9 +161,9 @@ function main(source: string) {
       }
     },
 
-    async parsePlaylistId({url}: {url: string}) {
+    async parsePlaylistId({ url }: { url: string }) {
       try {
-        return await Api.songList.handleParseId(url) 
+        return await Api.songList.handleParseId(url)
       } catch (e: any) {
         return {
           error: '解析歌单链接失败 ' + (e.error || e.message || e)

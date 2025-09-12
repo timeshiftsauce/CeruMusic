@@ -107,11 +107,11 @@ export async function shouldUseBlackText(imageSrc: string): Promise<boolean> {
     // 考虑到图片会受到rgba(0, 0, 0, 0.256)背景覆盖，实际显示会更暗
     // 大幅提高阈值，让白色文字在更多情况下被选择
     // 只有非常明亮的图片才使用黑色文字
-    
+
     const shouldUseBlack = averageLuminance >= 0.6
-    
+
     console.log(`决定使用${shouldUseBlack ? '黑色' : '白色'}文字`)
-    
+
     return shouldUseBlack
   } catch (error) {
     console.error('计算对比色失败:', error)

@@ -4,11 +4,7 @@
       <h3>自动更新</h3>
       <div class="update-info">
         <p>当前版本: {{ currentVersion }}</p>
-        <t-button 
-          theme="primary" 
-          :loading="isChecking" 
-          @click="handleCheckUpdate"
-        >
+        <t-button theme="primary" :loading="isChecking" @click="handleCheckUpdate">
           {{ isChecking ? '检查中...' : '检查更新' }}
         </t-button>
       </div>
