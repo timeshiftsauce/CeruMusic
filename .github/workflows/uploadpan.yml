@@ -34,7 +34,7 @@ jobs:
           # 读取输入参数
           SPECIFIC_TAG="${{ github.event.inputs.tag_name }}"
           RELEASES_JSON='${{ steps.get-releases.outputs.releases_json }}'
-          
+
           echo "开始同步 releases..."
           echo "特定标签: ${SPECIFIC_TAG:-所有版本}"
           echo "WebDAV 根路径: ${{ secrets.WEBDAV_BASE_URL }}/yd/ceru"
@@ -156,5 +156,5 @@ jobs:
               fi
             done
           done
-          
+
           echo "🎉 WebDAV 同步完成"

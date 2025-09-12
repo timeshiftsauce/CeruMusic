@@ -153,14 +153,14 @@ export default {
           _types.flac = {
             size
           }
-         
+
         case 320000:
           size = item.h ? sizeFormate(item.h.size) : null
           types.push({ type: '320k', size })
           _types['320k'] = {
             size
           }
-         
+
         case 192000:
         case 128000:
           size = item.l ? sizeFormate(item.l.size) : null

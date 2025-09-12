@@ -4,11 +4,111 @@ import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue
 import { ref } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
-import { TreeRoundDotIcon } from 'tdesign-icons-vue-next'
+import {
+  TreeRoundDotIcon,
+  PaletteIcon,
+  ApiIcon,
+  MusicIcon,
+  InfoCircleIcon,
+  PlayCircleIcon,
+  SaveIcon
+} from 'tdesign-icons-vue-next'
 import fonts from '@renderer/assets/icon_font/icons'
-
+import { useRouter } from 'vue-router'
+import { computed, watch } from 'vue'
+import MusicCache from '@renderer/components/Settings/MusicCache.vue'
+import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
+import ThemeSelector from '@renderer/components/ThemeSelector.vue'
+import Versions from '@renderer/components/Versions.vue'
+import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 const Store = LocalUserDetailStore()
 const { userInfo } = storeToRefs(Store)
+
+// 当前选择的设置分类
+const activeCategory = ref<string>('appearance')
+
+// 应用版本号
+const appVersion = ref('1.0.0')
+
+// 获取应用版本号
+const getAppVersion = async () => {
+  try {
+    const version = await window.electron.ipcRenderer.invoke('get-app-version')
+    if (version) {
+      appVersion.value = version
+    }
+  } catch (error) {
+    console.warn('Failed to get app version via IPC:', error)
+  }
+}
+
+// 初始化时获取版本号
+getAppVersion()
+
+// 自动更新功能
+const { checkForUpdates } = useAutoUpdate()
+
+// 检查更新状态
+const isCheckingUpdate = ref(false)
+
+// 检查更新函数
+const handleCheckUpdate = async () => {
+  isCheckingUpdate.value = true
+  try {
+    await checkForUpdates()
+  } catch (error) {
+    console.error('检查更新失败:', error)
+  } finally {
+    isCheckingUpdate.value = false
+  }
+}
+
+// 设置分类配置
+const settingsCategories = [
+  {
+    key: 'appearance',
+    label: '外观设置',
+    icon: PaletteIcon,
+    description: '主题、标题栏风格等外观配置'
+  },
+  {
+    key: 'ai',
+    label: 'AI 功能',
+    icon: ApiIcon,
+    description: 'DeepSeek API 配置和 AI 相关功能'
+  },
+  {
+    key: 'playlist',
+    label: '播放列表',
+    icon: PlayCircleIcon,
+    description: '播放列表管理和相关设置'
+  },
+  {
+    key: 'plugins',
+    label: '插件管理',
+    icon: TreeRoundDotIcon,
+    description: '插件安装、配置和管理'
+  },
+  {
+    key: 'music',
+    label: '音乐源',
+    icon: MusicIcon,
+    description: '音乐源选择和音质配置'
+  },
+  {
+    key: 'storage',
+    label: '存储管理',
+    icon: SaveIcon,
+    description: '缓存管理和存储设置'
+  },
+  {
+    key: 'about',
+    label: '关于',
+    icon: InfoCircleIcon,
+    description: '版本信息和功能说明'
+  }
+]
+
 // 当前选择的控制风格
 const currentStyle = ref<'windows' | 'traffic-light'>(
   userInfo.value.topBarStyle ? 'traffic-light' : 'windows'
@@ -17,6 +117,11 @@ const currentStyle = ref<'windows' | 'traffic-light'>(
 // DeepSeek API Key 配置
 const deepseekAPIkey = ref<string>(userInfo.value.deepseekAPIkey || '')
 const isEditingAPIKey = ref<boolean>(false)
+
+// 切换设置分类
+const switchCategory = (categoryKey: string): void => {
+  activeCategory.value = categoryKey
+}
 
 // 切换风格
 const switchStyle = (style: 'windows' | 'traffic-light'): void => {
@@ -50,10 +155,7 @@ const clearAPIKey = (): void => {
   isEditingAPIKey.value = false
   console.log('DeepSeek API Key 已清空')
 }
-import { useRouter } from 'vue-router'
-import { computed, watch } from 'vue'
-import MusicCache from '@renderer/components/Settings/MusicCache.vue'
-import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
+
 const router = useRouter()
 const goPlugin = () => {
   router.push('/plugins')
@@ -172,314 +274,465 @@ const getCurrentSourceName = () => {
   const source = userInfo.value.supportedSources?.[userInfo.value.selectSources]
   return source?.name || userInfo.value.selectSources
 }
+
+// 打开外部链接
+const openLink = (url: string) => {
+  window.open(url, '_blank')
+}
 </script>
 
 <template>
   <div class="main-container">
+    <!-- 标题栏 -->
     <div class="header">
       <TitleBarControls title="设置" :show-back="true" />
     </div>
-    <div class="settings-container">
-      <div class="settings-content">
-        <div class="settings-header">
-          <h2>设置你的顶部控制栏</h2>
-          <p>这里展示了两种不同风格的标题栏控制按钮</p>
-        </div>
 
-        <div class="demo-section">
-          <h3>风格选择</h3>
-          <div class="style-buttons">
-            <t-button
-              :theme="currentStyle === 'windows' ? 'primary' : 'default'"
-              @click="switchStyle('windows')"
-            >
-              Windows 风格
-            </t-button>
-            <t-button
-              :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
-              @click="switchStyle('traffic-light')"
-            >
-              红绿灯风格
-            </t-button>
-          </div>
-        </div>
-
-        <div class="demo-section">
-          <h3>两种风格对比</h3>
-          <div class="comparison-container">
-            <div class="style-demo">
-              <h4>Windows 风格</h4>
-              <div class="mock-titlebar">
-                <div class="mock-title">Windows 风格标题栏</div>
-                <TitleBarControls control-style="windows" />
-              </div>
+    <!-- 主要内容区域 -->
+    <div class="settings-layout">
+      <!-- 左侧导航栏 -->
+      <div class="sidebar">
+        <nav class="sidebar-nav">
+          <div
+            v-for="category in settingsCategories"
+            :key="category.key"
+            class="nav-item"
+            :class="{ active: activeCategory === category.key }"
+            @click="switchCategory(category.key)"
+          >
+            <div class="nav-icon">
+              <component :is="category.icon" />
             </div>
-
-            <div class="style-demo">
-              <h4>红绿灯风格 (macOS)</h4>
-              <div class="mock-titlebar">
-                <div class="mock-title">红绿灯风格标题栏</div>
-                <TitleBarControls control-style="traffic-light" />
-              </div>
+            <div class="nav-content">
+              <div class="nav-label">{{ category.label }}</div>
+              <div class="nav-description">{{ category.description }}</div>
             </div>
           </div>
-        </div>
-        <div class="demo-section">
-          <h3>应用主题色</h3>
-          <ThemeSelector />
-        </div>
-        <div class="demo-section">
-          <h3>DeepSeek API 配置</h3>
-          <div class="api-config-container">
-            <div class="api-config-header">
-              <p>配置您的 DeepSeek API Key 以使用 AI 功能</p>
-            </div>
+        </nav>
+      </div>
 
-            <div class="api-key-section">
-              <div class="api-key-input-group">
-                <label for="deepseek-api-key">API Key:</label>
-                <div class="input-container">
-                  <t-input
-                    id="deepseek-api-key"
-                    v-model="deepseekAPIkey"
-                    :type="isEditingAPIKey ? 'text' : 'password'"
-                    :readonly="!isEditingAPIKey"
-                    :placeholder="
-                      isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'
-                    "
-                    class="api-key-input"
-                  />
-                  <div class="input-actions">
-                    <t-button v-if="!isEditingAPIKey" theme="primary" @click="startEditAPIKey">
-                      {{ userInfo.deepseekAPIkey ? '编辑' : '配置' }}
-                    </t-button>
-                    <template v-else>
-                      <t-button theme="primary" @click="saveAPIKey"> 保存 </t-button>
-                      <t-button theme="default" @click="cancelEditAPIKey"> 取消 </t-button>
-                      <t-button theme="danger" @click="clearAPIKey"> 清空 </t-button>
-                    </template>
-                  </div>
-                </div>
-              </div>
+      <!-- 右侧内容面板 -->
+      <div class="content-panel">
+        <div class="panel-content">
+          <!-- 设置内容区域 -->
+          <transition name="fade-slide" mode="out-in">
+            <!-- 外观设置 -->
+            <div v-if="activeCategory === 'appearance'" key="appearance" class="settings-section">
+              <div class="setting-group">
+                <h3>标题栏风格</h3>
+                <p>选择您喜欢的标题栏控制按钮风格</p>
 
-              <div class="api-key-status">
-                <div class="status-indicator">
-                  <span
-                    :class="[
-                      'status-dot',
-                      userInfo.deepseekAPIkey ? 'configured' : 'not-configured'
-                    ]"
-                  ></span>
-                  <span class="status-text">
-                    {{ userInfo.deepseekAPIkey ? 'API Key 已配置' : 'API Key 未配置' }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="api-key-tips">
-                <h4>使用说明：</h4>
-                <ul>
-                  <li>
-                    请前往
-                    <a href="https://platform.deepseek.com/" target="_blank">DeepSeek 官网</a>
-                    获取您的 API Key
-                  </li>
-                  <li>API Key 将安全存储在本地，不会上传到服务器</li>
-                  <li>配置后即可使用 AI 相关功能</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-          <AIFloatBallSettings></AIFloatBallSettings>
-
-        </div>
-
-        <!-- 播放列表管理部分 -->
-        <div class="demo-section">
-          <h3>播放列表管理</h3>
-          <PlaylistSettings />
-          <!-- <PlaylistActions></PlaylistActions> -->
-        </div>
-        <!-- 插件管理部分 -->
-        <div class="demo-section">
-          <h3>插件管理</h3>
-          <div class="plugin-management">
-            <p>管理和配置应用插件，扩展音乐播放器功能</p>
-            <t-button theme="primary" style="line-height: 1em" @click="goPlugin">
-              <TreeRoundDotIcon style="margin-right: 0.2em" /> 打开插件管理
-            </t-button>
-          </div>
-        </div>
-
-        <!-- 音乐源和音质配置 -->
-        <div v-if="hasPluginData" class="demo-section music-source-section">
-          <h3>
-            <i class="iconfont icon-music"></i>
-            音乐源配置
-          </h3>
-          <div class="music-config-container">
-            <div class="config-header">
-              <div class="plugin-info">
-                <span class="plugin-name">当前插件: {{ currentPluginName }}</span>
-                <span class="plugin-status">已启用</span>
-              </div>
-            </div>
-
-            <!-- 音乐源选择 -->
-            <div class="source-selection">
-              <h4>
-                <i class="iconfont icon-source"></i>
-                音乐源选择
-              </h4>
-              <div class="source-cards">
-                <div
-                  v-for="(source, key) in userInfo.supportedSources"
-                  :key="key"
-                  class="source-card"
-                  :class="{ active: userInfo.selectSources === key }"
-                  @click="selectSource(key as string)"
-                >
-                  <div class="source-icon">
-                    <component :is="fonts[key]" style="font-size: 2em"></component>
-                  </div>
-                  <div class="source-info">
-                    <div class="source-name">{{ source.name }}</div>
-                    <div class="source-type">{{ source.type || '音乐源' }}</div>
-                  </div>
-                  <div class="source-check" v-if="userInfo.selectSources === key">
-                    <i class="iconfont icon-check"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 音质选择 -->
-            <div class="quality-selection" v-if="currentSourceQualities.length > 0">
-              <h4>
-                <i class="iconfont icon-quality"></i>
-                音质选择
-              </h4>
-              <div class="quality-slider-container">
-                <!-- <div class="quality-labels">
-                  <span
-                    v-for="quality in currentSourceQualities"
-                    :key="quality"
-                    class="quality-label"
-                    :class="{ active: userInfo.selectQuality === quality }"
+                <div class="style-buttons">
+                  <t-button
+                    :theme="currentStyle === 'windows' ? 'primary' : 'default'"
+                    @click="switchStyle('windows')"
                   >
-                    {{ getQualityDisplayName(quality) }}
-                  </span>
-                </div> -->
-                <t-slider
-                  v-model="qualitySliderValue"
-                  :min="0"
-                  :max="currentSourceQualities.length - 1"
-                  :step="1"
-                  :marks="qualityMarks"
-                  :label="qualityMarks[qualitySliderValue]"
-                  @change="onQualityChange"
-                  class="quality-slider"
-                />
+                    Windows 风格
+                  </t-button>
+                  <t-button
+                    :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
+                    @click="switchStyle('traffic-light')"
+                  >
+                    红绿灯风格
+                  </t-button>
+                </div>
+
+                <div class="style-preview">
+                  <div class="preview-item">
+                    <h4>Windows 风格</h4>
+                    <div class="mock-titlebar">
+                      <div class="mock-title">Windows 风格标题栏</div>
+                      <TitleBarControls control-style="windows" />
+                    </div>
+                  </div>
+                  <div class="preview-item">
+                    <h4>红绿灯风格 (macOS)</h4>
+                    <div class="mock-titlebar">
+                      <div class="mock-title">红绿灯风格标题栏</div>
+                      <TitleBarControls control-style="traffic-light" />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="quality-description">
-                <p>
-                  当前选择:
-                  <strong>{{ getQualityDisplayName(userInfo.selectQuality || '') }}</strong>
-                </p>
-                <p class="quality-hint">
-                  {{ getQualityDescription(userInfo.selectQuality || '') }}
-                </p>
+
+              <div class="setting-group">
+                <h3>应用主题色</h3>
+                <ThemeSelector />
               </div>
             </div>
 
-            <!-- 配置状态 -->
-            <div class="config-status">
-              <div class="status-item">
-                <span class="status-label">音乐源:</span>
-                <span class="status-value">{{ getCurrentSourceName() }}</span>
-              </div>
-              <div class="status-item">
-                <span class="status-label">音质:</span>
-                <span class="status-value">{{
-                  getQualityDisplayName(userInfo.selectQuality || '')
-                }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+            <!-- AI 功能设置 -->
+            <div v-else-if="activeCategory === 'ai'" key="ai" class="settings-section">
+              <div class="setting-group">
+                <h3>DeepSeek API 配置</h3>
+                <p>配置您的 DeepSeek API Key 以使用 AI 功能</p>
 
-        <!-- 未配置插件提示 -->
-        <div v-else class="demo-section plugin-prompt-section">
-          <h3>
-            <i class="iconfont icon-music"></i>
-            音乐源配置
-          </h3>
-          <div class="plugin-prompt">
-            <div class="prompt-icon">
-              <TreeRoundDotIcon />
-            </div>
-            <div class="prompt-content">
-              <h4>未检测到插件配置</h4>
-              <p>请先安装并选择一个音乐插件，然后返回此处配置音乐源和音质选项。</p>
-              <t-button theme="primary" @click="goPlugin">
-                <i class="iconfont icon-plugin"></i>
-                前往插件管理
-              </t-button>
-            </div>
-          </div>
-        </div>
-        <div class="demo-section">
-          <div>
-            <MusicCache></MusicCache>
-          </div>
-        </div>
-        <div class="demo-section">
-          <Versions></Versions>
-        </div>
+                <div class="api-key-section">
+                  <div class="api-key-input-group">
+                    <label for="deepseek-api-key">API Key:</label>
+                    <div class="input-container">
+                      <t-input
+                        id="deepseek-api-key"
+                        v-model="deepseekAPIkey"
+                        :type="isEditingAPIKey ? 'text' : 'password'"
+                        :readonly="!isEditingAPIKey"
+                        :placeholder="
+                          isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'
+                        "
+                        class="api-key-input"
+                      />
+                      <div class="input-actions">
+                        <t-button v-if="!isEditingAPIKey" theme="primary" @click="startEditAPIKey">
+                          {{ userInfo.deepseekAPIkey ? '编辑' : '配置' }}
+                        </t-button>
+                        <template v-else>
+                          <t-button theme="primary" @click="saveAPIKey"> 保存 </t-button>
+                          <t-button theme="default" @click="cancelEditAPIKey"> 取消 </t-button>
+                          <t-button theme="danger" @click="clearAPIKey"> 清空 </t-button>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
 
-        <div class="demo-section">
-          <h3>功能说明</h3>
-          <div class="feature-list">
-            <div class="feature-item">
-              <i class="iconfont icon-shezhi"></i>
-              <div>
-                <strong>设置按钮</strong>
-                <p>位于控制按钮最左侧，用于打开应用设置</p>
+                  <div class="api-key-status">
+                    <div class="status-indicator">
+                      <span
+                        :class="[
+                          'status-dot',
+                          userInfo.deepseekAPIkey ? 'configured' : 'not-configured'
+                        ]"
+                      ></span>
+                      <span class="status-text">
+                        {{ userInfo.deepseekAPIkey ? 'API Key 已配置' : 'API Key 未配置' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="api-key-tips">
+                    <h4>使用说明：</h4>
+                    <ul>
+                      <li>
+                        请前往
+                        <a href="https://platform.deepseek.com/" target="_blank">DeepSeek 官网</a>
+                        获取您的 API Key
+                      </li>
+                      <li>API Key 将安全存储在本地，不会上传到服务器</li>
+                      <li>配置后即可使用 AI 相关功能</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div class="feature-item">
-              <i class="iconfont icon-dibu"></i>
-              <div>
-                <strong>Mini 模式</strong>
-                <p>切换到迷你播放模式，节省桌面空间</p>
-              </div>
-            </div>
-
-            <div class="feature-item">
-              <i class="iconfont icon-zuixiaohua"></i>
-              <div>
-                <strong>最小化</strong>
-                <p>将窗口最小化到任务栏</p>
+              <div class="setting-group">
+                <h3>AI 浮球设置</h3>
+                <AIFloatBallSettings />
               </div>
             </div>
 
-            <div class="feature-item">
-              <i class="iconfont icon-zengjia"></i>
-              <div>
-                <strong>最大化</strong>
-                <p>切换窗口最大化/还原状态</p>
+            <!-- 播放列表设置 -->
+            <div v-else-if="activeCategory === 'playlist'" key="playlist" class="settings-section">
+              <div class="setting-group">
+                <h3>播放列表管理</h3>
+                <PlaylistSettings />
               </div>
             </div>
 
-            <div class="feature-item">
-              <i class="iconfont icon-a-quxiaoguanbi"></i>
-              <div>
-                <strong>关闭</strong>
-                <p>关闭应用程序</p>
+            <!-- 插件管理 -->
+            <div v-else-if="activeCategory === 'plugins'" key="plugins" class="settings-section">
+              <div class="setting-group">
+                <h3>插件管理</h3>
+                <p>管理和配置应用插件，扩展音乐播放器功能</p>
+                <t-button theme="primary" @click="goPlugin">
+                  <TreeRoundDotIcon style="margin-right: 0.5em" />
+                  打开插件管理
+                </t-button>
               </div>
             </div>
-          </div>
+
+            <!-- 音乐源配置 -->
+            <div v-else-if="activeCategory === 'music'" key="music" class="settings-section">
+              <!-- 有插件数据时显示配置 -->
+              <div v-if="hasPluginData" class="music-config-container">
+                <div class="setting-group">
+                  <div class="plugin-info">
+                    <span class="plugin-name">当前插件: {{ currentPluginName }}</span>
+                    <span class="plugin-status">已启用</span>
+                  </div>
+                </div>
+
+                <div class="setting-group">
+                  <h3>音乐源选择</h3>
+                  <div class="source-cards">
+                    <div
+                      v-for="(source, key) in userInfo.supportedSources"
+                      :key="key"
+                      class="source-card"
+                      :class="{ active: userInfo.selectSources === key }"
+                      @click="selectSource(key as string)"
+                    >
+                      <div class="source-icon">
+                        <component :is="fonts[key]" style="font-size: 2em"></component>
+                      </div>
+                      <div class="source-info">
+                        <div class="source-name">{{ source.name }}</div>
+                        <div class="source-type">{{ source.type || '音乐源' }}</div>
+                      </div>
+                      <div class="source-check" v-if="userInfo.selectSources === key">
+                        <i class="iconfont icon-check"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="currentSourceQualities.length > 0" class="setting-group">
+                  <h3>音质选择</h3>
+                  <div class="quality-slider-container">
+                    <t-slider
+                      v-model="qualitySliderValue"
+                      :min="0"
+                      :max="currentSourceQualities.length - 1"
+                      :step="1"
+                      :marks="qualityMarks"
+                      :label="qualityMarks[qualitySliderValue]"
+                      @change="onQualityChange"
+                      class="quality-slider"
+                    />
+                  </div>
+                  <div class="quality-description">
+                    <p>
+                      当前选择:
+                      <strong>{{ getQualityDisplayName(userInfo.selectQuality || '') }}</strong>
+                    </p>
+                    <p class="quality-hint">
+                      {{ getQualityDescription(userInfo.selectQuality || '') }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="setting-group">
+                  <h3>配置状态</h3>
+                  <div class="config-status">
+                    <div class="status-item">
+                      <span class="status-label">音乐源:</span>
+                      <span class="status-value">{{ getCurrentSourceName() }}</span>
+                    </div>
+                    <div class="status-item">
+                      <span class="status-label">音质:</span>
+                      <span class="status-value">{{
+                        getQualityDisplayName(userInfo.selectQuality || '')
+                      }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 未配置插件提示 -->
+              <div v-else class="plugin-prompt">
+                <div class="prompt-icon">
+                  <TreeRoundDotIcon />
+                </div>
+                <div class="prompt-content">
+                  <h4>未检测到插件配置</h4>
+                  <p>请先安装并选择一个音乐插件，然后返回此处配置音乐源和音质选项。</p>
+                  <t-button theme="primary" @click="goPlugin">
+                    <i class="iconfont icon-plugin"></i>
+                    前往插件管理
+                  </t-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 存储管理 -->
+            <div v-else-if="activeCategory === 'storage'" key="storage" class="settings-section">
+              <div class="setting-group">
+                <h3>音乐缓存管理</h3>
+                <MusicCache />
+              </div>
+            </div>
+
+            <!-- 关于页面 -->
+            <div v-else-if="activeCategory === 'about'" key="about" class="settings-section">
+              <!-- 应用信息 -->
+              <div class="setting-group">
+                <div class="app-header">
+                  <div class="app-logo">
+                    <img src="/logo.svg" alt="Ceru Music" />
+                  </div>
+                  <div class="app-info">
+                    <div class="app-title-row">
+                      <h2>Cerulearn Music</h2>
+                      <span class="app-version">v{{ appVersion }}</span>
+                    </div>
+                    <p class="app-subtitle">澜音 播放器</p>
+                    <p class="app-description">
+                      澜音是一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 版本信息 -->
+              <div class="setting-group">
+                <h3>版本信息</h3>
+                <div class="version-section">
+                  <Versions />
+                  <div class="update-actions">
+                    <t-button
+                      theme="primary"
+                      :loading="isCheckingUpdate"
+                      @click="handleCheckUpdate"
+                    >
+                      {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
+                    </t-button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 技术栈 -->
+              <div class="setting-group">
+                <h3>技术栈</h3>
+                <div class="tech-stack">
+                  <div class="tech-item">
+                    <span class="tech-name">Electron</span>
+                    <span class="tech-desc">跨平台桌面应用框架</span>
+                  </div>
+                  <div class="tech-item">
+                    <span class="tech-name">Vue 3</span>
+                    <span class="tech-desc">响应式前端框架</span>
+                  </div>
+                  <div class="tech-item">
+                    <span class="tech-name">TypeScript</span>
+                    <span class="tech-desc">类型安全的 JavaScript</span>
+                  </div>
+                  <div class="tech-item">
+                    <span class="tech-name">Pinia</span>
+                    <span class="tech-desc">Vue 状态管理工具</span>
+                  </div>
+                  <div class="tech-item">
+                    <span class="tech-name">Vite</span>
+                    <span class="tech-desc">快速前端构建工具</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 开发团队 -->
+              <div class="setting-group">
+                <h3>开发团队</h3>
+                <div class="developer-list">
+                  <div class="developer-item" @click="openLink('https://shiqianjiang.cn/')">
+                    <div class="developer-avatar">
+                      <img src="/head.jpg" alt="时迁酱" />
+                    </div>
+                    <div class="developer-info">
+                      <h4>时迁酱</h4>
+                      <p>产品总体设计与开发</p>
+                    </div>
+                  </div>
+                  <div class="developer-item">
+                    <div class="developer-avatar">
+                      <img src="/wldss.png" alt="无聊的霜霜" />
+                    </div>
+                    <div class="developer-info">
+                      <h4>无聊的霜霜</h4>
+                      <p>首页设计 & AI助手</p>
+                    </div>
+                  </div>
+                  <div class="developer-item">
+                    <div class="developer-avatar">
+                      <img src="/star.png" alt="Star" />
+                    </div>
+                    <div class="developer-info">
+                      <h4>Star</h4>
+                      <p>插件管理相关功能 & 部分接口封装</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 开源许可 -->
+              <div class="setting-group">
+                <h3>开源许可</h3>
+                <div class="license-info">
+                  <p>
+                    本项目源代码遵循 <strong>Apache License 2.0</strong> 开源协议，
+                    仅授权用户对项目框架进行学习、修改与二次开发，不包含任何音乐数据相关授权。
+                  </p>
+                  <div class="license-actions">
+                    <t-button
+                      theme="default"
+                      @click="openLink('https://github.com/timeshiftsauce/CeruMusic')"
+                    >
+                      <i class="iconfont icon-github"></i>
+                      查看源码
+                    </t-button>
+                    <t-button
+                      theme="default"
+                      @click="
+                        openLink('https://github.com/timeshiftsauce/CeruMusic/blob/main/LICENSE')
+                      "
+                    >
+                      <i class="iconfont icon-license"></i>
+                      许可协议
+                    </t-button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 法律声明 -->
+              <div class="setting-group">
+                <h3>法律声明</h3>
+                <div class="legal-notice">
+                  <div class="notice-item">
+                    <h4>🔒 数据与内容责任</h4>
+                    <p>
+                      本项目不直接获取、存储、传输任何音乐数据或版权内容，仅提供插件运行框架。
+                      用户通过插件获取的所有数据，其合法性由插件提供者及用户自行负责。
+                    </p>
+                  </div>
+                  <div class="notice-item">
+                    <h4>⚖️ 版权合规要求</h4>
+                    <p>
+                      用户承诺仅通过合规插件获取音乐相关信息，且获取、使用版权内容的行为符合
+                      《中华人民共和国著作权法》及相关法律法规，不侵犯任何第三方合法权益。
+                    </p>
+                  </div>
+                  <div class="notice-item">
+                    <h4>🚫 使用限制</h4>
+                    <p>
+                      本项目仅允许用于非商业、纯技术学习目的，禁止用于任何商业运营、盈利活动，
+                      禁止修改后用于侵犯第三方权益的场景。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 联系方式 -->
+              <div class="setting-group">
+                <h3>联系方式</h3>
+                <div class="contact-info">
+                  <p>如有技术问题或合作意向（仅限技术交流），请通过以下方式联系：</p>
+                  <div class="contact-actions">
+                    <t-button theme="primary" @click="openLink('https://qm.qq.com/q/IDpQnbGd06')">
+                      官方QQ群
+                    </t-button>
+                    <t-button
+                      theme="primary"
+                      variant="outline"
+                      @click="openLink('https://ceru.docs.shiqianjiang.cn/')"
+                    >
+                      官方网站
+                    </t-button>
+                    <t-button
+                      theme="default"
+                      @click="openLink('https://github.com/timeshiftsauce/CeruMusic/issues')"
+                    >
+                      问题反馈
+                    </t-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </div>
@@ -489,246 +742,356 @@ const getCurrentSourceName = () => {
 <style lang="scss" scoped>
 .main-container {
   height: 100vh;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
 }
 
 .header {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
-  background-color: #fff;
+  background: #ffffff;
   padding: 1.5rem;
-  position: sticky;
+  // border-bottom: 1px solid #e2e8f0;
+  // box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  top: 0;
-  left: 0;
-  right: 0;
 }
 
-.settings-container {
-  width: 100%;
-  padding: 2rem;
-  overflow-y: scroll;
-  max-height: 100vh;
+.settings-layout {
+  margin: 0px 6px;
+
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
-.settings-content {
-  max-width: 1100px;
-  margin: 0 auto;
-  background: #fff;
-  padding: 2rem;
-}
+// 左侧导航栏
+.sidebar {
+  width: 280px;
+  background: #ffffff;
+  // border-right: 1px solid #e2e8f0;
+  padding-right: 5px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 
-.settings-header {
-  margin-bottom: 2rem;
+  .sidebar-header {
+    // padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
 
-  h2 {
-    color: #111827;
-    margin-bottom: 0.5rem;
+    h3 {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1e293b;
+    }
   }
 
-  p {
-    color: #6b7280;
+  .sidebar-nav {
+    flex: 1;
+    // padding: 1rem 0;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1.5rem;
+    margin-top: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+
+    &:hover {
+      background: #f1f5f9;
+    }
+
+    &.active {
+      background: var(--td-brand-color-1);
+      border-left-color: var(--td-brand-color-5);
+
+      .nav-icon {
+        color: var(--td-brand-color-5);
+      }
+
+      .nav-label {
+        color: var(--td-brand-color-6);
+        font-weight: 600;
+      }
+    }
+
+    .nav-icon {
+      width: 20px;
+      height: 20px;
+      color: #64748b;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      svg {
+        width: 100%;
+        height: 100%;
+      }
+      transition: color 0.2s ease;
+    }
+
+    .nav-content {
+      flex: 1;
+      min-width: 0;
+
+      .nav-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #334155;
+        margin-bottom: 0.125rem;
+        transition: color 0.2s ease;
+      }
+
+      .nav-description {
+        font-size: 0.75rem;
+        color: #64748b;
+        line-height: 1.3;
+      }
+    }
   }
 }
 
-.demo-section {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
+// 右侧内容面板
+.content-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px;
 
-  h3 {
-    color: #111827;
-    margin-bottom: 1rem;
+  .panel-header {
+    padding: 2rem 2rem 1rem;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+
+    h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    p {
+      margin: 0;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
   }
 
-  h4 {
-    color: #374151;
-    margin-bottom: 0.5rem;
-    font-size: 1rem;
+  .panel-content {
+    flex: 1;
+    overflow-y: auto;
+    // padding: 2rem;
+    background: #f8fafc;
   }
 }
 
+// 设置区域
+.settings-section {
+  .setting-group {
+    background: #ffffff;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+    h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    > p {
+      margin: 0 0 1.5rem;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+  }
+}
+
+// 样式按钮
 .style-buttons {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 
-.preview-container,
-.comparison-container {
-  background: #f9fafb;
-  padding: 1rem;
-  border-radius: 0.375rem;
-}
-
-.comparison-container {
+// 样式预览
+.style-preview {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
-}
 
-.style-demo {
-  background: #fff;
-  padding: 1rem;
-  border-radius: 0.375rem;
-  border: 1px solid #e5e7eb;
+  .preview-item {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+
+    h4 {
+      margin: 0 0 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+    }
+  }
 }
 
 .mock-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 1rem;
+  padding: 0.75rem 1rem;
   background: #f6f6f6;
   border-radius: 0.375rem;
   border: 1px solid #d1d5db;
+
+  .mock-title {
+    font-weight: 500;
+    color: #374151;
+    font-size: 0.875rem;
+  }
 }
 
-.mock-title {
-  font-weight: 500;
-  color: #374151;
-  font-size: 0.875rem;
-}
-
+// 功能列表
 .feature-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
+  gap: 0.75rem;
 
-.feature-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 0.375rem;
+  .feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
 
-  .iconfont {
-    font-size: 1.25rem;
-    color: var(--td-brand-color);
-    margin-top: 0.125rem;
-  }
-
-  div {
-    flex: 1;
-
-    strong {
-      display: block;
-      color: #111827;
-      margin-bottom: 0.25rem;
+    .iconfont {
+      font-size: 1.125rem;
+      color: var(--td-brand-color-5);
+      margin-top: 0.125rem;
     }
 
-    p {
-      color: #6b7280;
-      font-size: 0.875rem;
-      margin: 0;
-    }
-  }
-}
+    div {
+      flex: 1;
 
-// DeepSeek API 配置样式
-.api-config-container {
-  .api-config-header {
-    margin-bottom: 1.5rem;
-
-    p {
-      color: #6b7280;
-      margin: 0;
-    }
-  }
-
-  .api-key-section {
-    .api-key-input-group {
-      margin-bottom: 1rem;
-
-      label {
+      strong {
         display: block;
-        font-weight: 500;
-        color: #374151;
-        margin-bottom: 0.5rem;
-      }
-
-      .input-container {
-        display: flex;
-        gap: 0.75rem;
-        align-items: flex-start;
-
-        .api-key-input {
-          flex: 1;
-        }
-
-        .input-actions {
-          display: flex;
-          gap: 0.5rem;
-          flex-shrink: 0;
-        }
-      }
-    }
-
-    .api-key-status {
-      margin-bottom: 1.5rem;
-
-      .status-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-
-        .status-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-
-          &.configured {
-            background-color: #10b981;
-          }
-
-          &.not-configured {
-            background-color: #ef4444;
-          }
-        }
-
-        .status-text {
-          font-size: 0.875rem;
-          color: #6b7280;
-        }
-      }
-    }
-
-    .api-key-tips {
-      background: #f9fafb;
-      padding: 1rem;
-      border-radius: 0.375rem;
-      border: 1px solid #e5e7eb;
-
-      h4 {
-        color: #374151;
-        margin: 0 0 0.75rem 0;
-        font-size: 0.875rem;
+        color: #1e293b;
+        margin-bottom: 0.25rem;
         font-weight: 600;
       }
 
-      ul {
+      p {
+        color: #64748b;
+        font-size: 0.875rem;
         margin: 0;
-        padding-left: 1.25rem;
+        line-height: 1.4;
+      }
+    }
+  }
+}
 
-        li {
-          color: #6b7280;
-          font-size: 0.875rem;
-          margin-bottom: 0.5rem;
+// API 配置样式
+.api-key-section {
+  .api-key-input-group {
+    margin-bottom: 1rem;
 
-          &:last-child {
-            margin-bottom: 0;
-          }
+    label {
+      display: block;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
 
-          a {
-            color: #3b82f6;
-            text-decoration: none;
+    .input-container {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
 
-            &:hover {
-              text-decoration: underline;
-            }
+      .api-key-input {
+        flex: 1;
+      }
+
+      .input-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+      }
+    }
+  }
+
+  .api-key-status {
+    margin-bottom: 1.5rem;
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+
+        &.configured {
+          background-color: var(--td-brand-color-5);
+        }
+
+        &.not-configured {
+          background-color: var(--td-error-color);
+        }
+      }
+
+      .status-text {
+        font-size: 0.875rem;
+        color: #64748b;
+      }
+    }
+  }
+
+  .api-key-tips {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+
+    h4 {
+      color: #1e293b;
+      margin: 0 0 0.75rem 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 1.25rem;
+
+      li {
+        color: #64748b;
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+
+        a {
+          color: var(--td-brand-color-5);
+          text-decoration: none;
+
+          &:hover {
+            text-decoration: underline;
           }
         }
       }
@@ -737,72 +1100,35 @@ const getCurrentSourceName = () => {
 }
 
 // 音乐源配置样式
-.music-source-section {
-  color: rgb(0, 0, 0);
-  border: none;
-
-  h3 {
-    color: rgb(0, 0, 0);
+.music-config-container {
+  .plugin-info {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, var(--td-brand-color-1) 0%, var(--td-brand-color-2) 100%);
+    border-radius: 0.75rem;
+    border: 1px solid var(--td-brand-color-3);
 
-    .iconfont {
-      font-size: 1.25rem;
+    .plugin-name {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--td-brand-color-6);
     }
-  }
-}
 
-.music-config-container {
-  .config-header {
-    margin-bottom: 2rem;
-
-    .plugin-info {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      padding: 1rem;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 0.5rem;
-      backdrop-filter: blur(10px);
-
-      .plugin-name {
-        font-weight: 600;
-        font-size: 1.1rem;
-      }
-
-      .plugin-status {
-        background: var(--td-brand-color-5);
-        color: var(--td-gray-color-1);
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-      }
-    }
-  }
-
-  .source-selection,
-  .quality-selection {
-    margin-bottom: 2rem;
-
-    h4 {
-      color: rgb(0, 0, 0);
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 1.1rem;
-
-      .iconfont {
-        font-size: 1.125rem;
-      }
+    .plugin-status {
+      background: var(--td-brand-color-5);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-size: 0.75rem;
+      font-weight: 500;
     }
   }
 
   .source-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1rem;
   }
 
@@ -811,38 +1137,32 @@ const getCurrentSourceName = () => {
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid transparent;
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
     border-radius: 0.75rem;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.15);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      border-color: var(--td-brand-color-3);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 
     &.active {
-      background: rgba(255, 255, 255, 0.2);
       border-color: var(--td-brand-color-5);
-      box-shadow: 0 0 20px var(--td-gray-color-6);
+      background: var(--td-brand-color-1);
+      box-shadow: 0 0 0 3px var(--td-brand-color-2);
     }
 
     .source-icon {
-      width: 3rem;
-      height: 3rem;
-      background: rgba(255, 255, 255, 0.2);
+      width: 2.5rem;
+      height: 2.5rem;
+      background: #f1f5f9;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-
-      .iconfont {
-        font-size: 1.5rem;
-        color: white;
-      }
+      color: #64748b;
     }
 
     .source-info {
@@ -850,67 +1170,31 @@ const getCurrentSourceName = () => {
 
       .source-name {
         font-weight: 600;
-        font-size: 1rem;
-        margin-bottom: 0.25rem;
-        text-overflow: ellipsis;
-        overflow: hidden;
-        white-space: nowrap;
+        font-size: 0.875rem;
+        color: #1e293b;
+        margin-bottom: 0.125rem;
       }
 
       .source-type {
-        font-size: 0.875rem;
-        opacity: 0.8;
+        font-size: 0.75rem;
+        color: #64748b;
       }
     }
 
     .source-check {
-      .iconfont {
-        font-size: 1.25rem;
-        color: #10b981;
-      }
+      color: var(--td-brand-color-5);
+      font-size: 1.125rem;
     }
   }
 
   .quality-slider-container {
-    background: rgba(255, 255, 255, 0.1);
+    background: #f8fafc;
     padding: 1.5rem;
     border-radius: 0.75rem;
-    backdrop-filter: blur(10px);
-
-    .quality-labels {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-
-      .quality-label {
-        font-size: 0.875rem;
-        opacity: 0.7;
-        transition: all 0.3s ease;
-
-        &.active {
-          opacity: 1;
-          font-weight: 600;
-          color: #10b981;
-        }
-      }
-    }
+    border: 1px solid #e2e8f0;
 
     .quality-slider {
       margin-bottom: 1rem;
-
-      :deep(.t-slider__track) {
-        background: rgba(255, 255, 255, 0.2);
-      }
-
-      :deep(.t-slider__track-active) {
-        background: linear-gradient(90deg, var(--td-brand-color-5), var(--td-brand-color-6));
-      }
-
-      :deep(.t-slider__button) {
-        background: white;
-        border: 3px solid var(--td-brand-color-5);
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-      }
     }
   }
 
@@ -922,13 +1206,14 @@ const getCurrentSourceName = () => {
       margin: 0.5rem 0;
 
       &:first-child {
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-weight: 600;
+        color: #1e293b;
       }
 
       &.quality-hint {
         font-size: 0.875rem;
-        opacity: 0.8;
+        color: #64748b;
       }
     }
   }
@@ -937,126 +1222,213 @@ const getCurrentSourceName = () => {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    margin-top: 2rem;
 
     .status-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 1rem;
-      background: rgba(255, 255, 255, 0.1);
+      background: #f8fafc;
       border-radius: 0.5rem;
-      backdrop-filter: blur(10px);
+      border: 1px solid #e2e8f0;
 
       .status-label {
         font-weight: 500;
-        opacity: 0.8;
+        color: #64748b;
+        font-size: 0.875rem;
       }
 
       .status-value {
         font-weight: 600;
-        color: var(--td-brand-color-6);
+        color: #1e293b;
+        font-size: 0.875rem;
       }
     }
   }
 }
 
 // 插件提示样式
-.plugin-prompt-section {
-  h3 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-
-    .iconfont {
-      font-size: 1.25rem;
-      color: #6b7280;
-    }
-  }
-}
-
 .plugin-prompt {
   display: flex;
   align-items: center;
-  gap: 2rem;
+  gap: 1.5rem;
   padding: 2rem;
-  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 1rem;
-  border: 2px dashed #d1d5db;
+  border: 2px dashed #cbd5e1;
 
   .prompt-icon {
-    font-size: 2rem;
-    width: 4rem;
-    color: #3b82f6;
-    height: 4rem;
-    background: linear-gradient(135deg, #000000 0%, #764ba2 100%);
+    width: 3rem;
+    height: 3rem;
+    background: linear-gradient(135deg, var(--td-brand-color-5) 0%, var(--td-brand-color-6) 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-
-    .iconfont {
-      font-size: 2rem;
-      color: white;
-    }
+    color: white;
+    font-size: 1.5rem;
   }
 
   .prompt-content {
     flex: 1;
 
     h4 {
-      color: #111827;
+      color: #1e293b;
       margin: 0 0 0.5rem 0;
-      font-size: 1.25rem;
+      font-size: 1.125rem;
+      font-weight: 600;
     }
 
     p {
-      color: #6b7280;
+      color: #64748b;
       margin: 0 0 1.5rem 0;
-      line-height: 1.6;
+      line-height: 1.5;
+    }
+  }
+}
+
+// 底部信息区域
+.footer-info {
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 1rem 2rem;
+
+  .footer-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+
+    .app-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      .app-name {
+        font-weight: 700;
+        color: #1e293b;
+        font-size: 1rem;
+      }
+
+      .app-version {
+        background: #f1f5f9;
+        color: #64748b;
+        padding: 0.125rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+    }
+
+    .developer-info {
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+
+    .copyright {
+      color: #94a3b8;
+      font-size: 0.75rem;
     }
   }
 }
 
 // 响应式设计
-// @media (max-width: 768px) {
-//   .music-config-container {
-//     .source-cards {
-//       grid-template-columns: 1fr;
-//     }
-
-//     .config-status {
-//       grid-template-columns: 1fr;
-//     }
-//   }
-
-//   .plugin-prompt {
-//     flex-direction: column;
-//     text-align: center;
-//     gap: 1.5rem;
-//   }
-// }
-
-// 动画效果
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+@media (max-width: 1024px) {
+  .settings-layout {
+    flex-direction: column;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .sidebar {
+    width: 100%;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+
+    .sidebar-nav {
+      display: flex;
+      overflow-x: auto;
+      padding: 0.5rem;
+
+      .nav-item {
+        flex-shrink: 0;
+        min-width: 200px;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+
+        &.active {
+          border-left: none;
+          border-bottom-color: #3b82f6;
+        }
+      }
+    }
+  }
+
+  .footer-info .footer-content {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
   }
 }
 
-.music-source-section,
-.plugin-prompt-section {
-  animation: fadeInUp 0.6s ease-out;
+@media (max-width: 768px) {
+  .style-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .music-config-container {
+    .source-cards {
+      grid-template-columns: 1fr;
+    }
+
+    .config-status {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .plugin-prompt {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
 }
 
-.source-card {
-  animation: fadeInUp 0.6s ease-out;
+// 过渡动画效果
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.fade-slide-enter-to,
+.fade-slide-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+// 导航项悬停动画
+.nav-item {
+  border-radius: 5px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  // &:hover {
+  //   transform: translateX(4px);
+  // }
+}
+
+// 设置组动画
+.setting-group {
+  animation: fadeInUp 0.4s ease-out;
   animation-fill-mode: both;
 
   &:nth-child(1) {
@@ -1071,5 +1443,290 @@ const getCurrentSourceName = () => {
   &:nth-child(4) {
     animation-delay: 0.4s;
   }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// 音乐源卡片动画
+.source-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+}
+
+// 按钮动画
+.style-buttons .t-button,
+.input-actions .t-button {
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+}
+
+// 功能列表项动画
+.feature-item {
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
+// 关于页面样式
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 0;
+
+  .app-logo {
+    width: 4rem;
+    height: 4rem;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  }
+
+  .app-info {
+    flex: 1;
+
+    .app-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+
+      h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e293b;
+      }
+
+      .app-version {
+        background: var(--td-brand-color-1);
+        color: var(--td-brand-color-6);
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid var(--td-brand-color-3);
+      }
+    }
+
+    .app-subtitle {
+      margin: 0 0 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--td-brand-color-5);
+    }
+
+    .app-description {
+      margin: 0;
+      color: #64748b;
+      line-height: 1.5;
+    }
+  }
+}
+
+.tech-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+
+  .tech-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+
+    .tech-name {
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .tech-desc {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+  }
+}
+
+.developer-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  cursor: pointer;
+
+  .developer-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+
+    &:hover {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .developer-avatar {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    }
+
+    .developer-info {
+      flex: 1;
+
+      h4 {
+        margin: 0 0 0.25rem;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+      }
+
+      p {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #64748b;
+      }
+    }
+  }
+}
+
+.license-info {
+  p {
+    margin: 0 0 1rem;
+    color: #64748b;
+    line-height: 1.5;
+  }
+
+  .license-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+}
+
+.legal-notice {
+  .notice-item {
+    margin-bottom: 1.5rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    h4 {
+      margin: 0 0 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.875rem;
+      color: #64748b;
+      line-height: 1.5;
+    }
+  }
+}
+
+// 版本信息样式
+.version-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+  .update-actions {
+    text-align: center;
+  }
+}
+
+.contact-info {
+  p {
+    margin: 0 0 1rem;
+    color: #64748b;
+    line-height: 1.5;
+  }
+
+  .contact-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+}
+
+// 响应式适配
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .tech-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-list {
+    grid-template-columns: 1fr;
+  }
+
+  .license-actions,
+  .contact-actions {
+    flex-direction: column;
+  }
+}
+.sidebar,
+.panel-content {
+  // Webkit 浏览器
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  // Firefox
+  scrollbar-width: none;
+
+  // IE/Edge
+  -ms-overflow-style: none;
 }
 </style>

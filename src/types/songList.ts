@@ -12,128 +12,139 @@ export interface IPCResponse<T = any> {
 // 歌单管理相关类型定义
 export interface SongListAPI {
   // === 歌单管理 ===
-  
+
   /**
    * 创建新歌单
    */
-  create(name: string, description?: string, source?: SongList['source']): Promise<IPCResponse<{ id: string }>>
-  
+  create(
+    name: string,
+    description?: string,
+    source?: SongList['source']
+  ): Promise<IPCResponse<{ id: string }>>
+
   /**
    * 获取所有歌单
    */
   getAll(): Promise<IPCResponse<SongList[]>>
-  
+
   /**
    * 根据ID获取歌单信息
    */
   getById(hashId: string): Promise<IPCResponse<SongList | null>>
-  
+
   /**
    * 删除歌单
    */
   delete(hashId: string): Promise<IPCResponse>
-  
+
   /**
    * 批量删除歌单
    */
   batchDelete(hashIds: string[]): Promise<IPCResponse<{ success: string[]; failed: string[] }>>
-  
+
   /**
    * 编辑歌单信息
    */
   edit(hashId: string, updates: Partial<Omit<SongList, 'id' | 'createTime'>>): Promise<IPCResponse>
-  
+
   /**
    * 更新歌单封面
    */
   updateCover(hashId: string, coverImgUrl: string): Promise<IPCResponse>
-  
+
   /**
    * 搜索歌单
    */
   search(keyword: string, source?: SongList['source']): Promise<IPCResponse<SongList[]>>
-  
+
   /**
    * 获取歌单统计信息
    */
-  getStatistics(): Promise<IPCResponse<{
-    total: number
-    bySource: Record<string, number>
-    lastUpdated: string
-  }>>
-  
+  getStatistics(): Promise<
+    IPCResponse<{
+      total: number
+      bySource: Record<string, number>
+      lastUpdated: string
+    }>
+  >
+
   /**
    * 检查歌单是否存在
    */
   exists(hashId: string): Promise<IPCResponse<boolean>>
 
   // === 歌曲管理 ===
-  
+
   /**
    * 添加歌曲到歌单
    */
   addSongs(hashId: string, songs: Songs[]): Promise<IPCResponse>
-  
+
   /**
    * 从歌单移除歌曲
    */
   removeSong(hashId: string, songmid: string | number): Promise<IPCResponse<boolean>>
-  
+
   /**
    * 批量移除歌曲
    */
-  removeSongs(hashId: string, songmids: (string | number)[]): Promise<IPCResponse<{ removed: number; notFound: number }>>
-  
+  removeSongs(
+    hashId: string,
+    songmids: (string | number)[]
+  ): Promise<IPCResponse<{ removed: number; notFound: number }>>
+
   /**
    * 清空歌单
    */
   clearSongs(hashId: string): Promise<IPCResponse>
-  
+
   /**
    * 获取歌单中的歌曲列表
    */
   getSongs(hashId: string): Promise<IPCResponse<readonly Songs[]>>
-  
+
   /**
    * 获取歌单歌曲数量
    */
   getSongCount(hashId: string): Promise<IPCResponse<number>>
-  
+
   /**
    * 检查歌曲是否在歌单中
    */
   hasSong(hashId: string, songmid: string | number): Promise<IPCResponse<boolean>>
-  
+
   /**
    * 根据ID获取歌曲
    */
   getSong(hashId: string, songmid: string | number): Promise<IPCResponse<Songs | null>>
-  
+
   /**
    * 搜索歌单中的歌曲
    */
   searchSongs(hashId: string, keyword: string): Promise<IPCResponse<Songs[]>>
-  
+
   /**
    * 获取歌单歌曲统计信息
    */
-  getSongStatistics(hashId: string): Promise<IPCResponse<{
-    total: number
-    bySinger: Record<string, number>
-    byAlbum: Record<string, number>
-    lastModified: string
-  }>>
-  
+  getSongStatistics(hashId: string): Promise<
+    IPCResponse<{
+      total: number
+      bySinger: Record<string, number>
+      byAlbum: Record<string, number>
+      lastModified: string
+    }>
+  >
+
   /**
    * 验证歌单完整性
    */
   validateIntegrity(hashId: string): Promise<IPCResponse<{ isValid: boolean; issues: string[] }>>
-  
+
   /**
    * 修复歌单数据
    */
   repairData(hashId: string): Promise<IPCResponse<{ fixed: boolean; changes: string[] }>>
-  
+
   /**
    * 强制保存歌单
    */

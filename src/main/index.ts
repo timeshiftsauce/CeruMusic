@@ -113,7 +113,6 @@ function createWindow(): void {
       contextIsolation: false,
       backgroundThrottling: false
     }
-
   })
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
@@ -237,7 +236,7 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('插件系统初始化失败:', error)
     }
-  },1000)
+  }, 1000)
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

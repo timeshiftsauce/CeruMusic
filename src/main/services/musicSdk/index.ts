@@ -19,7 +19,7 @@ export function request<T extends keyof MainApi>(
       return (Api[method] as (args: any) => any)(args)
     }
     throw new Error(`未知的方法: ${method}`)
-  }catch (error:any){
+  } catch (error: any) {
     throw new Error(error.message)
   }
 }

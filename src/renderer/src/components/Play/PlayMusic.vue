@@ -174,7 +174,7 @@ const playSong = async (song: SongList) => {
         // 同时更新播放列表中对应歌曲的URL
         const playlistIndex = list.value.findIndex((item) => item.songmid === song.songmid)
         if (playlistIndex !== -1) {
-          ; (list.value[playlistIndex] as any).url = urlToPlay
+          ;(list.value[playlistIndex] as any).url = urlToPlay
         }
       } catch (error) {
         throw error
@@ -411,7 +411,7 @@ const playNext = async () => {
 
 // 定期保存当前播放位置
 let savePositionInterval: number | null = null
-let unEnded: () => any = () => { }
+let unEnded: () => any = () => {}
 // 初始化播放器
 onMounted(async () => {
   console.log('加载')
@@ -535,7 +535,6 @@ watch(
 const toggleFullPlay = () => {
   if (!songInfo.value.songmid) return
   showFullPlay.value = !showFullPlay.value
-
 }
 
 // 进度条相关
@@ -709,20 +708,18 @@ const bg = ref('#ffffff46')
 watch(
   songInfo,
   async (newVal) => {
-    bg.value = bg.value==='#ffffff'?'#ffffff46':toRaw(bg.value)
+    bg.value = bg.value === '#ffffff' ? '#ffffff46' : toRaw(bg.value)
     if (newVal.img) {
       await setColor()
-    } else if(songInfo.value.songmid) {
+    } else if (songInfo.value.songmid) {
       songInfo.value.img = defaultCoverImg
       await setColor()
-    }else{
-      bg.value='#ffffff'
+    } else {
+      bg.value = '#ffffff'
     }
-
   },
   { deep: true, immediate: true }
 )
-
 
 watch(showFullPlay, (val) => {
   if (val) {
@@ -736,11 +733,19 @@ watch(showFullPlay, (val) => {
 </script>
 
 <template>
-  <div class="player-container" @click.stop="toggleFullPlay">
+  <div
+    class="player-container"
+    :style="!showFullPlay && 'box-shadow: none'"
+    @click.stop="toggleFullPlay"
+  >
     <!-- 进度条 -->
     <div class="progress-bar-container">
-      <div ref="progressRef" class="progress-bar" @mousedown="handleProgressDragStart($event)"
-        @click.stop="handleProgressClick">
+      <div
+        ref="progressRef"
+        class="progress-bar"
+        @mousedown="handleProgressDragStart($event)"
+        @click.stop="handleProgressClick"
+      >
         <div class="progress-background"></div>
         <div class="progress-filled" :style="{ width: `${progressPercentage}%` }"></div>
         <div class="progress-handle" :style="{ left: `${progressPercentage}%` }"></div>
@@ -784,13 +789,22 @@ watch(showFullPlay, (val) => {
         <div class="extra-controls">
           <!-- 播放模式按钮 -->
           <t-tooltip :content="playModeTip">
-            <t-button class="control-btn" shape="circle" variant="text" @click.stop="updatePlayMode">
+            <t-button
+              class="control-btn"
+              shape="circle"
+              variant="text"
+              @click.stop="updatePlayMode"
+            >
               <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.5em"></i>
             </t-button>
           </t-tooltip>
 
           <!-- 音量控制 -->
-          <div class="volume-control" @mouseenter="showVolumeSlider = true" @mouseleave="showVolumeSlider = false">
+          <div
+            class="volume-control"
+            @mouseenter="showVolumeSlider = true"
+            @mouseleave="showVolumeSlider = false"
+          >
             <button class="control-btn">
               <shengyin style="width: 1.5em; height: 1.5em" />
             </button>
@@ -799,8 +813,12 @@ watch(showFullPlay, (val) => {
             <transition name="volume-popup">
               <div v-show="showVolumeSlider" class="volume-slider-container" @click.stop>
                 <div class="volume-slider">
-                  <div ref="volumeBarRef" class="volume-bar" @click="handleVolumeClick"
-                    @mousedown="handleVolumeDragStart">
+                  <div
+                    ref="volumeBarRef"
+                    class="volume-bar"
+                    @click="handleVolumeClick"
+                    @mousedown="handleVolumeDragStart"
+                  >
                     <div class="volume-background"></div>
                     <div class="volume-filled" :style="{ height: `${volumeValue}%` }"></div>
                     <div class="volume-handle" :style="{ bottom: `${volumeValue}%` }"></div>
@@ -814,7 +832,12 @@ watch(showFullPlay, (val) => {
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
             <t-badge :count="list.length" :maxCount="99" color="#aaa">
-              <t-button class="control-btn" shape="circle" variant="text" @click.stop="togglePlaylist">
+              <t-button
+                class="control-btn"
+                shape="circle"
+                variant="text"
+                @click.stop="togglePlaylist"
+              >
                 <liebiao style="width: 1.5em; height: 1.5em" />
               </t-button>
             </t-badge>
@@ -824,15 +847,25 @@ watch(showFullPlay, (val) => {
     </div>
   </div>
   <div class="fullbox">
-    <FullPlay :song-id="songInfo.songmid ? songInfo.songmid.toString() : null" :show="showFullPlay"
-      :cover-image="songInfo.img" @toggle-fullscreen="toggleFullPlay"
-      :song-info="songInfo" :main-color="maincolor" />
+    <FullPlay
+      :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
+      :show="showFullPlay"
+      :cover-image="songInfo.img"
+      @toggle-fullscreen="toggleFullPlay"
+      :song-info="songInfo"
+      :main-color="maincolor"
+    />
   </div>
 
   <!-- 播放列表 -->
   <div v-show="showPlaylist" class="cover" @click="showPlaylist = false"></div>
   <transition name="playlist-drawer">
-    <div v-show="showPlaylist" class="playlist-container" :class="{ 'full-screen-mode': showFullPlay }" @click.stop>
+    <div
+      v-show="showPlaylist"
+      class="playlist-container"
+      :class="{ 'full-screen-mode': showFullPlay }"
+      @click.stop
+    >
       <div class="playlist-header">
         <div class="playlist-title">播放列表 ({{ list.length }})</div>
         <button class="playlist-close" @click.stop="showPlaylist = false">
@@ -846,8 +879,13 @@ watch(showFullPlay, (val) => {
           <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
         </div>
         <div v-else class="playlist-songs">
-          <div v-for="song in list" :key="song.songmid" class="playlist-song"
-            :class="{ active: song.songmid === currentSongId }" @click="playSong(song)">
+          <div
+            v-for="song in list"
+            :key="song.songmid"
+            class="playlist-song"
+            :class="{ active: song.songmid === currentSongId }"
+            @click="playSong(song)"
+          >
             <div class="song-info">
               <div class="song-name">{{ song.name }}</div>
               <div class="song-artist">{{ song.singer }}</div>
@@ -889,11 +927,12 @@ watch(showFullPlay, (val) => {
 }
 
 .player-container {
+  box-shadow: 0px -2px 20px 0px #00000039;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  transition: background .3s;
+  transition: background 0.3s;
   background: v-bind(bg);
   // border-top: 1px solid #e5e7eb;
   backdrop-filter: blur(1000px);

@@ -104,8 +104,14 @@ const handleKeyDown = () => {
           </div>
 
           <nav class="nav-section">
-            <t-button v-for="(item, index) in menuList" :key="index" :variant="menuActive == index ? 'base' : 'text'"
-              :class="menuActive == index ? 'nav-button active' : 'nav-button'" block @click="handleClick(index)">
+            <t-button
+              v-for="(item, index) in menuList"
+              :key="index"
+              :variant="menuActive == index ? 'base' : 'text'"
+              :class="menuActive == index ? 'nav-button active' : 'nav-button'"
+              block
+              @click="handleClick(index)"
+            >
               <i :class="`iconfont ${item.icon} nav-icon`"></i>
               {{ item.name }}
             </t-button>
@@ -130,10 +136,20 @@ const handleKeyDown = () => {
                   <svg class="icon" aria-hidden="true">
                     <use :xlink:href="`#icon-${source}`"></use>
                   </svg>
-                  <t-input v-model="keyword" placeholder="搜索音乐、歌手" style="width: 100%" @enter="handleKeyDown">
+                  <t-input
+                    v-model="keyword"
+                    placeholder="搜索音乐、歌手"
+                    style="width: 100%"
+                    @enter="handleKeyDown"
+                  >
                     <template #suffix>
-                      <t-button theme="primary" variant="text" shape="circle"
-                        style="display: flex; align-items: center; justify-content: center" @click="handleSearch">
+                      <t-button
+                        theme="primary"
+                        variant="text"
+                        shape="circle"
+                        style="display: flex; align-items: center; justify-content: center"
+                        @click="handleSearch"
+                      >
                         <SearchIcon style="font-size: 16px; color: #000" />
                       </t-button>
                     </template>
@@ -146,9 +162,11 @@ const handleKeyDown = () => {
 
             <div class="mainContent">
               <router-view v-slot="{ Component, route }">
-                <Transition name="page"
+                <Transition
+                  name="page"
                   :enter-active-class="`animate__animated ${route.meta.transitionIn} animate__fast`"
-                  :leave-active-class="`animate__animated ${route.meta.transitionOut} animate__fast`">
+                  :leave-active-class="`animate__animated ${route.meta.transitionOut} animate__fast`"
+                >
                   <KeepAlive exclude="list">
                     <component :is="Component" />
                   </KeepAlive>
@@ -182,7 +200,7 @@ const handleKeyDown = () => {
 
 .sidebar {
   width: 15rem;
-  background-image: linear-gradient(to bottom,var(--td-brand-color-4) -140vh, #ffffff 30vh);
+  background-image: linear-gradient(to bottom, var(--td-brand-color-4) -140vh, #ffffff 30vh);
   border-right: 0.0625rem solid #e5e7eb;
   flex-shrink: 0;
 
@@ -270,7 +288,7 @@ const handleKeyDown = () => {
 
 .content {
   padding: 0;
-  background-image: linear-gradient(to bottom,var(--td-brand-color-4) -110vh, #ffffff 15vh);
+  background-image: linear-gradient(to bottom, var(--td-brand-color-4) -110vh, #ffffff 15vh);
 
   display: flex;
   flex: 1;
@@ -312,13 +330,13 @@ const handleKeyDown = () => {
         align-items: center;
         transition: width 0.3s;
         padding: 0 0.5rem;
-        width: min(18.75rem,400px);
+        width: min(18.75rem, 400px);
         margin-right: 0.5rem;
         border-radius: 1.25rem !important;
         background-color: #fff;
         overflow: hidden;
-        &:has(input:focus){
-          width: max(18.75rem,400px);
+        &:has(input:focus) {
+          width: max(18.75rem, 400px);
         }
       }
 

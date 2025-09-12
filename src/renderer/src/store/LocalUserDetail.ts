@@ -79,7 +79,7 @@ export const LocalUserDetailStore = defineStore('Local', () => {
     return list.value
   }
 
-  function removeSong(songId: number|string) {
+  function removeSong(songId: number | string) {
     const index = list.value.findIndex((item) => item.songmid === songId)
     if (index !== -1) {
       list.value.splice(index, 1)

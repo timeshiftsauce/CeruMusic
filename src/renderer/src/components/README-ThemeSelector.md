@@ -62,6 +62,7 @@ import ThemeSelector from '@/components/ThemeSelector.vue'
 组件通过以下方式实现主题切换：
 
 1. **默认主题**: 移除 `theme-mode` 属性
+
    ```javascript
    document.documentElement.removeAttribute('theme-mode')
    ```
@@ -73,13 +74,13 @@ import ThemeSelector from '@/components/ThemeSelector.vue'
 
 ## 支持的主题
 
-| 主题名称 | 属性值 | 主色调 |
-|---------|--------|--------|
-| 默认 | `default` | #57b4ff |
-| 粉色 | `pink` | #fc5e7e |
-| 蓝色 | `blue` | #57b4ff |
-| 青色 | `cyan` | #3ac2b8 |
-| 橙色 | `orange` | #fb9458 |
+| 主题名称 | 属性值    | 主色调  |
+| -------- | --------- | ------- |
+| 默认     | `default` | #57b4ff |
+| 粉色     | `pink`    | #fc5e7e |
+| 蓝色     | `blue`    | #57b4ff |
+| 青色     | `cyan`    | #3ac2b8 |
+| 橙色     | `orange`  | #fb9458 |
 
 ## 自定义配置
 
@@ -90,7 +91,7 @@ import ThemeSelector from '@/components/ThemeSelector.vue'
 在 `src/renderer/src/assets/theme/` 目录下创建新的主题文件，例如 `green.css`：
 
 ```css
-:root[theme-mode="green"] {
+:root[theme-mode='green'] {
   --td-brand-color: #10b981;
   --td-brand-color-hover: #059669;
   /* 其他主题变量... */

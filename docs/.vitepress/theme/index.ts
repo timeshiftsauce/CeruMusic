@@ -1,7 +1,7 @@
 import DefaultTheme from 'vitepress/theme'
 import './style.css'
 import './dark.css'
-import MyLayout from './MyLayout.vue';
+import MyLayout from './MyLayout.vue'
 // history.scrollRestoration = 'manual'
 
 export default {
@@ -11,6 +11,3 @@ export default {
     // ...
   }
 }
-
-
-

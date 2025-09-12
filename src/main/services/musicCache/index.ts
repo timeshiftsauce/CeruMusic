@@ -4,7 +4,6 @@ import * as fs from 'fs/promises'
 import * as crypto from 'crypto'
 import axios from 'axios'
 
-
 export class MusicCacheService {
   private cacheDir: string
   private cacheIndex: Map<string, string> = new Map()
@@ -20,7 +19,7 @@ export class MusicCacheService {
     try {
       // 确保缓存目录存在
       await fs.mkdir(this.cacheDir, { recursive: true })
-      
+
       // 加载缓存索引
       await this.loadCacheIndex()
     } catch (error) {
@@ -60,12 +59,12 @@ export class MusicCacheService {
 
   async getCachedMusicUrl(songId: string, originalUrlPromise: Promise<string>): Promise<string> {
     const cacheKey = this.generateCacheKey(songId)
-    console.log('hash',cacheKey)
-    
+    console.log('hash', cacheKey)
+
     // 检查是否已缓存
     if (this.cacheIndex.has(cacheKey)) {
       const cachedFilePath = this.cacheIndex.get(cacheKey)!
-      
+
       try {
         // 验证文件是否存在
         await fs.access(cachedFilePath)
@@ -86,7 +85,7 @@ export class MusicCacheService {
   private async downloadAndCache(songId: string, url: string, cacheKey: string): Promise<string> {
     try {
       console.log(`开始下载歌曲: ${songId}`)
-      
+
       const response = await axios({
         method: 'GET',
         url: url,
@@ -108,7 +107,7 @@ export class MusicCacheService {
             // 更新缓存索引
             this.cacheIndex.set(cacheKey, cacheFilePath)
             await this.saveCacheIndex()
-            
+
             console.log(`歌曲缓存完成: ${cacheFilePath}`)
             resolve(`file://${cacheFilePath}`)
           } catch (error) {
@@ -143,7 +142,7 @@ export class MusicCacheService {
       // 清空缓存索引
       this.cacheIndex.clear()
       await this.saveCacheIndex()
-      
+
       console.log('音乐缓存已清空')
     } catch (error) {
       console.error('清空缓存失败:', error)
@@ -152,7 +151,7 @@ export class MusicCacheService {
 
   async getCacheSize(): Promise<number> {
     let totalSize = 0
-    
+
     for (const filePath of this.cacheIndex.values()) {
       try {
         const stats = await fs.stat(filePath)
@@ -161,14 +160,14 @@ export class MusicCacheService {
         // 文件不存在，忽略
       }
     }
-    
+
     return totalSize
   }
 
   async getCacheInfo(): Promise<{ count: number; size: number; sizeFormatted: string }> {
     const size = await this.getCacheSize()
     const count = this.cacheIndex.size
-    
+
     const formatSize = (bytes: number): string => {
       if (bytes === 0) return '0 B'
       const k = 1024

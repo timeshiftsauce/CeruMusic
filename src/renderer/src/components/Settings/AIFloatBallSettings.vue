@@ -1,17 +1,15 @@
 <template>
   <div class="float-ball-settings">
-    <t-card hover-shadow title="AI悬浮球设置">
-      <div class="card-body">
-        <div class="setting-item">
-          <span class="setting-label">显示AI悬浮球</span>
-          <t-switch v-model="showFloatBall" @change="handleFloatBallToggle" />
-        </div>
-        <div class="setting-description">
-          <p>开启后，AI悬浮球将显示在应用界面上，您可以随时与AI助手交流</p>
-          <p>关闭后，AI悬浮球将被隐藏，您可以随时在此处重新开启</p>
-        </div>
+    <div class="card-body">
+      <div class="setting-item">
+        <span class="setting-label">显示AI悬浮球</span>
+        <t-switch v-model="showFloatBall" @change="handleFloatBallToggle" />
       </div>
-    </t-card>
+      <div class="setting-description">
+        <p>开启后，AI悬浮球将显示在应用界面上，您可以随时与AI助手交流</p>
+        <p>关闭后，AI悬浮球将被隐藏，您可以随时在此处重新开启</p>
+      </div>
+    </div>
   </div>
 </template>
 

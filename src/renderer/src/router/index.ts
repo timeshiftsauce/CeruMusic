@@ -42,8 +42,8 @@ let routes: RouteRecordRaw[] = [
     path: '/settings',
     name: 'settings',
     meta: {
-      transitionIn: "animate__fadeIn",
-      transitionOut: "animate__fadeOut",
+      transitionIn: 'animate__fadeIn',
+      transitionOut: 'animate__fadeOut'
     },
     component: () => import('@renderer/views/settings/index.vue')
   },
@@ -55,14 +55,14 @@ let routes: RouteRecordRaw[] = [
 ]
 function setAnimate(routerObj: RouteRecordRaw[]) {
   for (let i = 0; i < routerObj.length; i++) {
-    let item = routerObj[i];
+    let item = routerObj[i]
     if (item.children && item.children.length > 0) {
-      setAnimate(item.children);
+      setAnimate(item.children)
     } else {
       if (item.meta) continue
-      item.meta = item.meta || {};
-      item.meta.transitionIn = 'animate__fadeInRight';
-      item.meta.transitionOut = 'animate__fadeOutLeft';
+      item.meta = item.meta || {}
+      item.meta.transitionIn = 'animate__fadeInRight'
+      item.meta.transitionOut = 'animate__fadeOutLeft'
     }
   }
 }
@@ -72,11 +72,11 @@ const option: RouterOptions = {
   routes,
   scrollBehavior(_to_, _from_, savedPosition) {
     if (savedPosition) {
-      return savedPosition;
+      return savedPosition
     } else {
-      return { top: 0 };
+      return { top: 0 }
     }
-  },
+  }
 }
 
 const router = createRouter(option)

@@ -13,7 +13,9 @@ class AudioManager {
   }
 
   // 获取或创建音频源
-  getOrCreateAudioSource(audioElement: HTMLAudioElement): { source: MediaElementAudioSourceNode; context: AudioContext } | null {
+  getOrCreateAudioSource(
+    audioElement: HTMLAudioElement
+  ): { source: MediaElementAudioSourceNode; context: AudioContext } | null {
     try {
       // 检查是否已经有音频源
       let source = this.audioSources.get(audioElement)
@@ -23,14 +25,14 @@ class AudioManager {
         // 创建新的音频上下文和源
         context = new (window.AudioContext || (window as any).webkitAudioContext)()
         source = context.createMediaElementSource(audioElement)
-        
+
         // 连接到输出，确保音频能正常播放
         source.connect(context.destination)
-        
+
         // 存储引用
         this.audioSources.set(audioElement, source)
         this.audioContexts.set(audioElement, context)
-        
+
         console.log('AudioManager: 创建新的音频源和上下文')
       }
 
@@ -42,7 +44,11 @@ class AudioManager {
   }
 
   // 创建分析器
-  createAnalyser(audioElement: HTMLAudioElement, id: string, fftSize: number = 256): AnalyserNode | null {
+  createAnalyser(
+    audioElement: HTMLAudioElement,
+    id: string,
+    fftSize: number = 256
+  ): AnalyserNode | null {
     const audioData = this.getOrCreateAudioSource(audioElement)
     if (!audioData) return null
 
@@ -97,10 +103,10 @@ class AudioManager {
       if (context && context.state !== 'closed') {
         context.close()
       }
-      
+
       this.audioSources.delete(audioElement)
       this.audioContexts.delete(audioElement)
-      
+
       console.log('AudioManager: 清理音频元素资源')
     } catch (error) {
       console.warn('AudioManager: 清理资源时出错:', error)

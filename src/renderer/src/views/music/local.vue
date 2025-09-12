@@ -275,7 +275,10 @@ const playPlaylist = async (playlist: SongList) => {
 
       // 调用播放器的方法替换播放列表
       if ((window as any).musicEmitter) {
-        ; (window as any).musicEmitter.emit('replacePlaylist', songs.map(song => toRaw(song)))
+        ;(window as any).musicEmitter.emit(
+          'replacePlaylist',
+          songs.map((song) => toRaw(song))
+        )
       }
       console.log('播放歌单:', playlist.name, '共', songs.length, '首歌曲')
       MessagePlugin.success(`已将播放列表替换为歌单"${playlist.name}"`)
@@ -308,7 +311,7 @@ const playSong = (song: Songs): void => {
   console.log('播放歌曲:', song.name)
   // 调用播放器的方法添加到播放列表并播放
   if ((window as any).musicEmitter) {
-    ; (window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
+    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
   }
 }
 
@@ -348,13 +351,15 @@ const importFromPlaylist = async () => {
     }
 
     // 等待一小段时间确保文件系统操作完成
-    await new Promise(resolve => setTimeout(resolve, 200))
+    await new Promise((resolve) => setTimeout(resolve, 200))
 
     // 将播放列表中的歌曲添加到新歌单
     const addResult = await songListAPI.addSongs(createResult.data.id, currentPlaylist)
 
     if (addResult.success) {
-      MessagePlugin.success(`成功从播放列表导入 ${currentPlaylist.length} 首歌曲到歌单"${playlistName}"`)
+      MessagePlugin.success(
+        `成功从播放列表导入 ${currentPlaylist.length} 首歌曲到歌单"${playlistName}"`
+      )
       // 刷新歌单列表
       await loadPlaylists()
     } else {
@@ -416,15 +421,15 @@ const handleNetworkPlaylistImport = async (url: string) => {
       return
     }
     const playlistId = parseResult as string
-    load1.then(res=>res.close())
+    load1.then((res) => res.close())
 
     // 获取歌单详情
     const load2 = MessagePlugin.loading('正在获取歌单信息...')
-    const detailResult = await window.api.music.requestSdk('getPlaylistDetail', {
+    const detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
       source: 'wy',
       id: playlistId,
       page: 1
-    }) as any
+    })) as any
 
     if (detailResult.error) {
       MessagePlugin.error('获取歌单详情失败：' + detailResult.error)
@@ -452,10 +457,10 @@ const handleNetworkPlaylistImport = async (url: string) => {
     const newPlaylistId = createResult.data!.id
 
     const addResult = await songListAPI.addSongs(newPlaylistId, songs)
-    
+
     let successCount = 0
     let failCount = 0
-    
+
     if (addResult.success) {
       successCount = songs.length
       failCount = 0
@@ -464,7 +469,7 @@ const handleNetworkPlaylistImport = async (url: string) => {
       failCount = songs.length
       console.error('批量添加歌曲失败:', addResult.error)
     }
-    load2.then(res=>res.close())
+    load2.then((res) => res.close())
 
     // 刷新歌单列表
     await loadPlaylists()
@@ -473,12 +478,11 @@ const handleNetworkPlaylistImport = async (url: string) => {
     if (successCount > 0) {
       MessagePlugin.success(
         `导入完成！成功导入 ${successCount} 首歌曲` +
-        (failCount > 0 ? `，${failCount} 首歌曲导入失败` : '')
+          (failCount > 0 ? `，${failCount} 首歌曲导入失败` : '')
       )
     } else {
       MessagePlugin.error('导入失败，没有成功导入任何歌曲')
     }
-
   } catch (error) {
     console.error('网络歌单导入失败:', error)
     MessagePlugin.error('导入失败：' + (error instanceof Error ? error.message : '未知错误'))
@@ -563,7 +567,13 @@ onMounted(() => {
         <div class="section-header">
           <h3>我的歌单 ({{ playlists.length }})</h3>
           <div class="section-actions">
-            <t-button theme="primary" variant="text" size="small" :loading="loading" @click="loadPlaylists">
+            <t-button
+              theme="primary"
+              variant="text"
+              size="small"
+              :loading="loading"
+              @click="loadPlaylists"
+            >
               <i class="iconfont icon-shuaxin"></i>
               刷新
             </t-button>
@@ -579,9 +589,14 @@ onMounted(() => {
         <div v-else-if="playlists.length > 0" class="playlists-grid">
           <div v-for="playlist in playlists" :key="playlist.id" class="playlist-card">
             <div class="playlist-cover" @click="viewPlaylist(playlist)">
-              <img v-if="playlist.coverImgUrl"
-                :src="playlist.coverImgUrl === 'default-cover' ? defaultCover : playlist.coverImgUrl" :alt="playlist.name"
-                class="cover-image" />
+              <img
+                v-if="playlist.coverImgUrl"
+                :src="
+                  playlist.coverImgUrl === 'default-cover' ? defaultCover : playlist.coverImgUrl
+                "
+                :alt="playlist.name"
+                class="cover-image"
+              />
               <div class="cover-overlay">
                 <i class="iconfont icon-bofang"></i>
               </div>
@@ -590,7 +605,11 @@ onMounted(() => {
               <div class="playlist-name" @click="viewPlaylist(playlist)" :title="playlist.name">
                 {{ playlist.name }}
               </div>
-              <div class="playlist-description" v-if="playlist.description" :title="playlist.description">
+              <div
+                class="playlist-description"
+                v-if="playlist.description"
+                :title="playlist.description"
+              >
                 {{ playlist.description }}
               </div>
               <div class="playlist-meta">
@@ -599,16 +618,34 @@ onMounted(() => {
               </div>
             </div>
             <div class="playlist-actions">
-              <t-button shape="circle" theme="primary" variant="text" size="small" title="播放歌单"
-                @click="playPlaylist(playlist)">
+              <t-button
+                shape="circle"
+                theme="primary"
+                variant="text"
+                size="small"
+                title="播放歌单"
+                @click="playPlaylist(playlist)"
+              >
                 <i class="iconfont icon-bofang"></i>
               </t-button>
-              <t-button shape="circle" theme="default" variant="text" size="small" title="查看详情"
-                @click="viewPlaylist(playlist)">
+              <t-button
+                shape="circle"
+                theme="default"
+                variant="text"
+                size="small"
+                title="查看详情"
+                @click="viewPlaylist(playlist)"
+              >
                 <i class="iconfont icon-liebiao"></i>
               </t-button>
-              <t-button shape="circle" theme="danger" variant="text" size="small" title="删除歌单"
-                @click="deletePlaylist(playlist)">
+              <t-button
+                shape="circle"
+                theme="danger"
+                variant="text"
+                size="small"
+                title="删除歌单"
+                @click="deletePlaylist(playlist)"
+              >
                 <i class="iconfont icon-shanchu"></i>
               </t-button>
             </div>
@@ -648,7 +685,12 @@ onMounted(() => {
           </div>
 
           <div class="list-body">
-            <div v-for="(song, index) in localSongs" :key="song.songmid" class="song-row" @dblclick="playSong(song)">
+            <div
+              v-for="(song, index) in localSongs"
+              :key="song.songmid"
+              class="song-row"
+              @dblclick="playSong(song)"
+            >
               <div class="row-item index">{{ index + 1 }}</div>
               <div class="row-item title">
                 <div class="song-title">{{ song.name }}</div>
@@ -662,18 +704,41 @@ onMounted(() => {
                 <span class="bitrate">{{ (song as any).bitrate || '320kbps' }}</span>
               </div>
               <div class="row-item actions">
-                <t-button shape="circle" theme="primary" variant="text" size="small" title="播放" @click="playSong(song)">
+                <t-button
+                  shape="circle"
+                  theme="primary"
+                  variant="text"
+                  size="small"
+                  title="播放"
+                  @click="playSong(song)"
+                >
                   <i class="iconfont icon-bofang"></i>
                 </t-button>
-                <t-dropdown v-if="playlists.length > 0"
+                <t-dropdown
+                  v-if="playlists.length > 0"
                   :options="playlists.map((p) => ({ content: p.name, value: p.id }))"
-                  @click="(playlistId) => addToPlaylist(song, playlists.find(p => p.id === playlistId)!)">
-                  <t-button shape="circle" theme="default" variant="text" size="small" title="添加到歌单">
+                  @click="
+                    (playlistId) => addToPlaylist(song, playlists.find((p) => p.id === playlistId)!)
+                  "
+                >
+                  <t-button
+                    shape="circle"
+                    theme="default"
+                    variant="text"
+                    size="small"
+                    title="添加到歌单"
+                  >
                     <i class="iconfont icon-zengjia"></i>
                   </t-button>
                 </t-dropdown>
-                <t-button shape="circle" theme="danger" variant="text" size="small" title="删除"
-                  @click="deleteSong(song)">
+                <t-button
+                  shape="circle"
+                  theme="danger"
+                  variant="text"
+                  size="small"
+                  title="删除"
+                  @click="deleteSong(song)"
+                >
                   <i class="iconfont icon-shanchu"></i>
                 </t-button>
               </div>
@@ -697,23 +762,43 @@ onMounted(() => {
     </div>
 
     <!-- 创建歌单对话框 -->
-    <t-dialog v-model:visible="showCreatePlaylistDialog" header="创建新歌单" width="500px"
-      :confirm-btn="{ content: '创建', theme: 'primary' }" :cancel-btn="{ content: '取消' }" @confirm="createPlaylist">
+    <t-dialog
+      v-model:visible="showCreatePlaylistDialog"
+      header="创建新歌单"
+      width="500px"
+      :confirm-btn="{ content: '创建', theme: 'primary' }"
+      :cancel-btn="{ content: '取消' }"
+      @confirm="createPlaylist"
+    >
       <div class="create-form">
         <t-form :data="newPlaylistForm" layout="vertical">
           <t-form-item label="歌单名称" name="name" required>
-            <t-input v-model="newPlaylistForm.name" placeholder="请输入歌单名称" clearable @keyup.enter="createPlaylist" />
+            <t-input
+              v-model="newPlaylistForm.name"
+              placeholder="请输入歌单名称"
+              clearable
+              @keyup.enter="createPlaylist"
+            />
           </t-form-item>
           <t-form-item label="歌单描述" name="description">
-            <t-textarea v-model="newPlaylistForm.description" placeholder="请输入歌单描述（可选）" :maxlength="200"
-              :autosize="{ minRows: 3, maxRows: 5 }" />
+            <t-textarea
+              v-model="newPlaylistForm.description"
+              placeholder="请输入歌单描述（可选）"
+              :maxlength="200"
+              :autosize="{ minRows: 3, maxRows: 5 }"
+            />
           </t-form-item>
         </t-form>
       </div>
     </t-dialog>
 
     <!-- 导入选择对话框 -->
-    <t-dialog v-model:visible="showImportDialog" header="选择导入方式" width="400px" :footer="false">
+    <t-dialog
+      v-model:visible="showImportDialog"
+      header="选择导入方式"
+      width="400px"
+      :footer="false"
+    >
       <div class="import-options">
         <div class="import-option" @click="importFromPlaylist">
           <div class="option-icon">
@@ -743,16 +828,28 @@ onMounted(() => {
       </div>
     </t-dialog>
     <!-- 网络歌单导入对话框 -->
-    <t-dialog v-model:visible="showNetworkImportDialog" header="从网络歌单导入-目前仅支持网易云歌单"
-      :confirm-btn="{ content: '开始导入', theme: 'primary' }" :cancel-btn="{ content: '取消', variant: 'outline' }"
-      @confirm="confirmNetworkImport" @cancel="cancelNetworkImport" width="500px">
+    <t-dialog
+      v-model:visible="showNetworkImportDialog"
+      header="从网络歌单导入-目前仅支持网易云歌单"
+      :confirm-btn="{ content: '开始导入', theme: 'primary' }"
+      :cancel-btn="{ content: '取消', variant: 'outline' }"
+      @confirm="confirmNetworkImport"
+      @cancel="cancelNetworkImport"
+      width="500px"
+    >
       <div class="network-import-content">
         <p class="import-description">
           请输入网易云音乐歌单链接，系统将自动解析并导入歌单中的所有歌曲到本地歌单。
         </p>
 
-        <t-input v-model="networkPlaylistUrl" placeholder="例如：https://music.163.com/playlist?id=123456789" clearable
-          autofocus class="url-input" @enter="confirmNetworkImport" />
+        <t-input
+          v-model="networkPlaylistUrl"
+          placeholder="例如：https://music.163.com/playlist?id=123456789"
+          clearable
+          autofocus
+          class="url-input"
+          @enter="confirmNetworkImport"
+        />
 
         <div class="import-tips">
           <p class="tip-title">支持的链接格式：</p>
@@ -764,10 +861,7 @@ onMounted(() => {
         </div>
       </div>
     </t-dialog>
-
   </div>
-
-
 </template>
 
 <style lang="scss" scoped>
@@ -902,7 +996,9 @@ onMounted(() => {
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 
   &:hover {
     transform: translateY(-4px);

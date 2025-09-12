@@ -1,6 +1,6 @@
 // 业务工具方法
 
-import { LX } from "../../types/global"
+import { LX } from '../../types/global'
 
 export const toNewMusicInfo = (oldMusicInfo: any): LX.Music.MusicInfo => {
   const meta: Record<string, any> = {

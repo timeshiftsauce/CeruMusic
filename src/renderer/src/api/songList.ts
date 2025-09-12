@@ -1,7 +1,7 @@
-import type { 
-  SongListAPI, 
-  IPCResponse, 
-  BatchOperationResult, 
+import type {
+  SongListAPI,
+  IPCResponse,
+  BatchOperationResult,
   RemoveSongsResult,
   SongListStatistics,
   SongStatistics,
@@ -29,7 +29,11 @@ class SongListService implements SongListAPI {
   /**
    * 创建新歌单
    */
-  async create(name: string, description: string = '', source: SongList['source'] = 'local'): Promise<IPCResponse<{ id: string }>> {
+  async create(
+    name: string,
+    description: string = '',
+    source: SongList['source'] = 'local'
+  ): Promise<IPCResponse<{ id: string }>> {
     try {
       return await this.songListAPI.create(name, description, source)
     } catch (error) {
@@ -99,7 +103,10 @@ class SongListService implements SongListAPI {
   /**
    * 编辑歌单信息
    */
-  async edit(hashId: string, updates: Partial<Omit<SongList, 'id' | 'createTime'>>): Promise<IPCResponse> {
+  async edit(
+    hashId: string,
+    updates: Partial<Omit<SongList, 'id' | 'createTime'>>
+  ): Promise<IPCResponse> {
     try {
       return await this.songListAPI.edit(hashId, updates)
     } catch (error) {
@@ -199,7 +206,10 @@ class SongListService implements SongListAPI {
   /**
    * 批量移除歌曲
    */
-  async removeSongs(hashId: string, songmids: (string | number)[]): Promise<IPCResponse<RemoveSongsResult>> {
+  async removeSongs(
+    hashId: string,
+    songmids: (string | number)[]
+  ): Promise<IPCResponse<RemoveSongsResult>> {
     try {
       return await this.songListAPI.removeSongs(hashId, songmids)
     } catch (error) {

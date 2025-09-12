@@ -121,42 +121,47 @@ const api = {
 
     // 监听更新事件
     onCheckingForUpdate: (callback: () => void) => {
-      ipcRenderer.on('auto-updater:checking-for-update', callback);
+      ipcRenderer.on('auto-updater:checking-for-update', callback)
     },
     onUpdateAvailable: (callback: () => void) => {
-      ipcRenderer.on('auto-updater:update-available', callback);
+      ipcRenderer.on('auto-updater:update-available', callback)
     },
     onUpdateNotAvailable: (callback: () => void) => {
-      ipcRenderer.on('auto-updater:update-not-available', callback);
+      ipcRenderer.on('auto-updater:update-not-available', callback)
     },
     onDownloadProgress: (callback: (progress: any) => void) => {
-      ipcRenderer.on('auto-updater:download-progress', (_, progress) => callback(progress));
+      ipcRenderer.on('auto-updater:download-progress', (_, progress) => callback(progress))
     },
     onUpdateDownloaded: (callback: () => void) => {
-      ipcRenderer.on('auto-updater:update-downloaded', callback);
+      ipcRenderer.on('auto-updater:update-downloaded', callback)
     },
     onError: (callback: (error: string) => void) => {
-      ipcRenderer.on('auto-updater:error', (_, error) => callback(error));
+      ipcRenderer.on('auto-updater:error', (_, error) => callback(error))
     },
     onDownloadStarted: (callback: (updateInfo: any) => void) => {
-      ipcRenderer.on('auto-updater:download-started', (_, updateInfo) => callback(updateInfo));
+      ipcRenderer.on('auto-updater:download-started', (_, updateInfo) => callback(updateInfo))
     },
 
     // 移除所有监听器
     removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('auto-updater:checking-for-update');
-      ipcRenderer.removeAllListeners('auto-updater:update-available');
-      ipcRenderer.removeAllListeners('auto-updater:update-not-available');
-      ipcRenderer.removeAllListeners('auto-updater:download-started');
-      ipcRenderer.removeAllListeners('auto-updater:download-progress');
-      ipcRenderer.removeAllListeners('auto-updater:update-downloaded');
-      ipcRenderer.removeAllListeners('auto-updater:error');
+      ipcRenderer.removeAllListeners('auto-updater:checking-for-update')
+      ipcRenderer.removeAllListeners('auto-updater:update-available')
+      ipcRenderer.removeAllListeners('auto-updater:update-not-available')
+      ipcRenderer.removeAllListeners('auto-updater:download-started')
+      ipcRenderer.removeAllListeners('auto-updater:download-progress')
+      ipcRenderer.removeAllListeners('auto-updater:update-downloaded')
+      ipcRenderer.removeAllListeners('auto-updater:error')
     }
   },
   ping: (callbaack: Function) => ipcRenderer.on('song-ended', () => callbaack()),
   pingService: {
-    start: () => { ipcRenderer.send('startPing'); console.log('eventStart') },
-    stop: () => { ipcRenderer.send('stopPing') }
+    start: () => {
+      ipcRenderer.send('startPing')
+      console.log('eventStart')
+    },
+    stop: () => {
+      ipcRenderer.send('stopPing')
+    }
   }
 }
 

@@ -7,6 +7,7 @@
 ## 修改的文件
 
 ### 1. 桌面应用自动更新 (`src/main/autoUpdate.ts`)
+
 - ✅ 添加了 Alist API 配置
 - ✅ 实现了 Alist 认证功能
 - ✅ 实现了 Alist 文件下载功能
@@ -14,6 +15,7 @@
 - ✅ 修复了 Authorization 头格式（使用直接 token 而非 Bearer 格式）
 
 ### 2. 官方网站下载功能 (`website/script.js`)
+
 - ✅ 添加了 Alist API 配置
 - ✅ 实现了 Alist 认证功能
 - ✅ 实现了版本列表获取功能
@@ -23,36 +25,44 @@
 - ✅ 修复了 Authorization 头格式
 
 ### 3. 配置文档
+
 - ✅ 创建了详细的配置说明 (`docs/alist-config.md`)
 - ✅ 创建了迁移总结文档 (`docs/alist-migration-summary.md`)
 
 ### 4. 测试脚本
+
 - ✅ 创建了 Alist 连接测试脚本 (`scripts/test-alist.js`)
 - ✅ 创建了认证格式测试脚本 (`scripts/auth-test.js`)
 
 ## 配置信息
 
 ### Alist 服务器配置
+
 - **服务器地址**: `http://47.96.72.224:5244`
 - **用户名**: `ceruupdate`
 - **密码**: `123456`
 - **文件路径格式**: `/{version}/{文件名}`
 
 ### Authorization 头格式
+
 经过测试确认，正确的格式是：
+
 ```
 Authorization: {token}
 ```
+
 **注意**: 不需要 "Bearer " 前缀
 
 ## 功能特性
 
 ### 桌面应用
+
 1. **智能下载**: 优先使用 Alist API，失败时自动回退
 2. **进度显示**: 支持下载进度显示和节流
 3. **错误处理**: 完善的错误处理和日志记录
 
 ### 网站
+
 1. **自动检测**: 自动检测用户操作系统并推荐对应版本
 2. **版本信息**: 自动获取最新版本信息和文件大小
 3. **多层备用**: Alist → GitHub API → GitHub 页面的三层备用机制
@@ -68,6 +78,7 @@ Authorization: {token}
 ## 可用文件
 
 测试显示 Alist 服务器当前包含以下文件：
+
 - `v1.2.1/` (版本目录)
 - `1111`
 - `L3YxLjIuMS8tMS4yLjEtYXJtNjQtbWFjLnppcA==`

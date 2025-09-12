@@ -76,7 +76,7 @@ const fetchLocalPlaylistSongs = async () => {
   try {
     // 调用本地歌单API获取歌曲列表
     const result = await window.api.songList.getSongs(playlistInfo.value.id)
-    
+
     if (result.success && result.data) {
       songs.value = result.data.map((song: any) => ({
         singer: song.singer || '未知歌手',
@@ -121,12 +121,12 @@ const fetchLocalPlaylistSongs = async () => {
 const fetchNetworkPlaylistSongs = async () => {
   try {
     // 调用API获取歌单详情和歌曲列表
-    const result = await window.api.music.requestSdk('getPlaylistDetail', {
+    const result = (await window.api.music.requestSdk('getPlaylistDetail', {
       source: playlistInfo.value.source,
       id: playlistInfo.value.id,
       page: 1
-    }) as any
-    
+    })) as any
+
     console.log(result)
     if (result && result.list) {
       songs.value = result.list
@@ -210,7 +210,7 @@ const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => 
   }
 
   let finalSongs = [...songsToReplace]
-  
+
   if (shouldShuffle) {
     // 创建歌曲索引数组并打乱
     const shuffledIndexes = Array.from({ length: songsToReplace.length }, (_, i) => i)
@@ -218,16 +218,19 @@ const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => 
       const j = Math.floor(Math.random() * (i + 1))
       ;[shuffledIndexes[i], shuffledIndexes[j]] = [shuffledIndexes[j], shuffledIndexes[i]]
     }
-    
+
     // 按打乱的顺序重新排列歌曲
-    finalSongs = shuffledIndexes.map(index => songsToReplace[index])
+    finalSongs = shuffledIndexes.map((index) => songsToReplace[index])
   }
-  
+
   // 使用自定义事件替换整个播放列表
   if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('replacePlaylist', finalSongs.map(song => toRaw(song)))
+    ;(window as any).musicEmitter.emit(
+      'replacePlaylist',
+      finalSongs.map((song) => toRaw(song))
+    )
   }
-  
+
   // // 更新当前播放状态
   // if (finalSongs[0]) {
   //   currentSong.value = finalSongs[0]
@@ -303,10 +306,10 @@ onMounted(() => {
           <h1 class="playlist-title">{{ playlistInfo.title }}</h1>
           <p class="playlist-author">by {{ playlistInfo.author }}</p>
           <p class="playlist-stats">{{ playlistInfo.total }} 首歌曲</p>
-          
+
           <!-- 播放控制按钮 -->
           <div class="playlist-actions">
-            <t-button 
+            <t-button
               theme="primary"
               size="medium"
               @click="handlePlayPlaylist"
@@ -315,13 +318,13 @@ onMounted(() => {
             >
               <template #icon>
                 <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z"/>
+                  <path d="M8 5v14l11-7z" />
                 </svg>
               </template>
               播放全部
             </t-button>
-            
-            <t-button 
+
+            <t-button
               variant="outline"
               size="medium"
               @click="handleShufflePlaylist"
@@ -330,7 +333,9 @@ onMounted(() => {
             >
               <template #icon>
                 <svg class="shuffle-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                  <path
+                    d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"
+                  />
                 </svg>
               </template>
               随机播放

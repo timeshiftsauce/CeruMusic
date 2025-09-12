@@ -1,10 +1,10 @@
 export default interface PlayList {
-  songmid: string|number
+  songmid: string | number
   hash?: string
   singer: string
   name: string
   albumName: string
-  albumId: string|number
+  albumId: string | number
   source: string
   interval: string
   img: string

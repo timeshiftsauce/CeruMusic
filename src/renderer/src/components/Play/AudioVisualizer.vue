@@ -49,9 +49,13 @@ const initAudioAnalyser = () => {
     fftSize = Math.min(fftSize, 2048) // 限制最大值
 
     // 使用音频管理器创建分析器
-    const createdAnalyser = audioManager.createAnalyser(Audio.value.audio, componentId.value, fftSize)
+    const createdAnalyser = audioManager.createAnalyser(
+      Audio.value.audio,
+      componentId.value,
+      fftSize
+    )
     analyser.value = createdAnalyser || undefined
-    
+
     if (analyser.value) {
       // 创建数据数组，明确指定 ArrayBuffer 类型
       const bufferLength = analyser.value.frequencyBinCount
@@ -63,7 +67,6 @@ const initAudioAnalyser = () => {
       const bufferLength = fftSize / 2
       dataArray.value = new Uint8Array(new ArrayBuffer(bufferLength))
     }
-    
   } catch (error) {
     console.error('音频分析器初始化失败:', error)
     // 创建一个默认大小的数据数组用于模拟数据
@@ -104,14 +107,14 @@ const draw = () => {
   for (let i = lowFreqStart; i < lowFreqEnd; i++) {
     lowFreqSum += dataArray.value[i]
   }
-  const lowFreqVolume = (lowFreqSum / (lowFreqEnd - lowFreqStart)) / 255
-  
+  const lowFreqVolume = lowFreqSum / (lowFreqEnd - lowFreqStart) / 255
+
   // 发送低频音量给父组件
   emit('lowFreqUpdate', lowFreqVolume)
 
   // 完全清空画布
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  
+
   // 如果有背景色，再填充背景
   if (props.backgroundColor !== 'transparent') {
     ctx.fillStyle = props.backgroundColor
@@ -121,14 +124,14 @@ const draw = () => {
   // 使用容器的实际尺寸进行计算，因为 ctx 已经缩放过了
   const container = canvas.parentElement
   if (!container) return
-  
+
   const containerRect = container.getBoundingClientRect()
   const canvasWidth = containerRect.width
   const canvasHeight = props.height
-  
+
   // 计算对称柱状图参数
   const halfBarCount = Math.floor(props.barCount / 2)
-  const barWidth = (canvasWidth / 2) / halfBarCount
+  const barWidth = canvasWidth / 2 / halfBarCount
   const maxBarHeight = canvasHeight * 0.9
   const centerX = canvasWidth / 2
 
@@ -136,10 +139,10 @@ const draw = () => {
   for (let i = 0; i < halfBarCount; i++) {
     // 增强低频响应，让可视化更敏感
     let barHeight = (dataArray.value[i] / 255) * maxBarHeight
-    
+
     // 对数据进行增强处理，让变化更明显
     barHeight = Math.pow(barHeight / maxBarHeight, 0.6) * maxBarHeight
-    
+
     const y = canvasHeight - barHeight
 
     // 创建渐变色
@@ -148,11 +151,11 @@ const draw = () => {
     gradient.addColorStop(1, props.color.replace(/[\d\.]+\)$/g, '0.3)'))
 
     ctx.fillStyle = gradient
-    
+
     // 绘制左侧柱状图（从中心向左）
     const leftX = centerX - (i + 1) * barWidth
     ctx.fillRect(leftX, y, barWidth, barHeight)
-    
+
     // 绘制右侧柱状图（从中心向右）
     const rightX = centerX + i * barWidth
     ctx.fillRect(rightX, y, barWidth, barHeight)
@@ -167,11 +170,11 @@ const draw = () => {
 // 开始可视化
 const startVisualization = () => {
   if (!props.show || !Audio.value.isPlay) return
-  
+
   if (!analyser.value) {
     initAudioAnalyser()
   }
-  
+
   draw()
 }
 
@@ -188,51 +191,56 @@ const stopVisualization = () => {
 }
 
 // 监听播放状态变化
-watch(() => Audio.value.isPlay, (isPlaying) => {
-  if (isPlaying && props.show) {
-    startVisualization()
-  } else {
-    stopVisualization()
+watch(
+  () => Audio.value.isPlay,
+  (isPlaying) => {
+    if (isPlaying && props.show) {
+      startVisualization()
+    } else {
+      stopVisualization()
+    }
   }
-})
+)
 
 // 监听显示状态变化
-watch(() => props.show, (show) => {
-  if (show && Audio.value.isPlay) {
-    startVisualization()
-  } else {
-    stopVisualization()
+watch(
+  () => props.show,
+  (show) => {
+    if (show && Audio.value.isPlay) {
+      startVisualization()
+    } else {
+      stopVisualization()
+    }
   }
-})
-
+)
 
 // 设置画布尺寸的函数
 const resizeCanvas = () => {
   if (!canvasRef.value) return
-  
+
   const canvas = canvasRef.value
   const container = canvas.parentElement
   if (!container) return
-  
+
   // 获取容器的实际尺寸
   const containerRect = container.getBoundingClientRect()
   const dpr = window.devicePixelRatio || 1
-  
+
   // 设置 canvas 的实际尺寸
   canvas.width = containerRect.width * dpr
   canvas.height = props.height * dpr
-  
+
   // 设置 CSS 尺寸
   canvas.style.width = containerRect.width + 'px'
   canvas.style.height = props.height + 'px'
-  
+
   const ctx = canvas.getContext('2d')
   if (ctx) {
     // 重置变换矩阵并重新缩放
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.scale(dpr, dpr)
   }
-  
+
   console.log('Canvas resized:', containerRect.width, 'x', props.height)
 }
 
@@ -240,7 +248,7 @@ const resizeCanvas = () => {
 onMounted(() => {
   if (canvasRef.value) {
     resizeCanvas()
-    
+
     // 使用 ResizeObserver 监听容器尺寸变化
     resizeObserver.value = new ResizeObserver((entries) => {
       for (const _entry of entries) {
@@ -250,14 +258,14 @@ onMounted(() => {
         })
       }
     })
-    
+
     // 观察 canvas 元素的父容器
     const container = canvasRef.value.parentElement
     if (container) {
       resizeObserver.value.observe(container)
     }
   }
-  
+
   if (Audio.value.audio && props.show && Audio.value.isPlay) {
     initAudioAnalyser()
     startVisualization()
@@ -267,10 +275,10 @@ onMounted(() => {
 // 组件卸载
 onBeforeUnmount(() => {
   console.log('AudioVisualizer 组件开始卸载')
-  
+
   // 停止可视化动画
   stopVisualization()
-  
+
   // 清理音频上下文和相关资源
   try {
     // 只断开分析器连接，不断开共享的音频源
@@ -278,12 +286,10 @@ onBeforeUnmount(() => {
       analyser.value.disconnect()
       analyser.value = undefined
     }
-    
-
   } catch (error) {
     console.warn('清理音频资源时出错:', error)
   }
-  
+
   // 断开 ResizeObserver
   try {
     if (resizeObserver.value) {
@@ -293,21 +299,17 @@ onBeforeUnmount(() => {
   } catch (error) {
     console.warn('断开 ResizeObserver 时出错:', error)
   }
-  
+
   // 清理数据数组
   dataArray.value = undefined
-  
+
   console.log('AudioVisualizer 组件卸载完成')
 })
 </script>
 
 <template>
   <div class="audio-visualizer" :style="{ height: `${height}px` }">
-    <canvas
-      ref="canvasRef"
-      class="visualizer-canvas"
-      :style="{ height: `${height}px` }"
-    />
+    <canvas ref="canvasRef" class="visualizer-canvas" :style="{ height: `${height}px` }" />
   </div>
 </template>
 
@@ -316,7 +318,7 @@ onBeforeUnmount(() => {
   width: 100%;
   position: relative;
   overflow: hidden;
-  
+
   .visualizer-canvas {
     width: 100%;
     display: block;
