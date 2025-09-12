@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, toRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { Edit2Icon, ListIcon } from 'tdesign-icons-vue-next'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
@@ -116,12 +117,22 @@ const loading = ref(false)
 // 对话框状态
 const showCreatePlaylistDialog = ref(false)
 const showImportDialog = ref(false)
+const showEditPlaylistDialog = ref(false)
 
 // 表单数据
 const newPlaylistForm = ref({
   name: '我的歌单',
   description: '这是我创建的歌单'
 })
+
+// 编辑歌单表单数据
+const editPlaylistForm = ref({
+  name: '',
+  description: ''
+})
+
+// 当前编辑的歌单
+const currentEditingPlaylist = ref<SongList | null>(null)
 
 // 将时长字符串转换为秒数
 const parseInterval = (interval: string): number => {
@@ -208,6 +219,55 @@ const createPlaylist = async () => {
   } catch (error) {
     console.error('创建歌单失败:', error)
     MessagePlugin.error('创建歌单失败')
+  }
+}
+
+// 编辑歌单
+const editPlaylist = (playlist: SongList) => {
+  currentEditingPlaylist.value = playlist
+  editPlaylistForm.value = {
+    name: playlist.name,
+    description: playlist.description || ''
+  }
+  showEditPlaylistDialog.value = true
+}
+
+// 保存歌单编辑
+const savePlaylistEdit = async () => {
+  if (!currentEditingPlaylist.value) return
+
+  if (!editPlaylistForm.value.name.trim()) {
+    MessagePlugin.warning('歌单名称不能为空')
+    return
+  }
+
+  try {
+    const result = await songListAPI.edit(currentEditingPlaylist.value.id, {
+      name: editPlaylistForm.value.name.trim(),
+      description: editPlaylistForm.value.description.trim()
+    })
+
+    if (result.success) {
+      MessagePlugin.success('歌单信息更新成功')
+      showEditPlaylistDialog.value = false
+      currentEditingPlaylist.value = null
+      await loadPlaylists()
+    } else {
+      MessagePlugin.error(result.error || '更新歌单信息失败')
+    }
+  } catch (error) {
+    console.error('更新歌单信息失败:', error)
+    MessagePlugin.error('更新歌单信息失败')
+  }
+}
+
+// 取消编辑歌单
+const cancelPlaylistEdit = () => {
+  showEditPlaylistDialog.value = false
+  currentEditingPlaylist.value = null
+  editPlaylistForm.value = {
+    name: '',
+    description: ''
   }
 }
 
@@ -618,36 +678,51 @@ onMounted(() => {
               </div>
             </div>
             <div class="playlist-actions">
-              <t-button
-                shape="circle"
-                theme="primary"
-                variant="text"
-                size="small"
-                title="播放歌单"
-                @click="playPlaylist(playlist)"
-              >
-                <i class="iconfont icon-bofang"></i>
-              </t-button>
-              <t-button
-                shape="circle"
-                theme="default"
-                variant="text"
-                size="small"
-                title="查看详情"
-                @click="viewPlaylist(playlist)"
-              >
-                <i class="iconfont icon-liebiao"></i>
-              </t-button>
-              <t-button
-                shape="circle"
-                theme="danger"
-                variant="text"
-                size="small"
-                title="删除歌单"
-                @click="deletePlaylist(playlist)"
-              >
-                <i class="iconfont icon-shanchu"></i>
-              </t-button>
+              <t-tooltip content="播放歌单">
+                <t-button
+                  shape="circle"
+                  theme="primary"
+                  variant="text"
+                  size="small"
+                  @click="playPlaylist(playlist)"
+                >
+                  <i class="iconfont icon-bofang"></i>
+                </t-button>
+              </t-tooltip>
+              <t-tooltip content="查看详情">
+                <t-button
+                  shape="circle"
+                  theme="default"
+                  variant="text"
+                  size="small"
+                  @click="viewPlaylist(playlist)"
+                >
+                  <ListIcon />
+                </t-button>
+              </t-tooltip>
+              <t-tooltip content="编辑歌单">
+                <t-button
+                  shape="circle"
+                  theme="success"
+                  variant="text"
+                  size="small"
+                  @click="editPlaylist(playlist)"
+                >
+                  <Edit2Icon />
+                </t-button>
+              </t-tooltip>
+
+              <t-tooltip content="删除歌单">
+                <t-button
+                  shape="circle"
+                  theme="danger"
+                  variant="text"
+                  size="small"
+                  @click="deletePlaylist(playlist)"
+                >
+                  <i class="iconfont icon-shanchu"></i>
+                </t-button>
+              </t-tooltip>
             </div>
           </div>
         </div>
@@ -861,6 +936,42 @@ onMounted(() => {
         </div>
       </div>
     </t-dialog>
+
+    <!-- 编辑歌单对话框 -->
+    <t-dialog
+      v-model:visible="showEditPlaylistDialog"
+      header="编辑歌单信息"
+      :confirm-btn="{ content: '保存', theme: 'primary' }"
+      :cancel-btn="{ content: '取消', variant: 'outline' }"
+      @confirm="savePlaylistEdit"
+      @cancel="cancelPlaylistEdit"
+      width="500px"
+    >
+      <div class="edit-playlist-content">
+        <div class="form-item">
+          <label class="form-label">歌单名称</label>
+          <t-input
+            v-model="editPlaylistForm.name"
+            placeholder="请输入歌单名称"
+            clearable
+            autofocus
+            maxlength="50"
+            show-word-limit
+          />
+        </div>
+
+        <div class="form-item">
+          <label class="form-label">歌单描述</label>
+          <t-textarea
+            v-model="editPlaylistForm.description"
+            placeholder="请输入歌单描述（可选）"
+            :autosize="{ minRows: 3, maxRows: 6 }"
+            maxlength="200"
+            show-word-limit
+          />
+        </div>
+      </div>
+    </t-dialog>
   </div>
 </template>
 
@@ -870,6 +981,47 @@ onMounted(() => {
   margin: 0 auto;
   width: 100%;
   position: relative;
+}
+
+// 编辑歌单对话框样式
+.edit-playlist-content {
+  .form-item {
+    margin-bottom: 1.5rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: #374151;
+      font-size: 14px;
+    }
+  }
+
+  .form-tips {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #f3f4f6;
+    border-radius: 6px;
+    border-left: 3px solid #10b981;
+
+    .tip-note {
+      margin: 0;
+      color: #6b7280;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      .iconfont {
+        color: #10b981;
+        font-size: 14px;
+      }
+    }
+  }
 }
 
 // 网络歌单导入对话框样式
