@@ -590,7 +590,7 @@ const openLink = (url: string) => {
 
               <!-- 技术栈 -->
               <div class="setting-group">
-                <h3>技术栈</h3>
+                <h3>技术栈&服务</h3>
                 <div class="tech-stack">
                   <div class="tech-item">
                     <span class="tech-name">Electron</span>
@@ -611,6 +611,14 @@ const openLink = (url: string) => {
                   <div class="tech-item">
                     <span class="tech-name">Vite</span>
                     <span class="tech-desc">快速前端构建工具</span>
+                  </div>
+                  <div
+                    class="tech-item link"
+                    style="cursor: pointer"
+                    @click="openLink('https://houlang.cloud/zh-CN/')"
+                  >
+                    <span class="tech-name">厚浪云</span>
+                    <span class="tech-desc">提供的云服务支持</span>
                   </div>
                 </div>
               </div>
@@ -1559,7 +1567,7 @@ const openLink = (url: string) => {
     background: #f8fafc;
     border-radius: 0.5rem;
     border: 1px solid #e2e8f0;
-
+    transition: 0.3s;
     .tech-name {
       font-weight: 600;
       color: #1e293b;
@@ -1568,6 +1576,13 @@ const openLink = (url: string) => {
     .tech-desc {
       font-size: 0.875rem;
       color: #64748b;
+    }
+    &.link:hover {
+      background-color: var(--td-brand-color-1);
+      border: 1px solid var(--td-brand-color-5);
+    }
+    &.link:active {
+      transform: scale(0.9);
     }
   }
 }

@@ -41,6 +41,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   allowElevation: true
 mac:
+  icon: 'resources/icons/icon.icns'
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -50,7 +51,10 @@ mac:
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
+  installerIcon: 'resources/icons/icon.ico'
+  uninstallerIcon: 'resources/icons/icon.ico'
 linux:
+  icon: 'resources/icons'
   target:
     - AppImage
     - snap
