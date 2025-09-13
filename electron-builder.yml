@@ -44,13 +44,12 @@ mac:
   icon: 'resources/icons/icon.icns'
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - NSDocumentsFolderUsageDescription: 需要访问文档文件夹来保存和打开您创建的文件。
+    - NSDownloadsFolderUsageDescription: 需要访问下载文件夹来管理您下载的内容。
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
+  title: ${productName}
 linux:
   icon: 'resources/icons'
   target:
