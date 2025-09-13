@@ -441,7 +441,7 @@ const handleLowFreqUpdate = (volume: number) => {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.256);
-    drop-filter: blur(10px);
+    -webkit-drop-filter: blur(10px);
     padding: 0 10vw;
     -webkit-drop-filter: blur(10px);
     overflow: hidden;

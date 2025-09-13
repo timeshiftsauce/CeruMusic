@@ -755,7 +755,7 @@ watch(showFullPlay, (val) => {
     <div class="player-content">
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
-        <div class="album-cover" v-if="songInfo.albumId">
+        <div class="album-cover" v-if="songInfo.songmid">
           <img :src="songInfo.img" alt="专辑封面" v-if="songInfo.img" />
           <img :src="defaultCoverImg" alt="默认封面" />
         </div>
