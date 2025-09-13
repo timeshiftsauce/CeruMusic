@@ -300,22 +300,44 @@ function findFileForPlatform(files, platform) {
   }
 
   // Filter out unwanted files (yml, yaml, txt, md, etc.)
-  const filteredFiles = files.filter(file => {
+  const filteredFiles = files.filter((file) => {
     const name = file.name.toLowerCase()
-    return !name.endsWith('.yml') && 
-           !name.endsWith('.yaml') && 
-           !name.endsWith('.txt') && 
-           !name.endsWith('.md') && 
-           !name.endsWith('.json') &&
-           !name.includes('latest') &&
-           !name.includes('blockmap')
+    return (
+      !name.endsWith('.yml') &&
+      !name.endsWith('.yaml') &&
+      !name.endsWith('.txt') &&
+      !name.endsWith('.md') &&
+      !name.endsWith('.json') &&
+      !name.includes('latest') &&
+      !name.includes('blockmap')
+    )
   })
 
   // Define file patterns for each platform (ordered by priority)
   const patterns = {
-    windows: [/ceru-music.*setup\\.exe$/i, /\\.exe$/i, /windows.*\\.zip$/i, /win32.*\\.zip$/i, /win.*x64.*\\.zip$/i],
-    macos: [/ceru-music.*\\.dmg$/i, /\\.dmg$/i, /darwin.*\\.zip$/i, /macos.*\\.zip$/i, /mac.*\\.zip$/i, /osx.*\\.zip$/i],
-    linux: [/ceru-music.*amd64\\.deb$/i, /\\.deb$/i, /\\.AppImage$/i, /linux.*\\.zip$/i, /linux.*\\.tar\\.gz$/i, /\\.rpm$/i]
+    windows: [
+      /ceru-music.*setup\\.exe$/i,
+      /\\.exe$/i,
+      /windows.*\\.zip$/i,
+      /win32.*\\.zip$/i,
+      /win.*x64.*\\.zip$/i
+    ],
+    macos: [
+      /ceru-music.*\\.dmg$/i,
+      /\\.dmg$/i,
+      /darwin.*\\.zip$/i,
+      /macos.*\\.zip$/i,
+      /mac.*\\.zip$/i,
+      /osx.*\\.zip$/i
+    ],
+    linux: [
+      /ceru-music.*amd64\\.deb$/i,
+      /\\.deb$/i,
+      /\\.AppImage$/i,
+      /linux.*\\.zip$/i,
+      /linux.*\\.tar\\.gz$/i,
+      /\\.rpm$/i
+    ]
   }
 
   const platformPatterns = patterns[platform] || []
@@ -353,22 +375,44 @@ function findDownloadAsset(assets, platform) {
   }
 
   // Filter out unwanted files (yml, yaml, txt, md, etc.)
-  const filteredAssets = assets.filter(asset => {
+  const filteredAssets = assets.filter((asset) => {
     const name = asset.name.toLowerCase()
-    return !name.endsWith('.yml') && 
-           !name.endsWith('.yaml') && 
-           !name.endsWith('.txt') && 
-           !name.endsWith('.md') && 
-           !name.endsWith('.json') &&
-           !name.includes('latest') &&
-           !name.includes('blockmap')
+    return (
+      !name.endsWith('.yml') &&
+      !name.endsWith('.yaml') &&
+      !name.endsWith('.txt') &&
+      !name.endsWith('.md') &&
+      !name.endsWith('.json') &&
+      !name.includes('latest') &&
+      !name.includes('blockmap')
+    )
   })
 
   // Define file patterns for each platform (ordered by priority)
   const patterns = {
-    windows: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win32.*\.zip$/i, /win.*x64.*\.zip$/i],
-    macos: [/ceru-music.*\.dmg$/i, /\.dmg$/i, /darwin.*\.zip$/i, /macos.*\.zip$/i, /mac.*\.zip$/i, /osx.*\.zip$/i],
-    linux: [/ceru-music.*amd64\.deb$/i, /\.deb$/i, /\.AppImage$/i, /linux.*\.zip$/i, /linux.*\.tar\.gz$/i, /\.rpm$/i]
+    windows: [
+      /ceru-music.*setup\.exe$/i,
+      /\.exe$/i,
+      /windows.*\.zip$/i,
+      /win32.*\.zip$/i,
+      /win.*x64.*\.zip$/i
+    ],
+    macos: [
+      /ceru-music.*\.dmg$/i,
+      /\.dmg$/i,
+      /darwin.*\.zip$/i,
+      /macos.*\.zip$/i,
+      /mac.*\.zip$/i,
+      /osx.*\.zip$/i
+    ],
+    linux: [
+      /ceru-music.*amd64\.deb$/i,
+      /\.deb$/i,
+      /\.AppImage$/i,
+      /linux.*\.zip$/i,
+      /linux.*\.tar\.gz$/i,
+      /\.rpm$/i
+    ]
   }
 
   const platformPatterns = patterns[platform] || []
