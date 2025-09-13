@@ -39,6 +39,8 @@ declare module 'vue' {
     TitleBarControls: typeof import('./src/components/TitleBarControls.vue')['default']
     TLayout: typeof import('tdesign-vue-next')['Layout']
     TLoading: typeof import('tdesign-vue-next')['Loading']
+    TRadioButton: typeof import('tdesign-vue-next')['RadioButton']
+    TRadioGroup: typeof import('tdesign-vue-next')['RadioGroup']
     TSlider: typeof import('tdesign-vue-next')['Slider']
     TSwitch: typeof import('tdesign-vue-next')['Switch']
     TTextarea: typeof import('tdesign-vue-next')['Textarea']
