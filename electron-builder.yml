@@ -51,8 +51,6 @@ mac:
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
-  installerIcon: 'resources/icons/icon.ico'
-  uninstallerIcon: 'resources/icons/icon.ico'
 linux:
   icon: 'resources/icons'
   target:
