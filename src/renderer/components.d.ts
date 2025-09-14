@@ -15,6 +15,7 @@ declare module 'vue' {
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
     MusicCache: typeof import('./src/components/Settings/MusicCache.vue')['default']
     PlaylistActions: typeof import('./src/components/Play/PlaylistActions.vue')['default']
+    PlaylistDrawer: typeof import('./src/components/Play/PlaylistDrawer.vue')['default']
     PlaylistSettings: typeof import('./src/components/Settings/PlaylistSettings.vue')['default']
     PlayMusic: typeof import('./src/components/Play/PlayMusic.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
