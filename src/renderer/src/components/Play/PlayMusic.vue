@@ -17,6 +17,7 @@ import icons from '../../assets/icon_font/icons'
 const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
+import PlaylistDrawer from './PlaylistDrawer.vue'
 import { extractDominantColor } from '@renderer/utils/colorExtractor'
 import { getBestContrastTextColorWithOpacity } from '@renderer/utils/contrastColor'
 import { PlayMode, type SongList } from '@renderer/types/audio'
@@ -152,7 +153,9 @@ const playSong = async (song: SongList) => {
 
     // 如果播放列表是打开的，滚动到当前播放歌曲
     if (showPlaylist.value) {
-      scrollToCurrentSong()
+      nextTick(() => {
+        playlistDrawerRef.value?.scrollToCurrentSong()
+      })
     }
 
     // 更新歌曲信息并触发主题色更新
@@ -267,6 +270,8 @@ const showVolumeSlider = ref(false)
 const volumeBarRef = ref<HTMLDivElement | null>(null)
 const isDraggingVolume = ref(false)
 
+
+
 const volumeValue = computed({
   get: () => Audio.value.volume,
   set: (val) => {
@@ -310,6 +315,7 @@ const handleVolumeDragEnd = () => {
 
 // 播放列表相关
 const showPlaylist = ref(false)
+const playlistDrawerRef = ref<InstanceType<typeof PlaylistDrawer> | null>(null)
 
 const togglePlaylist = (e: MouseEvent) => {
   e.stopPropagation()
@@ -317,28 +323,19 @@ const togglePlaylist = (e: MouseEvent) => {
 
   // 如果打开播放列表，滚动到当前播放歌曲
   if (showPlaylist.value) {
-    scrollToCurrentSong()
+    nextTick(() => {
+      playlistDrawerRef.value?.scrollToCurrentSong()
+    })
   }
-}
-
-// 滚动到当前播放歌曲
-const scrollToCurrentSong = () => {
-  if (!currentSongId.value) return
-
-  // 使用 nextTick 确保 DOM 已更新
-  nextTick(() => {
-    const activeSong = window.document.querySelector('.playlist-song.active') as HTMLElement
-    if (activeSong) {
-      activeSong.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      })
-    }
-  })
 }
 
 // 播放列表中的歌曲
 const currentSongId = computed(() => userInfo.value.lastPlaySongId)
+
+// 关闭播放列表
+const closePlaylist = () => {
+  showPlaylist.value = false
+}
 
 // 播放上一首
 const playPrevious = async () => {
@@ -465,6 +462,8 @@ onMounted(async () => {
     }
   }, 1000) // 每1秒保存一次
 })
+
+
 
 // 组件卸载时清理
 onUnmounted(() => {
@@ -857,54 +856,15 @@ watch(showFullPlay, (val) => {
     />
   </div>
 
-  <!-- 播放列表 -->
-  <div v-show="showPlaylist" class="cover" @click="showPlaylist = false"></div>
-  <transition name="playlist-drawer">
-    <div
-      v-show="showPlaylist"
-      class="playlist-container"
-      :class="{ 'full-screen-mode': showFullPlay }"
-      @click.stop
-    >
-      <div class="playlist-header">
-        <div class="playlist-title">播放列表 ({{ list.length }})</div>
-        <button class="playlist-close" @click.stop="showPlaylist = false">
-          <span class="iconfont icon-guanbi"></span>
-        </button>
-      </div>
-
-      <div class="playlist-content">
-        <div v-if="list.length === 0" class="playlist-empty">
-          <p>播放列表为空</p>
-          <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
-        </div>
-        <div v-else class="playlist-songs">
-          <div
-            v-for="song in list"
-            :key="song.songmid"
-            class="playlist-song"
-            :class="{ active: song.songmid === currentSongId }"
-            @click="playSong(song)"
-          >
-            <div class="song-info">
-              <div class="song-name">{{ song.name }}</div>
-              <div class="song-artist">{{ song.singer }}</div>
-            </div>
-            <div class="song-duration">
-              {{
-                song.interval.includes(':')
-                  ? song.interval
-                  : formatTime(parseInt(song.interval) / 1000)
-              }}
-            </div>
-            <button class="song-remove" @click.stop="localUserStore.removeSong(song.songmid)">
-              <span class="iconfont icon-xuanxiangshanchu"></span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </transition>
+  <!-- 播放列表组件 -->
+  <PlaylistDrawer
+    ref="playlistDrawerRef"
+    :show="showPlaylist"
+    :current-song-id="currentSongId"
+    :full-screen-mode="showFullPlay"
+    @close="closePlaylist"
+    @play-song="playSong"
+  />
 </template>
 
 <style lang="scss" scoped>
@@ -1251,205 +1211,7 @@ watch(showFullPlay, (val) => {
   transform: translateY(10px) scale(0.95);
 }
 
-/* 播放列表 */
-.playlist-container {
-  position: fixed;
-  border-radius: 16px 0 0 16px;
-  top: 72px;
-  right: 0;
-  width: 380px;
-  height: calc(100vh - var(--play-bottom-height) - 80px);
-  transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
-  background: rgba(255, 255, 255, 0.6);
-  /* 默认白色毛玻璃 */
-  backdrop-filter: blur(20px);
-  box-shadow: -5px 0 25px rgba(0, 0, 0, 0.15);
-  z-index: 9001;
-  display: flex;
-  flex-direction: column;
-  color: #333;
-  transform: translateX(0);
-  /* 初始位置 */
-}
 
-.cover {
-  position: fixed;
-  background-color: transparent;
-  width: 100vw;
-  height: 100vh;
-  z-index: 9000;
-  bottom: 0px;
-  right: 0;
-}
-
-/* 全屏模式下的样式 */
-.playlist-container.full-screen-mode {
-  background: rgba(0, 0, 0, 0.2);
-  /* 黑色毛玻璃 */
-  color: #fff;
-  /* 白色文字 */
-}
-
-.playlist-container.full-screen-mode .song-artist,
-.playlist-container.full-screen-mode .song-duration,
-.playlist-container.full-screen-mode .playlist-close,
-.playlist-container.full-screen-mode .song-remove {
-  color: #ccc;
-}
-
-.playlist-container.full-screen-mode .playlist-song:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.playlist-container.full-screen-mode .playlist-song.active {
-  border-left: #2373ce5d 4px solid;
-
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.playlist-container .playlist-song.active {
-  border-left: #2373ce93 4px solid;
-
-  background-color: rgba(114, 231, 255, 0.183);
-}
-
-.playlist-container.full-screen-mode .playlist-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.playlist-container.full-screen-mode .playlist-empty {
-  color: v-bind(contrastTextColor);
-}
-
-.playlist-header {
-  -webkit-app-region: no-drag;
-
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  flex-shrink: 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.playlist-title {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.playlist-close {
-  -webkit-app-region: no-drag;
-  background: transparent;
-  border: none;
-  color: #666;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.playlist-content {
-  flex: 1;
-  overflow-y: auto;
-  scrollbar-width: none;
-  margin: 10px 0;
-  padding: 0 8px;
-}
-
-.playlist-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100px;
-  color: #333;
-  font-size: 14px;
-  text-align: center;
-}
-
-.playlist-songs {
-  display: flex;
-  flex-direction: column;
-}
-
-.playlist-song {
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  cursor: pointer;
-  border-radius: 10px;
-  margin: 5px 0;
-  transition: background-color 0.2s ease;
-}
-
-.playlist-song:hover {
-  background-color: rgba(123, 123, 123, 0.384);
-}
-
-.playlist-song.active {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-
-.playlist-song .song-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.playlist-song .song-name {
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.playlist-container.full-screen-mode .playlist-song .song-name {
-  color: #fff;
-}
-
-.playlist-song .song-artist {
-  font-size: 12px;
-  color: #666;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.playlist-song .song-duration {
-  font-size: 12px;
-  color: #888;
-  margin: 0 12px;
-}
-
-.playlist-song .song-remove {
-  background: transparent;
-  border: none;
-  color: #999;
-  opacity: 0;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.2s ease;
-}
-
-.playlist-song:hover .song-remove {
-  opacity: 1;
-}
-
-/* 播放列表抽屉过渡 */
-.playlist-drawer-enter-active,
-.playlist-drawer-leave-active {
-  transition: transform 0.2s cubic-bezier(0.8, 0, 0.8, 0.43);
-}
-
-.playlist-drawer-enter-from,
-.playlist-drawer-leave-to {
-  transform: translateX(100%);
-}
 
 /* 响应式设计 */
 @media (max-width: 768px) {
@@ -1463,12 +1225,6 @@ watch(showFullPlay, (val) => {
 
   .right-section .extra-controls {
     gap: 8px;
-  }
-
-  .playlist-container {
-    width: 100%;
-    right: 0;
-    border-radius: 8px 8px 0 0;
   }
 }
 
