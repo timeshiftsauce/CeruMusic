@@ -68,13 +68,13 @@ const kw = {
   },
 
   getMusicUrls(musicInfo, cb) {
-    let tasks = []
-    let songId = musicInfo.songmid
+    const tasks = []
+    const songId = musicInfo.songmid
     musicInfo.types.forEach((type) => {
       tasks.push(kw.getMusicUrl(songId, type.type).promise)
     })
     Promise.all(tasks).then((urlInfo) => {
-      let typeUrl = {}
+      const typeUrl = {}
       urlInfo.forEach((info) => {
         typeUrl[info.type] = info.url
       })

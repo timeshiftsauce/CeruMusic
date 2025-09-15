@@ -64,13 +64,13 @@ const parseTools = {
   },
   msFormat(timeMs) {
     if (Number.isNaN(timeMs)) return ''
-    let ms = timeMs % 1000
+    const ms = timeMs % 1000
     timeMs /= 1000
-    let m = parseInt(timeMs / 60)
+    const m = parseInt(timeMs / 60)
       .toString()
       .padStart(2, '0')
     timeMs %= 60
-    let s = parseInt(timeMs).toString().padStart(2, '0')
+    const s = parseInt(timeMs).toString().padStart(2, '0')
     return `[${m}:${s}.${ms}]`
   },
   parseLyric(lines) {
@@ -79,7 +79,7 @@ const parseTools = {
 
     for (let line of lines) {
       line = line.trim()
-      let result = this.rxps.lineTime.exec(line)
+      const result = this.rxps.lineTime.exec(line)
       if (!result) {
         if (line.startsWith('[offset')) {
           lxlrcLines.push(line)
@@ -92,7 +92,7 @@ const parseTools = {
       const startTimeStr = this.msFormat(startMsTime)
       if (!startTimeStr) continue
 
-      let words = line.replace(this.rxps.lineTime, '')
+      const words = line.replace(this.rxps.lineTime, '')
 
       lrcLines.push(`${startTimeStr}${words.replace(this.rxps.wordTimeAll, '')}`)
 
@@ -124,7 +124,7 @@ const parseTools = {
   getIntv(interval) {
     if (!interval) return 0
     if (!interval.includes('.')) interval += '.0'
-    let arr = interval.split(/:|\./)
+    const arr = interval.split(/:|\./)
     while (arr.length < 3) arr.unshift('0')
     const [m, s, ms] = arr
     return parseInt(m) * 3600000 + parseInt(s) * 1000 + parseInt(ms)
@@ -134,7 +134,7 @@ const parseTools = {
     const targetlrcLines = targetlrc.split('\n')
     const timeRxp = /^\[([\d:.]+)\]/
     let temp = []
-    let newLrc = []
+    const newLrc = []
     targetlrcLines.forEach((line) => {
       const result = timeRxp.exec(line)
       if (!result) return
@@ -168,7 +168,7 @@ const parseTools = {
       crlyric: ''
     }
     if (ylrc) {
-      let lines = this.parseHeaderInfo(ylrc)
+      const lines = this.parseHeaderInfo(ylrc)
       if (lines) {
         const result = this.parseLyric(lines)
         if (ytlrc) {
@@ -245,8 +245,8 @@ const parseTools = {
 // https://github.com/lyswhut/lx-music-mobile/issues/370
 const fixTimeLabel = (lrc, tlrc, romalrc) => {
   if (lrc) {
-    let newLrc = lrc.replace(/\[(\d{2}:\d{2}):(\d{2})]/g, '[$1.$2]')
-    let newTlrc = tlrc?.replace(/\[(\d{2}:\d{2}):(\d{2})]/g, '[$1.$2]') ?? tlrc
+    const newLrc = lrc.replace(/\[(\d{2}:\d{2}):(\d{2})]/g, '[$1.$2]')
+    const newTlrc = tlrc?.replace(/\[(\d{2}:\d{2}):(\d{2})]/g, '[$1.$2]') ?? tlrc
     if (newLrc != lrc || newTlrc != tlrc) {
       lrc = newLrc
       tlrc = newTlrc

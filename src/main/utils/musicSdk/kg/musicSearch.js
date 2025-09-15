@@ -17,7 +17,7 @@ export default {
     const types = []
     const _types = {}
     if (rawData.FileSize !== 0) {
-      let size = sizeFormate(rawData.FileSize)
+      const size = sizeFormate(rawData.FileSize)
       types.push({ type: '128k', size, hash: rawData.FileHash })
       _types['128k'] = {
         size,
@@ -25,7 +25,7 @@ export default {
       }
     }
     if (rawData.HQFileSize !== 0) {
-      let size = sizeFormate(rawData.HQFileSize)
+      const size = sizeFormate(rawData.HQFileSize)
       types.push({ type: '320k', size, hash: rawData.HQFileHash })
       _types['320k'] = {
         size,
@@ -33,7 +33,7 @@ export default {
       }
     }
     if (rawData.SQFileSize !== 0) {
-      let size = sizeFormate(rawData.SQFileSize)
+      const size = sizeFormate(rawData.SQFileSize)
       types.push({ type: 'flac', size, hash: rawData.SQFileHash })
       _types.flac = {
         size,
@@ -41,7 +41,7 @@ export default {
       }
     }
     if (rawData.ResFileSize !== 0) {
-      let size = sizeFormate(rawData.ResFileSize)
+      const size = sizeFormate(rawData.ResFileSize)
       types.push({ type: 'flac24bit', size, hash: rawData.ResFileHash })
       _types.flac24bit = {
         size,
@@ -67,7 +67,7 @@ export default {
     }
   },
   handleResult(rawData) {
-    let ids = new Set()
+    const ids = new Set()
     const list = []
     rawData.forEach((item) => {
       const key = item.Audioid + item.FileHash
@@ -89,7 +89,7 @@ export default {
     // http://newlyric.kuwo.cn/newlyric.lrc?62355680
     return this.musicSearch(str, page, limit).then((result) => {
       if (!result || result.error_code !== 0) return this.search(str, page, limit, retryNum)
-      let list = this.handleResult(result.data.lists)
+      const list = this.handleResult(result.data.lists)
 
       if (list == null) return this.search(str, page, limit, retryNum)
 

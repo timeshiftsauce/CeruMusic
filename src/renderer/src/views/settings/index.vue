@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue'
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
 import {
@@ -15,7 +15,6 @@ import {
 } from 'tdesign-icons-vue-next'
 import fonts from '@renderer/assets/icon_font/icons'
 import { useRouter } from 'vue-router'
-import { computed, watch } from 'vue'
 import MusicCache from '@renderer/components/Settings/MusicCache.vue'
 import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
@@ -26,7 +25,6 @@ const { userInfo } = storeToRefs(Store)
 
 // 当前选择的设置分类
 const activeCategory = ref<string>('appearance')
-
 // 应用版本号
 const appVersion = ref('1.0.0')
 
@@ -477,7 +475,7 @@ const openLink = (url: string) => {
                         <div class="source-name">{{ source.name }}</div>
                         <div class="source-type">{{ source.type || '音乐源' }}</div>
                       </div>
-                      <div class="source-check" v-if="userInfo.selectSources === key">
+                      <div v-if="userInfo.selectSources === key" class="source-check">
                         <i class="iconfont icon-check"></i>
                       </div>
                     </div>
@@ -494,8 +492,8 @@ const openLink = (url: string) => {
                       :step="1"
                       :marks="qualityMarks"
                       :label="qualityMarks[qualitySliderValue]"
-                      @change="onQualityChange"
                       class="quality-slider"
+                      @change="onQualityChange"
                     />
                   </div>
                   <div class="quality-description">

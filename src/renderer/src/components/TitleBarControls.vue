@@ -4,6 +4,13 @@ import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
 
+const props = withDefaults(defineProps<Props>(), {
+  controlStyle: false,
+  showSettings: true,
+  showBack: false,
+  title: '',
+  color: 'black'
+})
 const Store = LocalUserDetailStore()
 const { userInfo } = storeToRefs(Store)
 
@@ -17,14 +24,6 @@ interface Props {
   title?: string
   color?: string
 }
-
-const props = withDefaults(defineProps<Props>(), {
-  controlStyle: false,
-  showSettings: true,
-  showBack: false,
-  title: '',
-  color: 'black'
-})
 
 // Mini 模式现在是直接隐藏到系统托盘，不需要状态跟踪
 

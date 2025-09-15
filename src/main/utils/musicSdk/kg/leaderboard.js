@@ -2,7 +2,7 @@ import { httpFetch } from '../../request'
 import { decodeName, formatPlayTime, sizeFormate } from '../index'
 import { formatSingerName } from '../utils'
 
-let boardList = [
+const boardList = [
   { id: 'kg__8888', name: 'TOP500', bangid: '8888' },
   { id: 'kg__6666', name: '飙升榜', bangid: '6666' },
   { id: 'kg__59703', name: '蜂鸟流行音乐榜', bangid: '59703' },
@@ -137,7 +137,7 @@ export default {
     return requestDataObj.promise
   },
   getSinger(singers) {
-    let arr = []
+    const arr = []
     singers.forEach((singer) => {
       arr.push(singer.author_name)
     })
@@ -149,7 +149,7 @@ export default {
       const types = []
       const _types = {}
       if (item.filesize !== 0) {
-        let size = sizeFormate(item.filesize)
+        const size = sizeFormate(item.filesize)
         types.push({ type: '128k', size, hash: item.hash })
         _types['128k'] = {
           size,
@@ -157,7 +157,7 @@ export default {
         }
       }
       if (item['320filesize'] !== 0) {
-        let size = sizeFormate(item['320filesize'])
+        const size = sizeFormate(item['320filesize'])
         types.push({ type: '320k', size, hash: item['320hash'] })
         _types['320k'] = {
           size,
@@ -165,7 +165,7 @@ export default {
         }
       }
       if (item.sqfilesize !== 0) {
-        let size = sizeFormate(item.sqfilesize)
+        const size = sizeFormate(item.sqfilesize)
         types.push({ type: 'flac', size, hash: item.sqhash })
         _types.flac = {
           size,
@@ -173,7 +173,7 @@ export default {
         }
       }
       if (item.filesize_high !== 0) {
-        let size = sizeFormate(item.filesize_high)
+        const size = sizeFormate(item.filesize_high)
         types.push({ type: 'flac24bit', size, hash: item.hash_high })
         _types.flac24bit = {
           size,
@@ -201,7 +201,7 @@ export default {
 
   filterBoardsData(rawList) {
     // console.log(rawList)
-    let list = []
+    const list = []
     for (const board of rawList) {
       if (board.isvol != 1) continue
       list.push({
@@ -243,9 +243,9 @@ export default {
     if (body.errcode != 0) return this.getList(bangid, page, retryNum)
 
     // console.log(body)
-    let total = body.data.total
-    let limit = 100
-    let listData = this.filterData(body.data.info)
+    const total = body.data.total
+    const limit = 100
+    const listData = this.filterData(body.data.info)
     // console.log(listData)
     return {
       total,
@@ -256,7 +256,7 @@ export default {
     }
   },
   getDetailPageUrl(id) {
-    if (typeof id == 'string') id = id.replace('kg__', '')
+    if (typeof id === 'string') id = id.replace('kg__', '')
     return `https://www.kugou.com/yy/rank/home/1-${id}.html`
   }
 }

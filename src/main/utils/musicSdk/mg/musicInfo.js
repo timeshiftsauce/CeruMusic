@@ -4,13 +4,13 @@ import { formatSingerName } from '../utils'
 
 const createGetMusicInfosTask = (ids) => {
   let list = ids
-  let tasks = []
+  const tasks = []
   while (list.length) {
     tasks.push(list.slice(0, 100))
     if (list.length < 100) break
     list = list.slice(100)
   }
-  let url = 'https://c.musicapp.migu.cn/MIGUM2.0/v1.0/content/resourceinfo.do?resourceType=2'
+  const url = 'https://c.musicapp.migu.cn/MIGUM2.0/v1.0/content/resourceinfo.do?resourceType=2'
   return Promise.all(
     tasks.map((task) =>
       createHttpFetch(url, {
@@ -25,7 +25,7 @@ const createGetMusicInfosTask = (ids) => {
 
 export const filterMusicInfoList = (rawList) => {
   // console.log(rawList)
-  let ids = new Set()
+  const ids = new Set()
   const list = []
   rawList.forEach((item) => {
     if (!item.songId || ids.has(item.songId)) return

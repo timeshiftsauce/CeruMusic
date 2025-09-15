@@ -13,9 +13,9 @@ import { httpFetch } from '../../request'
 export const signatureParams = (params, platform = 'android', body = '') => {
   let keyparam = 'OIlwieks28dk2k092lksi2UIkp'
   if (platform === 'web') keyparam = 'NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt'
-  let param_list = params.split('&')
+  const param_list = params.split('&')
   param_list.sort()
-  let sign_params = `${keyparam}${param_list.join('')}${body}${keyparam}`
+  const sign_params = `${keyparam}${param_list.join('')}${body}${keyparam}`
   return toMD5(sign_params)
 }
 

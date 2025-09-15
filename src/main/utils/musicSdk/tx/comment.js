@@ -197,10 +197,10 @@ export default {
   },
   filterNewComment(rawList) {
     return rawList.map((item) => {
-      let time = this.formatTime(item.time)
-      let timeStr = time ? dateFormat2(time) : null
+      const time = this.formatTime(item.time)
+      const timeStr = time ? dateFormat2(time) : null
       if (item.middlecommentcontent) {
-        let firstItem = item.middlecommentcontent[0]
+        const firstItem = item.middlecommentcontent[0]
         firstItem.avatarurl = item.avatarurl
         firstItem.praisenum = item.praisenum
         item.avatarurl = null
@@ -270,12 +270,12 @@ export default {
     })
   },
   replaceEmoji(msg) {
-    let rxp = /^\[em\](e\d+)\[\/em\]$/
+    const rxp = /^\[em\](e\d+)\[\/em\]$/
     let result = msg.match(/\[em\]e\d+\[\/em\]/g)
     if (!result) return msg
     result = Array.from(new Set(result))
-    for (let item of result) {
-      let code = item.replace(rxp, '$1')
+    for (const item of result) {
+      const code = item.replace(rxp, '$1')
       msg = msg.replace(
         new RegExp(item.replace('[em]', '\\[em\\]').replace('[/em]', '\\[\\/em\\]'), 'g'),
         emojis[code] || ''

@@ -85,7 +85,7 @@ const defaultHeaders = {
  * @param {Object} options - 请求选项
  */
 const buildHttpPromise = (url, options) => {
-  let obj = {
+  const obj = {
     isCancelled: false,
     cancelToken: axios.CancelToken.source(),
     cancelHttp: () => {
@@ -190,12 +190,12 @@ const fetchData = async (url, method = 'get', options = {}) => {
     let s = Buffer.from(bHh, 'hex').toString()
     s = s.replace(s.substr(-1), '')
     s = Buffer.from(s, 'base64').toString()
-    let v = process.versions.app
+    const v = process.versions.app
       .split('-')[0]
       .split('.')
       .map((n) => (n.length < 3 ? n.padStart(3, '0') : n))
       .join('')
-    let v2 = process.versions.app.split('-')[1] || ''
+    const v2 = process.versions.app.split('-')[1] || ''
     requestHeaders[s] =
       !s ||
       `${(await handleDeflateRaw(Buffer.from(JSON.stringify(`${path}${v}`.match(regx), null, 1).concat(v)).toString('base64'))).toString('hex')}&${parseInt(v)}${v2}`
@@ -385,7 +385,7 @@ export const http_jsonp = (url, options, callback) => {
     options = {}
   }
 
-  let jsonpCallback = 'jsonpCallback'
+  const jsonpCallback = 'jsonpCallback'
   if (url.indexOf('?') < 0) url += '?'
   url += `&${options.jsonpCallback}=${jsonpCallback}`
 

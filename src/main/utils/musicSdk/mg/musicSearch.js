@@ -212,7 +212,7 @@ export default {
         return Promise.reject(new Error(result ? result.info : '搜索失败'))
       const songResultData = result.songResultData || { resultList: [], totalCount: 0 }
 
-      let list = this.filterData(songResultData.resultList)
+      const list = this.filterData(songResultData.resultList)
       if (list == null) return this.search(str, page, limit, retryNum)
 
       this.total = parseInt(songResultData.totalCount)

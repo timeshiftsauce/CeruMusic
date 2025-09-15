@@ -7,28 +7,28 @@ export const filterMusicInfoItem = (item) => {
   const types = []
   const _types = {}
   if (item.file.size_128mp3 != 0) {
-    let size = sizeFormate(item.file.size_128mp3)
+    const size = sizeFormate(item.file.size_128mp3)
     types.push({ type: '128k', size })
     _types['128k'] = {
       size
     }
   }
   if (item.file.size_320mp3 !== 0) {
-    let size = sizeFormate(item.file.size_320mp3)
+    const size = sizeFormate(item.file.size_320mp3)
     types.push({ type: '320k', size })
     _types['320k'] = {
       size
     }
   }
   if (item.file.size_flac !== 0) {
-    let size = sizeFormate(item.file.size_flac)
+    const size = sizeFormate(item.file.size_flac)
     types.push({ type: 'flac', size })
     _types.flac = {
       size
     }
   }
   if (item.file.size_hires !== 0) {
-    let size = sizeFormate(item.file.size_hires)
+    const size = sizeFormate(item.file.size_hires)
     types.push({ type: 'flac24bit', size })
     _types.flac24bit = {
       size

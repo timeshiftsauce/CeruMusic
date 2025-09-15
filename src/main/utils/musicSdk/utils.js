@@ -42,7 +42,7 @@ export const formatSingerName = (singers, nameKey = 'name', join = '、') => {
   if (Array.isArray(singers)) {
     const singer = []
     singers.forEach((item) => {
-      let name = item[nameKey]
+      const name = item[nameKey]
       if (!name) return
       singer.push(name)
     })

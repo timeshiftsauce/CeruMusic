@@ -12,9 +12,9 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 let gl: WebGLRenderingContext | null = null
 let program: WebGLProgram | null = null
 let animationFrameId: number | null = null
-let startTime = Date.now()
-let dominantColor = ref({ r: 0.3, g: 0.3, b: 0.5 })
-let colorPalette = ref<Color[]>([
+const startTime = Date.now()
+const dominantColor = ref({ r: 0.3, g: 0.3, b: 0.5 })
+const colorPalette = ref<Color[]>([
   { r: 76, g: 116, b: 206 }, // 蓝色
   { r: 120, g: 80, b: 180 }, // 紫色
   { r: 60, g: 160, b: 160 } // 青色

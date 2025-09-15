@@ -9,7 +9,7 @@ export default {
   async getComment(musicInfo, page = 1, limit = 10) {
     if (this._requestObj) this._requestObj.cancelHttp()
     if (!musicInfo.songId) {
-      let id = await getSongId(musicInfo)
+      const id = await getSongId(musicInfo)
       if (!id) throw new Error('获取评论失败')
       musicInfo.songId = id
     }
@@ -40,7 +40,7 @@ export default {
     if (this._requestObj2) this._requestObj2.cancelHttp()
 
     if (!musicInfo.songId) {
-      let id = await getSongId(musicInfo)
+      const id = await getSongId(musicInfo)
       if (!id) throw new Error('获取评论失败')
       musicInfo.songId = id
     }

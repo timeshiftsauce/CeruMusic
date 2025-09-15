@@ -95,7 +95,7 @@ export default {
     let id
     let type
     if (tagId) {
-      let arr = tagId.split('-')
+      const arr = tagId.split('-')
       id = arr[0]
       type = arr[1]
     } else {
@@ -235,9 +235,9 @@ export default {
 
   filterBDListDetail(rawList) {
     return rawList.map((item) => {
-      let types = []
-      let _types = {}
-      for (let info of item.audios) {
+      const types = []
+      const _types = {}
+      for (const info of item.audios) {
         info.size = info.size?.toLocaleUpperCase()
         switch (info.bitrate) {
           case '4000':
@@ -415,9 +415,9 @@ export default {
   filterListDetail(rawData) {
     // console.log(rawData)
     return rawData.map((item) => {
-      let infoArr = item.N_MINFO.split(';')
-      let types = []
-      let _types = {}
+      const infoArr = item.N_MINFO.split(';')
+      const types = []
+      const _types = {}
       for (let info of infoArr) {
         info = info.match(this.regExps.mInfo)
         if (info) {
@@ -478,7 +478,7 @@ export default {
   getDetailPageUrl(id) {
     if (/[?&:/]/.test(id)) id = id.replace(this.regExps.listDetailLink, '$1')
     else if (/^digest-/.test(id)) {
-      let result = id.split('__')
+      const result = id.split('__')
       id = result[1]
     }
     return `http://www.kuwo.cn/playlist_detail/${id}`

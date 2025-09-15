@@ -2,7 +2,7 @@ import { decodeName, formatPlayTime, sizeFormate } from '../../index'
 import { createHttpFetch } from './util'
 
 const createGetMusicInfosTask = (hashs) => {
-  let data = {
+  const data = {
     area_code: '1',
     show_privilege: 1,
     show_album_info: '1',
@@ -16,13 +16,13 @@ const createGetMusicInfosTask = (hashs) => {
     fields: 'album_info,author_name,audio_info,ori_audio_name,base,songname,classification'
   }
   let list = hashs
-  let tasks = []
+  const tasks = []
   while (list.length) {
     tasks.push(Object.assign({ data: list.slice(0, 100) }, data))
     if (list.length < 100) break
     list = list.slice(100)
   }
-  let url = 'http://gateway.kugou.com/v3/album_audio/audio'
+  const url = 'http://gateway.kugou.com/v3/album_audio/audio'
   return tasks.map((task) =>
     createHttpFetch(url, {
       method: 'POST',
@@ -41,8 +41,8 @@ const createGetMusicInfosTask = (hashs) => {
 
 export const filterMusicInfoList = (rawList) => {
   // console.log(rawList)
-  let ids = new Set()
-  let list = []
+  const ids = new Set()
+  const list = []
   rawList.forEach((item) => {
     if (!item) return
     if (ids.has(item.audio_info.audio_id)) return
@@ -50,7 +50,7 @@ export const filterMusicInfoList = (rawList) => {
     const types = []
     const _types = {}
     if (item.audio_info.filesize !== '0') {
-      let size = sizeFormate(parseInt(item.audio_info.filesize))
+      const size = sizeFormate(parseInt(item.audio_info.filesize))
       types.push({ type: '128k', size, hash: item.audio_info.hash })
       _types['128k'] = {
         size,
@@ -58,7 +58,7 @@ export const filterMusicInfoList = (rawList) => {
       }
     }
     if (item.audio_info.filesize_320 !== '0') {
-      let size = sizeFormate(parseInt(item.audio_info.filesize_320))
+      const size = sizeFormate(parseInt(item.audio_info.filesize_320))
       types.push({ type: '320k', size, hash: item.audio_info.hash_320 })
       _types['320k'] = {
         size,
@@ -66,7 +66,7 @@ export const filterMusicInfoList = (rawList) => {
       }
     }
     if (item.audio_info.filesize_flac !== '0') {
-      let size = sizeFormate(parseInt(item.audio_info.filesize_flac))
+      const size = sizeFormate(parseInt(item.audio_info.filesize_flac))
       types.push({ type: 'flac', size, hash: item.audio_info.hash_flac })
       _types.flac = {
         size,
@@ -74,7 +74,7 @@ export const filterMusicInfoList = (rawList) => {
       }
     }
     if (item.audio_info.filesize_high !== '0') {
-      let size = sizeFormate(parseInt(item.audio_info.filesize_high))
+      const size = sizeFormate(parseInt(item.audio_info.filesize_high))
       types.push({ type: 'flac24bit', size, hash: item.audio_info.hash_high })
       _types.flac24bit = {
         size,

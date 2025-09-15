@@ -684,12 +684,12 @@ onMounted(() => {
               </div>
             </div>
             <div class="playlist-info">
-              <div class="playlist-name" @click="viewPlaylist(playlist)" :title="playlist.name">
+              <div class="playlist-name" :title="playlist.name" @click="viewPlaylist(playlist)">
                 {{ playlist.name }}
               </div>
               <div
-                class="playlist-description"
                 v-if="playlist.description"
+                class="playlist-description"
                 :title="playlist.description"
               >
                 {{ playlist.description }}
@@ -860,8 +860,8 @@ onMounted(() => {
 
     <!-- 创建歌单对话框 -->
     <t-dialog
-      placement="center"
       v-model:visible="showCreatePlaylistDialog"
+      placement="center"
       header="创建新歌单"
       width="500px"
       :confirm-btn="{ content: '创建', theme: 'primary' }"
@@ -892,8 +892,8 @@ onMounted(() => {
 
     <!-- 导入选择对话框 -->
     <t-dialog
-      placement="center"
       v-model:visible="showImportDialog"
+      placement="center"
       header="选择导入方式"
       width="400px"
       :footer="false"
@@ -928,14 +928,14 @@ onMounted(() => {
     </t-dialog>
     <!-- 网络歌单导入对话框 -->
     <t-dialog
-      placement="center"
       v-model:visible="showNetworkImportDialog"
+      placement="center"
       header="导入网易云音乐歌单"
       :confirm-btn="{ content: '开始导入', theme: 'primary' }"
       :cancel-btn="{ content: '取消', variant: 'outline' }"
+      width="500px"
       @confirm="confirmNetworkImport"
       @cancel="cancelNetworkImport"
-      width="500px"
     >
       <div class="network-import-content">
         <p class="import-description">
@@ -967,14 +967,14 @@ onMounted(() => {
 
     <!-- 编辑歌单对话框 -->
     <t-dialog
-      placement="center"
       v-model:visible="showEditPlaylistDialog"
+      placement="center"
       header="编辑歌单信息"
       :confirm-btn="{ content: '保存', theme: 'primary' }"
       :cancel-btn="{ content: '取消', variant: 'outline' }"
+      width="500px"
       @confirm="savePlaylistEdit"
       @cancel="cancelPlaylistEdit"
-      width="500px"
     >
       <div class="edit-playlist-content">
         <div class="form-item">

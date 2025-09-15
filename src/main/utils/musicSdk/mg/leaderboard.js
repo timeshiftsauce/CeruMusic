@@ -102,7 +102,7 @@ export default {
   },
   filterBoardsData(rawList) {
     // console.log(rawList)
-    let list = []
+    const list = []
     for (const board of rawList) {
       if (board.template != 'group1') continue
       for (const item of board.itemList) {
@@ -112,7 +112,7 @@ export default {
         )
           continue
 
-        let data = item.displayLogId.param
+        const data = item.displayLogId.param
         list.push({
           id: 'mg__' + data.rankId,
           name: data.rankName,
@@ -164,7 +164,7 @@ export default {
   },
 
   getDetailPageUrl(id) {
-    if (typeof id == 'string') id = id.replace('mg__', '')
+    if (typeof id === 'string') id = id.replace('mg__', '')
     for (const item of boardList) {
       if (item.bangid == id) {
         return `https://music.migu.cn/v3/music/top/${item.webId}`

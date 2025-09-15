@@ -51,14 +51,14 @@ export default {
   ...sources,
   init() {
     const tasks = []
-    for (let source of sources.sources) {
-      let sm = sources[source.id]
+    for (const source of sources.sources) {
+      const sm = sources[source.id]
       sm && sm.init && tasks.push(sm.init())
     }
     return Promise.all(tasks)
   },
   async searchMusic({ name, singer, source: s, limit = 25 }) {
-    const trimStr = (str) => (typeof str == 'string' ? str.trim() : str)
+    const trimStr = (str) => (typeof str === 'string' ? str.trim() : str)
     const musicName = trimStr(name)
     const tasks = []
     const excludeSource = ['xm']
@@ -106,7 +106,7 @@ export default {
     const getIntv = (interval) => {
       if (!interval) return 0
       // if (musicInfo._interval) return musicInfo._interval
-      let intvArr = interval.split(':')
+      const intvArr = interval.split(':')
       let intv = 0
       let unit = 1
       while (intvArr.length) {
@@ -115,9 +115,9 @@ export default {
       }
       return intv
     }
-    const trimStr = (str) => (typeof str == 'string' ? str.trim() : str || '')
+    const trimStr = (str) => (typeof str === 'string' ? str.trim() : str || '')
     const filterStr = (str) =>
-      typeof str == 'string'
+      typeof str === 'string'
         ? str.replace(/\s|'|\.|,|，|&|"|、|\(|\)|（|）|`|~|-|<|>|\||\/|\]|\[|!|！/g, '')
         : String(str || '')
     const fMusicName = filterStr(name).toLowerCase()

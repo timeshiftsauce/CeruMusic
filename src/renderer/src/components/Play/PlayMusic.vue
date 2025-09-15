@@ -27,6 +27,7 @@ import {
   destroyPlaylistEventListeners,
   getSongRealUrl
 } from '@renderer/utils/playlistManager'
+import mediaSessionController from '@renderer/utils/useAmtc'
 import defaultCoverImg from '/default-cover.png'
 
 const controlAudio = ControlAudioStore()
@@ -41,7 +42,7 @@ const removeMusicCtrlListener = window.api.onMusicCtrl(() => {
   togglePlayPause()
 })
 let timer: any = null
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+
 function throttle(callback: Function, delay: number) {
   if (timer) return
   timer = setTimeout(() => {
@@ -132,6 +133,9 @@ let isFull = false
 // 播放指定歌曲
 const playSong = async (song: SongList) => {
   try {
+    // 设置加载状态
+    isLoadingSong.value = true
+
     // 检查是否需要恢复播放位置（历史播放）
     const isHistoryPlay =
       song.songmid === userInfo.value.lastPlaySongId &&
@@ -162,6 +166,14 @@ const playSong = async (song: SongList) => {
     songInfo.value = {
       ...song
     }
+
+    // 更新媒体会话元数据
+    mediaSessionController.updateMetadata({
+      title: song.name,
+      artist: song.singer,
+      album: song.albumName || '未知专辑',
+      artworkUrl: song.img || defaultCoverImg
+    })
 
     // 确保主题色更新
     await setColor()
@@ -198,8 +210,8 @@ const playSong = async (song: SongList) => {
     // 等待音频准备就绪
     await waitForAudioReady()
 
-    // 短暂延迟确保音频状态稳定
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // // 短暂延迟确保音频状态稳定
+    // await new Promise((resolve) => setTimeout(resolve, 100))
 
     // 开始播放
     try {
@@ -229,12 +241,18 @@ const playSong = async (song: SongList) => {
   } catch (error: any) {
     console.error('播放歌曲失败:', error)
     MessagePlugin.error('播放失败，原因：' + error.message)
+  } finally {
+    // 无论成功还是失败，都清除加载状态
+    isLoadingSong.value = false
   }
 }
 provide('PlaySong', playSong)
 // 歌曲信息
 // const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
 const playMode = ref(PlayMode.SEQUENCE)
+
+// 歌曲加载状态
+const isLoadingSong = ref(false)
 
 // 更新播放模式
 const updatePlayMode = () => {
@@ -269,8 +287,6 @@ const playModeIconClass = computed(() => {
 const showVolumeSlider = ref(false)
 const volumeBarRef = ref<HTMLDivElement | null>(null)
 const isDraggingVolume = ref(false)
-
-
 
 const volumeValue = computed({
   get: () => Audio.value.volume,
@@ -415,6 +431,26 @@ onMounted(async () => {
   // 初始化播放列表事件监听器
   initPlaylistEventListeners(localUserStore, playSong)
 
+  // 初始化媒体会话控制器
+  if (Audio.value.audio) {
+    mediaSessionController.init(Audio.value.audio, {
+      play: async () => {
+        // 专门的播放函数，只处理播放逻辑
+        if (!Audio.value.isPlay) {
+          await handlePlay()
+        }
+      },
+      pause: async () => {
+        // 专门的暂停函数，只处理暂停逻辑
+        if (Audio.value.isPlay) {
+          await handlePause()
+        }
+      },
+      playPrevious: () => playPrevious(),
+      playNext: () => playNext()
+    })
+  }
+
   // 监听音频结束事件，根据播放模式播放下一首
   unEnded = controlAudio.subscribe('ended', () => {
     window.requestAnimationFrame(() => {
@@ -431,6 +467,14 @@ onMounted(async () => {
       songInfo.value = {
         ...lastPlayedSong
       }
+
+      // 立即更新媒体会话元数据，让系统显示当前歌曲信息
+      mediaSessionController.updateMetadata({
+        title: lastPlayedSong.name,
+        artist: lastPlayedSong.singer,
+        album: lastPlayedSong.albumName || '未知专辑',
+        artworkUrl: lastPlayedSong.img || defaultCoverImg
+      })
 
       // 如果有历史播放位置，设置为待恢复状态
       if (!Audio.value.isPlay) {
@@ -451,6 +495,9 @@ onMounted(async () => {
         } catch (error) {
           console.error('获取上次播放歌曲URL失败:', error)
         }
+      } else {
+        // 如果当前正在播放，设置状态为播放中
+        mediaSessionController.updatePlaybackState('playing')
       }
     }
   }
@@ -463,8 +510,6 @@ onMounted(async () => {
   }, 1000) // 每1秒保存一次
 })
 
-
-
 // 组件卸载时清理
 onUnmounted(() => {
   destroyPlaylistEventListeners()
@@ -475,6 +520,8 @@ onUnmounted(() => {
   if (removeMusicCtrlListener) {
     removeMusicCtrlListener()
   }
+  // 清理媒体会话控制器
+  mediaSessionController.cleanup()
   unEnded()
 })
 
@@ -559,50 +606,63 @@ const formatTime = (seconds: number) => {
 const currentTimeFormatted = computed(() => formatTime(Audio.value.currentTime))
 const durationFormatted = computed(() => formatTime(Audio.value.duration))
 
-// 播放/暂停切换
-const togglePlayPause = async () => {
-  if (Audio.value.url) {
-    if (Audio.value.isPlay) {
-      const stopResult = stop()
-      if (stopResult && typeof stopResult.then === 'function') {
-        await stopResult
-      }
-    } else {
-      try {
-        // 检查是否需要恢复历史播放位置
-        if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
-          console.log(`恢复播放位置: ${pendingRestorePosition}秒`)
-
-          // 等待音频准备就绪
-          await waitForAudioReady()
-
-          // 设置播放位置
-          setCurrentTime(pendingRestorePosition)
-          if (Audio.value.audio) {
-            Audio.value.audio.currentTime = pendingRestorePosition
-          }
-
-          // 清除待恢复的位置
-          pendingRestorePosition = 0
-          pendingRestoreSongId = null
-        }
-
-        const startResult = start()
-        if (startResult && typeof startResult.then === 'function') {
-          await startResult
-        }
-      } catch (error) {
-        console.error('播放失败:', error)
-        MessagePlugin.error('播放失败，请重试')
-      }
-    }
-  } else {
+// 专门的播放函数
+const handlePlay = async () => {
+  if (!Audio.value.url) {
     // 如果没有URL但有播放列表，尝试播放第一首歌
     if (list.value.length > 0) {
       await playSong(list.value[0])
     } else {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
     }
+    return
+  }
+
+  try {
+    // 检查是否需要恢复历史播放位置
+    if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
+      console.log(`恢复播放位置: ${pendingRestorePosition}秒`)
+
+      // 等待音频准备就绪
+      await waitForAudioReady()
+
+      // 设置播放位置
+      setCurrentTime(pendingRestorePosition)
+      if (Audio.value.audio) {
+        Audio.value.audio.currentTime = pendingRestorePosition
+      }
+
+      // 清除待恢复的位置
+      pendingRestorePosition = 0
+      pendingRestoreSongId = null
+    }
+
+    const startResult = start()
+    if (startResult && typeof startResult.then === 'function') {
+      await startResult
+    }
+  } catch (error) {
+    console.error('播放失败:', error)
+    MessagePlugin.error('播放失败，请重试')
+  }
+}
+
+// 专门的暂停函数
+const handlePause = async () => {
+  if (Audio.value.url && Audio.value.isPlay) {
+    const stopResult = stop()
+    if (stopResult && typeof stopResult.then === 'function') {
+      await stopResult
+    }
+  }
+}
+
+// 播放/暂停切换
+const togglePlayPause = async () => {
+  if (Audio.value.isPlay) {
+    await handlePause()
+  } else {
+    await handlePlay()
   }
 }
 
@@ -754,8 +814,8 @@ watch(showFullPlay, (val) => {
     <div class="player-content">
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
-        <div class="album-cover" v-if="songInfo.songmid">
-          <img :src="songInfo.img" alt="专辑封面" v-if="songInfo.img" />
+        <div v-if="songInfo.songmid" class="album-cover">
+          <img v-if="songInfo.img" :src="songInfo.img" alt="专辑封面" />
           <img :src="defaultCoverImg" alt="默认封面" />
         </div>
 
@@ -770,11 +830,18 @@ watch(showFullPlay, (val) => {
         <t-button class="control-btn" variant="text" shape="circle" @click.stop="playPrevious">
           <span class="iconfont icon-shangyishou"></span>
         </t-button>
-        <button class="control-btn play-btn" @click.stop="togglePlayPause">
-          <transition name="fade" mode="out-in">
-            <span v-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
-            <span v-else key="pause" class="iconfont icon-bofang"></span>
-          </transition>
+        <button
+          class="control-btn play-btn"
+          :disabled="isLoadingSong"
+          @click.stop="() => !isLoadingSong && togglePlayPause()"
+        >
+          <Transition name="loadSong" mode="out-in">
+            <div v-if="isLoadingSong" key="loading" class="loading-spinner play-loading"></div>
+            <transition v-else name="fade" mode="out-in">
+              <span v-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
+              <span v-else key="pause" class="iconfont icon-bofang"></span>
+            </transition>
+          </Transition>
         </button>
         <t-button class="control-btn" shape="circle" variant="text" @click.stop="playNext">
           <span class="iconfont icon-xiayishou"></span>
@@ -830,7 +897,7 @@ watch(showFullPlay, (val) => {
 
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
-            <t-badge :count="list.length" :maxCount="99" color="#aaa">
+            <t-badge :count="list.length" :max-count="99" color="#aaa">
               <t-button
                 class="control-btn"
                 shape="circle"
@@ -850,9 +917,9 @@ watch(showFullPlay, (val) => {
       :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
       :show="showFullPlay"
       :cover-image="songInfo.img"
-      @toggle-fullscreen="toggleFullPlay"
       :song-info="songInfo"
       :main-color="maincolor"
+      @toggle-fullscreen="toggleFullPlay"
     />
   </div>
 
@@ -884,6 +951,55 @@ watch(showFullPlay, (val) => {
 .fade-enter-from {
   opacity: 0;
   transform: rotate(-180deg);
+}
+
+/* 加载动画 */
+.loading-spinner {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid v-bind(hoverColor);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+}
+
+/* 播放按钮中的加载动画 */
+.play-loading {
+  width: 20px !important;
+  height: 20px !important;
+  margin: 4px;
+  border-width: 3px;
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: v-bind(hoverColor);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 加载歌曲过渡动画 - 缩小透明效果 */
+.loadSong-enter-active,
+.loadSong-leave-active {
+  transition: all 0.2s ease-in-out;
+}
+
+.loadSong-enter-from,
+.loadSong-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.loadSong-enter-to,
+.loadSong-leave-from {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .player-container {
@@ -1210,8 +1326,6 @@ watch(showFullPlay, (val) => {
   opacity: 0;
   transform: translateY(10px) scale(0.95);
 }
-
-
 
 /* 响应式设计 */
 @media (max-width: 768px) {

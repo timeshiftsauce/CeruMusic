@@ -10,9 +10,9 @@ export default {
     // console.log(rawList)
     // console.log(rawList.length, rawList2.length)
     return rawList.map((item, inedx) => {
-      let formats = item.formats.split('|')
-      let types = []
-      let _types = {}
+      const formats = item.formats.split('|')
+      const types = []
+      const _types = {}
       if (formats.includes('MP3128')) {
         types.push({ type: '128k', size: null })
         _types['128k'] = {

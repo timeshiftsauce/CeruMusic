@@ -27,10 +27,10 @@ export const toDateObj = (date: any): Date | '' => {
   switch (typeof date) {
     case 'string':
       if (!date.includes('T')) date = date.split('.')[0].replace(/-/g, '/')
-    // eslint-disable-next-line no-fallthrough
+
     case 'number':
       date = new Date(date)
-    // eslint-disable-next-line no-fallthrough
+
     case 'object':
       break
     default:

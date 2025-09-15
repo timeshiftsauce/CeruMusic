@@ -148,8 +148,8 @@ export default {
   }, */
   sortLrcArr(arr) {
     const lrcSet = new Set()
-    let lrc = []
-    let lrcT = []
+    const lrc = []
+    const lrcT = []
 
     let isLyricx = false
     for (const item of arr) {
@@ -192,11 +192,11 @@ export default {
   },
   parseLrc(lrc) {
     const lines = lrc.split(/\r\n|\r|\n/)
-    let tags = []
-    let lrcArr = []
+    const tags = []
+    const lrcArr = []
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim()
-      let result = timeExp.exec(line)
+      const result = timeExp.exec(line)
       if (result) {
         const text = line.replace(timeExp, '').trim()
         let time = RegExp.$1

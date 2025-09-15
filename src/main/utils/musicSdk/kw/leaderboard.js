@@ -206,7 +206,7 @@ export default {
 
   filterBoardsData(rawList) {
     // console.log(rawList)
-    let list = []
+    const list = []
     for (const board of rawList) {
       if (board.source != '1') continue
       list.push({

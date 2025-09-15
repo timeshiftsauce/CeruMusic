@@ -32,7 +32,7 @@ const props = withDefaults(defineProps<Props>(), {
   show: false,
   coverImage: '@assets/images/Default.jpg',
   songId: '',
-  mainColor: '#fff'
+  mainColor: '#rgb(0,0,0)'
 })
 // 定义事件
 const emit = defineEmits(['toggle-fullscreen'])
@@ -251,6 +251,27 @@ watch(
 const handleLowFreqUpdate = (volume: number) => {
   state.lowFreqVolume = volume
 }
+
+// 计算偏白的主题色
+const lightMainColor = computed(() => {
+  const color = props.mainColor
+  // 解析rgb颜色值
+  const rgbMatch = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*\d+\)/)
+  if (rgbMatch) {
+    let r = parseInt(rgbMatch[1])
+    let g = parseInt(rgbMatch[2])
+    let b = parseInt(rgbMatch[3])
+
+    // 适度向白色偏移，保持主题色特征
+    r = Math.min(255, r + (255 - r) * 0.8)
+    g = Math.min(255, g + (255 - g) * 0.8)
+    b = Math.min(255, b + (255 - b) * 0.8)
+
+    return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, 0.9)`
+  }
+  // 如果解析失败，返回默认的偏白色
+  return 'rgba(255, 255, 255, 0.9)'
+})
 </script>
 
 <template>
@@ -291,6 +312,12 @@ const handleLowFreqUpdate = (volume: number) => {
     </Transition>
     <div class="playbox">
       <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
+        <img
+          class="pointer"
+          :class="{ playing: Audio.isPlay }"
+          src="@renderer/assets/pointer.png"
+          alt="pointer"
+        />
         <div
           class="cd-container"
           :class="{ playing: Audio.isPlay }"
@@ -331,7 +358,7 @@ const handleLowFreqUpdate = (volume: number) => {
       </div>
     </div>
     <!-- 音频可视化组件 -->
-    <div class="audio-visualizer-container" v-if="props.show && coverImage">
+    <div v-if="props.show && coverImage" class="audio-visualizer-container">
       <AudioVisualizer
         :show="props.show && Audio.isPlay"
         :height="70"
@@ -441,12 +468,13 @@ const handleLowFreqUpdate = (volume: number) => {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.256);
-    -webkit-drop-filter: blur(10px);
+    -webkit-drop-filter: blur(80px);
     padding: 0 10vw;
-    -webkit-drop-filter: blur(10px);
+    -webkit-drop-filter: blur(80px);
     overflow: hidden;
     display: flex;
     position: relative;
+    --cd-width-auto: max(200px, min(30vw, 700px, calc(100vh - var(--play-bottom-height) - 250px)));
 
     .left {
       width: 40%;
@@ -464,9 +492,24 @@ const handleLowFreqUpdate = (volume: number) => {
       margin: 0 0 var(--play-bottom-height) 0;
       perspective: 1000px;
 
+      .pointer {
+        position: absolute;
+        width: calc(var(--cd-width-auto) / 3.5);
+        left: calc(50% - 1.8vh);
+        top: calc(50% - var(--cd-width-auto) / 2 - calc(var(--cd-width-auto) / 3.5) - 1vh);
+        transform: rotate(-20deg);
+        transform-origin: 1.8vh 1.8vh;
+        z-index: 2;
+        transition: transform 0.3s;
+
+        &.playing {
+          transform: rotate(0deg);
+        }
+      }
+
       .cd-container {
-        width: min(30vw, 700px);
-        height: min(30vw, 700px);
+        width: var(--cd-width-auto);
+        height: var(--cd-width-auto);
         position: relative;
         display: flex;
         align-items: center;
@@ -620,14 +663,33 @@ const handleLowFreqUpdate = (volume: number) => {
     }
 
     .right {
+      mask: linear-gradient(
+        rgba(255, 255, 255, 0) 0px,
+        rgba(255, 255, 255, 0.6) 5%,
+        rgb(255, 255, 255) 10%,
+        rgb(255, 255, 255) 75%,
+        rgba(255, 255, 255, 0.6) 85%,
+        rgba(255, 255, 255, 0)
+      );
+
       :deep(.lyric-player) {
+        --amll-lyric-view-color: v-bind(lightMainColor);
         font-family: lyricfont;
-        --amll-lyric-player-font-size: min(2.6vw, 32px);
+        --amll-lyric-player-font-size: min(2.6vw, 39px);
 
         // bottom: max(2vw, 29px);
 
         height: 200%;
         transform: translateY(-25%);
+
+        * [class^='lyricMainLine'] {
+          font-weight: 600 !important;
+
+          * {
+            font-weight: 600 !important;
+          }
+        }
+
         & > div {
           padding-bottom: 0;
           overflow: hidden;
@@ -665,6 +727,7 @@ const handleLowFreqUpdate = (volume: number) => {
   0% {
     transform: rotate(0deg);
   }
+
   100% {
     transform: rotate(360deg);
   }
@@ -675,10 +738,12 @@ const handleLowFreqUpdate = (volume: number) => {
     opacity: 0.1;
     transform: rotate(0deg) scale(1);
   }
+
   50% {
     opacity: 0.2;
     transform: rotate(180deg) scale(1.1);
   }
+
   100% {
     opacity: 0.1;
     transform: rotate(360deg) scale(1);
@@ -690,16 +755,20 @@ const handleLowFreqUpdate = (volume: number) => {
     opacity: 0.05;
     transform: rotate(0deg);
   }
+
   25% {
     opacity: 0.15;
   }
+
   50% {
     opacity: 0.1;
     transform: rotate(180deg);
   }
+
   75% {
     opacity: 0.15;
   }
+
   100% {
     opacity: 0.05;
     transform: rotate(360deg);

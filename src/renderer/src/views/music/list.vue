@@ -312,9 +312,9 @@ onMounted(() => {
             <t-button
               theme="primary"
               size="medium"
-              @click="handlePlayPlaylist"
               :disabled="songs.length === 0 || loading"
               class="play-btn"
+              @click="handlePlayPlaylist"
             >
               <template #icon>
                 <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -327,9 +327,9 @@ onMounted(() => {
             <t-button
               variant="outline"
               size="medium"
-              @click="handleShufflePlaylist"
               :disabled="songs.length === 0 || loading"
               class="shuffle-btn"
+              @click="handleShufflePlaylist"
             >
               <template #icon>
                 <svg class="shuffle-icon" viewBox="0 0 24 24" fill="currentColor">

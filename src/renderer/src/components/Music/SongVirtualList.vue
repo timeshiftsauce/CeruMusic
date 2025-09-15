@@ -2,11 +2,11 @@
   <div class="song-virtual-list">
     <!-- 表头 -->
     <div class="list-header">
-      <div class="col-index" v-if="showIndex"></div>
+      <div v-if="showIndex" class="col-index"></div>
       <div class="col-title">标题</div>
-      <div class="col-album" v-if="showAlbum">专辑</div>
+      <div v-if="showAlbum" class="col-album">专辑</div>
       <div class="col-like">喜欢</div>
-      <div class="col-duration" v-if="showDuration">时长</div>
+      <div v-if="showDuration" class="col-duration">时长</div>
     </div>
 
     <!-- 虚拟滚动容器 -->
@@ -21,13 +21,15 @@
             @mouseleave="hoveredSong = null"
           >
             <!-- 序号或播放状态图标 -->
-            <div class="col-index" v-if="showIndex">
-              <span v-if="hoveredSong !== (song.id || song.songmid)" class="track-number">
-                {{ String(visibleStartIndex + index + 1).padStart(2, '0') }}
-              </span>
-              <button v-else class="play-btn" title="播放" @click.stop="handlePlay(song)">
-                <i class="icon-play"></i>
-              </button>
+            <div v-if="showIndex" class="col-index">
+              <Transition name="playSong" mode="out-in">
+                <span v-if="hoveredSong !== (song.id || song.songmid)" class="track-number">
+                  {{ String(visibleStartIndex + index + 1).padStart(2, '0') }}
+                </span>
+                <button v-else class="play-btn" title="播放" @click.stop="handlePlay(song)">
+                  <i class="icon-play"></i>
+                </button>
+              </Transition>
             </div>
 
             <!-- 歌曲信息 -->
@@ -47,7 +49,7 @@
             </div>
 
             <!-- 专辑信息 -->
-            <div class="col-album" v-if="showAlbum">
+            <div v-if="showAlbum" class="col-album">
               <span class="album-name" :title="song.albumName">
                 {{ song.albumName || '-' }}
               </span>
@@ -61,7 +63,7 @@
             </div>
 
             <!-- 时长 -->
-            <div class="col-duration" v-if="showDuration">
+            <div v-if="showDuration" class="col-duration">
               <div class="duration-wrapper">
                 <span v-if="hoveredSong !== (song.id || song.songmid)" class="duration">
                   {{ formatDuration(song.interval) }}
@@ -247,6 +249,15 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.playSong-enter-active,
+.playSong-leave-active {
+  transition: all 0.2s ease-in-out;
+}
+.playSong-enter-from,
+.playSong-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
 .song-virtual-list {
   height: 100%;
   width: 100%;
@@ -373,6 +384,7 @@ onMounted(() => {
         align-items: center;
         justify-content: center;
         font-style: none;
+
         &:hover {
           background: rgba(80, 125, 175, 0.1);
           color: #3a5d8f;
@@ -568,14 +580,17 @@ onMounted(() => {
   content: '▶';
   font-style: normal;
 }
+
 .icon-pause::before {
   content: '⏸';
   font-style: normal;
 }
+
 .icon-download::before {
   content: '⬇';
   font-style: normal;
 }
+
 .icon-heart::before {
   content: '♡';
   font-style: normal;

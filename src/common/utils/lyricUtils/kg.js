@@ -24,13 +24,13 @@ const headExp = /^.*\[id:\$\w+\]\n/
 const parseLyric = (str) => {
   str = str.replace(/\r/g, '')
   if (headExp.test(str)) str = str.replace(headExp, '')
-  let trans = str.match(/\[language:([\w=\\/+]+)\]/)
+  const trans = str.match(/\[language:([\w=\\/+]+)\]/)
   let lyric
   let rlyric
   let tlyric
   if (trans) {
     str = str.replace(/\[language:[\w=\\/+]+\]\n/, '')
-    let json = JSON.parse(Buffer.from(trans[1], 'base64').toString())
+    const json = JSON.parse(Buffer.from(trans[1], 'base64').toString())
     for (const item of json.content) {
       switch (item.type) {
         case 0:
@@ -44,23 +44,23 @@ const parseLyric = (str) => {
   }
   let i = 0
   let crlyric = str.replace(/\[((\d+),\d+)\].*/g, (str) => {
-    let result = str.match(/\[((\d+),\d+)\].*/)
-    let lineStartTime = parseInt(result[2]) // 行开始时间
+    const result = str.match(/\[((\d+),\d+)\].*/)
+    const lineStartTime = parseInt(result[2]) // 行开始时间
     let time = lineStartTime
-    let ms = time % 1000
+    const ms = time % 1000
     time /= 1000
-    let m = parseInt(time / 60)
+    const m = parseInt(time / 60)
       .toString()
       .padStart(2, '0')
     time %= 60
-    let s = parseInt(time).toString().padStart(2, '0')
+    const s = parseInt(time).toString().padStart(2, '0')
     time = `${m}:${s}.${ms}`
     if (rlyric) rlyric[i] = `[${time}]${rlyric[i]?.join('') ?? ''}`
     if (tlyric) tlyric[i] = `[${time}]${tlyric[i]?.join('') ?? ''}`
     i++
 
     // 保持原始的 [start,duration] 格式，将相对时间戳转换为绝对时间戳
-    let processedStr = str.replace(/<(\d+),(\d+),(\d+)>/g, (match, start, duration, param) => {
+    const processedStr = str.replace(/<(\d+),(\d+),(\d+)>/g, (match, start, duration, param) => {
       const absoluteStart = lineStartTime + parseInt(start)
       return `(${absoluteStart},${duration},${param})`
     })

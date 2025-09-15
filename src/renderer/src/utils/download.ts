@@ -1,7 +1,6 @@
-import { NotifyPlugin } from 'tdesign-vue-next'
+import { NotifyPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { toRaw } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
 
 interface MusicItem {
   singer: string

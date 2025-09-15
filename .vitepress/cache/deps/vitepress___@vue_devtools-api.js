@@ -3985,11 +3985,11 @@ var walker = (
   const result = isEmptyObject(innerAnnotations)
     ? {
         transformedValue,
-        annotations: !!transformationResult ? [transformationResult.type] : void 0
+        annotations: transformationResult ? [transformationResult.type] : void 0
       }
     : {
         transformedValue,
-        annotations: !!transformationResult
+        annotations: transformationResult
           ? [transformationResult.type, innerAnnotations]
           : innerAnnotations
       }
