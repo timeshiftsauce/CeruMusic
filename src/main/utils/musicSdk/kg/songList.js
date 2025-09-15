@@ -71,10 +71,10 @@ export default {
     if (tryNum > 2) throw new Error('try max num')
 
     const { body } = await httpFetch(this.getSongListDetailUrl(id)).promise
-    let listData = body.match(this.regExps.listData)
-    let listInfo = body.match(this.regExps.listInfo)
+    const listData = body.match(this.regExps.listData)
+    const listInfo = body.match(this.regExps.listInfo)
     if (!listData) return this.getListDetailBySpecialId(id, page, ++tryNum)
-    let list = await this.getMusicInfos(JSON.parse(listData[1]))
+    const list = await this.getMusicInfos(JSON.parse(listData[1]))
     // listData = this.filterData(JSON.parse(listData[1]))
     let name
     let pic
@@ -82,7 +82,7 @@ export default {
       name = listInfo[1]
       pic = listInfo[2]
     }
-    let desc = this.parseHtmlDesc(body)
+    const desc = this.parseHtmlDesc(body)
 
     return {
       list,
@@ -116,7 +116,7 @@ export default {
     const result = []
     if (rawData.status !== 1) return result
     for (const key of Object.keys(rawData.data)) {
-      let tag = rawData.data[key]
+      const tag = rawData.data[key]
       result.push({
         id: tag.special_id,
         name: tag.special_name,
@@ -219,7 +219,7 @@ export default {
   },
 
   createTask(hashs) {
-    let data = {
+    const data = {
       area_code: '1',
       show_privilege: 1,
       show_album_info: '1',
@@ -233,13 +233,13 @@ export default {
       fields: 'album_info,author_name,audio_info,ori_audio_name,base,songname'
     }
     let list = hashs
-    let tasks = []
+    const tasks = []
     while (list.length) {
       tasks.push(Object.assign({ data: list.slice(0, 100) }, data))
       if (list.length < 100) break
       list = list.slice(100)
     }
-    let url = 'http://gateway.kugou.com/v2/album_audio/audio'
+    const url = 'http://gateway.kugou.com/v2/album_audio/audio'
     return tasks.map((task) =>
       this.createHttp(url, {
         method: 'POST',
@@ -283,7 +283,7 @@ export default {
     // console.log(songInfo)
     // type 1单曲，2歌单，3电台，4酷狗码，5别人的播放队列
     let songList
-    let info = songInfo.info
+    const info = songInfo.info
     switch (info.type) {
       case 2:
         if (!info.global_collection_id) return this.getListDetailBySpecialId(info.id)
@@ -319,7 +319,7 @@ export default {
       })
       // console.log(songList)
     }
-    let list = await this.getMusicInfos(songList || songInfo.list)
+    const list = await this.getMusicInfos(songList || songInfo.list)
     return {
       list,
       page: 1,
@@ -354,7 +354,7 @@ export default {
           this.getUserListDetail5(chain)
         )
     }
-    let list = await this.getMusicInfos(songInfo.list)
+    const list = await this.getMusicInfos(songInfo.list)
     // console.log(info, songInfo)
     return {
       list,
@@ -373,7 +373,7 @@ export default {
   },
 
   deDuplication(datas) {
-    let ids = new Set()
+    const ids = new Set()
     return datas.filter(({ hash }) => {
       if (ids.has(hash)) return false
       ids.add(hash)
@@ -408,9 +408,9 @@ export default {
   },
 
   async getUserListDetailByLink({ info }, link) {
-    let listInfo = info['0']
+    const listInfo = info['0']
     let total = listInfo.count
-    let tasks = []
+    const tasks = []
     let page = 0
     while (total) {
       const limit = total > 90 ? 90 : total
@@ -448,7 +448,7 @@ export default {
     }
   },
   createGetListDetail2Task(id, total) {
-    let tasks = []
+    const tasks = []
     let page = 0
     while (total) {
       const limit = total > 300 ? 300 : total
@@ -481,13 +481,13 @@ export default {
     return Promise.all(tasks).then(([...datas]) => datas.flat())
   },
   async getUserListDetail2(global_collection_id) {
-    let id = global_collection_id
+    const id = global_collection_id
     if (id.length > 1000) throw new Error('get list error')
     const params =
       'appid=1058&specialid=0&global_specialid=' +
       id +
       '&format=jsonp&srcappid=2919&clientver=20000&clienttime=1586163242519&mid=1586163242519&uuid=1586163242519&dfid=-'
-    let info = await this.createHttp(
+    const info = await this.createHttp(
       `https://mobiles.kugou.com/api/v5/special/info_v2?${params}&signature=${signatureParams(params, 'web')}`,
       {
         headers: {
@@ -501,7 +501,7 @@ export default {
       }
     )
     const songInfo = await this.createGetListDetail2Task(id, info.songcount)
-    let list = await this.getMusicInfos(songInfo)
+    const list = await this.getMusicInfos(songInfo)
     // console.log(info, songInfo, list)
     return {
       list,
@@ -534,7 +534,7 @@ export default {
   },
 
   async getUserListDetailByPcChain(chain) {
-    let key = `${chain}_pc_list`
+    const key = `${chain}_pc_list`
     if (this.cache.has(key)) return this.cache.get(key)
     const { body } = await httpFetch(`http://www.kugou.com/share/${chain}.html`, {
       headers: {
@@ -595,7 +595,7 @@ export default {
 
   async getUserListDetailById(id, page, limit) {
     const signature = await handleSignature(id, page, limit)
-    let info = await this.createHttp(
+    const info = await this.createHttp(
       `https://pubsongscdn.kugou.com/v2/get_other_list_file?srcappid=2919&clientver=20000&appid=1058&type=0&module=playlist&page=${page}&pagesize=${limit}&specialid=${id}&signature=${signature}`,
       {
         headers: {
@@ -608,7 +608,7 @@ export default {
     )
 
     // console.log(info)
-    let result = await this.getMusicInfos(info.info)
+    const result = await this.getMusicInfos(info.info)
     // console.log(info, songInfo)
     return result
   },
@@ -621,7 +621,7 @@ export default {
         link.replace(/^.*?global_collection_id=(\w+)(?:&.*$|#.*$|$)/, '$1')
       )
     if (link.includes('gcid_')) {
-      let gcid = link.match(/gcid_\w+/)?.[0]
+      const gcid = link.match(/gcid_\w+/)?.[0]
       if (gcid) {
         const global_collection_id = await this.decodeGcid(gcid)
         if (global_collection_id) return this.getUserListDetail2(global_collection_id)
@@ -667,7 +667,7 @@ export default {
           location.replace(/^.*?global_collection_id=(\w+)(?:&.*$|#.*$|$)/, '$1')
         )
       if (location.includes('gcid_')) {
-        let gcid = link.match(/gcid_\w+/)?.[0]
+        const gcid = link.match(/gcid_\w+/)?.[0]
         if (gcid) {
           const global_collection_id = await this.decodeGcid(gcid)
           if (global_collection_id) return this.getUserListDetail2(global_collection_id)
@@ -698,7 +698,7 @@ export default {
       // console.log('location', location)
       return this.getUserListDetail(location, page, ++retryNum)
     }
-    if (typeof body == 'string') {
+    if (typeof body === 'string') {
       let global_collection_id = body.match(/"global_collection_id":"(\w+)"/)?.[1]
       if (!global_collection_id) {
         let gcid = body.match(/"encode_gic":"(\w+)"/)?.[1]
@@ -735,7 +735,7 @@ export default {
       const types = []
       const _types = {}
       if (item.filesize !== 0) {
-        let size = sizeFormate(item.filesize)
+        const size = sizeFormate(item.filesize)
         types.push({ type: '128k', size, hash: item.hash })
         _types['128k'] = {
           size,
@@ -743,7 +743,7 @@ export default {
         }
       }
       if (item.filesize_320 !== 0) {
-        let size = sizeFormate(item.filesize_320)
+        const size = sizeFormate(item.filesize_320)
         types.push({ type: '320k', size, hash: item.hash_320 })
         _types['320k'] = {
           size,
@@ -751,7 +751,7 @@ export default {
         }
       }
       if (item.filesize_ape !== 0) {
-        let size = sizeFormate(item.filesize_ape)
+        const size = sizeFormate(item.filesize_ape)
         types.push({ type: 'ape', size, hash: item.hash_ape })
         _types.ape = {
           size,
@@ -759,7 +759,7 @@ export default {
         }
       }
       if (item.filesize_flac !== 0) {
-        let size = sizeFormate(item.filesize_flac)
+        const size = sizeFormate(item.filesize_flac)
         types.push({ type: 'flac', size, hash: item.hash_flac })
         _types.flac = {
           size,
@@ -849,8 +849,8 @@ export default {
   // hash list filter
   filterData2(rawList) {
     // console.log(rawList)
-    let ids = new Set()
-    let list = []
+    const ids = new Set()
+    const list = []
     rawList.forEach((item) => {
       if (!item) return
       if (ids.has(item.audio_info.audio_id)) return
@@ -858,7 +858,7 @@ export default {
       const types = []
       const _types = {}
       if (item.audio_info.filesize !== '0') {
-        let size = sizeFormate(parseInt(item.audio_info.filesize))
+        const size = sizeFormate(parseInt(item.audio_info.filesize))
         types.push({ type: '128k', size, hash: item.audio_info.hash })
         _types['128k'] = {
           size,
@@ -866,7 +866,7 @@ export default {
         }
       }
       if (item.audio_info.filesize_320 !== '0') {
-        let size = sizeFormate(parseInt(item.audio_info.filesize_320))
+        const size = sizeFormate(parseInt(item.audio_info.filesize_320))
         types.push({ type: '320k', size, hash: item.audio_info.hash_320 })
         _types['320k'] = {
           size,
@@ -874,7 +874,7 @@ export default {
         }
       }
       if (item.audio_info.filesize_flac !== '0') {
-        let size = sizeFormate(parseInt(item.audio_info.filesize_flac))
+        const size = sizeFormate(parseInt(item.audio_info.filesize_flac))
         types.push({ type: 'flac', size, hash: item.audio_info.hash_flac })
         _types.flac = {
           size,
@@ -882,7 +882,7 @@ export default {
         }
       }
       if (item.audio_info.filesize_high !== '0') {
-        let size = sizeFormate(parseInt(item.audio_info.filesize_high))
+        const size = sizeFormate(parseInt(item.audio_info.filesize_high))
         types.push({ type: 'flac24bit', size, hash: item.audio_info.hash_high })
         _types.flac24bit = {
           size,
@@ -927,7 +927,7 @@ export default {
 
   // 获取列表数据
   getList(sortId, tagId, page) {
-    let tasks = [this.getSongList(sortId, tagId, page)]
+    const tasks = [this.getSongList(sortId, tagId, page)]
     tasks.push(
       this.currentTagInfo.id === tagId
         ? Promise.resolve(this.currentTagInfo.info)
@@ -964,7 +964,7 @@ export default {
   },
 
   getDetailPageUrl(id) {
-    if (typeof id == 'string') {
+    if (typeof id === 'string') {
       if (/^https?:\/\//.test(id)) return id
       id = id.replace('id_', '')
     }

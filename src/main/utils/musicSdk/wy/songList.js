@@ -90,8 +90,8 @@ export default {
     const { statusCode, body } = await requestObj_listDetail.promise
     if (statusCode !== 200 || body.code !== this.successCode)
       return this.getListDetail(id, page, ++tryNum)
-    let limit = 1000
-    let rangeStart = (page - 1) * limit
+    const limit = 1000
+    const rangeStart = (page - 1) * limit
     // console.log(body)
     let list
     if (body.playlist.trackIds.length == body.privileges.length) {

@@ -1,178 +1,180 @@
 <template>
-  <TitleBarControls title="插件管理" :show-back="true" class="header"></TitleBarControls>
-  <div class="plugins-container">
-    <h2>插件管理</h2>
+  <div class="page">
+    <TitleBarControls title="插件管理" :show-back="true" class="header"></TitleBarControls>
+    <div class="plugins-container">
+      <h2>插件管理</h2>
 
-    <div class="plugin-actions">
-      <t-button theme="primary" @click="plugTypeDialog = true">
-        <template #icon><t-icon name="add" /></template> 添加插件
-      </t-button>
-      <t-dialog
-        :visible="plugTypeDialog"
-        :close-btn="true"
-        confirm-btn="确定"
-        cancel-btn="取消"
-        :on-confirm="addPlug"
-        :on-close="() => (plugTypeDialog = false)"
-      >
-        <template #header>请选择你的插件类别</template>
-        <template #body>
-          <t-radio-group v-model="type" variant="primary-filled" default-value="cr">
-            <t-radio-button value="cr">澜音插件</t-radio-button>
-            <t-radio-button value="lx">洛雪插件</t-radio-button>
-          </t-radio-group>
-        </template>
-      </t-dialog>
-      <t-button theme="default" @click="refreshPlugins">
-        <template #icon><t-icon name="refresh" /></template> 刷新
-      </t-button>
-    </div>
-
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <span>加载中...</span>
-    </div>
-
-    <div v-else-if="error" class="error-state">
-      <t-icon name="error-circle" style="font-size: 48px; color: #dc3545" />
-      <p>加载插件时出错</p>
-      <p class="error-message">{{ error }}</p>
-      <t-button theme="default" @click="refreshPlugins">
-        <template #icon><t-icon name="refresh" /></template> 重试
-      </t-button>
-    </div>
-
-    <div v-else-if="plugins.length === 0" class="empty-state">
-      <t-icon name="app" style="font-size: 48px" />
-      <p>暂无已安装的插件</p>
-      <p class="hint">点击"添加插件"按钮来安装新插件</p>
-    </div>
-
-    <div v-else class="plugin-list">
-      <div
-        v-for="plugin in plugins"
-        :key="plugin.pluginId"
-        class="plugin-item"
-        :class="{ selected: isPluginSelected(plugin.pluginId) }"
-      >
-        <div class="plugin-info">
-          <h3>
-            {{ plugin.pluginInfo.name }}
-            <span class="version">{{ plugin.pluginInfo.version }}</span>
-            <span v-if="isPluginSelected(plugin.pluginId)" class="current-tag">当前使用</span>
-          </h3>
-          <p class="author">作者: {{ plugin.pluginInfo.author }}</p>
-          <p class="description">{{ plugin.pluginInfo.description || '无描述' }}</p>
-          <div
-            v-if="plugin.supportedSources && Object.keys(plugin.supportedSources).length > 0"
-            class="plugin-sources"
-          >
-            <span class="source-label">支持的音源:</span>
-            <span v-for="source in plugin.supportedSources" :key="source.name" class="source-tag">
-              {{ source.name }}
-            </span>
-          </div>
-        </div>
-        <div class="plugin-actions">
-          <t-button
-            theme="default"
-            size="small"
-            @click.stop="viewPluginLogs(plugin.pluginId, plugin.pluginInfo.name)"
-            :disabled="loading"
-          >
-            <template #icon><t-icon name="view-list" /></template> 日志
-          </t-button>
-          <t-button
-            v-if="!isPluginSelected(plugin.pluginId)"
-            theme="primary"
-            size="small"
-            @click="selectPlugin(plugin)"
-          >
-            <template #icon><t-icon name="check" /></template> 使用
-          </t-button>
-          <t-button
-            theme="danger"
-            size="small"
-            @click="uninstallPlugin(plugin.pluginId, plugin.pluginInfo.name)"
-          >
-            <template #icon><t-icon name="delete" /></template> 卸载
-          </t-button>
-        </div>
+      <div class="plugin-actions">
+        <t-button theme="primary" @click="plugTypeDialog = true">
+          <template #icon><t-icon name="add" /></template> 添加插件
+        </t-button>
+        <t-dialog
+          :visible="plugTypeDialog"
+          :close-btn="true"
+          confirm-btn="确定"
+          cancel-btn="取消"
+          :on-confirm="addPlug"
+          :on-close="() => (plugTypeDialog = false)"
+        >
+          <template #header>请选择你的插件类别</template>
+          <template #body>
+            <t-radio-group v-model="type" variant="primary-filled" default-value="cr">
+              <t-radio-button value="cr">澜音插件</t-radio-button>
+              <t-radio-button value="lx">洛雪插件</t-radio-button>
+            </t-radio-group>
+          </template>
+        </t-dialog>
+        <t-button theme="default" @click="refreshPlugins">
+          <template #icon><t-icon name="refresh" /></template> 刷新
+        </t-button>
       </div>
-    </div>
 
-    <!-- 插件日志弹窗 -->
-    <t-dialog
-      v-model:visible="logDialogVisible"
-      top="10vh"
-      :close-btn="false"
-      :footer="false"
-      width="80%"
-      :style="{ maxWidth: '900px', maxHeight: '80vh' }"
-      class="log-dialog"
-    >
-      <template #header>
-        <div class="log-dialog-header">
-          <div class="log-title">
-            <i class="iconfont icon-terminal"></i>
-            {{ currentLogPluginName }} - 插件日志
-          </div>
-          <div class="log-actions">
-            <t-button
-              size="small"
-              variant="outline"
-              theme="default"
-              ghost
-              :disabled="logsLoading"
-              @click.stop="refreshLogs"
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <span>加载中...</span>
+      </div>
+
+      <div v-else-if="error" class="error-state">
+        <t-icon name="error-circle" style="font-size: 48px; color: #dc3545" />
+        <p>加载插件时出错</p>
+        <p class="error-message">{{ error }}</p>
+        <t-button theme="default" @click="refreshPlugins">
+          <template #icon><t-icon name="refresh" /></template> 重试
+        </t-button>
+      </div>
+
+      <div v-else-if="plugins.length === 0" class="empty-state">
+        <t-icon name="app" style="font-size: 48px" />
+        <p>暂无已安装的插件</p>
+        <p class="hint">点击"添加插件"按钮来安装新插件</p>
+      </div>
+
+      <div v-else class="plugin-list">
+        <div
+          v-for="plugin in plugins"
+          :key="plugin.pluginId"
+          class="plugin-item"
+          :class="{ selected: isPluginSelected(plugin.pluginId) }"
+        >
+          <div class="plugin-info">
+            <h3>
+              {{ plugin.pluginInfo.name }}
+              <span class="version">{{ plugin.pluginInfo.version }}</span>
+              <span v-if="isPluginSelected(plugin.pluginId)" class="current-tag">当前使用</span>
+            </h3>
+            <p class="author">作者: {{ plugin.pluginInfo.author }}</p>
+            <p class="description">{{ plugin.pluginInfo.description || '无描述' }}</p>
+            <div
+              v-if="plugin.supportedSources && Object.keys(plugin.supportedSources).length > 0"
+              class="plugin-sources"
             >
-              刷新
+              <span class="source-label">支持的音源:</span>
+              <span v-for="source in plugin.supportedSources" :key="source.name" class="source-tag">
+                {{ source.name }}
+              </span>
+            </div>
+          </div>
+          <div class="plugin-actions">
+            <t-button
+              theme="default"
+              size="small"
+              :disabled="loading"
+              @click.stop="viewPluginLogs(plugin.pluginId, plugin.pluginInfo.name)"
+            >
+              <template #icon><t-icon name="view-list" /></template> 日志
+            </t-button>
+            <t-button
+              v-if="!isPluginSelected(plugin.pluginId)"
+              theme="primary"
+              size="small"
+              @click="selectPlugin(plugin)"
+            >
+              <template #icon><t-icon name="check" /></template> 使用
+            </t-button>
+            <t-button
+              theme="danger"
+              size="small"
+              @click="uninstallPlugin(plugin.pluginId, plugin.pluginInfo.name)"
+            >
+              <template #icon><t-icon name="delete" /></template> 卸载
             </t-button>
           </div>
-          <div class="mac-controls">
-            <div class="mac-button close" @click="logDialogVisible = false"></div>
-            <div class="mac-button minimize"></div>
-            <div class="mac-button maximize"></div>
-          </div>
         </div>
-      </template>
-      <template #body>
-        <div class="console-container">
-          <div class="console-header">
-            <div class="console-info">
-              <span class="console-prompt">$</span>
-              <span class="console-path">~/plugins/{{ currentLogPluginName }}</span>
-              <span class="console-time">{{ formatTime(new Date()) }}</span>
+      </div>
+
+      <!-- 插件日志弹窗 -->
+      <t-dialog
+        v-model:visible="logDialogVisible"
+        top="10vh"
+        :close-btn="false"
+        :footer="false"
+        width="80%"
+        :style="{ maxWidth: '900px', maxHeight: '80vh' }"
+        class="log-dialog"
+      >
+        <template #header>
+          <div class="log-dialog-header">
+            <div class="log-title">
+              <i class="iconfont icon-terminal"></i>
+              {{ currentLogPluginName }} - 插件日志
+            </div>
+            <div class="log-actions">
+              <t-button
+                size="small"
+                variant="outline"
+                theme="default"
+                ghost
+                :disabled="logsLoading"
+                @click.stop="refreshLogs"
+              >
+                刷新
+              </t-button>
+            </div>
+            <div class="mac-controls">
+              <div class="mac-button close" @click="logDialogVisible = false"></div>
+              <div class="mac-button minimize"></div>
+              <div class="mac-button maximize"></div>
             </div>
           </div>
-          <div ref="logContentRef" class="console-content" :class="{ loading: logsLoading }">
-            <div v-if="logsLoading" class="console-loading">
-              <div class="loading-spinner"></div>
-              <span>正在加载日志...</span>
+        </template>
+        <template #body>
+          <div class="console-container">
+            <div class="console-header">
+              <div class="console-info">
+                <span class="console-prompt">$</span>
+                <span class="console-path">~/plugins/{{ currentLogPluginName }}</span>
+                <span class="console-time">{{ formatTime(new Date()) }}</span>
+              </div>
             </div>
-            <div v-else-if="logsError" class="console-error">
-              <span class="error-icon">❌</span>
-              <span>加载日志失败: {{ logsError }}</span>
-            </div>
-            <div v-else-if="logs.length === 0" class="console-empty">
-              <span class="empty-icon">📝</span>
-              <span>暂无日志记录</span>
-            </div>
-            <div v-else class="log-entries">
-              <div
-                v-for="(log, index) in logs"
-                :key="index"
-                class="log-entry"
-                :class="getLogLevel(log)"
-              >
-                <span class="log-timestamp">{{ formatLogTime(index) }}</span>
-                <span class="log-content">{{ log }}</span>
+            <div ref="logContentRef" class="console-content" :class="{ loading: logsLoading }">
+              <div v-if="logsLoading" class="console-loading">
+                <div class="loading-spinner"></div>
+                <span>正在加载日志...</span>
+              </div>
+              <div v-else-if="logsError" class="console-error">
+                <span class="error-icon">❌</span>
+                <span>加载日志失败: {{ logsError }}</span>
+              </div>
+              <div v-else-if="logs.length === 0" class="console-empty">
+                <span class="empty-icon">📝</span>
+                <span>暂无日志记录</span>
+              </div>
+              <div v-else class="log-entries">
+                <div
+                  v-for="(log, index) in logs"
+                  :key="index"
+                  class="log-entry"
+                  :class="getLogLevel(log)"
+                >
+                  <span class="log-timestamp">{{ formatLogTime(index) }}</span>
+                  <span class="log-content">{{ log }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </template>
-    </t-dialog>
+        </template>
+      </t-dialog>
+    </div>
   </div>
 </template>
 
@@ -213,7 +215,7 @@ const plugins = ref<Plugin[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const plugTypeDialog = ref(false)
-let type = ref<'lx' | 'cr'>('cr')
+const type = ref<'lx' | 'cr'>('cr')
 
 // 日志相关状态
 const logDialogVisible = ref(false)
@@ -381,7 +383,7 @@ async function uninstallPlugin(pluginId: string, pluginName: string) {
           // 卸载成功才刷新插件列表
           await getPlugins()
           // 显示成功消息
-          if (pluginId == localUserStore.userInfo.pluginId) {
+          if (pluginId === localUserStore.userInfo.pluginId) {
             localUserStore.userInfo.pluginId = ''
             localUserStore.userInfo.supportedSources = {}
             localUserStore.userInfo.selectSources = ''
@@ -508,6 +510,11 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
 .header {
   -webkit-app-region: drag;
   display: flex;
@@ -522,8 +529,13 @@ onMounted(async () => {
 }
 
 .plugins-container {
+  flex: 1;
   padding: 20px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .plugin-actions {
@@ -590,6 +602,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .plugin-item {
@@ -676,6 +691,7 @@ onMounted(async () => {
 /* 日志弹窗样式 */
 :deep(.log-dialog) {
   height: 80vh;
+
   .t-dialog {
     background: #1e1e1e;
     border-radius: 12px;
@@ -710,6 +726,7 @@ onMounted(async () => {
   background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);
   min-height: 48px;
   width: 100%;
+
   .log-title {
     display: flex;
     align-items: center;
@@ -753,6 +770,7 @@ onMounted(async () => {
     display: flex;
     gap: 8px;
     flex-direction: row-reverse;
+
     .mac-button {
       width: 12px;
       height: 12px;
@@ -762,6 +780,7 @@ onMounted(async () => {
 
       &.close {
         background: #ff5f57;
+
         &:hover {
           background: #ff3b30;
         }
@@ -769,6 +788,7 @@ onMounted(async () => {
 
       &.minimize {
         background: #ffbd2e;
+
         &:hover {
           background: #ff9500;
         }
@@ -776,6 +796,7 @@ onMounted(async () => {
 
       &.maximize {
         background: #28ca42;
+
         &:hover {
           background: #30d158;
         }
@@ -938,6 +959,7 @@ onMounted(async () => {
       .log-content {
         color: #ff6b6b;
       }
+
       .log-timestamp {
         color: #ff6b6b;
       }
@@ -947,6 +969,7 @@ onMounted(async () => {
       .log-content {
         color: #ffd93d;
       }
+
       .log-timestamp {
         color: #ffd93d;
       }
@@ -956,6 +979,7 @@ onMounted(async () => {
       .log-content {
         color: #74b9ff;
       }
+
       .log-timestamp {
         color: #74b9ff;
       }
@@ -965,6 +989,7 @@ onMounted(async () => {
       .log-content {
         color: #a29bfe;
       }
+
       .log-timestamp {
         color: #a29bfe;
       }
@@ -982,6 +1007,7 @@ onMounted(async () => {
   0% {
     transform: rotate(0deg);
   }
+
   100% {
     transform: rotate(360deg);
   }

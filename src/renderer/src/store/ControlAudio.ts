@@ -180,7 +180,6 @@ export const ControlAudioStore = defineStore('controlAudio', () => {
   }
   const start = async () => {
     const volume = Audio.volume
-    console.log('开始播放音频111', volume)
     if (Audio.audio) {
       Audio.audio.volume = 0
       try {

@@ -2,7 +2,7 @@ import { httpFetch } from '../../request'
 import { formatPlayTime, sizeFormate } from '../index'
 import { formatSingerName } from '../utils'
 
-let boardList = [
+const boardList = [
   { id: 'tx__4', name: '流行指数榜', bangid: '4' },
   { id: 'tx__26', name: '热歌榜', bangid: '26' },
   { id: 'tx__27', name: '新歌榜', bangid: '27' },
@@ -137,31 +137,31 @@ export default {
   filterData(rawList) {
     // console.log(rawList)
     return rawList.map((item) => {
-      let types = []
-      let _types = {}
+      const types = []
+      const _types = {}
       if (item.file.size_128mp3 !== 0) {
-        let size = sizeFormate(item.file.size_128mp3)
+        const size = sizeFormate(item.file.size_128mp3)
         types.push({ type: '128k', size })
         _types['128k'] = {
           size
         }
       }
       if (item.file.size_320mp3 !== 0) {
-        let size = sizeFormate(item.file.size_320mp3)
+        const size = sizeFormate(item.file.size_320mp3)
         types.push({ type: '320k', size })
         _types['320k'] = {
           size
         }
       }
       if (item.file.size_flac !== 0) {
-        let size = sizeFormate(item.file.size_flac)
+        const size = sizeFormate(item.file.size_flac)
         types.push({ type: 'flac', size })
         _types.flac = {
           size
         }
       }
       if (item.file.size_hires !== 0) {
-        let size = sizeFormate(item.file.size_hires)
+        const size = sizeFormate(item.file.size_hires)
         types.push({ type: 'flac24bit', size })
         _types.flac24bit = {
           size
@@ -195,10 +195,10 @@ export default {
   },
   getPeriods(bangid) {
     return this.getData(this.periodUrl).then(({ body: html }) => {
-      let result = html.match(this.regExps.periodList)
+      const result = html.match(this.regExps.periodList)
       if (!result) return Promise.reject(new Error('get data failed'))
       result.forEach((item) => {
-        let result = item.match(this.regExps.period)
+        const result = item.match(this.regExps.period)
         if (!result) return
         this.periods[result[2]] = {
           name: result[1],
@@ -212,7 +212,7 @@ export default {
   },
   filterBoardsData(rawList) {
     // console.log(rawList)
-    let list = []
+    const list = []
     for (const board of rawList) {
       // 排除 MV榜
       if (board.id == 201) continue
@@ -256,8 +256,8 @@ export default {
   getList(bangid, page, retryNum = 0) {
     if (++retryNum > 3) return Promise.reject(new Error('try max num'))
     bangid = parseInt(bangid)
-    let info = this.periods[bangid]
-    let p = info ? Promise.resolve(info.period) : this.getPeriods(bangid)
+    const info = this.periods[bangid]
+    const p = info ? Promise.resolve(info.period) : this.getPeriods(bangid)
     return p.then((period) => {
       return this.listDetailRequest(bangid, period, this.limit).then((resp) => {
         if (resp.body.code !== 0) return this.getList(bangid, page, retryNum)
@@ -273,7 +273,7 @@ export default {
   },
 
   getDetailPageUrl(id) {
-    if (typeof id == 'string') id = id.replace('tx__', '')
+    if (typeof id === 'string') id = id.replace('tx__', '')
     return `https://y.qq.com/n/ryqq/toplist/${id}`
   }
 }

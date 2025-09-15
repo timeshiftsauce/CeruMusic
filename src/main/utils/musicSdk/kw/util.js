@@ -111,8 +111,8 @@ export const lrcTools = {
     // 使用原始的酷我音乐时间计算逻辑，但输出绝对时间戳
     const offset = parseInt(str)
     const offset2 = parseInt(str2)
-    let startTime = Math.abs((offset + offset2) / (this.offset * 2))
-    let duration = Math.abs((offset - offset2) / (this.offset2 * 2))
+    const startTime = Math.abs((offset + offset2) / (this.offset * 2))
+    const duration = Math.abs((offset - offset2) / (this.offset2 * 2))
 
     // 转换为基于行开始时间的绝对时间戳
     const absoluteStartTime = lineStartTime + startTime

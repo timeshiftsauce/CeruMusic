@@ -26,7 +26,7 @@ export function compareVer(currentVer: string, targetVer: string): -1 | 0 | 1 {
     .replace(/[^0-9.]/g, fix)
     .split('.')
   const targetVerArr: Array<string | number> = ('' + targetVer).replace(/[^0-9.]/g, fix).split('.')
-  let c = Math.max(currentVerArr.length, targetVerArr.length)
+  const c = Math.max(currentVerArr.length, targetVerArr.length)
   for (let i = 0; i < c; i++) {
     // convert to integer the most efficient way
     currentVerArr[i] = ~~currentVerArr[i]

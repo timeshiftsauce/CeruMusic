@@ -121,6 +121,7 @@ onUnmounted(() => {
 <template>
   <div>
     <audio
+      id="globaAudio"
       ref="audioMeta"
       preload="auto"
       :src="audioStore.Audio.url"
@@ -131,7 +132,6 @@ onUnmounted(() => {
       @loadeddata="handleLoadedData"
       @ended="handleEnded"
       @canplay="handleCanPlay"
-      id="globaAudio"
     ></audio>
   </div>
 </template>

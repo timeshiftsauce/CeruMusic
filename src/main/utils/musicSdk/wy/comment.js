@@ -70,7 +70,7 @@ const applyEmoji = (text) => {
   return text
 }
 
-let cursorTools = {
+const cursorTools = {
   cache: {},
   getCursor(id, page, limit) {
     let cacheData = this.cache[id]
@@ -190,7 +190,7 @@ export default {
   },
   filterComment(rawList) {
     return rawList.map((item) => {
-      let data = {
+      const data = {
         id: item.commentId,
         text: item.content ? applyEmoji(item.content) : '',
         time: item.time ? item.time : '',
@@ -203,7 +203,7 @@ export default {
         reply: []
       }
 
-      let replyData = item.beReplied && item.beReplied[0]
+      const replyData = item.beReplied && item.beReplied[0]
       return replyData
         ? {
             id: item.commentId,

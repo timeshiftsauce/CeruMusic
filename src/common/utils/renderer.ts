@@ -38,7 +38,7 @@ const handleScrollY = (
   // @ts-expect-error
   const start = element.scrollTop ?? element.scrollY ?? 0
   if (to > start) {
-    let maxScrollTop = element.scrollHeight - element.clientHeight
+    const maxScrollTop = element.scrollHeight - element.clientHeight
     if (to > maxScrollTop) to = maxScrollTop
   } else if (to < start) {
     if (to < 0) to = 0
@@ -55,7 +55,7 @@ const handleScrollY = (
 
   let currentTime = 0
   let val: number
-  let key = Math.random()
+  const key = Math.random()
 
   const animateScroll = () => {
     element.lx_scrollTimeout = undefined
@@ -156,7 +156,7 @@ const handleScrollX = (
   // @ts-expect-error
   const start = element.scrollLeft || element.scrollX || 0
   if (to > start) {
-    let maxScrollLeft = element.scrollWidth - element.clientWidth
+    const maxScrollLeft = element.scrollWidth - element.clientWidth
     if (to > maxScrollLeft) to = maxScrollLeft
   } else if (to < start) {
     if (to < 0) to = 0
@@ -173,7 +173,7 @@ const handleScrollX = (
 
   let currentTime = 0
   let val: number
-  let key = Math.random()
+  const key = Math.random()
 
   const animateScroll = () => {
     element.lx_scrollTimeout = undefined
@@ -272,7 +272,7 @@ const handleScrollXR = (
   // @ts-expect-error
   const start = element.scrollLeft || (element.scrollX as number) || 0
   if (to < start) {
-    let maxScrollLeft = -element.scrollWidth + element.clientWidth
+    const maxScrollLeft = -element.scrollWidth + element.clientWidth
     if (to < maxScrollLeft) to = maxScrollLeft
   } else if (to > start) {
     if (to > 0) to = 0
@@ -290,7 +290,7 @@ const handleScrollXR = (
 
   let currentTime = 0
   let val: number
-  let key = Math.random()
+  const key = Math.random()
 
   const animateScroll = () => {
     element.lx_scrollTimeout = undefined
@@ -371,7 +371,7 @@ export const scrollXRTo = (
 /**
  * 设置标题
  */
-let dom_title = document.getElementsByTagName('title')[0]
+const dom_title = document.getElementsByTagName('title')[0]
 export const setTitle = (title: string | null) => {
   title ||= 'LX Music'
   dom_title.innerText = title

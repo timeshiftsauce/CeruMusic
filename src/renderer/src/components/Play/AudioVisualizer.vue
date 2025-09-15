@@ -12,11 +12,6 @@ interface Props {
   backgroundColor?: string
 }
 
-// 定义事件
-const emit = defineEmits<{
-  lowFreqUpdate: [volume: number]
-}>()
-
 const props = withDefaults(defineProps<Props>(), {
   show: true,
   height: 80,
@@ -24,6 +19,11 @@ const props = withDefaults(defineProps<Props>(), {
   color: 'rgba(255, 255, 255, 0.8)',
   backgroundColor: 'transparent'
 })
+
+// 定义事件
+const emit = defineEmits<{
+  lowFreqUpdate: [volume: number]
+}>()
 
 const canvasRef = ref<HTMLCanvasElement>()
 const animationId = ref<number>()

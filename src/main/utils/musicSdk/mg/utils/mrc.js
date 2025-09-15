@@ -22,15 +22,15 @@ const teaDecrypt = (data, key) => {
     let j2 = data[0]
     let j3 = toLong((6n + 52n / lengthBitint) * DELTA)
     while (true) {
-      let j4 = j3
+      const j4 = j3
       if (j4 == 0n) break
-      let j5 = toLong(3n & toLong(j4 >> 2n))
+      const j5 = toLong(3n & toLong(j4 >> 2n))
       let j6 = lengthBitint
       while (true) {
         j6--
         if (j6 > 0n) {
-          let j7 = data[j6 - 1n]
-          let i = j6
+          const j7 = data[j6 - 1n]
+          const i = j6
           j2 = toLong(
             data[i] -
               (toLong(toLong(j2 ^ j4) + toLong(j7 ^ key[toLong(toLong(3n & j6) ^ j5)])) ^
@@ -42,7 +42,7 @@ const teaDecrypt = (data, key) => {
           data[i] = j2
         } else break
       }
-      let j8 = data[lengthBitint - 1n]
+      const j8 = data[lengthBitint - 1n]
       j2 = toLong(
         data[0n] -
           toLong(
@@ -89,7 +89,7 @@ const toBigintArray = (data) => {
 const MAX = 9223372036854775807n
 const MIN = -9223372036854775808n
 const toLong = (str) => {
-  const num = typeof str == 'string' ? BigInt('0x' + str) : str
+  const num = typeof str === 'string' ? BigInt('0x' + str) : str
   if (num > MAX) return toLong(num - (1n << 64n))
   else if (num < MIN) return toLong(num + (1n << 64n))
   return num

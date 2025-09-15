@@ -1,6 +1,6 @@
 import { createWebHashHistory, createRouter, RouteRecordRaw, RouterOptions } from 'vue-router'
 
-let routes: RouteRecordRaw[] = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'welcome',
@@ -55,7 +55,7 @@ let routes: RouteRecordRaw[] = [
 ]
 function setAnimate(routerObj: RouteRecordRaw[]) {
   for (let i = 0; i < routerObj.length; i++) {
-    let item = routerObj[i]
+    const item = routerObj[i]
     if (item.children && item.children.length > 0) {
       setAnimate(item.children)
     } else {

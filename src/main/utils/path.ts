@@ -20,7 +20,7 @@ function getAppDirPath(
     | 'logs'
     | 'crashDumps'
 ) {
-  let dirPath: string = electron.app.getPath(name ?? 'userData')
+  const dirPath: string = electron.app.getPath(name ?? 'userData')
   return dirPath
 }
 

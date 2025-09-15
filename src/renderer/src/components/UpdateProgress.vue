@@ -22,7 +22,7 @@
             <span>已下载: {{ formatBytes(downloadState.progress.transferred) }}</span>
             <span>总大小: {{ formatBytes(downloadState.progress.total) }}</span>
           </div>
-          <div class="download-speed" v-if="downloadSpeed > 0">
+          <div v-if="downloadSpeed > 0" class="download-speed">
             下载速度: {{ formatBytes(downloadSpeed) }}/s
           </div>
         </div>

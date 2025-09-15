@@ -76,8 +76,6 @@ const scrollToCurrentSong = () => {
   })
 }
 
-
-
 // 关闭播放列表
 const handleClose = () => {
   emit('close')
@@ -87,12 +85,12 @@ const handleClose = () => {
 const handleMouseEnter = (index: number) => {
   // 如果正在拖拽，不显示提示
   if (isDragSorting.value) return
-  
+
   // 清除之前的定时器
   if (hoverTimer.value) {
     clearTimeout(hoverTimer.value)
   }
-  
+
   // 设置新的定时器
   hoverTimer.value = window.setTimeout(() => {
     hoverTipVisible.value = true
@@ -106,7 +104,7 @@ const handleMouseLeave = () => {
     clearTimeout(hoverTimer.value)
     hoverTimer.value = null
   }
-  
+
   // 隐藏提示
   hoverTipVisible.value = false
   hoverTipIndex.value = -1
@@ -134,65 +132,75 @@ const handleTouchStart = (event: TouchEvent, index: number, song: any) => {
 }
 
 // 拖拽排序相关方法
-const handlePointerStart = (event: MouseEvent | TouchEvent, index: number, song: any, isTouch: boolean) => {
+const handlePointerStart = (
+  event: MouseEvent | TouchEvent,
+  index: number,
+  song: any,
+  isTouch: boolean
+) => {
   event.preventDefault()
   event.stopPropagation()
-  
+
   // 重置标记
   isDragStarted.value = false
   wasLongPressed.value = false
   currentOperatingSong.value = song
-  
+
   // 清除之前的定时器
   if (longPressTimer.value) {
     clearTimeout(longPressTimer.value)
   }
-  
+
   // 记录初始位置
   const clientY = isTouch ? (event as TouchEvent).touches[0].clientY : (event as MouseEvent).clientY
   dragStartY.value = clientY
   dragCurrentY.value = clientY
-  
+
   // 设置长按定时器
   longPressTimer.value = window.setTimeout(() => {
     wasLongPressed.value = true // 标记发生了长按
     startDragSort(index, song)
     isDragStarted.value = true // 标记已开始拖动
   }, longPressDelay)
-  
+
   // 添加移动和结束事件监听
   const handleMove = (e: MouseEvent | TouchEvent) => {
     const currentY = 'touches' in e ? e.touches[0].clientY : e.clientY
     const deltaY = Math.abs(currentY - dragStartY.value)
-    
+
     // 如果移动距离超过阈值，取消长按
     if (deltaY > dragThreshold && longPressTimer.value) {
       clearTimeout(longPressTimer.value)
       longPressTimer.value = null
     }
-    
+
     // 如果已经开始拖拽，更新位置
     if (isDragSorting.value) {
       dragCurrentY.value = currentY
       updateDragOverIndex(currentY)
     }
   }
-  
+
   const handleEnd = () => {
     const hadLongPressTimer = !!longPressTimer.value
     const wasInDragMode = isDragSorting.value
-    
+
     if (longPressTimer.value) {
       clearTimeout(longPressTimer.value)
       longPressTimer.value = null
     }
-    
+
     if (isDragSorting.value) {
       endDragSort()
     }
-    
+
     // 如果没有发生长按且没有在拖拽模式，说明是正常点击，触发播放
-    if (!wasLongPressed.value && !wasInDragMode && hadLongPressTimer && currentOperatingSong.value) {
+    if (
+      !wasLongPressed.value &&
+      !wasInDragMode &&
+      hadLongPressTimer &&
+      currentOperatingSong.value
+    ) {
       // 短暂延迟后播放，确保状态已经稳定
       setTimeout(() => {
         emit('playSong', currentOperatingSong.value)
@@ -208,14 +216,14 @@ const handlePointerStart = (event: MouseEvent | TouchEvent, index: number, song:
         currentOperatingSong.value = null
       }, 200)
     }
-    
+
     // 移除事件监听
     document.removeEventListener('mousemove', handleMove)
     document.removeEventListener('mouseup', handleEnd)
     document.removeEventListener('touchmove', handleMove)
     document.removeEventListener('touchend', handleEnd)
   }
-  
+
   // 添加事件监听
   document.addEventListener('mousemove', handleMove)
   document.addEventListener('mouseup', handleEnd)
@@ -226,18 +234,18 @@ const handlePointerStart = (event: MouseEvent | TouchEvent, index: number, song:
 const startDragSort = (index: number, song: any) => {
   // 隐藏悬停提示
   hideTip()
-  
+
   isDragSorting.value = true
   draggedIndex.value = index
   draggedSong.value = song
   dragOverIndex.value = index
-  
+
   // 保存原始列表用于实时预览
   originalList.value = [...list.value]
-  
+
   // 添加拖拽样式
   document.body.style.userSelect = 'none'
-  
+
   // 触觉反馈（如果支持）
   if ('vibrate' in navigator) {
     navigator.vibrate(50)
@@ -247,19 +255,20 @@ const startDragSort = (index: number, song: any) => {
 const updateDragOverIndex = (clientY: number) => {
   const playlistContainer = document.querySelector('.playlist-content')
   if (!playlistContainer) return
-  
+
   const containerRect = playlistContainer.getBoundingClientRect()
   const scrollThreshold = 80 // 增加边缘滚动触发区域
   const maxScrollSpeed = 15 // 增加最大滚动速度
-  
+
   // 检查是否需要自动滚动
   const distanceFromTop = clientY - containerRect.top
   const distanceFromBottom = containerRect.bottom - clientY
-  
+
   // 检查是否可以滚动
   const canScrollUp = playlistContainer.scrollTop > 0
-  const canScrollDown = playlistContainer.scrollTop < (playlistContainer.scrollHeight - playlistContainer.clientHeight)
-  
+  const canScrollDown =
+    playlistContainer.scrollTop < playlistContainer.scrollHeight - playlistContainer.clientHeight
+
   if (distanceFromTop < scrollThreshold && distanceFromTop > 0 && canScrollUp) {
     // 向上滚动
     const intensity = (scrollThreshold - distanceFromTop) / scrollThreshold
@@ -274,18 +283,18 @@ const updateDragOverIndex = (clientY: number) => {
     // 停止自动滚动
     stopAutoScroll()
   }
-  
+
   // 计算拖拽位置，考虑容器滚动偏移
   const playlistSongs = document.querySelectorAll('.playlist-song')
   let newOverIndex = draggedIndex.value
-  
+
   // 如果在容器范围内，计算最接近的插入位置
   if (clientY >= containerRect.top && clientY <= containerRect.bottom) {
     for (let i = 0; i < playlistSongs.length; i++) {
       const songElement = playlistSongs[i] as HTMLElement
       const rect = songElement.getBoundingClientRect()
       const centerY = rect.top + rect.height / 2
-      
+
       if (clientY < centerY) {
         newOverIndex = i
         break
@@ -300,9 +309,13 @@ const updateDragOverIndex = (clientY: number) => {
     // 在容器下方，插入到末尾
     newOverIndex = playlistSongs.length
   }
-  
+
   // 实时更新列表顺序进行预览
-  if (newOverIndex !== dragOverIndex.value && newOverIndex >= 0 && newOverIndex <= list.value.length) {
+  if (
+    newOverIndex !== dragOverIndex.value &&
+    newOverIndex >= 0 &&
+    newOverIndex <= list.value.length
+  ) {
     dragOverIndex.value = newOverIndex
     updatePreviewList()
   }
@@ -311,21 +324,21 @@ const updateDragOverIndex = (clientY: number) => {
 // 实时预览列表更新
 const updatePreviewList = () => {
   if (draggedIndex.value === -1 || dragOverIndex.value === -1) return
-  
+
   const newList = [...list.value]
   const draggedItem = newList.splice(draggedIndex.value, 1)[0]
-  
+
   // 计算实际插入位置
   let insertIndex = dragOverIndex.value
   if (dragOverIndex.value > draggedIndex.value) {
     insertIndex = dragOverIndex.value - 1
   }
-  
+
   newList.splice(insertIndex, 0, draggedItem)
-  
+
   // 更新预览列表（不保存到localStorage）
   list.value = newList
-  
+
   // 更新拖拽索引
   draggedIndex.value = insertIndex
 }
@@ -333,12 +346,12 @@ const updatePreviewList = () => {
 // 自动滚动相关方法
 const startAutoScroll = () => {
   if (autoScrollTimer.value) return
-  
+
   autoScrollTimer.value = window.setInterval(() => {
     const playlistContainer = document.querySelector('.playlist-content')
     if (playlistContainer && scrollSpeed.value !== 0) {
       playlistContainer.scrollTop += scrollSpeed.value
-      
+
       // 在自动滚动过程中持续更新拖拽位置预览
       if (isDragSorting.value) {
         updateDragOverIndex(dragCurrentY.value)
@@ -358,10 +371,10 @@ const stopAutoScroll = () => {
 const endDragSort = () => {
   // 停止自动滚动
   stopAutoScroll()
-  
+
   // 由于实时预览已经更新了列表，这里只需要确保保存
   // list.value 的变化会被 watch 监听器自动保存到 localStorage
-  
+
   // 重置状态
   isDragSorting.value = false
   draggedIndex.value = -1
@@ -369,7 +382,7 @@ const endDragSort = () => {
   draggedSong.value = null
   isDragStarted.value = false
   wasLongPressed.value = false
-  
+
   // 移除拖拽样式
   document.body.style.userSelect = ''
 }
@@ -380,12 +393,12 @@ onUnmounted(() => {
   if (hoverTimer.value) {
     clearTimeout(hoverTimer.value)
   }
-  
+
   // 清理拖拽相关定时器
   if (longPressTimer.value) {
     clearTimeout(longPressTimer.value)
   }
-  
+
   // 清理自动滚动定时器
   stopAutoScroll()
 })
@@ -418,19 +431,14 @@ defineExpose({
           <p>播放列表为空</p>
           <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
         </div>
-        <TransitionGroup 
-          v-else 
-          :class="playlistSongsClass"
-          name="list-item"
-          tag="div"
-        >
+        <TransitionGroup v-else :class="playlistSongsClass" name="list-item" tag="div">
           <div
             v-for="(song, index) in list"
             :key="song.songmid"
             class="playlist-song"
-            :class="{ 
+            :class="{
               active: song.songmid === currentSongId,
-              'dragging': isDragSorting && index === draggedIndex
+              dragging: isDragSorting && index === draggedIndex
             }"
             @mousedown="handleMouseDown($event, index, song)"
             @touchstart="handleTouchStart($event, index, song)"
@@ -438,10 +446,10 @@ defineExpose({
             @mouseleave="handleMouseLeave"
           >
             <!-- 拖拽手柄 -->
-            <div class="drag-handle" v-if="isDragSorting && index === draggedIndex">
+            <div v-if="isDragSorting && index === draggedIndex" class="drag-handle">
               <span class="drag-dots">⋮⋮</span>
             </div>
-            
+
             <div class="song-info">
               <div class="song-name">{{ song.name }}</div>
               <div class="song-artist">{{ song.singer }}</div>
@@ -456,14 +464,10 @@ defineExpose({
             <button class="song-remove" @click.stop="localUserStore.removeSong(song.songmid)">
               <span class="iconfont icon-xuanxiangshanchu"></span>
             </button>
-            
+
             <!-- 悬停提示 -->
             <transition name="hover-tip">
-              <div 
-                v-if="hoverTipVisible && hoverTipIndex === index" 
-                class="hover-tip"
-                @click.stop
-              >
+              <div v-if="hoverTipVisible && hoverTipIndex === index" class="hover-tip" @click.stop>
                 长按可拖动排序
               </div>
             </transition>

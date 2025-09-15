@@ -142,7 +142,7 @@ onUnmounted(() => {
       <!-- 错误状态 -->
       <div v-else-if="error" class="error-container">
         <t-alert theme="error" :message="error" />
-        <t-button theme="primary" @click="fetchHotSonglist" style="margin-top: 1rem">
+        <t-button theme="primary" style="margin-top: 1rem" @click="fetchHotSonglist">
           重新加载
         </t-button>
       </div>
@@ -161,24 +161,22 @@ onUnmounted(() => {
           <div
             class="playlist-info"
             :style="{
-              'background-color': mainColors[index],
-              color: textColors[index]
+              '--hover-bg-color': mainColors[index],
+              '--hover-text-color': textColors[index]
             }"
           >
-            <h4 class="playlist-title" :style="{ color: textColors[index] }">
+            <h4 class="playlist-title">
               {{ playlist.title }}
             </h4>
-            <p class="playlist-desc" :style="{ color: textColors[index] }">
+            <p class="playlist-desc">
               {{ playlist.description }}
             </p>
             <div class="playlist-meta">
-              <span class="play-count" :style="{ color: textColors[index] }">
+              <span class="play-count">
                 <i class="iconfont icon-bofang"></i>
                 {{ playlist.playCount }}
               </span>
-              <span class="song-count" v-if="playlist.total" :style="{ color: textColors[index] }"
-                >{{ playlist.total }}首</span
-              >
+              <span v-if="playlist.total" class="song-count">{{ playlist.total }}首</span>
             </div>
             <!-- <div class="playlist-author">by {{ playlist.author }}</div> -->
           </div>
@@ -312,6 +310,23 @@ onUnmounted(() => {
 
     .playlist-info {
       backdrop-filter: blur(8px);
+      background-color: var(--hover-bg-color);
+      color: #111827;
+      .playlist-title {
+        color: var(--hover-text-color);
+      }
+      .playlist-desc {
+        color: var(--hover-text-color);
+      }
+      .playlist-meta {
+        color: var(--hover-text-color);
+        * {
+          color: var(--hover-text-color);
+        }
+      }
+      .playlist-author {
+        color: var(--hover-text-color);
+      }
     }
   }
 
@@ -357,8 +372,9 @@ onUnmounted(() => {
     padding: 1.25rem 1rem;
     position: relative;
     background: rgba(255, 255, 255, 0.95);
+
     backdrop-filter: blur(4px);
-    transition: backdrop-filter 0.3s ease;
+    transition: all 0.3s ease;
 
     .playlist-title {
       font-size: 1rem;
@@ -384,6 +400,7 @@ onUnmounted(() => {
       -webkit-box-orient: vertical;
       overflow: hidden;
       min-height: 2.625rem; // 确保描述区域高度一致
+      transition: color 0.3s ease;
     }
 
     .playlist-meta {
@@ -394,6 +411,7 @@ onUnmounted(() => {
       margin-top: auto; // 推到底部
       padding-top: 0.5rem;
       border-top: 1px solid rgba(229, 231, 235, 0.5);
+      transition: color 0.3s ease;
     }
 
     .play-count {
@@ -403,6 +421,7 @@ onUnmounted(() => {
       align-items: center;
       gap: 0.25rem;
       font-weight: 500;
+      transition: color 0.3s ease;
 
       .iconfont {
         font-size: 0.875rem;
@@ -417,6 +436,7 @@ onUnmounted(() => {
       background: rgba(156, 163, 175, 0.1);
       padding: 0.125rem 0.5rem;
       border-radius: 0.375rem;
+      transition: color 0.3s ease;
     }
 
     .playlist-author {
@@ -425,6 +445,7 @@ onUnmounted(() => {
       font-style: italic;
       margin-top: 0.25rem;
       opacity: 0.8;
+      transition: color 0.3s ease;
     }
   }
 }

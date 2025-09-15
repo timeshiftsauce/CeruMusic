@@ -21,7 +21,7 @@ const aesEncrypt = (buffer, mode, key, iv) => {
 }
 
 const aesDecrypt = function (cipherBuffer, mode, key, iv) {
-  let decipher = createDecipheriv(mode, key, iv)
+  const decipher = createDecipheriv(mode, key, iv)
   return Buffer.concat([decipher.update(cipherBuffer), decipher.final()])
 }
 

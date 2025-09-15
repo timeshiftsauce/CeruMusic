@@ -47,7 +47,7 @@ export default {
     )
     if (!albumList.info) return Promise.reject(new Error('Get album list failed.'))
 
-    let result = await getMusicInfosByList(albumList.info)
+    const result = await getMusicInfosByList(albumList.info)
 
     const info = await this.getAlbumInfo(id)
 

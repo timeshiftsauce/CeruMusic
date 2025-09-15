@@ -12,7 +12,7 @@ export default {
     // const res_id = (await getMusicInfoRaw(hash)).classification?.[0]?.res_id
     // if (!res_id) throw new Error('获取评论失败')
 
-    let timestamp = Date.now()
+    const timestamp = Date.now()
     const params = `dfid=0&mid=16249512204336365674023395779019&clienttime=${timestamp}&uuid=0&extdata=${hash}&appid=1005&code=fc4be23b4e972707f36b8a828a93ba8a&schash=${hash}&clientver=11409&p=${page}&clienttoken=&pagesize=${limit}&ver=10&kugouid=0`
     // const params = `appid=1005&clienttime=${timestamp}&clienttoken=0&clientver=11409&code=fc4be23b4e972707f36b8a828a93ba8a&dfid=0&extdata=${hash}&kugouid=0&mid=16249512204336365674023395779019&mixsongid=${res_id}&p=${page}&pagesize=${limit}&uuid=0&ver=10`
     const _requestObj = httpFetch(
@@ -40,7 +40,7 @@ export default {
   async getHotComment({ hash }, page = 1, limit = 20) {
     // console.log(songmid)
     if (this._requestObj2) this._requestObj2.cancelHttp()
-    let timestamp = Date.now()
+    const timestamp = Date.now()
     const params = `dfid=0&mid=16249512204336365674023395779019&clienttime=${timestamp}&uuid=0&extdata=${hash}&appid=1005&code=fc4be23b4e972707f36b8a828a93ba8a&schash=${hash}&clientver=11409&p=${page}&clienttoken=&pagesize=${limit}&ver=10&kugouid=0`
     // https://github.com/GitHub-ZC/wp_MusicApi/blob/bf9307dd138dc8ac6c4f7de29361209d4f5b665f/routes/v1/kugou/comment.js#L53
     const _requestObj2 = httpFetch(
@@ -94,7 +94,7 @@ export default {
   },
   filterComment(rawList) {
     return rawList.map((item) => {
-      let data = {
+      const data = {
         id: item.id,
         text: decodeName(
           (item.atlist ? this.replaceAt(item.content, item.atlist) : item.content) || ''

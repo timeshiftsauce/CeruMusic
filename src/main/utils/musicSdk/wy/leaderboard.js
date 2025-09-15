@@ -134,7 +134,7 @@ export default {
 
   filterBoardsData(rawList) {
     // console.log(rawList)
-    let list = []
+    const list = []
     for (const board of rawList) {
       // 排除 MV榜
       // if (board.id == 201) continue
@@ -210,7 +210,7 @@ export default {
   },
 
   getDetailPageUrl(id) {
-    if (typeof id == 'string') id = id.replace('wy__', '')
+    if (typeof id === 'string') id = id.replace('wy__', '')
     return `https://music.163.com/#/discover/toplist?id=${id}`
   }
 }

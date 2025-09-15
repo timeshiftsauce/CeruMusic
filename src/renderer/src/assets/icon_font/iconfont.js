@@ -25,7 +25,7 @@
         }
       }
       ;((i = function () {
-        var a,
+        let a,
           l = document.createElement('div')
         ;((l.innerHTML = c._iconfont_svg_string_4997692),
           (l = l.getElementsByTagName('svg')[0]) &&

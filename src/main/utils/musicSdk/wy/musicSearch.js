@@ -20,7 +20,7 @@ export default {
     return searchRequest.promise.then(({ body }) => body)
   },
   getSinger(singers) {
-    let arr = []
+    const arr = []
     singers.forEach((singer) => {
       arr.push(singer.name)
     })
@@ -87,7 +87,7 @@ export default {
     return this.musicSearch(str, page, limit).then((result) => {
       // console.log(result)
       if (!result || result.code !== 200) return this.search(str, page, limit, retryNum)
-      let list = this.handleResult(result.result.songs || [])
+      const list = this.handleResult(result.result.songs || [])
       // console.log(list)
 
       if (list == null) return this.search(str, page, limit, retryNum)

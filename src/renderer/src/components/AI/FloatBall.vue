@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
               :class="message.type"
             >
               <div v-if="message.type === 'loading'" class="message-content loading-content">
-                <t-loading size="small" />
+                <TLoading size="small" />
                 <span class="loading-text">{{ message.content }}</span>
               </div>
               <div v-else class="message-content" v-html="message.html || message.content"></div>

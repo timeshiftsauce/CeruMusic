@@ -4,7 +4,7 @@ import { decodeKrc } from '../../../../common/utils/lyricUtils/kg'
 export default {
   getIntv(interval) {
     if (!interval) return 0
-    let intvArr = interval.split(':')
+    const intvArr = interval.split(':')
     let intv = 0
     let unit = 1
     while (intvArr.length) {
@@ -36,7 +36,7 @@ export default {
   //   return requestObj
   // },
   searchLyric(name, hash, time, tryNum = 0) {
-    let requestObj = httpFetch(
+    const requestObj = httpFetch(
       `http://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${encodeURIComponent(name)}&hash=${hash}&timelength=${time}&lrctxt=1`,
       {
         headers: {
@@ -49,12 +49,12 @@ export default {
     requestObj.promise = requestObj.promise.then(({ body, statusCode }) => {
       if (statusCode !== 200) {
         if (tryNum > 5) return Promise.reject(new Error('歌词获取失败'))
-        let tryRequestObj = this.searchLyric(name, hash, time, ++tryNum)
+        const tryRequestObj = this.searchLyric(name, hash, time, ++tryNum)
         requestObj.cancelHttp = tryRequestObj.cancelHttp.bind(tryRequestObj)
         return tryRequestObj.promise
       }
       if (body.candidates.length) {
-        let info = body.candidates[0]
+        const info = body.candidates[0]
         return {
           id: info.id,
           accessKey: info.accesskey,
@@ -66,7 +66,7 @@ export default {
     return requestObj
   },
   getLyricDownload(id, accessKey, fmt, tryNum = 0) {
-    let requestObj = httpFetch(
+    const requestObj = httpFetch(
       `http://lyrics.kugou.com/download?ver=1&client=pc&id=${id}&accesskey=${accessKey}&fmt=${fmt}&charset=utf8`,
       {
         headers: {
@@ -79,7 +79,7 @@ export default {
     requestObj.promise = requestObj.promise.then(({ body, statusCode }) => {
       if (statusCode !== 200) {
         if (tryNum > 5) return Promise.reject(new Error('歌词获取失败'))
-        let tryRequestObj = this.getLyric(id, accessKey, fmt, ++tryNum)
+        const tryRequestObj = this.getLyric(id, accessKey, fmt, ++tryNum)
         requestObj.cancelHttp = tryRequestObj.cancelHttp.bind(tryRequestObj)
         return tryRequestObj.promise
       }
@@ -102,7 +102,7 @@ export default {
     return requestObj
   },
   getLyric(songInfo, tryNum = 0) {
-    let requestObj = this.searchLyric(
+    const requestObj = this.searchLyric(
       songInfo.name,
       songInfo.hash,
       songInfo._interval || this.getIntv(songInfo.interval)
@@ -111,7 +111,7 @@ export default {
     requestObj.promise = requestObj.promise.then((result) => {
       if (!result) return Promise.reject(new Error('Get lyric failed'))
 
-      let requestObj2 = this.getLyricDownload(result.id, result.accessKey, result.fmt)
+      const requestObj2 = this.getLyricDownload(result.id, result.accessKey, result.fmt)
 
       requestObj.cancelHttp = requestObj2.cancelHttp.bind(requestObj2)
 

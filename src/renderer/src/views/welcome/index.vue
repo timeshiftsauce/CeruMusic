@@ -24,7 +24,7 @@
 
         <!-- 特性标签 -->
         <div class="feature-tags">
-          <span class="tag" v-for="(feature, index) in features" :key="index">
+          <span v-for="(feature, index) in features" :key="index" class="tag">
             {{ feature }}
           </span>
         </div>

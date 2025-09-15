@@ -32,7 +32,7 @@ export default {
     // console.log(rawData)
     for (let i = 0; i < rawData.length; i++) {
       const info = rawData[i]
-      let songId = info.MUSICRID.replace('MUSIC_', '')
+      const songId = info.MUSICRID.replace('MUSIC_', '')
       // const format = (info.FORMATS || info.formats).split('|')
 
       if (!info.N_MINFO) {
@@ -43,7 +43,7 @@ export default {
       const types = []
       const _types = {}
 
-      let infoArr = info.N_MINFO.split(';')
+      const infoArr = info.N_MINFO.split(';')
       for (let info of infoArr) {
         info = info.match(this.regExps.mInfo)
         if (info) {
@@ -77,7 +77,7 @@ export default {
       }
       types.reverse()
 
-      let interval = parseInt(info.DURATION)
+      const interval = parseInt(info.DURATION)
 
       result.push({
         name: decodeName(info.SONGNAME),
@@ -109,7 +109,7 @@ export default {
       // console.log(result)
       if (!result || (result.TOTAL !== '0' && result.SHOW === '0'))
         return this.search(str, page, limit, ++retryNum)
-      let list = this.handleResult(result.abslist)
+      const list = this.handleResult(result.abslist)
 
       if (list == null) return this.search(str, page, limit, ++retryNum)
 

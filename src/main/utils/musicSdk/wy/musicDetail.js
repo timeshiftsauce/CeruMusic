@@ -5,7 +5,7 @@ import { formatPlayTime, sizeFormate } from '../index'
 
 export default {
   getSinger(singers) {
-    let arr = []
+    const arr = []
     singers?.forEach((singer) => {
       arr.push(singer.name)
     })
