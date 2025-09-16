@@ -217,15 +217,22 @@ ipcMain.handle('get-app-version', () => {
 aiEvents(mainWindow)
 import './events/musicCache'
 import './events/songList'
+import './events/directorySettings'
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
+  // Set app user model id for windows - 确保与 electron-builder.yml 中的 appId 一致
+  electronApp.setAppUserModelId('com.cerumusic.app')
 
-  electronApp.setAppUserModelId('com.cerulean.music')
+  // 在 Windows 上设置应用程序名称，帮助 SMTC 识别
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.cerumusic.app')
+    // 设置应用程序名称
+    app.setName('澜音')
+  }
 
   setTimeout(async () => {
     // 初始化插件系统

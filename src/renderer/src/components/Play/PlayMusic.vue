@@ -27,7 +27,7 @@ import {
   destroyPlaylistEventListeners,
   getSongRealUrl
 } from '@renderer/utils/playlistManager'
-import mediaSessionController from '@renderer/utils/useAmtc'
+import mediaSessionController from '@renderer/utils/useSmtc'
 import defaultCoverImg from '/default-cover.png'
 
 const controlAudio = ControlAudioStore()
@@ -163,9 +163,10 @@ const playSong = async (song: SongList) => {
     }
 
     // 更新歌曲信息并触发主题色更新
-    songInfo.value = {
-      ...song
-    }
+    songInfo.value.name = song.name
+    songInfo.value.singer = song.singer
+    songInfo.value.albumName = song.albumName
+    songInfo.value.img = song.img
 
     // 更新媒体会话元数据
     mediaSessionController.updateMetadata({
@@ -176,7 +177,6 @@ const playSong = async (song: SongList) => {
     })
 
     // 确保主题色更新
-    await setColor()
 
     let urlToPlay = ''
 
@@ -209,7 +209,10 @@ const playSong = async (song: SongList) => {
 
     // 等待音频准备就绪
     await waitForAudioReady()
-
+    await setColor()
+    songInfo.value = {
+      ...song
+    }
     // // 短暂延迟确保音频状态稳定
     // await new Promise((resolve) => setTimeout(resolve, 100))
 

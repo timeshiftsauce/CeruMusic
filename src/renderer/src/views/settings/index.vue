@@ -15,6 +15,7 @@ import {
 } from 'tdesign-icons-vue-next'
 import fonts from '@renderer/assets/icon_font/icons'
 import { useRouter } from 'vue-router'
+import DirectorySettings from '@renderer/components/Settings/DirectorySettings.vue'
 import MusicCache from '@renderer/components/Settings/MusicCache.vue'
 import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
@@ -27,6 +28,26 @@ const { userInfo } = storeToRefs(Store)
 const activeCategory = ref<string>('appearance')
 // 应用版本号
 const appVersion = ref('1.0.0')
+
+// 组件引用
+const musicCacheRef = ref()
+const directorySettingsRef = ref()
+
+// 处理目录更改事件
+const handleDirectoryChanged = () => {
+  console.log('目录已更改，刷新缓存信息')
+  if (musicCacheRef.value?.refreshCacheInfo) {
+    musicCacheRef.value.refreshCacheInfo()
+  }
+}
+
+// 处理缓存清除事件
+const handleCacheCleared = () => {
+  console.log('缓存已清除，刷新目录大小')
+  if (directorySettingsRef.value?.refreshDirectorySizes) {
+    directorySettingsRef.value.refreshDirectorySizes()
+  }
+}
 
 // 获取应用版本号
 const getAppVersion = async () => {
@@ -542,9 +563,13 @@ const openLink = (url: string) => {
 
             <!-- 存储管理 -->
             <div v-else-if="activeCategory === 'storage'" key="storage" class="settings-section">
-              <div class="setting-group">
-                <h3>音乐缓存管理</h3>
-                <MusicCache />
+              <DirectorySettings
+                ref="directorySettingsRef"
+                @directory-changed="handleDirectoryChanged"
+                @cache-cleared="handleCacheCleared"
+              />
+              <div style="margin-top: 20px">
+                <MusicCache ref="musicCacheRef" @cache-cleared="handleCacheCleared" />
               </div>
             </div>
 

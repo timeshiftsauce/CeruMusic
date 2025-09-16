@@ -162,6 +162,20 @@ const api = {
     stop: () => {
       ipcRenderer.send('stopPing')
     }
+  },
+
+  // 目录设置相关
+  directorySettings: {
+    getDirectories: () => ipcRenderer.invoke('directory-settings:get-directories'),
+    selectCacheDir: () => ipcRenderer.invoke('directory-settings:select-cache-dir'),
+    selectDownloadDir: () => ipcRenderer.invoke('directory-settings:select-download-dir'),
+    saveDirectories: (directories: any) =>
+      ipcRenderer.invoke('directory-settings:save-directories', directories),
+    resetDirectories: () => ipcRenderer.invoke('directory-settings:reset-directories'),
+    openDirectory: (dirPath: string) =>
+      ipcRenderer.invoke('directory-settings:open-directory', dirPath),
+    getDirectorySize: (dirPath: string) =>
+      ipcRenderer.invoke('directory-settings:get-directory-size', dirPath)
   }
 }
 
