@@ -1,5 +1,5 @@
 import DefaultTheme from 'vitepress/theme'
-import './style.css'
+import './style.scss'
 import './dark.css'
 import MyLayout from './MyLayout.vue'
 // history.scrollRestoration = 'manual'
