@@ -218,33 +218,33 @@ html.dark #app {
 * 黑暗模式切换动画
 * -------------------------------------------------------------------------- */
 
-// #VPContent .vp-doc > div {
-//   animation:
-//     rises 1s,
-//     looming 1s;
-// }
+#VPContent .vp-doc > div {
+  animation:
+    rises 1s,
+    looming 1s;
+}
 
-// @keyframes rises {
-//   0% {
-//     transform: translateY(50px);
-//   }
+@keyframes rises {
+  0% {
+    transform: translateY(50px);
+  }
 
-//   100% {
-//     transform: translateY(0);
-//   }
-// }
+  100% {
+    transform: translateY(0);
+  }
+}
 
-// @keyframes looming {
-//   0% {
-//     opacity: 0;
-//   }
-//   50% {
-//     opacity: 0.3;
-//   }
-//   100% {
-//     opacity: 1;
-//   }
-// }
+@keyframes looming {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
 
 .vp-doc li div[class*='language-'] {
   margin: 12px;
