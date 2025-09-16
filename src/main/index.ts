@@ -7,7 +7,6 @@ import musicService from './services/music'
 import pluginService from './services/plugin'
 import aiEvents from './events/ai'
 import './services/musicSdk/index'
-
 // 获取单实例锁
 const gotTheLock = app.requestSingleInstanceLock()
 

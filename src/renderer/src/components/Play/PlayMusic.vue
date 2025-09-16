@@ -215,10 +215,7 @@ const playSong = async (song: SongList) => {
 
     // 开始播放
     try {
-      const startResult = start()
-      if (startResult && typeof startResult.then === 'function') {
-        await startResult
-      }
+      start()
     } catch (error) {
       console.error('启动播放失败:', error)
       // 如果是 AbortError，尝试重新播放
@@ -835,13 +832,11 @@ watch(showFullPlay, (val) => {
           :disabled="isLoadingSong"
           @click.stop="() => !isLoadingSong && togglePlayPause()"
         >
-          <Transition name="loadSong" mode="out-in">
+          <transition name="fade" mode="out-in">
             <div v-if="isLoadingSong" key="loading" class="loading-spinner play-loading"></div>
-            <transition v-else name="fade" mode="out-in">
-              <span v-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
-              <span v-else key="pause" class="iconfont icon-bofang"></span>
-            </transition>
-          </Transition>
+            <span v-else-if="Audio.isPlay" key="play" class="iconfont icon-zanting"></span>
+            <span v-else key="pause" class="iconfont icon-bofang"></span>
+          </transition>
         </button>
         <t-button class="control-btn" shape="circle" variant="text" @click.stop="playNext">
           <span class="iconfont icon-xiayishou"></span>
