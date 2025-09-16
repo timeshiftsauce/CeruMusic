@@ -18,3 +18,4 @@ temp/log.txt
 /.idea/
 docs/.vitepress/dist
 docs/.vitepress/cache
+yarn.lock
