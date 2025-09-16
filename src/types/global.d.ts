@@ -20,6 +20,11 @@ declare global {
         removeMessageListener: () => void
       }
     }
+    electron: {
+      ipcRenderer: {
+        invoke: (channel: string, ...args: any[]) => Promise<any>
+      }
+    }
   }
 }
 

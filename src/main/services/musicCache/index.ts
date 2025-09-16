@@ -3,16 +3,41 @@ import * as path from 'path'
 import * as fs from 'fs/promises'
 import * as crypto from 'crypto'
 import axios from 'axios'
+import { CONFIG_NAME } from '../../events/directorySettings'
 
 export class MusicCacheService {
-  private cacheDir: string
   private cacheIndex: Map<string, string> = new Map()
-  private indexFilePath: string
 
   constructor() {
-    this.cacheDir = path.join(app.getPath('userData'), 'music-cache')
-    this.indexFilePath = path.join(this.cacheDir, 'cache-index.json')
     this.initCache()
+  }
+
+  private getCacheDirectory(): string {
+    try {
+      // 尝试从配置文件读取自定义缓存目录
+      const configPath = path.join(app.getPath('userData'), CONFIG_NAME)
+      const configData = require('fs').readFileSync(configPath, 'utf-8')
+      const config = JSON.parse(configData)
+
+      if (config.cacheDir && typeof config.cacheDir === 'string') {
+        return config.cacheDir
+      }
+    } catch {
+      // 配置文件不存在或读取失败，使用默认目录
+    }
+
+    // 默认缓存目录
+    return path.join(app.getPath('userData'), 'music-cache')
+  }
+
+  // 动态获取缓存目录
+  public get cacheDir(): string {
+    return this.getCacheDirectory()
+  }
+
+  // 动态获取索引文件路径
+  public get indexFilePath(): string {
+    return path.join(this.cacheDir, 'cache-index.json')
   }
 
   private async initCache() {
@@ -130,43 +155,117 @@ export class MusicCacheService {
 
   async clearCache(): Promise<void> {
     try {
-      // 删除所有缓存文件
+      console.log('开始清空缓存目录:', this.cacheDir)
+
+      // 先重新加载缓存索引，确保获取最新的文件列表
+      await this.loadCacheIndex()
+
+      // 删除索引中记录的所有缓存文件
+      let deletedFromIndex = 0
       for (const filePath of this.cacheIndex.values()) {
         try {
           await fs.unlink(filePath)
-        } catch (error) {
-          // 忽略文件不存在的错误
+          deletedFromIndex++
+          console.log('删除缓存文件:', filePath)
+        } catch (error: any) {
+          console.warn('删除文件失败:', filePath, error.message)
         }
+      }
+
+      // 删除缓存目录中的所有其他文件（包括可能遗漏的文件）
+      let deletedFromDir = 0
+      try {
+        const files = await fs.readdir(this.cacheDir)
+        for (const file of files) {
+          const filePath = path.join(this.cacheDir, file)
+          try {
+            const stats = await fs.stat(filePath)
+            if (stats.isFile() && file !== 'cache-index.json') {
+              await fs.unlink(filePath)
+              deletedFromDir++
+              console.log('删除目录文件:', filePath)
+            }
+          } catch (error: any) {
+            console.warn('删除目录文件失败:', filePath, error.message)
+          }
+        }
+      } catch (error: any) {
+        console.warn('读取缓存目录失败:', error.message)
       }
 
       // 清空缓存索引
       this.cacheIndex.clear()
       await this.saveCacheIndex()
 
-      console.log('音乐缓存已清空')
+      console.log(
+        `音乐缓存已清空 - 从索引删除: ${deletedFromIndex}个文件, 从目录删除: ${deletedFromDir}个文件`
+      )
     } catch (error) {
       console.error('清空缓存失败:', error)
+      throw error
     }
   }
 
-  async getCacheSize(): Promise<number> {
+  getDirectorySize = async (dirPath: string): Promise<number> => {
     let totalSize = 0
 
-    for (const filePath of this.cacheIndex.values()) {
-      try {
-        const stats = await fs.stat(filePath)
-        totalSize += stats.size
-      } catch (error) {
-        // 文件不存在，忽略
+    try {
+      const items = await fs.readdir(dirPath)
+
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item)
+        const stats = await fs.stat(itemPath)
+
+        if (stats.isDirectory()) {
+          totalSize += await this.getDirectorySize(itemPath)
+        } else {
+          totalSize += stats.size
+        }
       }
+    } catch {
+      // 忽略无法访问的文件/目录
     }
 
     return totalSize
   }
 
   async getCacheInfo(): Promise<{ count: number; size: number; sizeFormatted: string }> {
-    const size = await this.getCacheSize()
-    const count = this.cacheIndex.size
+    // 重新加载缓存索引以确保数据准确
+    await this.loadCacheIndex()
+
+    // 统计实际的缓存文件数量和大小
+    let actualCount = 0
+    let totalSize = 0
+
+    try {
+      const items = await fs.readdir(this.cacheDir)
+
+      for (const item of items) {
+        const itemPath = path.join(this.cacheDir, item)
+        try {
+          const stats = await fs.stat(itemPath)
+
+          if (stats.isFile() && item !== 'cache-index.json') {
+            // 检查是否是音频文件
+            const ext = path.extname(item).toLowerCase()
+            const audioExts = ['.mp3', '.flac', '.wav', '.aac', '.ogg', '.m4a', '.wma']
+
+            if (audioExts.includes(ext)) {
+              actualCount++
+              totalSize += stats.size
+            }
+          }
+        } catch (error: any) {
+          // 忽略无法访问的文件
+          console.warn('无法访问文件:', itemPath, error.message)
+        }
+      }
+    } catch (error: any) {
+      console.warn('读取缓存目录失败:', error.message)
+      // 如果无法读取目录，使用索引数据作为备选
+      totalSize = await this.getDirectorySize(this.cacheDir)
+      actualCount = this.cacheIndex.size
+    }
 
     const formatSize = (bytes: number): string => {
       if (bytes === 0) return '0 B'
@@ -176,10 +275,12 @@ export class MusicCacheService {
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     }
 
+    console.log(`缓存信息 - 文件数量: ${actualCount}, 总大小: ${totalSize} bytes`)
+
     return {
-      count,
-      size,
-      sizeFormatted: formatSize(size)
+      count: actualCount,
+      size: totalSize,
+      sizeFormatted: formatSize(totalSize)
     }
   }
 }

@@ -11,7 +11,6 @@ import {
 } from './type'
 import pluginService from '../plugin/index'
 import musicSdk from '../../utils/musicSdk/index'
-import { getAppDirPath } from '../../utils/path'
 import { musicCacheService } from '../musicCache'
 import path from 'node:path'
 import fs from 'fs'
@@ -19,6 +18,8 @@ import fsPromise from 'fs/promises'
 import axios from 'axios'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'url'
+import { app } from 'electron'
+import { CONFIG_NAME } from '../../events/directorySettings'
 
 const fileLock: Record<string, boolean> = {}
 
@@ -89,6 +90,24 @@ function main(source: string) {
       const url = await this.getMusicUrl({ pluginId, songInfo, quality })
       if (typeof url === 'object') throw new Error('无法获取歌曲链接')
 
+      // 获取自定义下载目录
+      const getDownloadDirectory = (): string => {
+        try {
+          const configPath = path.join(app.getPath('userData'), CONFIG_NAME)
+          const configData = fs.readFileSync(configPath, 'utf-8')
+          const config = JSON.parse(configData)
+
+          if (config.downloadDir && typeof config.downloadDir === 'string') {
+            return config.downloadDir
+          }
+        } catch {
+          // 配置文件不存在或读取失败，使用默认目录
+        }
+
+        // 默认下载目录
+        return path.join(app.getPath('music'), 'CeruMusic/songs')
+      }
+
       // 从URL中提取文件扩展名，如果没有则默认为mp3
       const getFileExtension = (url: string): string => {
         try {
@@ -110,11 +129,10 @@ function main(source: string) {
       }
 
       const fileExtension = getFileExtension(url)
+      const downloadDir = getDownloadDirectory()
       const songPath = path.join(
-        getAppDirPath('music'),
-        'CeruMusic',
-        'songs',
-        `${songInfo.name}-${songInfo.singer}-${source}.${fileExtension}`
+        downloadDir,
+        `${songInfo.name}-${songInfo.singer}-${songInfo.source}.${fileExtension}`
           .replace(/[/\\:*?"<>|]/g, '')
           .replace(/^\.+/, '')
           .replace(/\.+$/, '')

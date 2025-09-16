@@ -493,6 +493,8 @@ const lightMainColor = computed(() => {
       perspective: 1000px;
 
       .pointer {
+        user-select: none;
+        -webkit-user-drag: none;
         position: absolute;
         width: calc(var(--cd-width-auto) / 3.5);
         left: calc(50% - 1.8vh);

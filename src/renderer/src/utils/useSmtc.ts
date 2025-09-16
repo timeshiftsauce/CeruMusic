@@ -39,12 +39,21 @@ class MediaSessionController {
     if (!this.isSupported) return
 
     try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        artwork: this.generateArtworkSizes(metadata.artworkUrl)
-      })
+      // 确保元数据完整性，避免空值导致SMTC显示异常
+      const safeMetadata = {
+        title: metadata.title || '未知歌曲',
+        artist: metadata.artist || '未知艺术家',
+        album: metadata.album || '未知专辑',
+        artwork: metadata.artworkUrl ? this.generateArtworkSizes(metadata.artworkUrl) : []
+      }
+
+      navigator.mediaSession.metadata = new MediaMetadata(safeMetadata)
+
+      // 强制更新播放状态，确保SMTC正确识别
+      if (this.audioElement) {
+        const currentState = this.audioElement.paused ? 'paused' : 'playing'
+        navigator.mediaSession.playbackState = currentState
+      }
     } catch (error) {
       console.warn('Failed to update media session metadata:', error)
     }
@@ -77,9 +86,19 @@ class MediaSessionController {
     this.audioElement = audioElement
     this.callbacks = callbacks
 
-    // 只设置媒体会话动作处理器，不自动监听音频事件
-    // 让应用层手动控制播放状态更新，避免循环调用
+    // 设置媒体会话动作处理器
     this.setupMediaSessionActionHandlers()
+
+    // 初始化时设置默认的播放状态
+    navigator.mediaSession.playbackState = 'none'
+
+    // 设置默认元数据，确保SMTC能够识别应用
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: '澜音',
+      artist: 'CeruMusic',
+      album: '音乐播放器',
+      artwork: []
+    })
   }
 
   /**

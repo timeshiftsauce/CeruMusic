@@ -3,6 +3,10 @@ import { ref } from 'vue'
 
 export interface SettingsState {
   showFloatBall: boolean
+  directories?: {
+    cacheDir: string
+    downloadDir: string
+  }
 }
 
 export const useSettingsStore = defineStore('settings', () => {

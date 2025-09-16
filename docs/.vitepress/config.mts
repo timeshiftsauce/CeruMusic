@@ -32,7 +32,8 @@ export default defineConfig({
               { text: '音乐播放列表', link: '/guide/used/playList' },
             ]
           },
-          { text: '软件设计文档', link: '/guide/design' }
+          { text: '软件设计文档', link: '/guide/design' },
+          { text: '更新日志', link: '/guide/updateLog' }
         ]
       },
       {

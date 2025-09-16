@@ -79,6 +79,48 @@ interface CustomAPI {
     start: () => undefined
     stop: () => undefined
   }
+  
+  // 目录设置API
+  directorySettings: {
+    getDirectories: () => Promise<{
+      cacheDir: string
+      downloadDir: string
+    }>
+    selectCacheDir: () => Promise<{
+      success: boolean
+      path?: string
+      message?: string
+    }>
+    selectDownloadDir: () => Promise<{
+      success: boolean
+      path?: string
+      message?: string
+    }>
+    saveDirectories: (directories: {
+      cacheDir: string
+      downloadDir: string
+    }) => Promise<{
+      success: boolean
+      message: string
+    }>
+    resetDirectories: () => Promise<{
+      success: boolean
+      directories?: {
+        cacheDir: string
+        downloadDir: string
+      }
+      message?: string
+    }>
+    openDirectory: (dirPath: string) => Promise<{
+      success: boolean
+      message?: string
+    }>
+    getDirectorySize: (dirPath: string) => Promise<{
+      size: number
+      formatted: string
+    }>
+  }
+  
   // 用户配置API
   getUserConfig: () => Promise<any>
 }
