@@ -19,7 +19,13 @@ export default defineConfig({
       {
         text: 'CeruMusic',
         items: [
-          { text: '使用教程', link: '/guide/' },
+          { text: '安装教程', link: '/guide/' },
+          {
+            text:'使用教程',
+            items:[
+              { text: '音乐播放列表', link: '/guide/used/playList' },
+            ]
+          },
           { text: '软件设计文档', link: '/guide/design' }
         ]
       },
