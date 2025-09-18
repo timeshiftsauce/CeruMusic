@@ -565,10 +565,11 @@ const openLink = (url: string) => {
             <div v-else-if="activeCategory === 'storage'" key="storage" class="settings-section">
               <DirectorySettings
                 ref="directorySettingsRef"
+                class="setting-group"
                 @directory-changed="handleDirectoryChanged"
                 @cache-cleared="handleCacheCleared"
               />
-              <div style="margin-top: 20px">
+              <div style="margin-top: 20px" class="setting-group">
                 <MusicCache ref="musicCacheRef" @cache-cleared="handleCacheCleared" />
               </div>
             </div>
@@ -859,10 +860,12 @@ const openLink = (url: string) => {
       display: flex;
       justify-content: center;
       align-items: center;
+
       svg {
         width: 100%;
         height: 100%;
       }
+
       transition: color 0.2s ease;
     }
 
@@ -1465,12 +1468,15 @@ const openLink = (url: string) => {
   &:nth-child(1) {
     animation-delay: 0.1s;
   }
+
   &:nth-child(2) {
     animation-delay: 0.2s;
   }
+
   &:nth-child(3) {
     animation-delay: 0.3s;
   }
+
   &:nth-child(4) {
     animation-delay: 0.4s;
   }
@@ -1481,6 +1487,7 @@ const openLink = (url: string) => {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1591,6 +1598,7 @@ const openLink = (url: string) => {
     border-radius: 0.5rem;
     border: 1px solid #e2e8f0;
     transition: 0.3s;
+
     .tech-name {
       font-weight: 600;
       color: #1e293b;
@@ -1600,10 +1608,12 @@ const openLink = (url: string) => {
       font-size: 0.875rem;
       color: #64748b;
     }
+
     &.link:hover {
       background-color: var(--td-brand-color-1);
       border: 1px solid var(--td-brand-color-5);
     }
+
     &.link:active {
       transform: scale(0.9);
     }
@@ -1706,6 +1716,7 @@ const openLink = (url: string) => {
   flex-direction: column;
   gap: 1rem;
   position: relative;
+
   .update-actions {
     text-align: center;
   }
@@ -1745,6 +1756,7 @@ const openLink = (url: string) => {
     flex-direction: column;
   }
 }
+
 .sidebar,
 .panel-content {
   // Webkit 浏览器

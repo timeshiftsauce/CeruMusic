@@ -86,19 +86,9 @@ class MediaSessionController {
     this.audioElement = audioElement
     this.callbacks = callbacks
 
-    // 设置媒体会话动作处理器
+    // 只设置媒体会话动作处理器，不自动监听音频事件
+    // 让应用层手动控制播放状态更新，避免循环调用
     this.setupMediaSessionActionHandlers()
-
-    // 初始化时设置默认的播放状态
-    navigator.mediaSession.playbackState = 'none'
-
-    // 设置默认元数据，确保SMTC能够识别应用
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: '澜音',
-      artist: 'CeruMusic',
-      album: '音乐播放器',
-      artwork: []
-    })
   }
 
   /**
