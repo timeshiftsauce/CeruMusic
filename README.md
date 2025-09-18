@@ -8,6 +8,9 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
 <img src="assets/image-20250827175023917.png" alt="image-20250827175023917" style="zoom: 33%;" /><img src="assets/image-20250827175109430.png" alt="image-20250827175109430" style="zoom:33%;" />
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=timeshiftsauce/CeruMusic&type=Date)](https://www.star-history.com/#timeshiftsauce/CeruMusic&Date)
 ## 技术栈
 
 - **Electron**：用于构建跨平台桌面应用
