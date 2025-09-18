@@ -347,13 +347,14 @@ const lightMainColor = computed(() => {
           :lyric-lines="props.show ? state.lyricLines : []"
           :current-time="state.currentTime"
           class="lyric-player"
+          :enable-spring="true"
+          :enable-scale="true"
           @line-click="
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
             }
           "
         >
-          <template #bottom-line> Test Bottom Line </template>
         </LyricPlayer>
       </div>
     </div>

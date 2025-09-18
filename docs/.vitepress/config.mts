@@ -73,7 +73,9 @@ export default defineConfig({
     lastUpdatedText: '上次更新',
 
   },
-
+  sitemap: {
+    hostname: 'https://ceru.docs.shiqianjiang.cn'
+  },
   lastUpdated: true,
   head: [['link', { rel: 'icon', href: '/logo.svg' }]],
 })
