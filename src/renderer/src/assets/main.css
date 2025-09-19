@@ -133,7 +133,7 @@
   --td-shadow-inset-right: inset 0.5px 0 0 #dcdcdc;
   --td-shadow-inset-bottom: inset 0 -0.5px 0 #dcdcdc;
   --td-shadow-inset-left: inset -0.5px 0 0 #dcdcdc;
-  --td-mask-active: rgba(0, 0, 0, 0.6);
+  --td-mask-active: rgba(255, 255, 255, 0.6);
   --td-mask-disabled: rgba(255, 255, 255, 0.6);
 }
 
@@ -244,7 +244,7 @@
   --td-bg-color-specialcomponent: transparent;
   --td-border-level-1-color: var(--td-gray-color-11);
   --td-border-level-2-color: var(--td-gray-color-9);
-  --td-mask-active: rgba(0, 0, 0, 0.4);
+  --td-mask-active: rgba(0, 0, 0, 0.1);
   --td-mask-disabled: rgba(0, 0, 0, 0.6);
 }
 

@@ -22,7 +22,7 @@ const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${app.getVer
 // Alist API 配置
 const ALIST_BASE_URL = 'https://alist.shiqianjiang.cn' // 请替换为实际的 alist 域名
 const ALIST_USERNAME = 'ceruupdate'
-const ALIST_PASSWORD = '123456'
+const ALIST_PASSWORD = '123456' //登录公开的账号密码
 
 // Alist 认证 token
 let alistToken: string | null = null

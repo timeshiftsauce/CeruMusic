@@ -4,7 +4,6 @@ import { dateFormat } from '../../common/utils/common'
 // 导出通用工具函数
 export * from '../../common/utils/nodejs'
 export * from '../../common/utils/common'
-export * from '../../common/utils/tools'
 
 /**
  * 格式化播放数量

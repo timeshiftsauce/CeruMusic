@@ -18,16 +18,16 @@ const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
-import { extractDominantColor } from '@renderer/utils/colorExtractor'
-import { getBestContrastTextColorWithOpacity } from '@renderer/utils/contrastColor'
+import { extractDominantColor } from '@renderer/utils/color/colorExtractor'
+import { getBestContrastTextColorWithOpacity } from '@renderer/utils/color/contrastColor'
 import { PlayMode, type SongList } from '@renderer/types/audio'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
   initPlaylistEventListeners,
   destroyPlaylistEventListeners,
   getSongRealUrl
-} from '@renderer/utils/playlistManager'
-import mediaSessionController from '@renderer/utils/useSmtc'
+} from '@renderer/utils/playlist/playlistManager'
+import mediaSessionController from '@renderer/utils/audio/useSmtc'
 import defaultCoverImg from '/default-cover.png'
 
 const controlAudio = ControlAudioStore()

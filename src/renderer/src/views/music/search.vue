@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, toRaw } from 'vue'
 import { searchValue } from '@renderer/store/search'
-import { downloadSingleSong } from '@renderer/utils/download'
+import { downloadSingleSong } from '@renderer/utils/audio/download'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'

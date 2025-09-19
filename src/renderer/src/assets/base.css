@@ -77,3 +77,6 @@ body {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
 }
+.t-dialog__mask{
+  backdrop-filter: blur(5px);
+}

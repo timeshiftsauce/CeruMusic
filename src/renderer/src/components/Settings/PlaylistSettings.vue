@@ -9,7 +9,7 @@ import {
   importPlaylistFromFile,
   importPlaylistFromClipboard,
   validateImportedPlaylist
-} from '@renderer/utils/playlistExportImport'
+} from '@renderer/utils/playlist/playlistExportImport'
 import type { SongList } from '@renderer/types/audio'
 import { CloudDownloadIcon, DeleteIcon, CloudUploadIcon } from 'tdesign-icons-vue-next'
 

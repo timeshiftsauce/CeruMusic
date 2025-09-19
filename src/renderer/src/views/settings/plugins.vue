@@ -829,7 +829,8 @@ onMounted(async () => {
     align-items: center;
     gap: 12px;
     font-size: 12px;
-
+    user-select: text;
+  
     .console-prompt {
       color: var(--td-brand-color-5);
       font-weight: bold;
@@ -1024,6 +1025,7 @@ onMounted(async () => {
   }
 
   .console-container {
+
     height: 50vh;
     max-height: 400px;
     min-height: 250px;

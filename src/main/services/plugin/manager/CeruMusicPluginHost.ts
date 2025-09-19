@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2025. 时迁酱 Inc. All rights reserved.
+ *
+ * This software is the confidential and proprietary information of 时迁酱.
+ * Unauthorized copying of this file, via any medium is strictly prohibited.
+ *
+ * @author 时迁酱，无聊的霜霜，Star
+ * @since 2025-9-19
+ * @version 1.0
+ */
+
 import * as vm from 'vm'
 import fetch from 'node-fetch'
 import * as fs from 'fs'

@@ -21,6 +21,274 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 - **CeruPlugins**：音乐插件运行环境（仅提供框架，不包含默认插件）
 - **AMLL**：音乐生态辅助模块（仅提供功能接口，不关联具体音乐数据源）
 
+## 项目结构
+
+```ast
+CeruMuisc/
+    ├── .github/
+    │   └── workflows/
+    │       ├── auto-sync-release.yml
+    │       ├── deploydocs.yml
+    │       ├── main.yml
+    │       ├── sync-releases-to-webdav.yml
+    │       └── uploadpan.yml
+    ├── scripts/
+    │   ├── auth-test.js
+    │   ├── genAst.js
+    │   └── test-alist.js
+    ├── src/
+    │   ├── common/
+    │   │   ├── types/
+    │   │   │   ├── playList.ts
+    │   │   │   └── songList.ts
+    │   │   ├── utils/
+    │   │   │   ├── lyricUtils/
+    │   │   │   │   ├── kg.js
+    │   │   │   │   └── util.ts
+    │   │   │   ├── common.ts
+    │   │   │   ├── nodejs.ts
+    │   │   │   └── renderer.ts
+    │   │   └── index.ts
+    │   ├── main/
+    │   │   ├── events/
+    │   │   │   ├── ai.ts
+    │   │   │   ├── autoUpdate.ts
+    │   │   │   ├── directorySettings.ts
+    │   │   │   ├── musicCache.ts
+    │   │   │   └── songList.ts
+    │   │   ├── services/
+    │   │   │   ├── music/
+    │   │   │   │   ├── index.ts
+    │   │   │   │   ├── net-ease-service.ts
+    │   │   │   │   └── service-base.ts
+    │   │   │   ├── musicCache/
+    │   │   │   │   └── index.ts
+    │   │   │   ├── musicSdk/
+    │   │   │   │   ├── index.ts
+    │   │   │   │   ├── service.ts
+    │   │   │   │   └── type.ts
+    │   │   │   ├── plugin/
+    │   │   │   │   ├── manager/
+    │   │   │   │   │   ├── CeruMusicPluginHost.ts
+    │   │   │   │   │   └── converter-event-driven.ts
+    │   │   │   │   ├── index.ts
+    │   │   │   │   └── logger.ts
+    │   │   │   ├── songList/
+    │   │   │   │   ├── ManageSongList.ts
+    │   │   │   │   └── PlayListSongs.ts
+    │   │   │   └── ai-service.ts
+    │   │   ├── utils/
+    │   │   │   ├── musicSdk/
+    │   │   │   │   ├── kg/
+    │   │   │   │   │   ├── temp/
+    │   │   │   │   │   │   ├── musicSearch-new.js
+    │   │   │   │   │   │   └── songList-new.js
+    │   │   │   │   │   ├── vendors/
+    │   │   │   │   │   │   └── infSign.min.js
+    │   │   │   │   │   ├── album.js
+    │   │   │   │   │   ├── api-test.js
+    │   │   │   │   │   ├── comment.js
+    │   │   │   │   │   ├── hotSearch.js
+    │   │   │   │   │   ├── index.js
+    │   │   │   │   │   ├── leaderboard.js
+    │   │   │   │   │   ├── lyric.js
+    │   │   │   │   │   ├── musicInfo.js
+    │   │   │   │   │   ├── musicSearch.js
+    │   │   │   │   │   ├── pic.js
+    │   │   │   │   │   ├── singer.js
+    │   │   │   │   │   ├── songList.js
+    │   │   │   │   │   ├── tipSearch.js
+    │   │   │   │   │   └── util.js
+    │   │   │   │   ├── kw/
+    │   │   │   │   │   ├── album.js
+    │   │   │   │   │   ├── api-temp.js
+    │   │   │   │   │   ├── api-test.js
+    │   │   │   │   │   ├── comment.js
+    │   │   │   │   │   ├── hotSearch.js
+    │   │   │   │   │   ├── index.js
+    │   │   │   │   │   ├── kwdecode.ts
+    │   │   │   │   │   ├── leaderboard.js
+    │   │   │   │   │   ├── lyric.js
+    │   │   │   │   │   ├── musicSearch.js
+    │   │   │   │   │   ├── pic.js
+    │   │   │   │   │   ├── songList.js
+    │   │   │   │   │   ├── tipSearch.js
+    │   │   │   │   │   └── util.js
+    │   │   │   │   ├── mg/
+    │   │   │   │   │   ├── temp/
+    │   │   │   │   │   │   └── leaderboard-old.js
+    │   │   │   │   │   ├── utils/
+    │   │   │   │   │   │   ├── index.js
+    │   │   │   │   │   │   └── mrc.js
+    │   │   │   │   │   ├── album.js
+    │   │   │   │   │   ├── api-test.js
+    │   │   │   │   │   ├── comment.js
+    │   │   │   │   │   ├── hotSearch.js
+    │   │   │   │   │   ├── index.js
+    │   │   │   │   │   ├── leaderboard.js
+    │   │   │   │   │   ├── lyric.js
+    │   │   │   │   │   ├── musicInfo.js
+    │   │   │   │   │   ├── musicSearch.js
+    │   │   │   │   │   ├── pic.js
+    │   │   │   │   │   ├── songId.js
+    │   │   │   │   │   ├── songList.js
+    │   │   │   │   │   └── tipSearch.js
+    │   │   │   │   ├── tx/
+    │   │   │   │   │   ├── api-test.js
+    │   │   │   │   │   ├── comment.js
+    │   │   │   │   │   ├── hotSearch.js
+    │   │   │   │   │   ├── index.js
+    │   │   │   │   │   ├── leaderboard.js
+    │   │   │   │   │   ├── lyric.js
+    │   │   │   │   │   ├── musicInfo.js
+    │   │   │   │   │   ├── musicSearch.js
+    │   │   │   │   │   ├── singer.js
+    │   │   │   │   │   ├── songList.js
+    │   │   │   │   │   └── tipSearch.js
+    │   │   │   │   ├── wy/
+    │   │   │   │   │   ├── utils/
+    │   │   │   │   │   │   ├── crypto.js
+    │   │   │   │   │   │   └── index.js
+    │   │   │   │   │   ├── api-test.js
+    │   │   │   │   │   ├── comment.js
+    │   │   │   │   │   ├── hotSearch.js
+    │   │   │   │   │   ├── index.js
+    │   │   │   │   │   ├── leaderboard.js
+    │   │   │   │   │   ├── lyric.js
+    │   │   │   │   │   ├── musicDetail.js
+    │   │   │   │   │   ├── musicInfo.js
+    │   │   │   │   │   ├── musicSearch.js
+    │   │   │   │   │   ├── singer.js
+    │   │   │   │   │   ├── songList.js
+    │   │   │   │   │   └── tipSearch.js
+    │   │   │   │   ├── api-source-info.ts
+    │   │   │   │   ├── index.js
+    │   │   │   │   ├── options.js
+    │   │   │   │   └── utils.js
+    │   │   │   ├── array.ts
+    │   │   │   ├── index.ts
+    │   │   │   ├── object.ts
+    │   │   │   ├── path.ts
+    │   │   │   ├── request.js
+    │   │   │   └── utils.ts
+    │   │   ├── autoUpdate.ts
+    │   │   └── index.ts
+    │   ├── preload/
+    │   │   ├── index.d.ts
+    │   │   └── index.ts
+    │   ├── renderer/
+    │   │   ├── public/
+    │   │   │   ├── default-cover.png
+    │   │   │   ├── head.jpg
+    │   │   │   ├── logo.svg
+    │   │   │   ├── star.png
+    │   │   │   └── wldss.png
+    │   │   ├── src/
+    │   │   │   ├── api/
+    │   │   │   │   └── songList.ts
+    │   │   │   ├── components/
+    │   │   │   │   ├── AI/
+    │   │   │   │   │   └── FloatBall.vue
+    │   │   │   │   ├── Music/
+    │   │   │   │   │   └── SongVirtualList.vue
+    │   │   │   │   ├── Play/
+    │   │   │   │   │   ├── AudioVisualizer.vue
+    │   │   │   │   │   ├── FullPlay.vue
+    │   │   │   │   │   ├── GlobalAudio.vue
+    │   │   │   │   │   ├── PlaylistActions.vue
+    │   │   │   │   │   ├── PlaylistDrawer.vue
+    │   │   │   │   │   ├── PlayMusic.vue
+    │   │   │   │   │   └── ShaderBackground.vue
+    │   │   │   │   ├── Search/
+    │   │   │   │   │   └── SearchComponent.vue
+    │   │   │   │   ├── Settings/
+    │   │   │   │   │   ├── AIFloatBallSettings.vue
+    │   │   │   │   │   ├── DirectorySettings.vue
+    │   │   │   │   │   ├── MusicCache.vue
+    │   │   │   │   │   ├── PlaylistSettings.vue
+    │   │   │   │   │   └── UpdateSettings.vue
+    │   │   │   │   ├── ThemeSelector.vue
+    │   │   │   │   ├── TitleBarControls.vue
+    │   │   │   │   ├── UpdateExample.vue
+    │   │   │   │   ├── UpdateProgress.vue
+    │   │   │   │   └── Versions.vue
+    │   │   │   ├── composables/
+    │   │   │   │   └── useAutoUpdate.ts
+    │   │   │   ├── layout/
+    │   │   │   │   └── index.vue
+    │   │   │   ├── router/
+    │   │   │   │   └── index.ts
+    │   │   │   ├── services/
+    │   │   │   │   ├── music/
+    │   │   │   │   │   ├── index.ts
+    │   │   │   │   │   └── service-base.ts
+    │   │   │   │   └── autoUpdateService.ts
+    │   │   │   ├── store/
+    │   │   │   │   ├── ControlAudio.ts
+    │   │   │   │   ├── LocalUserDetail.ts
+    │   │   │   │   ├── search.ts
+    │   │   │   │   └── Settings.ts
+    │   │   │   ├── types/
+    │   │   │   │   ├── audio.ts
+    │   │   │   │   ├── Sources.ts
+    │   │   │   │   └── userInfo.ts
+    │   │   │   ├── utils/
+    │   │   │   │   ├── audio/
+    │   │   │   │   │   ├── audioManager.ts
+    │   │   │   │   │   ├── download.ts
+    │   │   │   │   │   ├── useSmtc.ts
+    │   │   │   │   │   └── volume.ts
+    │   │   │   │   ├── color/
+    │   │   │   │   │   ├── colorExtractor.ts
+    │   │   │   │   │   └── contrastColor.ts
+    │   │   │   │   └── playlist/
+    │   │   │   │       ├── playlistExportImport.ts
+    │   │   │   │       └── playlistManager.ts
+    │   │   │   ├── views/
+    │   │   │   │   ├── home/
+    │   │   │   │   │   └── index.vue
+    │   │   │   │   ├── music/
+    │   │   │   │   │   ├── find.vue
+    │   │   │   │   │   ├── list.vue
+    │   │   │   │   │   ├── local.vue
+    │   │   │   │   │   ├── recent.vue
+    │   │   │   │   │   └── search.vue
+    │   │   │   │   ├── settings/
+    │   │   │   │   │   ├── index.vue
+    │   │   │   │   │   └── plugins.vue
+    │   │   │   │   └── welcome/
+    │   │   │   │       └── index.vue
+    │   │   │   ├── App.vue
+    │   │   │   ├── env.d.ts
+    │   │   │   └── main.ts
+    │   │   ├── auto-imports.d.ts
+    │   │   ├── components.d.ts
+    │   │   └── index.html
+    │   └── types/
+    │       ├── musicCache.ts
+    │       └── songList.ts
+    ├── website/
+    │   ├── CeruUse.html
+    │   ├── design.html
+    │   ├── index.html
+    │   ├── pluginDev.html
+    │   ├── script.js
+    │   └── styles.css
+    ├── electron-builder.yml
+    ├── electron.vite.config.ts
+    ├── eslint.config.js
+    ├── LICENSE
+    ├── package-lock.json
+    ├── package.json
+    ├── qodana.sarif.json
+    ├── qodana.yaml
+    ├── README.md
+    ├── tsconfig.json
+    ├── tsconfig.node.json
+    ├── tsconfig.web.json
+    └── yarn.lock
+```
+
 ## 主要功能
 
 - 提供插件加载与管理功能，支持通过合规插件获取公开音乐信息

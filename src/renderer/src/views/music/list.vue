@@ -3,7 +3,7 @@ import { ref, onMounted, toRaw } from 'vue'
 import { useRoute } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { downloadSingleSong } from '@renderer/utils/download'
+import { downloadSingleSong } from '@renderer/utils/audio/download'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
 
 interface MusicItem {

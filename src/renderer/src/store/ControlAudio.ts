@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
-import { transitionVolume } from '@renderer/utils/volume'
+import { transitionVolume } from '@renderer/utils/audio/volume'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
 import type {

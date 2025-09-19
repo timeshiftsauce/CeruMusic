@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-import { extractColors, Color } from '@renderer/utils/colorExtractor'
+import { extractColors, Color } from '@renderer/utils/color/colorExtractor'
 import DefaultCover from '@renderer/assets/images/Default.jpg'
 import CoverImage from '@renderer/assets/images/cover.png'
 
@@ -40,7 +40,7 @@ const actualCoverImage = computed(() => {
 const vertexShaderSource = `
   attribute vec2 a_position;
   varying vec2 v_texCoord;
-  
+
   void main() {
     gl_Position = vec4(a_position, 0.0, 1.0);
     v_texCoord = a_position * 0.5 + 0.5;
@@ -53,81 +53,81 @@ const fragmentShaderSource = `
   varying vec2 v_texCoord;
   uniform float u_time;
   uniform vec3 u_color;
-  
+
   // 改进的随机函数 - 更平滑
   float random(vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
   }
-  
+
   // 改进的噪声函数 - 使用三次Hermite插值，更平滑
   float noise(vec2 st) {
     vec2 i = floor(st);
     vec2 f = fract(st);
-    
+
     // 四个角的随机值
     float a = random(i);
     float b = random(i + vec2(1.0, 0.0));
     float c = random(i + vec2(0.0, 1.0));
     float d = random(i + vec2(1.0, 1.0));
-    
+
     // 使用三次Hermite插值，更加平滑
     vec2 u = f * f * (3.0 - 2.0 * f);
-    
+
     return mix(a, b, u.x) +
            (c - a) * u.y * (1.0 - u.x) +
            (d - b) * u.x * u.y;
   }
-  
+
   // 改进的分数布朗运动 - 降低频率，减少网格感
   float fbm(vec2 st) {
     float value = 0.0;
     float amplitude = 0.5;
     float frequency = 0.6; // 降低初始频率
-    
+
     // 减少迭代次数，使用更平滑的混合
     for (int i = 0; i < 4; i++) { // 减少迭代次数
       value += amplitude * noise(st * frequency);
       frequency *= 1.8; // 降低频率增长率
       amplitude *= 0.6; // 提高振幅衰减率
     }
-    
+
     // 额外的平滑处理
     return smoothstep(0.2, 0.8, value);
   }
-  
+
   // HSV转RGB颜色
   vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
   }
-  
+
   void main() {
     // 使用时间和位置创建动态效果
     vec2 st = v_texCoord;
     float time = u_time * 0.20; // 降低时间速率，使动画更平滑
-    
+
     // 创建更平滑的移动噪声场
     vec2 q = vec2(
       fbm(st + vec2(0.0, time * 0.3)),
       fbm(st + vec2(time * 0.2, 0.0))
     );
-    
+
     // 使用q创建第二层噪声，降低强度
     vec2 r = vec2(
       fbm(st + 2.0 * q + vec2(1.7, 9.2) + time * 0.1),
       fbm(st + 2.0 * q + vec2(8.3, 2.8) + time * 0.08)
     );
-    
+
     // 最终的噪声值 - 额外平滑处理
     float f = fbm(st + r * 0.7);
-    
+
     // 从主色调提取HSV
     vec3 baseColor = u_color;
     float maxComp = max(max(baseColor.r, baseColor.g), baseColor.b);
     float minComp = min(min(baseColor.r, baseColor.g), baseColor.b);
     float delta = maxComp - minComp;
-    
+
     // 估算色相
     float hue = 0.0;
     if (delta > 0.0) {
@@ -140,78 +140,78 @@ const fragmentShaderSource = `
       }
       hue /= 6.0;
     }
-    
+
     // 估算饱和度和明度
     float saturation = maxComp == 0.0 ? 0.0 : delta / maxComp;
     float value = maxComp;
-    
+
     // 提高基础亮度和饱和度，使颜色更加明亮清新
     saturation = min(saturation * 1.0, 1.0);  // 增加饱和度
     value = min(value * 1.3, 1.0);            // 增加亮度
-    
+
     // 创建多个颜色变体 - 更明亮的变体
     vec3 color1 = hsv2rgb(vec3(hue, saturation * 0.9, min(value * 1.1, 1.0)));
     vec3 color2 = hsv2rgb(vec3(mod(hue + 0.05, 1.0), min(saturation * 1.3, 1.0), min(value * 1.2, 1.0)));
     vec3 color3 = hsv2rgb(vec3(mod(hue + 0.1, 1.0), min(saturation * 1.1, 1.0), min(value * 1.15, 1.0)));
     vec3 color4 = hsv2rgb(vec3(mod(hue - 0.05, 1.0), min(saturation * 1.2, 1.0), min(value * 1.25, 1.0)));
-    
+
     // 使用噪声值混合多个颜色 - 更平滑的混合，使用更多主色调
     float t1 = smoothstep(0.0, 1.0, f);
     float t2 = sin(f * 3.14) * 0.5 + 0.5;
     float t3 = cos(f * 2.0 + time * 0.5) * 0.5 + 0.5;
     float t4 = sin(f * 4.0 + time * 0.3) * 0.5 + 0.5; // 额外的混合因子
-    
+
     // 创建两个额外的颜色变体，增加色彩丰富度
     vec3 color5 = hsv2rgb(vec3(mod(hue + 0.15, 1.0), min(saturation * 1.4, 1.0), min(value * 1.3, 1.0)));
     vec3 color6 = hsv2rgb(vec3(mod(hue - 0.15, 1.0), min(saturation * 1.3, 1.0), min(value * 1.2, 1.0)));
-    
+
     // 混合所有颜色
     vec3 colorMix1 = mix(color1, color2, t1);
     vec3 colorMix2 = mix(color3, color4, t2);
     vec3 colorMix3 = mix(color5, color6, t4);
-    
+
     vec3 color = mix(
       mix(colorMix1, colorMix2, t3),
       colorMix3,
       sin(f * 2.5 + time * 0.4) * 0.5 + 0.5
     );
-    
+
     // 添加更多的动态亮点和波纹
     color += 0.15 * sin(f * 8.0 + time) * vec3(1.0);
-    
+
     // 增加波纹效果
     float ripple1 = sin(st.x * 12.0 + time * 0.8) * sin(st.y * 12.0 + time * 0.7) * 0.06;
     float ripple2 = sin(st.x * 8.0 - time * 0.6) * sin(st.y * 8.0 - time * 0.5) * 0.05;
     float ripple3 = sin(st.x * 15.0 + time * 0.4) * sin(st.y * 15.0 + time * 0.3) * 0.04;
-    
+
     // 混合多层波纹
     color += vec3(ripple1 + ripple2 + ripple3);
-    
+
     // 添加更大范围、更柔和的光晕效果
     float glow = smoothstep(0.3, 0.7, f);
     color = mix(color, vec3(1.0), glow * 0.12);
-    
+
     // 添加柔和的渐变效果，进一步减少网格感
     float vignette = smoothstep(0.0, 0.7, 0.5 - length(st - 0.5));
     color = mix(color, color * 1.2, vignette * 0.3);
-    
+
     // 应用高斯模糊效果，减少锐利的网格边缘
     vec2 pixel = vec2(1.0) / vec2(800.0, 600.0); // 假设的分辨率
     float blur = 0.0;
-    
+
     // 简化的高斯模糊 - 只采样几个点以保持性能
     blur += f * 0.5;
     blur += fbm(st + pixel * vec2(1.0, 0.0)) * 0.125;
     blur += fbm(st + pixel * vec2(-1.0, 0.0)) * 0.125;
     blur += fbm(st + pixel * vec2(0.0, 1.0)) * 0.125;
     blur += fbm(st + pixel * vec2(0.0, -1.0)) * 0.125;
-    
+
     // 使用模糊值平滑颜色过渡
     color = mix(color, mix(color1, color4, 0.5), (blur - f) * 0.2);
-    
+
     // 确保颜色在有效范围内
     color = clamp(color, 0.0, 1.0);
-    
+
     gl_FragColor = vec4(color, 1.0);
   }
 `
