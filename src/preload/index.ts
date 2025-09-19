@@ -22,16 +22,18 @@ const api = {
   },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
   onMusicCtrl: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => {
+    // 音乐控制
     const handler = (event: Electron.IpcRendererEvent) => callback(event)
     ipcRenderer.on('music-control', handler)
     return () => ipcRenderer.removeListener('music-control', handler)
   },
-
+  // 音乐相关方法
   music: {
     request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args),
     requestSdk: (api: string, args: any) =>
       ipcRenderer.invoke('service-music-sdk-request', api, args)
   },
+  //音源插件
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') =>
       ipcRenderer.invoke('service-plugin-selectAndAddPlugin', type),
@@ -43,7 +45,7 @@ const api = {
       ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId),
     getPluginLog: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPluginLog', pluginId)
   },
-
+  // ai助手
   ai: {
     ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt),
     askStream: (prompt: string, streamId: string) =>
@@ -63,7 +65,7 @@ const api = {
       ipcRenderer.removeAllListeners('ai-stream-error')
     }
   },
-
+  // 音频缓存管理
   musicCache: {
     getInfo: () => ipcRenderer.invoke('music-cache:get-info'),
     clear: () => ipcRenderer.invoke('music-cache:clear'),

@@ -12,7 +12,7 @@ import {
 import type { SongList } from '@renderer/types/audio'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, toRaw } from 'vue'
-import { shouldUseBlackText } from '@renderer/utils/contrastColor'
+import { shouldUseBlackText } from '@renderer/utils/color/contrastColor'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { Fullscreen1Icon, FullscreenExit1Icon, ChevronDownIcon } from 'tdesign-icons-vue-next'
 // 直接从包路径导入，避免 WebAssembly 导入问题

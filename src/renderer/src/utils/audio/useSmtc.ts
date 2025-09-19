@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2025. 时迁酱 Inc. All rights reserved.
+ *
+ * This software is the confidential and proprietary information of 时迁酱.
+ * Unauthorized copying of this file, via any medium is strictly prohibited.
+ *
+ * @author 时迁酱，无聊的霜霜，Star
+ * @since 2025-9-19
+ * @version 1.0
+ */
+
 interface MediaSessionCallbacks {
   play: () => void
   pause: () => void
@@ -51,8 +62,7 @@ class MediaSessionController {
 
       // 强制更新播放状态，确保SMTC正确识别
       if (this.audioElement) {
-        const currentState = this.audioElement.paused ? 'paused' : 'playing'
-        navigator.mediaSession.playbackState = currentState
+        navigator.mediaSession.playbackState = this.audioElement.paused ? 'paused' : 'playing'
       }
     } catch (error) {
       console.warn('Failed to update media session metadata:', error)

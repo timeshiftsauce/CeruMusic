@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { storeToRefs } from 'pinia'
-import audioManager from '@renderer/utils/audioManager'
+import audioManager from '@renderer/utils/audio/audioManager'
 
 interface Props {
   show?: boolean

@@ -14,14 +14,6 @@
         <h1 class="brand-title">Cerulean Music</h1>
         <p class="brand-subtitle">澜音-纯净音乐，极致音乐体验</p>
 
-        <!-- 加载状态 -->
-        <!-- <div class="loading-area">
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progress + '%' }"></div>
-          </div>
-          <p class="loading-text">{{ loadingText }}</p>
-        </div> -->
-
         <!-- 特性标签 -->
         <div class="feature-tags">
           <span v-for="(feature, index) in features" :key="index" class="tag">
@@ -58,12 +50,13 @@ onMounted(async () => {
   }
 
   setTimeout(() => {
-    router.push('/home')
+    router.replace('/home')
   }, 2000)
 })
 </script>
 
 <style scoped>
+
 .welcome-container {
   width: 100vw;
   height: 100vh;
@@ -228,28 +221,28 @@ onMounted(async () => {
     flex-direction: column;
     text-align: center;
   }
-  
+
   .logo-section {
     flex: none;
     padding: 2rem 2rem 1rem 2rem;
   }
-  
+
   .content-section {
     flex: none;
     justify-content: center;
     padding: 1rem 2rem 2rem 2rem;
   }
-  
+
   .brand-title {
     font-size: 2.8rem;
   }
-  
+
   .image-bg {
     width: 150px;
     height: 150px;
     filter: blur(40px);
   }
-  
+
   .logo-image {
     width: 100px;
     height: 100px;
@@ -260,21 +253,21 @@ onMounted(async () => {
   .brand-title {
     font-size: 2.2rem;
   }
-  
+
   .brand-subtitle {
     font-size: 1rem;
   }
-  
+
   .content-section {
     padding: 1rem;
   }
-  
+
   .image-bg {
     width: 120px;
     height: 120px;
     filter: blur(30px);
   }
-  
+
   .logo-image {
     width: 80px;
     height: 80px;

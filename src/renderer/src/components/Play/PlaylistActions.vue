@@ -8,7 +8,7 @@ import {
   importPlaylistFromFile,
   importPlaylistFromClipboard,
   validateImportedPlaylist
-} from '@renderer/utils/playlistExportImport'
+} from '@renderer/utils/playlist/playlistExportImport'
 import { CloudDownloadIcon } from 'tdesign-icons-vue-next'
 import type { SongList } from '@renderer/types/audio'
 import { storeToRefs } from 'pinia'

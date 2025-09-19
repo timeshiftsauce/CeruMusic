@@ -2,7 +2,7 @@
 import { ref, onMounted, watch, WatchHandle, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { extractDominantColor } from '../../utils/colorExtractor'
+import { extractDominantColor } from '../../utils/color/colorExtractor'
 
 // 路由实例
 const router = useRouter()
