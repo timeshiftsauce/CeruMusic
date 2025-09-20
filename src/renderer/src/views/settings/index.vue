@@ -239,7 +239,7 @@ const selectSource = (sourceKey: string) => {
 }
 
 // 音质滑块变化处理
-const onQualityChange = (value: number) => {
+const onQualityChange = (value: any) => {
   if (
     currentSourceQualities.value.length > 0 &&
     value >= 0 &&

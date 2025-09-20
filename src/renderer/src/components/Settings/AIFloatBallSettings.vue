@@ -25,7 +25,7 @@ const { settings } = storeToRefs(settingsStore)
 const showFloatBall = ref(settings.value.showFloatBall !== false)
 
 // 处理悬浮球开关切换
-const handleFloatBallToggle = (val: boolean) => {
+const handleFloatBallToggle = (val: any) => {
   settingsStore.updateSettings({ showFloatBall: val })
 }
 
