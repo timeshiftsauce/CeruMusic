@@ -180,20 +180,12 @@ const playSong = async (song: SongList) => {
 
     let urlToPlay = ''
 
-    // 如果没有URL，需要获取URL
-    if (!urlToPlay) {
-      // eslint-disable-next-line no-useless-catch
-      try {
-        urlToPlay = await getSongRealUrl(toRaw(song))
-
-        // 同时更新播放列表中对应歌曲的URL
-        const playlistIndex = list.value.findIndex((item) => item.songmid === song.songmid)
-        if (playlistIndex !== -1) {
-          ;(list.value[playlistIndex] as any).url = urlToPlay
-        }
-      } catch (error) {
-        throw error
-      }
+    // 获取URL
+    // eslint-disable-next-line no-useless-catch
+    try {
+      urlToPlay = await getSongRealUrl(toRaw(song))
+    } catch (error) {
+      throw error
     }
 
     // 先停止当前播放

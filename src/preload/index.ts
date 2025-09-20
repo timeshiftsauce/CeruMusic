@@ -178,6 +178,17 @@ const api = {
       ipcRenderer.invoke('directory-settings:open-directory', dirPath),
     getDirectorySize: (dirPath: string) =>
       ipcRenderer.invoke('directory-settings:get-directory-size', dirPath)
+  },
+
+  // 插件通知相关
+  pluginNotice: {
+    onPluginNotice(callback: (data: string) => any) {
+      function listener(_: any, data: any) {
+        callback(data)
+      }
+      ipcRenderer.on('plugin-notice', listener)
+      return () => ipcRenderer.removeListener('plugin-notice', listener)
+    }
   }
 }
 

@@ -35,21 +35,23 @@ function main(source: string) {
         const usePlugin = pluginService.getPluginById(pluginId)
         if (!pluginId || !usePlugin) return { error: '请配置音源来播放歌曲' }
 
-        // 获取原始URL
-        const originalUrlPromise = usePlugin.getMusicUrl(source, songInfo, quality)
-
         // 生成歌曲唯一标识
         const songId = `${songInfo.name}-${songInfo.singer}-${source}-${quality}`
 
-        // 尝试获取缓存的URL
-        try {
-          const cachedUrl = await musicCacheService.getCachedMusicUrl(songId, originalUrlPromise)
+        // 先检查缓存
+        const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
+        if (cachedUrl) {
           return cachedUrl
-        } catch (cacheError) {
-          console.warn('缓存获取失败，使用原始URL:', cacheError)
-          const originalUrl = await originalUrlPromise
-          return originalUrl
         }
+
+        // 没有缓存时才发起网络请求
+        const originalUrl = await usePlugin.getMusicUrl(source, songInfo, quality)
+        // 异步缓存，不阻塞返回
+        musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
+          console.warn('缓存歌曲失败:', error)
+        })
+
+        return originalUrl
       } catch (e: any) {
         return {
           error: '获取歌曲失败 ' + e.error || e

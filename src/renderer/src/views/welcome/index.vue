@@ -56,7 +56,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-
 .welcome-container {
   width: 100vw;
   height: 100vh;

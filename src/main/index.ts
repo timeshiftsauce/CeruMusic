@@ -218,6 +218,7 @@ aiEvents(mainWindow)
 import './events/musicCache'
 import './events/songList'
 import './events/directorySettings'
+import './events/pluginNotice'
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
 
 // This method will be called when Electron has finished

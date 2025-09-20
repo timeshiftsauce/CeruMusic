@@ -82,9 +82,9 @@ export class MusicCacheService {
     return path.join(this.cacheDir, `${cacheKey}${ext}`)
   }
 
-  async getCachedMusicUrl(songId: string, originalUrlPromise: Promise<string>): Promise<string> {
+  async getCachedMusicUrl(songId: string): Promise<string | null> {
     const cacheKey = this.generateCacheKey(songId)
-    console.log('hash', cacheKey)
+    console.log('检查缓存 hash:', cacheKey)
 
     // 检查是否已缓存
     if (this.cacheIndex.has(cacheKey)) {
@@ -97,14 +97,29 @@ export class MusicCacheService {
         return `file://${cachedFilePath}`
       } catch (error) {
         // 文件不存在，从缓存索引中移除
+        console.warn(`缓存文件不存在，移除索引: ${cachedFilePath}`)
         this.cacheIndex.delete(cacheKey)
         await this.saveCacheIndex()
       }
     }
 
-    // 下载并缓存文件 先返回源链接不等待结果优化体验
-    this.downloadAndCache(songId, await originalUrlPromise, cacheKey)
-    return await originalUrlPromise
+    return null
+  }
+
+  async cacheMusic(songId: string, url: string): Promise<void> {
+    const cacheKey = this.generateCacheKey(songId)
+
+    // 如果已经缓存，跳过
+    if (this.cacheIndex.has(cacheKey)) {
+      return
+    }
+
+    try {
+      await this.downloadAndCache(songId, url, cacheKey)
+    } catch (error) {
+      console.error(`缓存歌曲失败: ${songId}`, error)
+      throw error
+    }
   }
 
   private async downloadAndCache(songId: string, url: string, cacheKey: string): Promise<string> {

@@ -68,7 +68,6 @@ function extractDefaultSources() {
         };
       });
       
-      console.log('提取的音源配置:', extractedSources);
       return extractedSources;
     } catch (e) {
       console.log('解析 MUSIC_QUALITY 失败:', e.message);
@@ -94,6 +93,70 @@ sources = extractDefaultSources();
 let isInitialized = false;
 let pluginSources = {};
 let requestHandler = null;
+let updateAlertSent = false; // 防止重复发送更新提示
+
+// 处理更新提示事件
+function handleUpdateAlert(data, cerumusicApi) {
+  // 每次运行脚本只能调用一次
+  if (updateAlertSent) {
+    console.warn(\`[${pluginName}] updateAlert 事件每次运行脚本只能调用一次，忽略重复调用\`);
+    return;
+  }
+  
+  if (!data || !data.log) {
+    console.error(\`[${pluginName}] updateAlert 事件缺少必需的 log 参数\`);
+    return;
+  }
+  
+  // 验证和处理参数
+  let log = String(data.log);
+  let updateUrl = data.updateUrl ? String(data.updateUrl) : undefined;
+  
+  // 限制 log 长度为 1024 字符
+  if (log.length > 1024) {
+    log = log.substring(0, 1024);
+    console.warn(\`[${pluginName}] 更新日志超过 1024 字符，已截断\`);
+  }
+  
+  // 验证 updateUrl 格式
+  if (updateUrl) {
+    if (updateUrl.length > 1024) {
+      updateUrl = updateUrl.substring(0, 1024);
+      console.warn(\`[${pluginName}] 更新地址超过 1024 字符，已截断\`);
+    }
+    
+    if (!updateUrl.startsWith('http://') && !updateUrl.startsWith('https://')) {
+      console.error(\`[${pluginName}] updateUrl 必须是 HTTP 协议的 URL 地址\`);
+      updateUrl = undefined;
+    }
+  }
+  
+  // 标记已发送
+  updateAlertSent = true;
+  
+  // 通过 CeruMusic 的通知系统发送更新提示
+  try {
+    // 使用传入的 cerumusic API 对象发送通知
+    if (cerumusicApi && cerumusicApi.NoticeCenter) {
+      cerumusicApi.NoticeCenter('update', {
+        title: \`${pluginName} 有新版本可用\`,
+        content: log,
+        url: updateUrl,
+        pluginInfo: {
+          name: '${pluginName}',
+          type: 'lx',
+          forcedUpdate: false
+        }
+      });
+      
+      console.log(\`[${pluginName}] 更新提示已发送\`, { log: log.substring(0, 100) + '...', updateUrl });
+    } else {
+      console.error(\`[${pluginName}] CeruMusic API 不可用，无法发送更新提示\`);
+    }
+  } catch (error) {
+    console.error(\`[${pluginName}] 发送更新提示失败:\`, error.message);
+  }
+}
 initializePlugin()
 function initializePlugin() {
   if (isInitialized) return;
@@ -133,9 +196,9 @@ function initializePlugin() {
             qualitys: sourceInfo.qualitys || originalQualitys || ['128k', '320k']
           };
         });
-        
-        console.log('[${pluginName + ' by Ceru插件' || 'ceru插件'}] 音源注册完成:', Object.keys(pluginSources));
-        console.log('[${pluginName + ' by Ceru插件' || 'ceru插件'}] 动态音源信息已更新:', sources);
+      } else if (event === 'updateAlert' && data) {
+        // 处理更新提示事件，传入 cerumusic API
+        handleUpdateAlert(data, cerumusic);
       }
     },
     request: request,

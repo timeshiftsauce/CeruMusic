@@ -13,8 +13,18 @@ import * as vm from 'vm'
 import fetch from 'node-fetch'
 import * as fs from 'fs'
 import { MusicItem } from '../../musicSdk/type'
+import { sendPluginNotice } from '../../../events/pluginNotice'
 
-// 定义插件结构接口
+// ==================== 常量定义 ====================
+const CONSTANTS = {
+  DEFAULT_TIMEOUT: 10000, // 10秒超时
+  API_VERSION: '1.0.3',
+  ENVIRONMENT: 'nodejs',
+  NOTICE_DELAY: 100, // 通知延迟时间
+  LOG_PREFIX: '[CeruMusic]'
+} as const
+
+// ==================== 类型定义 ====================
 export interface PluginInfo {
   name: string
   version: string
@@ -44,7 +54,7 @@ interface MusicInfo extends MusicItem {
 interface RequestResult {
   body: any
   statusCode: number
-  headers: Record<string, string[]>
+  headers: Record<string, string>
 }
 
 interface CeruMusicApiUtils {
@@ -63,12 +73,26 @@ interface CeruMusicApi {
     options?: RequestOptions | RequestCallback,
     callback?: RequestCallback
   ) => Promise<RequestResult> | void
+  NoticeCenter: (
+    type: 'error' | 'info' | 'success' | 'warn' | 'update',
+    data: {
+      title: string
+      content?: string
+      url?: string
+      version?: string
+      pluginInfo: {
+        name?: string // 插件名
+        type: 'lx' | 'cr' //插件类型
+      }
+    }
+  ) => void
 }
 
 type RequestOptions = {
   method?: string
   headers?: Record<string, string>
   body?: any
+  timeout?: number
   [key: string]: any
 }
 
@@ -77,8 +101,21 @@ type RequestCallback = (error: Error | null, result: RequestResult | null) => vo
 type Logger = {
   log: (...args: any[]) => void
   error: (...args: any[]) => void
-  warn?: (...args: any[]) => void
-  info?: (...args: any[]) => void
+  warn: (...args: any[]) => void
+  info: (...args: any[]) => void
+}
+
+type PluginMethodName = 'musicUrl' | 'getPic' | 'getLyric'
+
+// ==================== 错误类定义 ====================
+class PluginError extends Error {
+  constructor(
+    message: string,
+    public readonly method?: string
+  ) {
+    super(message)
+    this.name = 'PluginError'
+  }
 }
 
 /**
@@ -96,11 +133,14 @@ class CeruMusicPluginHost {
    */
   constructor(pluginCode: string | null = null, logger: Logger = console) {
     this.pluginCode = pluginCode
-    this.plugin = null // 存储插件导出的对象
+    this.plugin = null
+
     if (pluginCode) {
       this._initialize(logger)
     }
   }
+
+  // ==================== 公共方法 ====================
 
   /**
    * 从文件加载插件
@@ -108,148 +148,12 @@ class CeruMusicPluginHost {
    * @param logger 日志记录器
    */
   async loadPlugin(pluginPath: string, logger: Logger = console): Promise<CeruMusicPlugin> {
-    this.pluginCode = fs.readFileSync(pluginPath, 'utf-8')
-    this._initialize(logger)
-    return this.plugin as CeruMusicPlugin
-  }
-
-  /**
-   * 初始化沙箱环境，加载并验证插件
-   * @private
-   */
-  _initialize(console: Logger): void {
-    // 提供给插件的API
-    const cerumusicApi: CeruMusicApi = {
-      env: 'nodejs',
-      version: '1.0.0',
-      utils: {
-        buffer: {
-          from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
-            if (typeof data === 'string') {
-              return Buffer.from(data, encoding)
-            } else if (data instanceof Buffer) {
-              return data
-            } else if (data instanceof ArrayBuffer) {
-              return Buffer.from(new Uint8Array(data))
-            } else {
-              return Buffer.from(data as any)
-            }
-          },
-          bufToString: (buffer: Buffer, encoding?: BufferEncoding) => buffer.toString(encoding)
-        }
-      },
-      request: (url, options, callback) => {
-        // 支持 Promise 和 callback 两种调用方式
-        if (typeof options === 'function') {
-          callback = options as RequestCallback
-          options = { method: 'GET' }
-        }
-
-        const makeRequest = async (): Promise<RequestResult> => {
-          try {
-            console.log(`[CeruMusic] 发起请求: ${url}`)
-
-            // 添加超时设置
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
-
-            const requestOptions = {
-              method: 'GET',
-              ...(options as RequestOptions),
-              signal: controller.signal
-            }
-
-            const response = await fetch(url, requestOptions)
-            clearTimeout(timeoutId)
-
-            console.log(`[CeruMusic] 请求响应状态: ${response.status}`)
-
-            // 尝试解析JSON，如果失败则返回文本
-            let body: any
-            try {
-              body = await response.json()
-            } catch (parseError: any) {
-              console.error(`[CeruMusic] 解析响应失败: ${parseError.message}`)
-              // 解析失败时创建错误body
-              body = {
-                code: response.status,
-                msg: `Failed to parse response: ${parseError.message}`
-              }
-            }
-
-            console.log(`[CeruMusic] 请求响应内容:`, body)
-
-            const result: RequestResult = {
-              body,
-              statusCode: response.status,
-              headers: response.headers.raw()
-            }
-
-            if (callback) {
-              callback(null, result)
-            }
-            return result
-          } catch (error: any) {
-            console.error(`[CeruMusic] Request failed: ${error.message}`)
-
-            if (callback) {
-              // 网络错误时，调用 callback(error, null)
-              callback(error, null)
-              // 需要返回一个值以满足 Promise<RequestResult> 类型
-              return {
-                body: { error: error.message },
-                statusCode: 500,
-                headers: {}
-              }
-            } else {
-              throw error
-            }
-          }
-        }
-
-        if (callback) {
-          makeRequest().catch((error) => {
-            console.error(`[CeruMusic] Unhandled request error in callback mode: ${error.message}`)
-          }) // 确保错误被正确处理
-          return undefined
-        } else {
-          return makeRequest()
-        }
-      }
-    }
-
-    const sandbox = {
-      module: { exports: {} },
-      cerumusic: cerumusicApi,
-      console: console,
-      setTimeout: setTimeout,
-      clearTimeout: clearTimeout,
-      setInterval: setInterval,
-      clearInterval: clearInterval,
-      Buffer: Buffer,
-      JSON: JSON,
-      require: () => ({}),
-      global: {},
-      process: { env: {} }
-    }
-
     try {
-      // 在沙箱中执行插件代码
-      if (this.pluginCode) {
-        vm.runInNewContext(this.pluginCode, sandbox)
-        this.plugin = sandbox.module.exports as CeruMusicPlugin
-        console.log(`[CeruMusic] Plugin "${this.plugin.pluginInfo.name}" loaded successfully.`)
-      } else {
-        throw new Error('No plugin code provided.')
-      }
-    } catch (e: any) {
-      console.error('[CeruMusic] Error executing plugin code:', e)
-      throw new Error('Failed to initialize plugin.')
-    }
-
-    // 验证插件结构
-    if (!this.plugin?.pluginInfo || !this.plugin.sources || !this.plugin.musicUrl) {
-      throw new Error('Invalid plugin structure. Required fields: pluginInfo, sources, musicUrl.')
+      this.pluginCode = fs.readFileSync(pluginPath, 'utf-8')
+      this._initialize(logger)
+      return this.plugin as CeruMusicPlugin
+    } catch (error: any) {
+      throw new PluginError(`无法加载插件 ${pluginPath}: ${error.message}`)
     }
   }
 
@@ -257,10 +161,8 @@ class CeruMusicPluginHost {
    * 获取插件信息
    */
   getPluginInfo(): PluginInfo {
-    if (!this.plugin) {
-      throw new Error('Plugin not initialized')
-    }
-    return this.plugin.pluginInfo
+    this._ensurePluginInitialized()
+    return this.plugin!.pluginInfo
   }
 
   /**
@@ -274,10 +176,8 @@ class CeruMusicPluginHost {
    * 获取支持的音源和音质信息
    */
   getSupportedSources(): PluginSource[] {
-    if (!this.plugin) {
-      throw new Error('Plugin not initialized')
-    }
-    return this.plugin.sources
+    this._ensurePluginInitialized()
+    return this.plugin!.sources
   }
 
   /**
@@ -287,148 +187,7 @@ class CeruMusicPluginHost {
    * @param quality 音质
    */
   async getMusicUrl(source: string, musicInfo: MusicInfo, quality: string): Promise<string> {
-    try {
-      if (!this.plugin || typeof this.plugin.musicUrl !== 'function') {
-        throw new Error(`Action "musicUrl" is not implemented in plugin.`)
-      }
-
-      console.log(`[CeruMusic] 开始调用插件的 musicUrl 方法...`)
-
-      // 将 cerumusic API 绑定到函数调用的 this 上下文
-      const result = await this.plugin.musicUrl.call(
-        { cerumusic: this._getCerumusicApi() },
-        source,
-        musicInfo,
-        quality
-      )
-
-      console.log(`[CeruMusic] 插件 musicUrl 方法调用成功`)
-      return result
-    } catch (error: any) {
-      console.error(`[CeruMusic] getMusicUrl 方法执行失败:`, error.message)
-      console.error(`[CeruMusic] 错误堆栈:`, error.stack)
-
-      // 重新抛出错误，确保外部可以捕获
-      throw new Error(`Plugin getMusicUrl failed: ${error.message}`)
-    }
-  }
-
-  /**
-   * 获取 cerumusic API 对象
-   * @private
-   */
-  _getCerumusicApi(): CeruMusicApi {
-    return {
-      env: 'nodejs',
-      version: '1.0.0',
-      utils: {
-        buffer: {
-          from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
-            if (typeof data === 'string') {
-              return Buffer.from(data, encoding)
-            } else if (data instanceof Buffer) {
-              return data
-            } else if (data instanceof ArrayBuffer) {
-              return Buffer.from(new Uint8Array(data))
-            } else {
-              return Buffer.from(data as any)
-            }
-          },
-          bufToString: (buffer: Buffer, encoding?: BufferEncoding) => buffer.toString(encoding)
-        }
-      },
-      request: (url, options, callback) => {
-        // 支持 Promise 和 callback 两种调用方式
-        if (typeof options === 'function') {
-          callback = options as RequestCallback
-          options = { method: 'GET' }
-        }
-
-        const makeRequest = async (): Promise<RequestResult> => {
-          try {
-            console.log(`[CeruMusic] 发起请求: ${url}`)
-
-            // 添加超时设置
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
-
-            const requestOptions = {
-              method: 'GET',
-              ...(options as RequestOptions),
-              signal: controller.signal
-            }
-
-            const response = await fetch(url, requestOptions)
-            clearTimeout(timeoutId)
-
-            console.log(`[CeruMusic] 请求响应状态: ${response.status}`)
-
-            // 尝试解析JSON，如果失败则返回文本
-            let body: any
-            const contentType = response.headers.get('content-type')
-
-            try {
-              if (contentType && contentType.includes('application/json')) {
-                body = await response.json()
-              } else {
-                const text = await response.text()
-                console.log(`[CeruMusic] 响应不是JSON格式，内容: ${text.substring(0, 200)}...`)
-                // 对于非JSON响应，创建一个错误状态的body
-                body = {
-                  code: response.status,
-                  msg: `Expected JSON response but got: ${contentType || 'unknown content type'}`,
-                  data: text
-                }
-              }
-            } catch (parseError: any) {
-              console.error(`[CeruMusic] 解析响应失败: ${parseError.message}`)
-              // 解析失败时创建错误body
-              body = {
-                code: response.status,
-                msg: `Failed to parse response: ${parseError.message}`
-              }
-            }
-
-            console.log(`[CeruMusic] 请求响应内容:`, body)
-
-            const result: RequestResult = {
-              body,
-              statusCode: response.status,
-              headers: response.headers.raw()
-            }
-
-            if (callback) {
-              callback(null, result)
-            }
-            return result
-          } catch (error: any) {
-            console.error(`[CeruMusic] Request failed: ${error.message}`)
-
-            if (callback) {
-              // 网络错误时，调用 callback(error, null)
-              callback(error, null)
-              // 需要返回一个值以满足 Promise<RequestResult> 类型
-              return {
-                body: { error: error.message },
-                statusCode: 500,
-                headers: {}
-              }
-            } else {
-              throw error
-            }
-          }
-        }
-
-        if (callback) {
-          makeRequest().catch((error) => {
-            console.error(`[CeruMusic] Unhandled request error in callback mode: ${error.message}`)
-          }) // 确保错误被正确处理
-          return undefined
-        } else {
-          return makeRequest()
-        }
-      }
-    }
+    return this._callPluginMethod('musicUrl', source, musicInfo, quality)
   }
 
   /**
@@ -437,25 +196,7 @@ class CeruMusicPluginHost {
    * @param musicInfo 音乐信息
    */
   async getPic(source: string, musicInfo: MusicInfo): Promise<string> {
-    try {
-      if (!this.plugin || typeof this.plugin.getPic !== 'function') {
-        throw new Error(`Action "getPic" is not implemented in plugin.`)
-      }
-
-      console.log(`[CeruMusic] 开始调用插件的 getPic 方法...`)
-
-      const result = await this.plugin.getPic.call(
-        { cerumusic: this._getCerumusicApi() },
-        source,
-        musicInfo
-      )
-
-      console.log(`[CeruMusic] 插件 getPic 方法调用成功`)
-      return result
-    } catch (error: any) {
-      console.error(`[CeruMusic] getPic 方法执行失败:`, error.message)
-      throw new Error(`Plugin getPic failed: ${error.message}`)
-    }
+    return this._callPluginMethod('getPic', source, musicInfo)
   }
 
   /**
@@ -464,24 +205,364 @@ class CeruMusicPluginHost {
    * @param musicInfo 音乐信息
    */
   async getLyric(source: string, musicInfo: MusicInfo): Promise<string> {
+    return this._callPluginMethod('getLyric', source, musicInfo)
+  }
+
+  // ==================== 私有方法 ====================
+
+  /**
+   * 初始化沙箱环境，加载并验证插件
+   * @private
+   */
+  private _initialize(logger: Logger): void {
+    if (!this.pluginCode) {
+      throw new PluginError('No plugin code provided.')
+    }
+
+    const sandbox = this._createSandbox(logger)
+
     try {
-      if (!this.plugin || typeof this.plugin.getLyric !== 'function') {
-        throw new Error(`Action "getLyric" is not implemented in plugin.`)
-      }
+      vm.runInNewContext(this.pluginCode, sandbox)
+      this.plugin = sandbox.module.exports as CeruMusicPlugin
 
-      console.log(`[CeruMusic] 开始调用插件的 getLyric 方法...`)
+      this._validatePlugin()
 
-      const result = await this.plugin.getLyric.call(
-        { cerumusic: this._getCerumusicApi() },
-        source,
-        musicInfo
+      logger.log(
+        `${CONSTANTS.LOG_PREFIX} Plugin "${this.plugin.pluginInfo.name}" loaded successfully.`
       )
+    } catch (error: any) {
+      logger.error(`${CONSTANTS.LOG_PREFIX} Error executing plugin code:`, error)
+      throw new PluginError('Failed to initialize plugin.')
+    }
+  }
 
-      console.log(`[CeruMusic] 插件 getLyric 方法调用成功`)
+  /**
+   * 创建沙箱环境
+   * @private
+   */
+  private _createSandbox(logger: Logger): any {
+    return {
+      module: { exports: {} },
+      cerumusic: this._getCerumusicApi(),
+      console: logger,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      Buffer,
+      JSON,
+      require: () => ({}),
+      global: {},
+      process: { env: {} }
+    }
+  }
+
+  /**
+   * 验证插件结构
+   * @private
+   */
+  private _validatePlugin(): void {
+    if (!this.plugin?.pluginInfo || !this.plugin.sources || !this.plugin.musicUrl) {
+      throw new PluginError(
+        'Invalid plugin structure. Required fields: pluginInfo, sources, musicUrl.'
+      )
+    }
+  }
+
+  /**
+   * 确保插件已初始化
+   * @private
+   */
+  private _ensurePluginInitialized(): void {
+    if (!this.plugin) {
+      throw new PluginError('Plugin not initialized')
+    }
+  }
+
+  /**
+   * 统一的插件方法调用逻辑
+   * @private
+   */
+  private async _callPluginMethod(
+    methodName: PluginMethodName,
+    ...args: readonly any[]
+  ): Promise<string> {
+    this._ensurePluginInitialized()
+    const method = this.plugin![methodName] as any
+    if (typeof method !== 'function') {
+      throw new PluginError(`Action "${methodName}" is not implemented in plugin.`, methodName)
+    }
+    try {
+      console.log(`${CONSTANTS.LOG_PREFIX} 开始调用插件的 ${methodName} 方法...`)
+
+      const result = await method.call(...[{ cerumusic: this._getCerumusicApi() }], ...args)
+
+      console.log(`${CONSTANTS.LOG_PREFIX} 插件 ${methodName} 方法调用成功`)
       return result
     } catch (error: any) {
-      console.error(`[CeruMusic] getLyric 方法执行失败:`, error.message)
-      throw new Error(`Plugin getLyric failed: ${error.message}`)
+      console.error(`${CONSTANTS.LOG_PREFIX} ${methodName} 方法执行失败:`, error.message)
+      if (methodName === 'musicUrl') {
+        console.error(`${CONSTANTS.LOG_PREFIX} 错误堆栈:`, error.stack)
+      }
+      throw new PluginError(`Plugin ${methodName} failed: ${error.message}`, methodName)
+    }
+  }
+
+  // ==================== 工具方法 ====================
+
+  // /**
+  //  * 验证 URL 是否有效
+  //  * @private
+  //  */
+  // private _isValidUrl(url: string): boolean {
+  //   try {
+  //     const urlObj = new URL(url)
+  //     return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
+  //   } catch {
+  //     return false
+  //   }
+  // }
+
+  // /**
+  //  * 根据通知类型获取标题
+  //  * @private
+  //  */
+  // private _getNoticeTitle(type: string): string {
+  //   const titleMap: Record<string, string> = {
+  //     update: '插件更新',
+  //     error: '插件错误',
+  //     warning: '插件警告',
+  //     info: '插件信息',
+  //     success: '操作成功'
+  //   }
+  //   return titleMap[type] || '插件通知'
+  // }
+
+  // /**
+  //  * 根据通知类型获取默认消息
+  //  * @private
+  //  */
+  // private _getDefaultMessage(type: string, data: any): string {
+  //   const pluginName = this.plugin?.pluginInfo?.name || '未知插件'
+
+  //   switch (type) {
+  //     case 'error':
+  //       return `插件 "${pluginName}" 发生错误: ${data?.error || '未知错误'}`
+  //     case 'warning':
+  //       return `插件 "${pluginName}" 警告: ${data?.warning || '需要注意'}`
+  //     case 'success':
+  //       return `插件 "${pluginName}" 操作成功`
+  //     case 'info':
+  //     default:
+  //       return `插件 "${pluginName}" 信息: ${JSON.stringify(data)}`
+  //   }
+  // }
+
+  /**
+   * 解析响应体
+   * @private
+   */
+  private async _parseResponseBody(response: any): Promise<any> {
+    const contentType = response.headers.get('content-type') || ''
+
+    try {
+      if (contentType.includes('application/json')) {
+        return await response.json()
+      } else if (contentType.includes('text/')) {
+        return await response.text()
+      } else {
+        // 对于其他类型，尝试解析为 JSON，失败则返回文本
+        const text = await response.text()
+        try {
+          return JSON.parse(text)
+        } catch {
+          return text
+        }
+      }
+    } catch (parseError: any) {
+      console.error(`${CONSTANTS.LOG_PREFIX} 解析响应失败: ${parseError.message}`)
+      return {
+        error: 'Parse failed',
+        message: parseError.message,
+        statusCode: response.status
+      }
+    }
+  }
+
+  /**
+   * 创建错误结果
+   * @private
+   */
+  private _createErrorResult(error: any, url: string): RequestResult {
+    const isTimeout = error.name === 'AbortError'
+    return {
+      body: {
+        error: error.name || 'RequestError',
+        message: error.message,
+        url
+      },
+      statusCode: isTimeout ? 408 : 500,
+      headers: {}
+    }
+  }
+
+  // ==================== API 构建方法 ====================
+
+  /**
+   * 获取 cerumusic API 对象
+   * @private
+   */
+  private _getCerumusicApi(): CeruMusicApi {
+    return {
+      env: CONSTANTS.ENVIRONMENT,
+      version: CONSTANTS.API_VERSION,
+      utils: this._createApiUtils(),
+      request: this._createRequestFunction(),
+      NoticeCenter: this._createNoticeCenter()
+    }
+  }
+
+  /**
+   * 创建 API 工具对象
+   * @private
+   */
+  private _createApiUtils(): CeruMusicApiUtils {
+    return {
+      buffer: {
+        from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
+          if (typeof data === 'string') {
+            return Buffer.from(data, encoding)
+          } else if (data instanceof Buffer) {
+            return data
+          } else if (data instanceof ArrayBuffer) {
+            return Buffer.from(new Uint8Array(data))
+          } else {
+            return Buffer.from(data as any)
+          }
+        },
+        bufToString: (buffer: Buffer, encoding?: BufferEncoding) => buffer.toString(encoding)
+      }
+    }
+  }
+
+  /**
+   * 创建请求函数
+   * @private
+   */
+  private _createRequestFunction() {
+    return (
+      url: string,
+      options?: RequestOptions | RequestCallback,
+      callback?: RequestCallback
+    ) => {
+      // 支持 Promise 和 callback 两种调用方式
+      if (typeof options === 'function') {
+        callback = options as RequestCallback
+        options = { method: 'GET' }
+      }
+
+      const requestOptions = options as RequestOptions
+      const makeRequest = () => this._makeHttpRequest(url, requestOptions)
+
+      // 执行请求
+      if (callback) {
+        makeRequest()
+          .then((result) => callback(null, result))
+          .catch((error) => {
+            const errorResult = this._createErrorResult(error, url)
+            callback(error, errorResult)
+          })
+        return undefined
+      } else {
+        return makeRequest()
+      }
+    }
+  }
+
+  /**
+   * 执行 HTTP 请求
+   * @private
+   */
+  private async _makeHttpRequest(url: string, options: RequestOptions): Promise<RequestResult> {
+    const controller = new AbortController()
+    const timeout = options.timeout || CONSTANTS.DEFAULT_TIMEOUT
+
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+      console.warn(`${CONSTANTS.LOG_PREFIX} 请求超时: ${url}`)
+    }, timeout)
+
+    try {
+      console.log(`${CONSTANTS.LOG_PREFIX} 发起请求: ${options.method || 'GET'} ${url}`)
+
+      const fetchOptions = {
+        method: 'GET',
+        ...options,
+        signal: controller.signal
+      }
+
+      const response = await fetch(url, fetchOptions)
+      clearTimeout(timeoutId)
+
+      console.log(`${CONSTANTS.LOG_PREFIX} 请求响应: ${response.status} ${response.statusText}`)
+
+      const body = await this._parseResponseBody(response)
+      const headers = this._extractHeaders(response)
+
+      const result: RequestResult = {
+        body,
+        statusCode: response.status,
+        headers
+      }
+
+      console.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
+        url,
+        status: response.status,
+        bodyType: typeof body
+      })
+
+      return result
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+
+      const errorMessage =
+        error.name === 'AbortError' ? `请求超时: ${url}` : `请求失败: ${error.message}`
+
+      console.error(`${CONSTANTS.LOG_PREFIX} ${errorMessage}`)
+      throw error
+    }
+  }
+
+  /**
+   * 提取响应头
+   * @private
+   */
+  private _extractHeaders(response: any): Record<string, string> {
+    const headers: Record<string, string> = {}
+    response.headers.forEach((value: string, key: string) => {
+      headers[key] = value
+    })
+    return headers
+  }
+
+  /**
+   * 创建通知中心
+   * @private
+   */
+  private _createNoticeCenter() {
+    return (type: string, data: any) => {
+      const sendNotice = () => {
+        if (this.plugin?.pluginInfo) {
+          sendPluginNotice(
+            { type: type as any, data, currentVersion: this.plugin.pluginInfo.version },
+            this.plugin.pluginInfo.name
+          )
+        } else {
+          // 如果插件还未初始化，延迟执行
+          setTimeout(sendNotice, CONSTANTS.NOTICE_DELAY)
+        }
+      }
+      sendNotice()
     }
   }
 }
