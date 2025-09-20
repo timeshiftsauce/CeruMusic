@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import PlayMusic from '@renderer/components/Play/PlayMusic.vue'
-import HomeLayout from '@renderer//layout/index.vue'
+// import HomeLayout from '@renderer/layout/index.vue'
+// Trigger auto-import regeneration
 </script>
 
 <template>

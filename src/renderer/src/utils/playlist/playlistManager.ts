@@ -74,15 +74,11 @@ export async function addToPlaylistAndPlay(
   playSongCallback: (song: SongList) => Promise<void>
 ) {
   try {
-    // 获取真实播放URL
-
-    await getSongRealUrl(song)
-    const playResult = playSongCallback(song)
-
     // 使用store的方法添加歌曲到第一位
     localUserStore.addSongToFirst(song)
 
     // 播放歌曲 - 确保正确处理Promise
+    const playResult = playSongCallback(song)
     if (playResult && typeof playResult.then === 'function') {
       await playResult
     }
@@ -152,9 +148,7 @@ export async function replacePlaylist(
 
     // 播放第一首歌曲
     if (songs[0]) {
-      await getSongRealUrl(songs[0])
       const playResult = playSongCallback(songs[0])
-
       if (playResult && typeof playResult.then === 'function') {
         await playResult
       }

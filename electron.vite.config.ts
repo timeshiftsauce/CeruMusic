@@ -36,14 +36,16 @@ export default defineConfig({
           TDesignResolver({
             library: 'vue-next'
           })
-        ]
+        ],
+        dts: true
       }),
       Components({
         resolvers: [
           TDesignResolver({
             library: 'vue-next'
           })
-        ]
+        ],
+        dts: true
       })
     ],
     base: './',

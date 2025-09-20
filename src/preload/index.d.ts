@@ -119,10 +119,15 @@ interface CustomAPI {
       size: number
       formatted: string
     }>
+
   }
   
   // 用户配置API
   getUserConfig: () => Promise<any>
+
+  pluginNotice: {
+    onPluginNotice: (listener: (...args: any[]) => void) => ()=>void
+  } 
 }
 
 declare global {

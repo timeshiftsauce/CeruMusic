@@ -815,7 +815,7 @@ onMounted(() => {
                   v-if="playlists.length > 0"
                   :options="playlists.map((p) => ({ content: p.name, value: p.id }))"
                   @click="
-                    (playlistId) => addToPlaylist(song, playlists.find((p) => p.id === playlistId)!)
+                    (option) => addToPlaylist(song, playlists.find((p) => p.id === option.value)!)
                   "
                 >
                   <t-button

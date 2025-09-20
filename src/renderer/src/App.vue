@@ -11,8 +11,6 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import GlobalAudio from './components/Play/GlobalAudio.vue'
-import FloatBall from './components/AI/FloatBall.vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useAutoUpdate } from './composables/useAutoUpdate'
 
@@ -79,6 +77,7 @@ const applyTheme = (themeName) => {
     </router-view>
     <GlobalAudio />
     <FloatBall />
+    <PluginNoticeDialog />
     <UpdateProgress />
   </div>
 </template>
