@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'
-import { onMounted, onUnmounted, ref, watchEffect, computed } from 'vue'
+import { onMounted, ref, watchEffect, computed } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter } from 'vue-router'
 import { searchValue } from '@renderer/store/search'
