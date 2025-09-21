@@ -16,7 +16,12 @@ import { shouldUseBlackText } from '@renderer/utils/color/contrastColor'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { Fullscreen1Icon, FullscreenExit1Icon, ChevronDownIcon } from 'tdesign-icons-vue-next'
 // 直接从包路径导入，避免 WebAssembly 导入问题
-import { parseYrc, parseLrc, parseTTML } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
+import {
+  parseYrc,
+  parseLrc,
+  parseTTML,
+  parseQrc
+} from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
 import _ from 'lodash'
 import { storeToRefs } from 'pinia'
 
@@ -151,7 +156,11 @@ watch(
         if (lyricData.crlyric) {
           // 使用逐字歌词
           lyricText = lyricData.crlyric
-          parsedLyrics = parseYrc(lyricText)
+          if (source === 'tx') {
+            parsedLyrics = parseQrc(lyricText)
+          } else {
+            parsedLyrics = parseYrc(lyricText)
+          }
           console.log(`使用${source}逐字歌词`, parsedLyrics)
         } else if (lyricData.lyric) {
           lyricText = lyricData.lyric
