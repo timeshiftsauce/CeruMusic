@@ -2,6 +2,7 @@
 import { ref, onMounted, watch, WatchHandle, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { storeToRefs } from 'pinia'
 import { extractDominantColor } from '../../utils/color/colorExtractor'
 
 // 路由实例
@@ -18,25 +19,16 @@ const textColors = ref<string[]>([])
 const hotSongs: any = ref([])
 
 let watchSource: WatchHandle | null = null
+
 // 获取热门歌单数据
 const fetchHotSonglist = async () => {
-  const LocalUserDetail = LocalUserDetailStore()
-  watchSource = watch(
-    LocalUserDetail.userSource,
-    () => {
-      if (LocalUserDetail.userSource.source) {
-        fetchHotSonglist()
-      }
-    },
-    { deep: true }
-  )
   try {
     loading.value = true
     error.value = ''
 
     // 调用真实 API 获取热门歌单
     const result = await window.api.music.requestSdk('getHotSonglist', {
-      source: LocalUserDetail.userSource.source
+      source: userSource.value.source
     })
     if (result && result.list) {
       recommendPlaylists.value = result.list.map((item: any) => ({
@@ -112,13 +104,27 @@ const playSong = (song: any): void => {
   console.log('播放歌曲:', song.title)
 }
 
+// 获取 store 实例和响应式引用
+const LocalUserDetail = LocalUserDetailStore()
+const { userSource } = storeToRefs(LocalUserDetail)
+
 // 组件挂载时获取数据
 onMounted(() => {
-  fetchHotSonglist()
+  // 设置音源变化监听器
+  watchSource = watch(
+    userSource,
+    (newSource) => {
+      if (newSource.source) {
+        fetchHotSonglist()
+      }
+    },
+    { deep: true, immediate: true }
+  )
 })
 onUnmounted(() => {
   if (watchSource) {
     watchSource()
+    watchSource = null
   }
 })
 </script>

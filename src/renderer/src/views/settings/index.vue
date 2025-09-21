@@ -735,6 +735,44 @@ const openLink = (url: string) => {
                       禁止修改后用于侵犯第三方权益的场景。
                     </p>
                   </div>
+                  <div class="notice-item">
+                    <h4>🚫 使用限制</h4>
+                    <p>
+                      本项目仅允许用于非商业、纯技术学习目的，禁止用于任何商业运营、盈利活动，
+                      禁止修改后用于侵犯第三方权益的场景。
+                    </p>
+                  </div>
+                </div>
+                <h3 style="margin-top: 2rem">关于我们(菜单)</h3>
+                <div class="legal-notice">
+                  <div class="notice-item">
+                    <h4>😊 时迁酱</h4>
+                    <p>
+                      你好呀好呀～我是 (时迁酱)
+                      <br />
+                      一枚普普通通的高中生，因为好奇+喜欢，悄悄自学了一点编程✨！
+                      <br />
+                      <br />
+                      没想到今天你能用上我做的软件——「澜音」，它其实是我学 Electron
+                      时孵出来的小demo！
+                      <br />
+                      看到它真的能运行、还有人愿意用，我真的超级开心＋骄傲的！💖
+                      <br />
+                      <br />
+                      当然啦，平时还是要乖乖写作业上课哒～但我还是会继续挤出时间，让澜音慢慢长大，越走越远哒！💪
+                      <br />
+                      <br />
+                      如果你也喜欢它，或者想给我加点零食鼓励🧋，欢迎打赏赞助哟～谢谢可爱的你！！
+                      <img
+                        src="https://oss.shiqianjiang.cn/storage/default/20250907/image-2025082711173bb1bba3608ef15d0e1fb485f80f29c728186.png"
+                        alt="赞赏"
+                        style="width: 100%; padding: 20px 30%"
+                      />
+                      什么你也想学习编程？我教你吖！QQ:2115295703
+                    </p>
+                    <br />
+                    <h4>...待补充</h4>
+                  </div>
                 </div>
               </div>
 

@@ -434,12 +434,14 @@ const importFromPlaylist = async () => {
 // 网络歌单导入对话框状态
 const showNetworkImportDialog = ref(false)
 const networkPlaylistUrl = ref('')
+const importPlatformType = ref('wy') // 默认选择网易云音乐
 
 // 从网络歌单导入
 const importFromNetwork = () => {
   showImportDialog.value = false
   showNetworkImportDialog.value = true
   networkPlaylistUrl.value = ''
+  importPlatformType.value = 'wy' // 重置为默认平台
 }
 
 // 确认网络歌单导入
@@ -457,6 +459,43 @@ const confirmNetworkImport = async () => {
 const cancelNetworkImport = () => {
   showNetworkImportDialog.value = false
   networkPlaylistUrl.value = ''
+  importPlatformType.value = 'wy'
+}
+
+// 为歌单歌曲获取封面图片
+const setPicForPlaylist = async (songs: any[], source: string) => {
+  // 筛选出需要获取封面的歌曲
+  const songsNeedPic = songs.filter((song) => !song.img)
+
+  if (songsNeedPic.length === 0) return
+
+  // 批量请求封面
+  const picPromises = songsNeedPic.map(async (song, index) => {
+    try {
+      const url = await window.api.music.requestSdk('getPic', {
+        source,
+        songInfo: toRaw(song)
+      })
+      return {
+        song,
+        url: typeof url !== 'object' ? url : ''
+      }
+    } catch (e) {
+      console.log('获取封面失败 index' + index, e)
+      return {
+        song,
+        url: ''
+      }
+    }
+  })
+
+  // 等待所有请求完成
+  const results = await Promise.all(picPromises)
+
+  // 更新歌曲封面
+  results.forEach((result) => {
+    result.song.img = result.url
+  })
 }
 
 // 处理网络歌单导入
@@ -464,31 +503,171 @@ const handleNetworkPlaylistImport = async (input: string) => {
   try {
     const load1 = MessagePlugin.loading('正在解析歌单链接...')
 
-    // 使用正则表达式匹配网易云音乐歌单ID
-    const playlistIdRegex = /(?:music\.163\.com\/.*[?&]id=|playlist\?id=|playlist\/|id=)(\d+)/i
-    const match = input.match(playlistIdRegex)
+    let playlistId: string = ''
+    let platformName: string = ''
 
-    let playlistId: string
+    if (importPlatformType.value === 'wy') {
+      // 网易云音乐歌单ID解析
+      const playlistIdRegex = /(?:music\.163\.com\/.*[?&]id=|playlist\?id=|playlist\/|id=)(\d+)/i
+      const match = input.match(playlistIdRegex)
 
-    if (match && match[1]) {
-      // 从链接中提取到歌单ID
-      playlistId = match[1]
-    } else {
-      // 检查是否直接输入的是纯数字ID
-      const numericMatch = input.match(/^\d+$/)
-      if (numericMatch) {
-        playlistId = input
+      if (match && match[1]) {
+        playlistId = match[1]
       } else {
-        MessagePlugin.error('无法识别的歌单链接或ID格式，请输入网易云音乐歌单链接或歌单ID')
-        return
+        const numericMatch = input.match(/^\d+$/)
+        if (numericMatch) {
+          playlistId = input
+        } else {
+          MessagePlugin.error('无法识别的网易云音乐歌单链接或ID格式')
+          load1.then((res) => res.close())
+          return
+        }
       }
+      platformName = '网易云音乐'
+    } else if (importPlatformType.value === 'tx') {
+      // QQ音乐歌单ID解析 - 支持多种链接格式
+      const qqPlaylistRegexes = [
+        // 标准歌单链接
+        /(?:y\.qq\.com\/n\/ryqq\/playlist\/|music\.qq\.com\/.*[?&]id=|playlist[?&]id=)(\d+)/i,
+        // 分享链接格式
+        /(?:i\.y\.qq\.com\/n2\/m\/share\/details\/taoge\.html.*[?&]id=)(\d+)/i,
+        // 其他可能的分享格式
+        /(?:c\.y\.qq\.com\/base\/fcgi-bin\/u\?.*__=)(\d+)/i,
+        // 手机版链接
+        /(?:i\.y\.qq\.com\/v8\/playsquare\/playlist\.html.*[?&]id=)(\d+)/i,
+        // 通用ID提取 - 匹配 id= 或 &id= 参数
+        /[?&]id=(\d+)/i
+      ]
+
+      let match: RegExpMatchArray | null = null
+      for (const regex of qqPlaylistRegexes) {
+        match = input.match(regex)
+        if (match && match[1]) {
+          playlistId = match[1]
+          break
+        }
+      }
+
+      if (!match || !match[1]) {
+        // 检查是否直接输入的是纯数字ID
+        const numericMatch = input.match(/^\d+$/)
+        if (numericMatch) {
+          playlistId = input
+        } else {
+          MessagePlugin.error('无法识别的QQ音乐歌单链接或ID格式，请检查链接是否正确')
+          load1.then((res) => res.close())
+          return
+        }
+      }
+      platformName = 'QQ音乐'
+    } else if (importPlatformType.value === 'kw') {
+      // 酷我音乐歌单ID解析
+      const kwPlaylistRegexes = [
+        // 标准歌单链接
+        /(?:kuwo\.cn\/playlist_detail\/|kuwo\.cn\/.*[?&]pid=)(\d+)/i,
+        // 手机版链接
+        /(?:m\.kuwo\.cn\/h5app\/playlist\/|kuwo\.cn\/.*[?&]id=)(\d+)/i,
+        // 通用ID提取
+        /[?&](?:pid|id)=(\d+)/i
+      ]
+
+      let match: RegExpMatchArray | null = null
+      for (const regex of kwPlaylistRegexes) {
+        match = input.match(regex)
+        if (match && match[1]) {
+          playlistId = match[1]
+          break
+        }
+      }
+
+      if (!match || !match[1]) {
+        const numericMatch = input.match(/^\d+$/)
+        if (numericMatch) {
+          playlistId = input
+        } else {
+          MessagePlugin.error('无法识别的酷我音乐歌单链接或ID格式，请检查链接是否正确')
+          load1.then((res) => res.close())
+          return
+        }
+      }
+      platformName = '酷我音乐'
+    } else if (importPlatformType.value === 'kg') {
+      // 酷狗音乐链接处理 - 传递完整链接给getUserListDetail
+      const kgPlaylistRegexes = [
+        // 标准歌单链接
+        /kugou\.com\/yy\/special\/single\/\d+/i,
+        // 手机版歌单链接 (新格式)
+        /m\.kugou\.com\/songlist\/gcid_[a-zA-Z0-9]+/i,
+        // 手机版链接 (旧格式)
+        /m\.kugou\.com\/.*[?&]id=\d+/i,
+        // 参数链接
+        /kugou\.com\/.*[?&](?:specialid|id)=\d+/i,
+        // 通用酷狗链接
+        /kugou\.com\/.*playlist/i
+      ]
+
+      let isValidLink = false
+      for (const regex of kgPlaylistRegexes) {
+        if (regex.test(input)) {
+          isValidLink = true
+          playlistId = input // 传递完整链接
+          break
+        }
+      }
+
+      if (!isValidLink) {
+        // 检查是否为纯数字ID
+        const numericMatch = input.match(/^\d+$/)
+        if (numericMatch) {
+          playlistId = input
+        } else {
+          MessagePlugin.error('无法识别的酷狗音乐歌单链接或ID格式，请检查链接是否正确')
+          load1.then((res) => res.close())
+          return
+        }
+      }
+      platformName = '酷狗音乐'
+    } else if (importPlatformType.value === 'mg') {
+      // 咪咕音乐歌单ID解析
+      const mgPlaylistRegexes = [
+        // 标准歌单链接
+        /(?:music\.migu\.cn\/.*[?&]id=)(\d+)/i,
+        // 手机版链接
+        /(?:m\.music\.migu\.cn\/.*[?&]id=)(\d+)/i,
+        // 通用ID提取
+        /[?&]id=(\d+)/i
+      ]
+
+      let match: RegExpMatchArray | null = null
+      for (const regex of mgPlaylistRegexes) {
+        match = input.match(regex)
+        if (match && match[1]) {
+          playlistId = match[1]
+          break
+        }
+      }
+
+      if (!match || !match[1]) {
+        const numericMatch = input.match(/^\d+$/)
+        if (numericMatch) {
+          playlistId = input
+        } else {
+          MessagePlugin.error('无法识别的咪咕音乐歌单链接或ID格式，请检查链接是否正确')
+          load1.then((res) => res.close())
+          return
+        }
+      }
+      platformName = '咪咕音乐'
+    } else {
+      MessagePlugin.error('不支持的平台类型')
+      load1.then((res) => res.close())
+      return
     }
 
     // 验证歌单ID是否有效
     if (!playlistId || playlistId.length < 6) {
       MessagePlugin.error('歌单ID格式不正确')
       load1.then((res) => res.close())
-
       return
     }
 
@@ -500,58 +679,104 @@ const handleNetworkPlaylistImport = async (input: string) => {
     let detailResult: any
     try {
       detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
-        source: 'wy',
+        source: importPlatformType.value,
         id: playlistId,
         page: 1
       })) as any
     } catch {
-      MessagePlugin.error('获取歌单详情失败：歌曲信息可能有误')
+      MessagePlugin.error(`获取${platformName}歌单详情失败：歌曲信息可能有误`)
       load2.then((res) => res.close())
-
       return
     }
+
     if (detailResult.error) {
-      MessagePlugin.error('获取歌单详情失败：' + detailResult.error)
+      MessagePlugin.error(`获取${platformName}歌单详情失败：` + detailResult.error)
       load2.then((res) => res.close())
-
       return
     }
+
     const playlistInfo = detailResult.info
     const songs = detailResult.list || []
 
     if (songs.length === 0) {
       MessagePlugin.warning('该歌单没有歌曲')
       load2.then((res) => res.close())
-
       return
     }
 
-    const createResult = await songListAPI.create(
-      `${playlistInfo.name} (导入)`,
-      `从网易云音乐导入 - 原歌单：${playlistInfo.name}`,
-      'wy'
-    )
-    const newPlaylistId = createResult.data!.id
-    await songListAPI.updateCover(newPlaylistId, detailResult.info.img)
-    if (!createResult.success) {
-      MessagePlugin.error('创建本地歌单失败：' + createResult.error)
-      return
-    }
-
-    const addResult = await songListAPI.addSongs(newPlaylistId, songs)
-
+    // 处理导入结果
     let successCount = 0
     let failCount = 0
 
-    if (addResult.success) {
-      successCount = songs.length
-      failCount = 0
+    // 为酷狗音乐获取封面图片
+    if (importPlatformType.value === 'kg') {
+      load2.then((res) => res.close())
+      const load3 = MessagePlugin.loading('正在获取歌曲封面...')
+      if (songs.length > 100) MessagePlugin.info('歌曲较多，封面获取可能较慢')
+
+      try {
+        await setPicForPlaylist(songs, importPlatformType.value)
+      } catch (error) {
+        console.warn('获取封面失败，但继续导入:', error)
+      }
+
+      load3.then((res) => res.close())
+      const load4 = MessagePlugin.loading('正在创建本地歌单...')
+
+      const createResult = await songListAPI.create(
+        `${playlistInfo.name} (导入)`,
+        `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
+        importPlatformType.value
+      )
+
+      const newPlaylistId = createResult.data!.id
+      await songListAPI.updateCover(newPlaylistId, detailResult.info.img)
+
+      if (!createResult.success) {
+        MessagePlugin.error('创建本地歌单失败：' + createResult.error)
+        load4.then((res) => res.close())
+        return
+      }
+
+      const addResult = await songListAPI.addSongs(newPlaylistId, songs)
+      load4.then((res) => res.close())
+
+      if (addResult.success) {
+        successCount = songs.length
+        failCount = 0
+      } else {
+        successCount = 0
+        failCount = songs.length
+        console.error('批量添加歌曲失败:', addResult.error)
+      }
     } else {
-      successCount = 0
-      failCount = songs.length
-      console.error('批量添加歌曲失败:', addResult.error)
+      const createResult = await songListAPI.create(
+        `${playlistInfo.name} (导入)`,
+        `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
+        importPlatformType.value
+      )
+
+      const newPlaylistId = createResult.data!.id
+      await songListAPI.updateCover(newPlaylistId, detailResult.info.img)
+
+      if (!createResult.success) {
+        MessagePlugin.error('创建本地歌单失败：' + createResult.error)
+        load2.then((res) => res.close())
+        return
+      }
+
+      const addResult = await songListAPI.addSongs(newPlaylistId, songs)
+      load2.then((res) => res.close())
+
+      if (addResult.success) {
+        successCount = songs.length
+        failCount = 0
+      } else {
+        successCount = 0
+        failCount = songs.length
+        console.error('批量添加歌曲失败:', addResult.error)
+      }
     }
-    load2.then((res) => res.close())
 
     // 刷新歌单列表
     await loadPlaylists()
@@ -559,7 +784,7 @@ const handleNetworkPlaylistImport = async (input: string) => {
     // 显示导入结果
     if (successCount > 0) {
       MessagePlugin.success(
-        `导入完成！成功导入 ${successCount} 首歌曲` +
+        `从${platformName}导入完成！成功导入 ${successCount} 首歌曲` +
           (failCount > 0 ? `，${failCount} 首歌曲导入失败` : '')
       )
     } else {
@@ -917,7 +1142,7 @@ onMounted(() => {
           </div>
           <div class="option-content">
             <h4>从网络歌单</h4>
-            <p>导入网易云、QQ音乐等平台歌单</p>
+            <p>导入网易云音乐、QQ音乐等平台歌单</p>
             <span class="coming-soon">实验性功能</span>
           </div>
           <div class="option-arrow">
@@ -930,37 +1155,122 @@ onMounted(() => {
     <t-dialog
       v-model:visible="showNetworkImportDialog"
       placement="center"
-      header="导入网易云音乐歌单"
+      header="导入网络歌单"
       :confirm-btn="{ content: '开始导入', theme: 'primary' }"
       :cancel-btn="{ content: '取消', variant: 'outline' }"
-      width="500px"
+      width="600px"
+      :style="{ maxHeight: '80vh' }"
       @confirm="confirmNetworkImport"
       @cancel="cancelNetworkImport"
     >
       <div class="network-import-content">
-        <p class="import-description">
-          请输入网易云音乐歌单链接或歌单ID，系统将自动识别格式并导入歌单中的所有歌曲到本地歌单。
-        </p>
+        <!-- 平台选择 -->
+        <div class="platform-selector">
+          <label class="form-label">选择导入平台</label>
+          <t-radio-group v-model="importPlatformType" variant="primary-filled">
+            <t-radio-button value="wy"> 网易云音乐 </t-radio-button>
+            <t-radio-button value="tx"> QQ音乐 </t-radio-button>
+            <t-radio-button value="kw"> 酷我音乐 </t-radio-button>
+            <t-radio-button value="kg"> 酷狗音乐 </t-radio-button>
+            <t-radio-button value="mg"> 咪咕音乐 </t-radio-button>
+          </t-radio-group>
+        </div>
 
-        <t-input
-          v-model="networkPlaylistUrl"
-          placeholder="支持链接或ID：https://music.163.com/playlist?id=123456789 或 123456789"
-          clearable
-          autofocus
-          class="url-input"
-          @enter="confirmNetworkImport"
-        />
+        <!-- 内容区域 - 添加过渡动画 -->
+        <div class="import-content-wrapper">
+          <transition name="fade-slide" mode="out-in">
+            <div :key="importPlatformType" class="import-content">
+              <div style="margin-bottom: 1em">
+                请输入{{
+                  importPlatformType === 'wy'
+                    ? '网易云音乐'
+                    : importPlatformType === 'tx'
+                      ? 'QQ音乐'
+                      : importPlatformType === 'kw'
+                        ? '酷我音乐'
+                        : importPlatformType === 'kg'
+                          ? '酷狗音乐'
+                          : importPlatformType === 'mg'
+                            ? '咪咕音乐'
+                            : '音乐平台'
+                }}歌单链接或歌单ID，系统将自动识别格式并导入歌单中的所有歌曲到本地歌单。
+              </div>
+              <t-input
+                v-model="networkPlaylistUrl"
+                :placeholder="
+                  importPlatformType === 'wy'
+                    ? '支持链接或ID：https://music.163.com/playlist?id=123456789 或 123456789'
+                    : importPlatformType === 'tx'
+                      ? '支持链接或ID：https://y.qq.com/n/ryqq/playlist/123456789 或 123456789'
+                      : importPlatformType === 'kw'
+                        ? '支持链接或ID：http://www.kuwo.cn/playlist_detail/123456789 或 123456789'
+                        : importPlatformType === 'kg'
+                          ? '支持链接或ID：https://www.kugou.com/yy/special/single/123456789 或 123456789'
+                          : importPlatformType === 'mg'
+                            ? '支持链接或ID：https://music.migu.cn/v3/music/playlist/123456789 或 123456789'
+                            : '请输入歌单链接或ID'
+                "
+                clearable
+                autofocus
+                class="url-input"
+                @enter="confirmNetworkImport"
+              />
 
-        <div class="import-tips">
-          <p class="tip-title">支持的输入格式：</p>
-          <ul class="tip-list">
-            <li>完整链接：https://music.163.com/playlist?id=123456789</li>
-            <li>手机链接：https://music.163.com/m/playlist?id=123456789</li>
-            <li>分享链接：https://y.music.163.com/m/playlist/123456789</li>
-            <li>纯数字ID：123456789</li>
-            <li>其他包含ID的网易云链接格式</li>
-          </ul>
-          <p class="tip-note">智能识别：系统会自动从输入中提取歌单ID</p>
+              <div class="import-tips">
+                <p class="tip-title">
+                  {{
+                    importPlatformType === 'wy'
+                      ? '网易云音乐'
+                      : importPlatformType === 'tx'
+                        ? 'QQ音乐'
+                        : importPlatformType === 'kw'
+                          ? '酷我音乐'
+                          : importPlatformType === 'kg'
+                            ? '酷狗音乐'
+                            : importPlatformType === 'mg'
+                              ? '咪咕音乐'
+                              : '音乐平台'
+                  }}支持的输入格式：
+                </p>
+                <ul v-if="importPlatformType === 'wy'" class="tip-list">
+                  <li>完整链接：https://music.163.com/playlist?id=123456789</li>
+                  <li>手机链接：https://music.163.com/m/playlist?id=123456789</li>
+                  <li>分享链接：https://y.music.163.com/m/playlist/123456789</li>
+                  <li>纯数字ID：123456789</li>
+                  <li>其他包含ID的网易云链接格式</li>
+                </ul>
+                <ul v-else-if="importPlatformType === 'tx'" class="tip-list">
+                  <li>完整链接：https://y.qq.com/n/ryqq/playlist/123456789</li>
+                  <li>手机链接：https://i.y.qq.com/v8/playsquare/playlist.html?id=123456789</li>
+                  <li>分享链接：https://i.y.qq.com/n2/m/share/details/taoge.html?id=123456789</li>
+                  <li>其他分享：https://c.y.qq.com/base/fcgi-bin/u?__=123456789</li>
+                  <li>纯数字ID：123456789</li>
+                </ul>
+                <ul v-else-if="importPlatformType === 'kw'" class="tip-list">
+                  <li>完整链接：http://www.kuwo.cn/playlist_detail/123456789</li>
+                  <li>手机链接：http://m.kuwo.cn/h5app/playlist/123456789</li>
+                  <li>参数链接：http://www.kuwo.cn/playlist?pid=123456789</li>
+                  <li>纯数字ID：123456789</li>
+                  <li>其他包含ID的酷我音乐链接格式</li>
+                </ul>
+                <ul v-else-if="importPlatformType === 'kg'" class="tip-list">
+                  <li>完整链接：https://www.kugou.com/yy/special/single/123456789</li>
+                  <li>手机版链接：https://m.kugou.com/songlist/gcid_3z9vj0yqz4bz00b</li>
+                  <li>旧版手机链接：https://m.kugou.com/playlist?id=123456789</li>
+                  <li>参数链接：https://www.kugou.com/playlist?specialid=123456789</li>
+                  <li>纯数字ID：123456789</li>
+                </ul>
+                <ul v-else-if="importPlatformType === 'mg'" class="tip-list">
+                  <li>完整链接：https://music.migu.cn/v3/music/playlist/123456789</li>
+                  <li>手机链接：https://m.music.migu.cn/playlist?id=123456789</li>
+                  <li>参数链接：https://music.migu.cn/playlist?id=123456789</li>
+                  <li>纯数字ID：123456789</li>
+                  <li>其他包含ID的咪咕音乐链接格式</li>
+                </ul>
+                <p class="tip-note">智能识别：系统会自动从输入中提取歌单ID</p>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </t-dialog>
@@ -1055,48 +1365,190 @@ onMounted(() => {
 
 // 网络歌单导入对话框样式
 .network-import-content {
-  .import-description {
-    margin-bottom: 1rem;
-    color: #666;
-    font-size: 14px;
-    line-height: 1.5;
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 0 10px;
+  // 自定义滚动条样式
+  &::-webkit-scrollbar {
+    width: 6px;
   }
 
-  .url-input {
-    margin-bottom: 1.5rem;
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
   }
 
-  .import-tips {
-    background: #f8f9fa;
-    border-radius: 6px;
-    padding: 1rem;
-    border-left: 3px solid #507daf;
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
 
-    .tip-title {
-      margin: 0 0 0.5rem 0;
-      font-weight: 500;
-      color: #333;
-      font-size: 14px;
+    &:hover {
+      background: #a8a8a8;
+    }
+  }
+
+  .platform-selector {
+    margin-bottom: 2rem;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+    padding: 0.5rem 0;
+    margin: -0.5rem 0 1.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+
+    .form-label {
+      display: block;
+      margin-bottom: 1rem;
+      font-weight: 600;
+      color: #374151;
+      font-size: 15px;
     }
 
-    .tip-list {
-      margin: 0 0 0.5rem 0;
-      padding-left: 1.2rem;
+    :deep(.t-radio-group) {
+      width: 100%;
 
-      li {
-        color: #666;
-        font-size: 13px;
-        margin-bottom: 0.25rem;
-        font-family: 'Consolas', 'Monaco', monospace;
+      .t-radio-button {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        .t-radio-button__label {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          font-weight: 500;
+          text-align: center;
+          .iconfont {
+            font-size: 16px;
+            transition: all 0.2s ease;
+          }
+        }
+
+        &.t-is-checked .t-radio-button__label .iconfont {
+          transform: scale(1.1);
+        }
       }
     }
+  }
 
-    .tip-note {
-      margin: 0;
-      color: #999;
-      font-size: 12px;
-      font-style: italic;
+  .import-content-wrapper {
+    position: relative;
+    min-height: 200px;
+    flex: 1;
+  }
+
+  .import-content {
+    .import-description {
+      margin-bottom: 1.25rem;
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 1rem;
+      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      border-radius: 8px;
+      border-left: 4px solid var(--td-brand-color-4);
     }
+
+    .url-input {
+      margin-bottom: 1.5rem;
+    }
+
+    .import-tips {
+      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      border-radius: 12px;
+      padding: 1.25rem;
+      border: 1px solid #e2e8f0;
+      position: relative;
+      overflow: hidden;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background: linear-gradient(to bottom, var(--td-brand-color-4), var(--td-brand-color-6));
+      }
+
+      .tip-title {
+        margin: 0 0 0.75rem 0;
+        font-weight: 600;
+        color: #334155;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        &::before {
+          content: '💡';
+          font-size: 16px;
+        }
+      }
+
+      .tip-list {
+        margin: 0 0 0.75rem 0;
+        padding-left: 1.5rem;
+
+        li {
+          color: #64748b;
+          font-size: 13px;
+          margin-bottom: 0.5rem;
+          font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+          padding: 0.25rem 0.5rem;
+          background: rgba(255, 255, 255, 0.6);
+          border-radius: 4px;
+          transition: all 0.2s ease;
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.9);
+            transform: translateX(4px);
+          }
+        }
+      }
+
+      .tip-note {
+        margin: 0;
+        color: #94a3b8;
+        font-size: 12px;
+        font-style: italic;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 6px;
+
+        &::before {
+          content: '✨';
+          font-size: 14px;
+        }
+      }
+    }
+  }
+
+  // 过渡动画
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fade-slide-enter-from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+
+  .fade-slide-leave-to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+
+  .fade-slide-enter-to,
+  .fade-slide-leave-from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

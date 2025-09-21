@@ -124,10 +124,20 @@ const currentOperatingSong = ref<any>(null)
 
 // 统一的鼠标/触摸事件处理
 const handleMouseDown = (event: MouseEvent, index: number, song: any) => {
+  // 检查是否点击了删除按钮或其子元素
+  const target = event.target as HTMLElement
+  if (target.closest('.song-remove')) {
+    return // 如果点击的是删除按钮，直接返回，不处理拖拽逻辑
+  }
   handlePointerStart(event, index, song, false)
 }
 
 const handleTouchStart = (event: TouchEvent, index: number, song: any) => {
+  // 检查是否点击了删除按钮或其子元素
+  const target = event.target as HTMLElement
+  if (target.closest('.song-remove')) {
+    return // 如果点击的是删除按钮，直接返回，不处理拖拽逻辑
+  }
   handlePointerStart(event, index, song, true)
 }
 

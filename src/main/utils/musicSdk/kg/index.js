@@ -24,5 +24,4 @@ const kg = {
     return `https://www.kugou.com/song/#hash=${songInfo.hash}&album_id=${songInfo.albumId}`
   }
 }
-
 export default kg

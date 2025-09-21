@@ -33,7 +33,8 @@ export default defineConfig({
             ]
           },
           { text: '软件设计文档', link: '/guide/design' },
-          { text: '更新日志', link: '/guide/updateLog' }
+          { text: '更新日志', link: '/guide/updateLog' },
+          { text: '更新计划', link: '/guide/update'}
         ]
       },
       {
