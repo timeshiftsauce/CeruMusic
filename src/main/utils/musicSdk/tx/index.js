@@ -21,5 +21,4 @@ const tx = {
     return `https://y.qq.com/n/yqq/song/${songInfo.songmid}.html`
   }
 }
-
 export default tx

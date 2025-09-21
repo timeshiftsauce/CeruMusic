@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'
-import { onMounted, ref, watchEffect } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect, computed } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter } from 'vue-router'
 import { searchValue } from '@renderer/store/search'
@@ -45,6 +45,68 @@ const menuList: MenuItem[] = [
 ]
 const menuActive = ref(0)
 const router = useRouter()
+const source_list_show = ref(false)
+
+// 检查是否有插件数据
+const hasPluginData = computed(() => {
+  const LocalUserDetail = LocalUserDetailStore()
+  return !!(
+    LocalUserDetail.userInfo.pluginId &&
+    LocalUserDetail.userInfo.supportedSources &&
+    Object.keys(LocalUserDetail.userInfo.supportedSources).length > 0
+  )
+})
+
+// 音源名称映射
+const sourceNames = {
+  wy: '网易云音乐',
+  kg: '酷狗音乐',
+  mg: '咪咕音乐',
+  tx: 'QQ音乐',
+  kw: '酷我音乐'
+}
+
+// 动态音源列表数据，基于supportedSources
+const sourceList = computed(() => {
+  const LocalUserDetail = LocalUserDetailStore()
+  const supportedSources = LocalUserDetail.userInfo.supportedSources
+
+  if (!supportedSources) return []
+
+  return Object.keys(supportedSources).map((key) => ({
+    key,
+    name: sourceNames[key] || key,
+    icon: sourceicon[key] || key
+  }))
+})
+
+// 切换音源选择器显示状态
+const toggleSourceList = () => {
+  source_list_show.value = !source_list_show.value
+}
+
+// 选择音源
+const selectSource = (sourceKey: string) => {
+  if (!hasPluginData.value) return
+
+  const LocalUserDetail = LocalUserDetailStore()
+  LocalUserDetail.userInfo.selectSources = sourceKey
+
+  // 自动选择该音源的最高音质
+  const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
+  if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
+    LocalUserDetail.userInfo.selectQuality = sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
+  }
+
+  // 更新音源图标
+  source.value = sourceicon[sourceKey]
+  source_list_show.value = false
+}
+
+// 点击遮罩关闭音源选择器
+const handleMaskClick = () => {
+  source_list_show.value = false
+}
 
 const handleClick = (index: number): void => {
   menuActive.value = index
@@ -132,9 +194,34 @@ const handleKeyDown = () => {
 
             <div class="search-container">
               <div class="search-input">
-                <svg class="icon" aria-hidden="true">
-                  <use :xlink:href="`#icon-${source}`"></use>
-                </svg>
+                <div class="source-selector" @click="toggleSourceList">
+                  <svg class="icon" aria-hidden="true">
+                    <use :xlink:href="`#icon-${source}`"></use>
+                  </svg>
+                </div>
+                <!-- 透明遮罩 -->
+                <transition name="mask">
+                  <div v-if="source_list_show" class="source-mask" @click="handleMaskClick"></div>
+                </transition>
+                <!-- 音源选择列表 -->
+                <transition name="source">
+                  <div v-if="source_list_show" class="source-list">
+                    <div class="items">
+                      <div
+                        v-for="item in sourceList"
+                        :key="item.key"
+                        class="source-item"
+                        :class="{ active: source === item.icon }"
+                        @click="selectSource(item.key)"
+                      >
+                        <svg class="source-icon" aria-hidden="true">
+                          <use :xlink:href="`#icon-${item.icon}`"></use>
+                        </svg>
+                        <span class="source-name">{{ item.name }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </transition>
                 <t-input
                   v-model="keyword"
                   placeholder="搜索音乐、歌手"
@@ -173,6 +260,34 @@ const handleKeyDown = () => {
   position: absolute;
   width: 100%;
 }
+
+// 音源选择器过渡动画
+.source-enter-active,
+.source-leave-active {
+  transition: all 0.2s ease;
+}
+
+.source-enter-from {
+  opacity: 0;
+  transform: translateY(-0.5rem);
+}
+
+.source-leave-to {
+  opacity: 0;
+  transform: translateY(-0.5rem);
+}
+
+// 遮罩过渡动画
+.mask-enter-active,
+.mask-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.mask-enter-from,
+.mask-leave-to {
+  opacity: 0;
+}
+
 .home-container {
   height: calc(100vh - var(--play-bottom-height));
   overflow-y: hidden;
@@ -320,9 +435,120 @@ const handleKeyDown = () => {
         margin-right: 0.5rem;
         border-radius: 1.25rem !important;
         background-color: #fff;
-        overflow: hidden;
+        overflow: visible;
+        position: relative;
+
         &:has(input:focus) {
           width: max(18.75rem, 400px);
+        }
+
+        .source-selector {
+          display: flex;
+          align-items: center;
+          cursor: pointer;
+          box-sizing: border-box;
+          padding: 0.25rem;
+          aspect-ratio: 1 / 1;
+          border-radius: 999px;
+          overflow: hidden;
+          transition: background-color 0.2s;
+
+          &:hover {
+            background-color: #f3f4f6;
+          }
+
+          .source-arrow {
+            margin-left: 0.25rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+            transition: transform 0.2s;
+
+            &.rotated {
+              transform: rotate(180deg);
+            }
+          }
+        }
+
+        .source-mask {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 9999999;
+          background: transparent;
+          cursor: pointer;
+        }
+
+        .source-list {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          z-index: 10000000;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          min-width: 10rem;
+          overflow-y: hidden;
+          margin-top: 0.25rem;
+          padding: 0.5em;
+
+          .items {
+            max-height: 12rem;
+            overflow-y: auto;
+
+            // 隐藏滚动条
+            &::-webkit-scrollbar {
+              width: 0;
+              height: 0;
+            }
+
+            &::-webkit-scrollbar-track {
+              background: transparent;
+            }
+
+            &::-webkit-scrollbar-thumb {
+              background: transparent;
+            }
+
+            // Firefox 隐藏滚动条
+            scrollbar-width: none;
+          }
+
+          .source-item {
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+
+            &:last-child {
+              margin: 0;
+            }
+
+            &:hover {
+              background-color: #f3f4f6;
+            }
+
+            &.active {
+              background-color: var(--td-brand-color-1);
+              color: var(--td-brand-color);
+            }
+
+            .source-icon {
+              width: 1rem;
+              height: 1rem;
+              margin-right: 0.5rem;
+            }
+
+            .source-name {
+              font-size: 0.875rem;
+              white-space: nowrap;
+            }
+          }
         }
       }
 
@@ -330,6 +556,9 @@ const handleKeyDown = () => {
         border-radius: 0rem !important;
         border: none;
         box-shadow: none;
+        &.t-input--suffix {
+          padding-right: 0 !important;
+        }
       }
 
       .settings-btn {

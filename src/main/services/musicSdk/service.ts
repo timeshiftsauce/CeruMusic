@@ -85,6 +85,10 @@ function main(source: string) {
     },
 
     async getPlaylistDetail({ id, page }: GetSongListDetailsArg) {
+      // 酷狗音乐特殊处理：直接调用getUserListDetail
+      if (source === 'kg' && /https?:\/\//.test(id)) {
+        return (await Api.songList.getUserListDetail(id, page)) as PlaylistDetailResult
+      }
       return (await Api.songList.getListDetail(id, page)) as PlaylistDetailResult
     },
 
