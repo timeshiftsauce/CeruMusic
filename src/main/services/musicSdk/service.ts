@@ -18,8 +18,7 @@ import fsPromise from 'fs/promises'
 import axios from 'axios'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'url'
-import { app } from 'electron'
-import { CONFIG_NAME } from '../../events/directorySettings'
+import { configManager } from '../ConfigManager'
 
 const fileLock: Record<string, boolean> = {}
 
@@ -98,20 +97,9 @@ function main(source: string) {
 
       // 获取自定义下载目录
       const getDownloadDirectory = (): string => {
-        try {
-          const configPath = path.join(app.getPath('userData'), CONFIG_NAME)
-          const configData = fs.readFileSync(configPath, 'utf-8')
-          const config = JSON.parse(configData)
-
-          if (config.downloadDir && typeof config.downloadDir === 'string') {
-            return config.downloadDir
-          }
-        } catch {
-          // 配置文件不存在或读取失败，使用默认目录
-        }
-
-        // 默认下载目录
-        return path.join(app.getPath('music'), 'CeruMusic/songs')
+        // 使用配置管理服务获取下载目录
+        const directories = configManager.getDirectories()
+        return directories.downloadDir
       }
 
       // 从URL中提取文件扩展名，如果没有则默认为mp3

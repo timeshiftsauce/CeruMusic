@@ -206,19 +206,25 @@ const qualitySliderValue = ref(0)
 const qualityMarks = computed(() => {
   const marks: Record<number, string> = {}
   currentSourceQualities.value.forEach((quality, index) => {
-    marks[index] = getQualityDisplayName(quality)
+    marks[index] = String(getQualityDisplayName(quality))
   })
   return marks
 })
 
 // 监听当前选择的音质，更新滑块位置
 watch(
-  () => userInfo.value.selectQuality,
-  (newQuality) => {
-    if (newQuality && currentSourceQualities.value.length > 0) {
-      const index = currentSourceQualities.value.indexOf(newQuality)
+  [() => userInfo.value.selectQuality, () => currentSourceQualities.value],
+  ([newQuality, qualities]) => {
+    if (qualities.length > 0 && newQuality) {
+      // 检查当前选择的音质是否在新平台的支持列表中
+      const index = qualities.indexOf(newQuality)
       if (index !== -1) {
         qualitySliderValue.value = index
+      } else {
+        // 如果当前音质不在支持列表中，选择默认音质
+        console.log('当前音质不在支持列表中，选择默认音质')
+        // 选择最高音质
+        userInfo.value.selectQuality = qualities[qualities.length - 1]
       }
     }
   },
@@ -234,7 +240,11 @@ const selectSource = (sourceKey: string) => {
   // 自动选择该音源的最高音质
   const source = userInfo.value.supportedSources?.[sourceKey]
   if (source && source.qualitys && source.qualitys.length > 0) {
-    userInfo.value.selectQuality = source.qualitys[source.qualitys.length - 1]
+    // 检查当前选择的音质是否在新平台的支持列表中
+    const currentQuality = userInfo.value.selectQuality
+    if (!currentQuality || !source.qualitys.includes(currentQuality)) {
+      userInfo.value.selectQuality = source.qualitys[source.qualitys.length - 1]
+    }
   }
 }
 
@@ -743,7 +753,7 @@ const openLink = (url: string) => {
                     </p>
                   </div>
                 </div>
-                <h3 style="margin-top: 2rem">关于我们(菜单)</h3>
+                <h3 style="margin-top: 2rem">关于我们</h3>
                 <div class="legal-notice">
                   <div class="notice-item">
                     <h4>😊 时迁酱</h4>
@@ -782,8 +792,8 @@ const openLink = (url: string) => {
                 <div class="contact-info">
                   <p>如有技术问题或合作意向（仅限技术交流），请通过以下方式联系：</p>
                   <div class="contact-actions">
-                    <t-button theme="primary" @click="openLink('https://qm.qq.com/q/IDpQnbGd06')">
-                      官方QQ群
+                    <t-button theme="primary" @click="openLink('https://qm.qq.com/q/8c25dPfylG')">
+                      官方QQ群(1057783951)
                     </t-button>
                     <t-button
                       theme="primary"

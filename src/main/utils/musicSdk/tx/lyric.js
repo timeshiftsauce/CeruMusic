@@ -74,17 +74,17 @@ export default {
 
       let times = words.match(this.rxps.wordTimeAll)
       if (!times) continue
-      
+
       let currentStart = startMsTime
       const processedTimes = []
-      
+
       times.forEach(time => {
         const result = /\((\d+),(\d+),(\d+)\)/.exec(time)
         const duration = parseInt(result[2])
         processedTimes.push(`(${currentStart},${duration},0)`)
         currentStart += duration
       })
-      
+
       const wordArr = words.split(this.rxps.wordTime)
       const newWords = processedTimes.map((time, index) => `${time}${wordArr[index]}`).join('')
       lxlrcLines.push(`${startTimeStr}${newWords}`)
@@ -176,7 +176,6 @@ export default {
     }
     if (lrc) {
       let { lyric } = this.parseCeru(this.removeTag(lrc))
-      console.log(lyric, lrc)
       info.lyric = lyric
       info.crlyric = lrc
     }
@@ -185,7 +184,7 @@ export default {
 
     return info
   },
-   parseRlyric(lrc) {
+  parseRlyric(lrc) {
     lrc = lrc.trim()
     lrc = lrc.replace(/\r/g, '')
     if (!lrc) return { lyric: '', lxlyric: '' }

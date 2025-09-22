@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, screen } from 'electron'
+import { configManager } from './services/ConfigManager'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -89,20 +90,27 @@ function createTray(): void {
 
 function createWindow(): void {
   // return
-  // Create the browser window.
-  mainWindow = new BrowserWindow({
+  // 获取保存的窗口位置和大小
+  const savedBounds = configManager.getWindowBounds()
+
+  // 获取屏幕尺寸
+  const primaryDisplay = screen.getPrimaryDisplay()
+  // 使用完整屏幕尺寸而不是工作区域，以支持真正的全屏模式
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.size
+
+  // 默认窗口配置
+  const defaultOptions = {
     width: 1100,
     height: 750,
     minWidth: 1100,
     minHeight: 670,
+    maxWidth: screenWidth,
+    maxHeight: screenHeight,
     show: false,
-    center: true,
+    center: !savedBounds, // 如果有保存的位置，则不居中
     autoHideMenuBar: true,
-    // alwaysOnTop: true,
-    // 移除最大宽高限制，以便全屏模式能够铺满整个屏幕
-    titleBarStyle: 'hidden',
+    titleBarStyle: 'hidden' as const,
     ...(process.platform === 'linux' ? { icon } : {}),
-    // ...(process.platform !== 'darwin' ? { titleBarOverlay: true } : {}),
     icon: path.join(__dirname, '../../resources/logo.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -112,8 +120,56 @@ function createWindow(): void {
       contextIsolation: false,
       backgroundThrottling: false
     }
-  })
+  }
+
+  // 如果有保存的窗口位置和大小，则使用保存的值
+  if (savedBounds) {
+    Object.assign(defaultOptions, savedBounds)
+  }
+
+  // Create the browser window.
+  mainWindow = new BrowserWindow(defaultOptions)
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
+
+  // 监听窗口移动和调整大小事件，保存窗口位置和大小
+  mainWindow.on('moved', () => {
+    if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
+      const bounds = mainWindow.getBounds()
+      configManager.saveWindowBounds(bounds)
+    }
+  })
+
+  mainWindow.on('resized', () => {
+    if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
+      const bounds = mainWindow.getBounds()
+
+      // 获取当前屏幕尺寸
+      const { screen } = require('electron')
+      const currentDisplay = screen.getDisplayMatching(bounds)
+      const { width: screenWidth, height: screenHeight } = currentDisplay.workAreaSize
+
+      // 确保窗口不超过屏幕尺寸
+      let needResize = false
+      const newBounds = { ...bounds }
+
+      if (bounds.width > screenWidth) {
+        newBounds.width = screenWidth
+        needResize = true
+      }
+
+      if (bounds.height > screenHeight) {
+        newBounds.height = screenHeight
+        needResize = true
+      }
+
+      // 如果需要调整大小，应用新的尺寸
+      if (needResize) {
+        mainWindow.setBounds(newBounds)
+      }
+
+      configManager.saveWindowBounds(newBounds)
+    }
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
