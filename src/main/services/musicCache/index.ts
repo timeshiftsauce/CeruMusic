@@ -1,9 +1,8 @@
-import { app } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs/promises'
 import * as crypto from 'crypto'
 import axios from 'axios'
-import { CONFIG_NAME } from '../../events/directorySettings'
+import { configManager } from '../ConfigManager'
 
 export class MusicCacheService {
   private cacheIndex: Map<string, string> = new Map()
@@ -13,21 +12,9 @@ export class MusicCacheService {
   }
 
   private getCacheDirectory(): string {
-    try {
-      // 尝试从配置文件读取自定义缓存目录
-      const configPath = path.join(app.getPath('userData'), CONFIG_NAME)
-      const configData = require('fs').readFileSync(configPath, 'utf-8')
-      const config = JSON.parse(configData)
-
-      if (config.cacheDir && typeof config.cacheDir === 'string') {
-        return config.cacheDir
-      }
-    } catch {
-      // 配置文件不存在或读取失败，使用默认目录
-    }
-
-    // 默认缓存目录
-    return path.join(app.getPath('userData'), 'music-cache')
+    // 使用配置管理服务获取缓存目录
+    const directories = configManager.getDirectories()
+    return directories.cacheDir
   }
 
   // 动态获取缓存目录

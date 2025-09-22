@@ -95,7 +95,11 @@ const selectSource = (sourceKey: string) => {
   // 自动选择该音源的最高音质
   const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
   if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
-    LocalUserDetail.userInfo.selectQuality = sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
+    const currentQuality = LocalUserDetail.userInfo.selectQuality
+    if (!currentQuality || !sourceDetail.qualitys.includes(currentQuality)) {
+      LocalUserDetail.userInfo.selectQuality =
+        sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
+    }
   }
 
   // 更新音源图标
