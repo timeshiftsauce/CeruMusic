@@ -537,6 +537,33 @@ defineExpose({
   color: #ccc;
 }
 
+/* 全屏模式下的滚动条样式 - 只显示滑块 */
+.playlist-container .playlist-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 91, 91, 0.3) transparent;
+}
+.playlist-container.full-screen-mode .playlist-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.playlist-container.full-screen-mode .playlist-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.playlist-container.full-screen-mode .playlist-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.playlist-container.full-screen-mode .playlist-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.playlist-container.full-screen-mode .playlist-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
 .playlist-container.full-screen-mode .playlist-song:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
@@ -589,7 +616,7 @@ defineExpose({
 .playlist-content {
   flex: 1;
   overflow-y: auto;
-  scrollbar-width: none;
+  // scrollbar-width: none;
   margin: 10px 0;
   padding: 0 8px;
 }
