@@ -19,6 +19,7 @@
             class="song-item"
             @mouseenter="hoveredSong = song.id || song.songmid"
             @mouseleave="hoveredSong = null"
+            @contextmenu="handleContextMenu($event, song)"
           >
             <!-- 序号或播放状态图标 -->
             <div v-if="showIndex" class="col-index">
@@ -90,12 +91,27 @@
         </div>
       </div>
     </div>
+
+    <!-- 右键菜单 -->
+    <ContextMenu
+      v-model:visible="contextMenuVisible"
+      :position="contextMenuPosition"
+      :items="contextMenuItems"
+      @item-click="handleContextMenuItemClick"
+      @close="closeContextMenu"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { DownloadIcon } from 'tdesign-icons-vue-next'
+import { ref, computed, onMounted, nextTick, toRaw } from 'vue'
+import { DownloadIcon, PlayCircleIcon, AddIcon, FolderIcon } from 'tdesign-icons-vue-next'
+import ContextMenu from '../ContextMenu/ContextMenu.vue'
+import { createMenuItem, createSeparator, calculateMenuPosition } from '../ContextMenu/utils'
+import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
+import songListAPI from '@renderer/api/songList'
+import type { SongList } from '@common/types/songList'
+import { MessagePlugin } from 'tdesign-vue-next'
 
 interface Song {
   id?: number
@@ -141,6 +157,14 @@ const buffer = 5
 const scrollTop = ref(0)
 const visibleStartIndex = ref(0)
 const visibleEndIndex = ref(0)
+
+// 右键菜单相关状态
+const contextMenuVisible = ref(false)
+const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
+const contextMenuSong = ref<Song | null>(null)
+
+// 歌单列表
+const playlists = ref<SongList[]>([])
 
 // 计算总高度
 const totalHeight = computed(() => props.songs.length * itemHeight)
@@ -236,6 +260,119 @@ const onScroll = (event: Event) => {
   emit('scroll', event)
 }
 
+// 右键菜单项配置
+const contextMenuItems = computed((): ContextMenuItem[] => {
+  const baseItems: ContextMenuItem[] = [
+    createMenuItem('play', '播放', {
+      icon: PlayCircleIcon,
+      onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+        if (contextMenuSong.value) {
+          handlePlay(contextMenuSong.value)
+        }
+      }
+    }),
+    createMenuItem('addToPlaylist', '添加到播放列表', {
+      icon: AddIcon,
+      onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+        if (contextMenuSong.value) {
+          handleAddToPlaylist(contextMenuSong.value)
+        }
+      }
+    })
+  ]
+
+  // 如果有歌单，添加"加入歌单"子菜单
+  if (playlists.value.length > 0) {
+    baseItems.push(
+      createMenuItem('addToSongList', '加入歌单', {
+        icon: FolderIcon,
+        children: playlists.value.map((playlist) =>
+          createMenuItem(`playlist_${playlist.id}`, playlist.name, {
+            onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+              if (contextMenuSong.value) {
+                handleAddToSongList(contextMenuSong.value, playlist)
+              }
+            }
+          })
+        )
+      })
+    )
+  }
+
+  // 添加分隔线
+  baseItems.push(createSeparator())
+
+  baseItems.push(
+    createMenuItem('download', '下载', {
+      icon: DownloadIcon,
+      onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+        if (contextMenuSong.value) {
+          emit('download', contextMenuSong.value)
+        }
+      }
+    })
+  )
+
+  return baseItems
+})
+
+// 处理右键菜单
+const handleContextMenu = (event: MouseEvent, song: Song) => {
+  event.preventDefault()
+  event.stopPropagation()
+
+  // 设置菜单数据
+  contextMenuSong.value = song
+
+  // 使用智能位置计算，确保菜单在可视区域内
+  contextMenuPosition.value = calculateMenuPosition(event, 240, 300)
+
+  // 直接显示菜单
+  contextMenuVisible.value = true
+}
+
+// 处理右键菜单项点击
+const handleContextMenuItemClick = (_item: ContextMenuItem, _event: MouseEvent) => {
+  // 菜单项的 onClick 回调已经在 ContextMenuItem 组件中调用
+  // 这里不需要额外关闭菜单，ContextMenu 组件会处理关闭逻辑
+  // 避免重复关闭导致菜单显示问题
+}
+
+// 关闭右键菜单
+const closeContextMenu = () => {
+  contextMenuVisible.value = false
+  contextMenuSong.value = null
+}
+
+// 加载歌单列表
+const loadPlaylists = async () => {
+  try {
+    const result = await songListAPI.getAll()
+    if (result.success) {
+      playlists.value = result.data || []
+    } else {
+      console.error('加载歌单失败:', result.error)
+    }
+  } catch (error) {
+    console.error('加载歌单失败:', error)
+  }
+}
+
+// 添加歌曲到歌单
+const handleAddToSongList = async (song: Song, playlist: SongList) => {
+  try {
+    const result = await songListAPI.addSongs(playlist.id, [toRaw(song) as any])
+    if (result.success) {
+      MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
+    } else {
+      MessagePlugin.error(result.error || '添加到歌单失败')
+    }
+  } catch (error) {
+    console.error('添加到歌单失败:', error)
+    MessagePlugin.error('添加到歌单失败')
+  }
+}
+
 onMounted(() => {
   // 组件挂载后触发一次重新计算
   nextTick(() => {
@@ -245,6 +382,9 @@ onMounted(() => {
       onScroll(event)
     }
   })
+
+  // 加载歌单列表
+  loadPlaylists()
 })
 </script>
 

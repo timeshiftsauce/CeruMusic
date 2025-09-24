@@ -34,6 +34,8 @@ const isPlaying = ref(false)
 const search = searchValue()
 
 onMounted(async () => {
+  const localUserStore = LocalUserDetailStore()
+
   watch(
     search,
     async () => {
@@ -41,6 +43,17 @@ onMounted(async () => {
       await performSearch(true)
     },
     { immediate: true }
+  )
+
+  // 监听 userSource 变化，重新加载页面
+  watch(
+    () => localUserStore.userSource,
+    async () => {
+      if (keyword.value.trim()) {
+        await performSearch(true)
+      }
+    },
+    { deep: true }
   )
 })
 

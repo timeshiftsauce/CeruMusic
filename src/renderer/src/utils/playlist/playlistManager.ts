@@ -13,8 +13,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-  // 将事件总线挂载到全局
-  ; (window as any).musicEmitter = emitter
+// 将事件总线挂载到全局
+;(window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -37,10 +37,10 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const LocalUserDetail = LocalUserDetailStore()
     // 通过统一的request方法获取真实的播放URL
     let quality = LocalUserDetail.userSource.quality as string
-    
+
     // 检查是否为特殊音质（高清臻音、全景环绕或超清母带）
     const isSpecialQuality = ['hires', 'atmos', 'master'].includes(quality)
-    
+
     // 如果是特殊音质，先尝试获取对应链接
     if (isSpecialQuality) {
       try {
@@ -51,13 +51,16 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
           songInfo: song as any,
           quality
         })
-        
+
         // 如果成功获取特殊音质链接，直接返回
-        if (typeof specialUrlData === 'string' || (typeof specialUrlData === 'object' && !specialUrlData.error)) {
+        if (
+          typeof specialUrlData === 'string' ||
+          (typeof specialUrlData === 'object' && !specialUrlData.error)
+        ) {
           console.log(`成功获取${qualityMap[quality]}链接`)
           return specialUrlData as string
         }
-        
+
         console.log(`获取${qualityMap[quality]}链接失败，回退到标准逻辑`)
         // 如果获取特殊音质失败，继续执行原有逻辑
       } catch (specialError) {
@@ -65,7 +68,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
         // 特殊音质获取失败，继续执行原有逻辑
       }
     }
-    
+
     // 原有逻辑：检查歌曲支持的最高音质
     if (
       qualityKey.indexOf(quality) >
@@ -73,7 +76,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     ) {
       quality = (song.types[song.types.length - 1] as unknown as { type: any }).type
     }
-    
+
     console.log(`使用音质: ${quality} - ${qualityMap[quality]}`)
     const urlData = await window.api.music.requestSdk('getMusicUrl', {
       pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
@@ -81,7 +84,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       songInfo: song as any,
       quality
     })
-    
+
     console.log(urlData)
     if (typeof urlData === 'object' && urlData.error) {
       throw new Error(urlData.error)

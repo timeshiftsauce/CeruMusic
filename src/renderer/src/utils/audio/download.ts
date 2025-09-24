@@ -50,7 +50,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
           songInfo: toRaw(songInfo)
         })
 
-          ; (await tip).close()
+        ;(await tip).close()
 
         // 如果成功获取特殊音质链接，处理结果并返回
         if (specialResult && 'error' in specialResult && !specialResult.error) {
@@ -92,7 +92,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       quality,
       songInfo: toRaw(songInfo)
     })
-      ; (await tip).close()
+    ;(await tip).close()
     if (!Object.hasOwn(result, 'path')) {
       MessagePlugin.info(result.message)
     } else {
