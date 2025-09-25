@@ -13,13 +13,15 @@ export default {
     lineTime2: /^\[([\d:.]+)\]/,
     wordTime: /\(\d+,\d+,\d+\)/,
     wordTimeAll: /(\(\d+,\d+,\d+\))/g,
-    timeLabelFixRxp: /(?:\.0+|0+)$/,
+    timeLabelFixRxp: /(?:\.0+|0+)$/
   },
   msFormat(timeMs) {
     if (Number.isNaN(timeMs)) return ''
     let ms = timeMs % 1000
     timeMs /= 1000
-    let m = parseInt(timeMs / 60).toString().padStart(2, '0')
+    let m = parseInt(timeMs / 60)
+      .toString()
+      .padStart(2, '0')
     timeMs %= 60
     let s = parseInt(timeMs).toString().padStart(2, '0')
     return `[${m}:${s}.${String(ms).padStart(3, '0')}]`
@@ -78,7 +80,7 @@ export default {
       let currentStart = startMsTime
       const processedTimes = []
 
-      times.forEach(time => {
+      times.forEach((time) => {
         const result = /\((\d+),(\d+),(\d+)\)/.exec(time)
         const duration = parseInt(result[2])
         processedTimes.push(`(${currentStart},${duration},0)`)
@@ -91,7 +93,7 @@ export default {
     }
     return {
       lyric: lrcLines.join('\n'),
-      lxlyric: lxlrcLines.join('\n'),
+      lxlyric: lxlrcLines.join('\n')
     }
   },
   getIntv(interval) {
@@ -171,8 +173,7 @@ export default {
       lyric: '',
       tlyric: '',
       rlyric: '',
-      crlyric: '',
-
+      crlyric: ''
     }
     if (lrc) {
       let { lyric } = this.parseCeru(this.removeTag(lrc))
@@ -208,11 +209,7 @@ export default {
     return lrcLines.join('\n')
   },
   parseLyric(lrc, tlrc, rlrc) {
-    return this.parse(
-      decode(lrc),
-      decode(tlrc),
-      decode(rlrc)
-    )
+    return this.parse(decode(lrc), decode(tlrc), decode(rlrc))
   },
   getLyric(mInfo, retryNum = 0) {
     if (retryNum > 3) return Promise.reject(new Error('Get lyric failed'))

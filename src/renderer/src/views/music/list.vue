@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, toRaw } from 'vue'
+import { ref, onMounted, toRaw, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
-import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
 
 interface MusicItem {
   singer: string
@@ -202,6 +201,103 @@ const handleAddToPlaylist = (song: MusicItem) => {
   }
 }
 
+// 从本地歌单移出歌曲
+const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
+  try {
+    const result = await window.api.songList.removeSongs(playlistInfo.value.id, [song.songmid])
+
+    if (result.success) {
+      // 从当前歌曲列表中移除
+      const index = songs.value.findIndex((s) => s.songmid === song.songmid)
+      if (index !== -1) {
+        songs.value.splice(index, 1)
+        // 更新歌单信息中的歌曲总数
+        playlistInfo.value.total = songs.value.length
+      }
+      MessagePlugin.success(`已将"${song.name}"从歌单中移出`)
+    } else {
+      MessagePlugin.error(result.error || '移出歌曲失败')
+    }
+  } catch (error) {
+    console.error('移出歌曲失败:', error)
+    MessagePlugin.error('移出歌曲失败')
+  }
+}
+
+// 检查是否是本地歌单
+const isLocalPlaylist = computed(() => {
+  return route.query.type === 'local' || route.query.source === 'local'
+})
+
+// 文件选择器引用
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+// 点击封面修改图片（仅本地歌单）
+const handleCoverClick = () => {
+  if (!isLocalPlaylist.value) return
+
+  // 触发文件选择器
+  if (fileInputRef.value) {
+    fileInputRef.value.click()
+  }
+}
+
+// 处理文件选择
+const handleFileSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+
+  if (!file) return
+
+  // 检查文件类型
+  if (!file.type.startsWith('image/')) {
+    MessagePlugin.error('请选择图片文件')
+    return
+  }
+
+  // 检查文件大小（限制为5MB）
+  if (file.size > 5 * 1024 * 1024) {
+    MessagePlugin.error('图片文件大小不能超过5MB')
+    return
+  }
+
+  try {
+    // 读取文件为base64
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64Data = e.target?.result as string
+
+      try {
+        // 调用API更新歌单封面
+        const result = await window.api.songList.updateCover(playlistInfo.value.id, base64Data)
+
+        if (result.success) {
+          // 更新本地显示的封面
+          playlistInfo.value.cover = base64Data
+          MessagePlugin.success('封面更新成功')
+        } else {
+          MessagePlugin.error(result.error || '封面更新失败')
+        }
+      } catch (error) {
+        console.error('更新封面失败:', error)
+        MessagePlugin.error('封面更新失败')
+      }
+    }
+
+    reader.onerror = () => {
+      MessagePlugin.error('读取图片文件失败')
+    }
+
+    reader.readAsDataURL(file)
+  } catch (error) {
+    console.error('处理图片文件失败:', error)
+    MessagePlugin.error('处理图片文件失败')
+  }
+
+  // 清空文件选择器的值，以便可以重复选择同一个文件
+  target.value = ''
+}
+
 // 替换播放列表的通用函数
 const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => {
   if (!(window as any).musicEmitter) {
@@ -299,9 +395,30 @@ onMounted(() => {
     <div class="fixed-header">
       <!-- 歌单信息 -->
       <div class="playlist-header">
-        <div class="playlist-cover">
+        <div
+          class="playlist-cover"
+          :class="{ clickable: isLocalPlaylist }"
+          @click="handleCoverClick"
+        >
           <img :src="playlistInfo.cover" :alt="playlistInfo.title" />
+          <!-- 本地歌单显示编辑提示 -->
+          <div v-if="isLocalPlaylist" class="cover-overlay">
+            <svg class="edit-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+              />
+            </svg>
+            <span>点击修改封面</span>
+          </div>
         </div>
+        <!-- 隐藏的文件选择器 -->
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="image/*"
+          style="display: none"
+          @change="handleFileSelect"
+        />
         <div class="playlist-details">
           <h1 class="playlist-title">{{ playlistInfo.title }}</h1>
           <p class="playlist-author">by {{ playlistInfo.author }}</p>
@@ -362,10 +479,13 @@ onMounted(() => {
           :show-index="true"
           :show-album="true"
           :show-duration="true"
+          :is-local-playlist="isLocalPlaylist"
+          :playlist-id="playlistInfo.id"
           @play="handlePlay"
           @pause="handlePause"
           @download="handleDownload"
           @add-to-playlist="handleAddToPlaylist"
+          @remove-from-local-playlist="handleRemoveFromLocalPlaylist"
         />
       </div>
     </div>
@@ -451,11 +571,58 @@ onMounted(() => {
     border-radius: 0.5rem;
     overflow: hidden;
     flex-shrink: 0;
+    position: relative;
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      transition: transform 0.2s ease;
+    }
+
+    // 本地歌单封面可点击样式
+    &.clickable {
+      cursor: pointer;
+
+      &:hover {
+        .cover-overlay {
+          opacity: 1;
+        }
+
+        img {
+          transform: scale(1.05);
+        }
+      }
+    }
+
+    .cover-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      color: white;
+      font-size: 12px;
+      text-align: center;
+      padding: 8px;
+
+      .edit-icon {
+        width: 24px;
+        height: 24px;
+        margin-bottom: 4px;
+      }
+
+      span {
+        font-weight: 500;
+        line-height: 1.2;
+      }
     }
   }
 

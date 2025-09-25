@@ -55,7 +55,11 @@
 
               <!-- 子菜单箭头 -->
               <div v-if="item.children && item.children.length > 0" class="context-menu__arrow">
-                <i class="context-menu__arrow-icon">▶</i>
+                <chevron-right-icon
+                  :fill-color="'transparent'"
+                  :stroke-color="'#000000'"
+                  :stroke-width="1.5"
+                />
               </div>
             </template>
           </li>
@@ -75,7 +79,13 @@
       </div>
 
       <!-- 子菜单 -->
-      <div v-if="activeSubmenu" class="context-menu__submenu-wrapper" :style="submenuWrapperStyle">
+      <div
+        v-if="activeSubmenu"
+        class="context-menu__submenu-wrapper"
+        :style="submenuWrapperStyle"
+        @mouseenter="handleSubmenuMouseEnter"
+        @mouseleave="handleSubmenuMouseLeave"
+      >
         <ContextMenu
           ref="submenuRef"
           :visible="true"
@@ -102,6 +112,7 @@ import type {
   AnimationConfig,
   ScrollConfig
 } from './types'
+import { ChevronRightIcon } from 'tdesign-icons-vue-next'
 
 // 默认配置
 const DEFAULT_EDGE_CONFIG: EdgeDetectionConfig = {
@@ -187,7 +198,12 @@ const scrollContainerStyle = computed((): CSSProperties => {
 })
 
 const visibleItems = computed(() => {
-  return props.items.filter((item) => !item.separator || item.label)
+  return props.items.filter((item) => {
+    // 显示所有非分隔线项目
+    if (!item.separator) return true
+    // 显示所有分隔线项目（无论是否有label）
+    return true
+  })
 })
 
 const showScrollIndicator = computed(() => {
@@ -199,9 +215,7 @@ const canScrollDown = computed(() => scrollTop.value < scrollHeight.value - clie
 
 const submenuWrapperStyle = computed((): CSSProperties => {
   return {
-    position: 'absolute',
-    left: '100%',
-    top: '0',
+    position: 'fixed',
     zIndex: props.zIndex + 1,
     maxHeight: `${submenuMaxHeight.value}px`
   }
@@ -362,6 +376,11 @@ const handleSubmenuItemClick = (item: ContextMenuItem, event: MouseEvent) => {
 const openSubmenu = (item: ContextMenuItem, _event: MouseEvent) => {
   if (!menuRef.value) return
 
+  // 如果是相同的子菜单，不需要重新计算位置
+  if (activeSubmenu.value && activeSubmenu.value.id === item.id) {
+    return
+  }
+
   // 移除未使用的变量声明
   activeSubmenu.value = item
 
@@ -372,16 +391,119 @@ const openSubmenu = (item: ContextMenuItem, _event: MouseEvent) => {
 
 const closeSubmenu = () => {
   activeSubmenu.value = null
+  clearTimeout(submenuTimer.value)
 }
-
 const updateSubmenuPosition = () => {
   if (!menuRef.value || !activeSubmenu.value) return
 
   const menuRect = menuRef.value.getBoundingClientRect()
-  submenuPosition.value = {
-    x: menuRect.right - 2,
-    y: menuRect.top
+  // 初始位置：显示在右侧
+  const x = menuRect.right
+  const y = menuRect.top
+
+  // 先设置初始位置，让子菜单渲染
+  submenuPosition.value = { x, y }
+
+  // 等待子菜单渲染完成后调整位置
+  setTimeout(() => {
+    // 子菜单通过 Teleport 渲染到 body 中，需要在 body 中查找
+    // 查找所有的 context-menu 元素，找到 z-index 最高的（即子菜单）
+    const allMenus = document.querySelectorAll('.context-menu')
+    console.log('All menus found:', allMenus.length)
+
+    let submenuEl: Element | null = null
+    let maxZIndex = props.zIndex
+
+    allMenus.forEach((menu) => {
+      const style = window.getComputedStyle(menu)
+      const zIndex = parseInt(style.zIndex) || 0
+      console.log('Menu z-index:', zIndex, 'Current max:', maxZIndex)
+
+      if (zIndex > maxZIndex) {
+        maxZIndex = zIndex
+        submenuEl = menu as Element
+      }
+    })
+
+    console.log('Found submenu:', submenuEl)
+
+    if (submenuEl) {
+      const submenuRect = (submenuEl as HTMLElement).getBoundingClientRect()
+      console.log('submenuRect:', submenuRect)
+
+      if (submenuRect.width > 0) {
+        // 计算包含滚动条的实际宽度
+        const scrollContainer = (submenuEl as HTMLElement).querySelector(
+          '.context-menu__scroll-container'
+        ) as HTMLElement | null
+        let actualWidth = submenuRect.width
+
+        if (scrollContainer) {
+          // 检查是否有滚动条
+          const hasScrollbar = scrollContainer.scrollHeight > scrollContainer.clientHeight
+          if (hasScrollbar) {
+            // 添加滚动条宽度（通常是6-17px，这里使用默认的6px）
+            const scrollbarWidth = scrollContainer.offsetWidth - scrollContainer.clientWidth
+            actualWidth += scrollbarWidth
+            console.log('Added scrollbar width:', scrollbarWidth, 'Total width:', actualWidth)
+          }
+        }
+
+        adjustSubmenuPosition(actualWidth)
+      } else {
+        // 如果宽度为0，再等一下
+        setTimeout(() => {
+          const retryRect = (submenuEl as HTMLElement).getBoundingClientRect()
+          console.log('retryRect:', retryRect)
+          if (retryRect.width > 0) {
+            // 重试时也要考虑滚动条
+            const scrollContainer = (submenuEl as HTMLElement).querySelector(
+              '.context-menu__scroll-container'
+            ) as HTMLElement | null
+            let actualWidth = retryRect.width
+
+            if (scrollContainer) {
+              const hasScrollbar = scrollContainer.scrollHeight > scrollContainer.clientHeight
+              if (hasScrollbar) {
+                const scrollbarWidth = scrollContainer.offsetWidth - scrollContainer.clientWidth
+                actualWidth += scrollbarWidth
+              }
+            }
+
+            adjustSubmenuPosition(actualWidth)
+          }
+        }, 50)
+      }
+    }
+  }, 0)
+}
+
+// 提取位置调整逻辑为独立函数
+const adjustSubmenuPosition = (submenuWidth: number) => {
+  if (!menuRef.value || !activeSubmenu.value) return
+
+  const menuRect = menuRef.value.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const threshold = 10
+
+  // 重新计算位置
+  let adjustedX = menuRect.right
+  const y = menuRect.top
+
+  // 检查右侧是否有足够空间显示子菜单
+  if (adjustedX + submenuWidth > viewportWidth - threshold) {
+    // 如果右侧空间不足，显示在左侧：父元素的left - 子菜单宽度
+    adjustedX = menuRect.left - submenuWidth
   }
+
+  // 确保子菜单不会超出左边界
+  if (adjustedX < threshold) {
+    adjustedX = threshold
+  }
+
+  console.log('Final position:', { x: adjustedX, y })
+  // 更新最终位置
+  submenuPosition.value = { x: adjustedX, y }
 }
 
 const handleBackdropClick = () => {
@@ -395,6 +517,18 @@ const handleBackdropContextMenu = (event: MouseEvent) => {
 
 const handleMouseLeave = () => {
   clearTimeout(submenuTimer.value)
+}
+
+const handleSubmenuMouseEnter = () => {
+  // 鼠标进入子菜单区域，清除关闭定时器
+  clearTimeout(submenuTimer.value)
+}
+
+const handleSubmenuMouseLeave = () => {
+  // 鼠标离开子菜单区域，延迟关闭子菜单
+  submenuTimer.value = setTimeout(() => {
+    closeSubmenu()
+  }, 100)
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {
@@ -476,10 +610,10 @@ defineExpose({
   /* scrollbar-color: rgba(255, 255, 255, 0.3) transparent; */
   transition: transform 0.15s ease;
 }
-/* 
 .context-menu__scroll-container::-webkit-scrollbar {
   width: 6px;
 }
+/* 
 
 .context-menu__scroll-container::-webkit-scrollbar-track {
   background: transparent;
@@ -528,6 +662,8 @@ defineExpose({
   padding: 0;
   margin: 4px 0;
   cursor: default;
+  height: auto;
+  min-height: auto;
 }
 
 .context-menu__item--has-children {
@@ -560,6 +696,9 @@ defineExpose({
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
+  justify-content: center;
+  align-items: center;
+  display: flex;
   color: #999;
 }
 
@@ -570,8 +709,10 @@ defineExpose({
 
 .context-menu__separator {
   height: 1px;
+  width: 100%;
   background: #e0e0e0;
   margin: 0 8px;
+  opacity: 0.8;
 }
 
 .context-menu__scroll-indicator {
@@ -658,7 +799,8 @@ defineExpose({
   }
 
   .context-menu__separator {
-    background: #404040;
+    background: #555555;
+    opacity: 0.9;
   }
 
   .context-menu__scroll-indicator-top,

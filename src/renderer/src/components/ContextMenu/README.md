@@ -52,8 +52,8 @@ const menuItems = ref<ContextMenuItem[]>([
 ```vue
 <template>
   <div class="song-list">
-    <div 
-      v-for="song in songs" 
+    <div
+      v-for="song in songs"
       :key="song.id"
       class="song-item"
       @contextmenu.prevent="handleSongContextMenu(song, $event)"
@@ -99,13 +99,13 @@ const handleSongContextMenu = (song, event) => {
 
 ### ContextMenu 组件属性
 
-| 属性 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| visible | boolean | false | 控制菜单显示/隐藏 |
-| items | ContextMenuItem[] | [] | 菜单项配置数组 |
-| position | ContextMenuPosition | {x:0,y:0} | 菜单位置坐标 |
-| maxHeight | number | 400 | 菜单最大高度 |
-| zIndex | number | 1000 | 菜单层级 |
+| 属性      | 类型                | 默认值    | 说明              |
+| --------- | ------------------- | --------- | ----------------- |
+| visible   | boolean             | false     | 控制菜单显示/隐藏 |
+| items     | ContextMenuItem[]   | []        | 菜单项配置数组    |
+| position  | ContextMenuPosition | {x:0,y:0} | 菜单位置坐标      |
+| maxHeight | number              | 400       | 菜单最大高度      |
+| zIndex    | number              | 1000      | 菜单层级          |
 
 ### ContextMenuItem 类型
 
@@ -125,6 +125,7 @@ interface ContextMenuItem {
 ### 工具函数
 
 #### createMenuItem
+
 创建标准菜单项
 
 ```typescript
@@ -139,6 +140,7 @@ createMenuItem(id: string, label: string, options?: {
 ```
 
 #### createSeparator
+
 创建分隔线
 
 ```typescript
@@ -146,12 +148,13 @@ createSeparator(): ContextMenuItem
 ```
 
 #### calculateMenuPosition
+
 智能计算菜单位置
 
 ```typescript
 calculateMenuPosition(
-  event: MouseEvent, 
-  menuWidth?: number, 
+  event: MouseEvent,
+  menuWidth?: number,
   menuHeight?: number
 ): ContextMenuPosition
 ```
@@ -177,14 +180,12 @@ const menuItems = [
 
 ```typescript
 const dynamicMenuItems = computed(() => {
-  const items = [
-    createMenuItem('play', '播放')
-  ]
-  
+  const items = [createMenuItem('play', '播放')]
+
   if (user.value.isPremium) {
     items.push(createMenuItem('download', '下载高音质'))
   }
-  
+
   return items
 })
 ```
@@ -227,12 +228,15 @@ const menuItems = [
 ## 故障排除
 
 ### 菜单位置不正确
+
 确保使用 `calculateMenuPosition` 函数计算位置。
 
 ### 菜单项点击无效
+
 检查 `onClick` 回调函数是否正确绑定。
 
 ### 样式冲突
+
 使用 `className` 属性添加自定义样式类。
 
 ## 贡献指南

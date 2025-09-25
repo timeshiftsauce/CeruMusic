@@ -2,24 +2,24 @@
 // 这个文件可以用来测试 NoticeCenter 功能
 
 const pluginInfo = {
-  name: "测试通知插件",
-  version: "1.0.0",
-  author: "CeruMusic Team",
-  description: "用于测试插件通知功能的示例插件",
-  type: "cr"
+  name: '测试通知插件',
+  version: '1.0.0',
+  author: 'CeruMusic Team',
+  description: '用于测试插件通知功能的示例插件',
+  type: 'cr'
 }
 
 const sources = [
   {
-    name: "test",
-    qualities: ["128k", "320k"]
+    name: 'test',
+    qualities: ['128k', '320k']
   }
 ]
 
 // 模拟音乐URL获取函数
 async function musicUrl(source, musicInfo, quality) {
   console.log('测试插件：获取音乐URL')
-  
+
   // 测试不同类型的通知
   setTimeout(() => {
     // 测试信息通知
@@ -29,7 +29,7 @@ async function musicUrl(source, musicInfo, quality) {
       content: '插件正在正常工作'
     })
   }, 1000)
-  
+
   setTimeout(() => {
     // 测试警告通知
     this.cerumusic.NoticeCenter('warning', {
@@ -38,7 +38,7 @@ async function musicUrl(source, musicInfo, quality) {
       content: '请注意某些设置'
     })
   }, 2000)
-  
+
   setTimeout(() => {
     // 测试成功通知
     this.cerumusic.NoticeCenter('success', {
@@ -47,7 +47,7 @@ async function musicUrl(source, musicInfo, quality) {
       content: '音乐URL获取成功'
     })
   }, 3000)
-  
+
   setTimeout(() => {
     // 测试更新通知
     this.cerumusic.NoticeCenter('update', {
@@ -62,7 +62,7 @@ async function musicUrl(source, musicInfo, quality) {
       }
     })
   }, 4000)
-  
+
   setTimeout(() => {
     // 测试错误通知
     this.cerumusic.NoticeCenter('error', {
@@ -71,7 +71,7 @@ async function musicUrl(source, musicInfo, quality) {
       error: '模拟的错误信息'
     })
   }, 5000)
-  
+
   // 返回一个测试URL
   return 'https://example.com/test-music.mp3'
 }

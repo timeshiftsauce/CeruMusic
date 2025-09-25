@@ -7,8 +7,8 @@ export default defineConfig({
   base: '/',
   description:
     'Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。',
-  markdown:{
-    config(md){
+  markdown: {
+    config(md) {
       md.use(note)
     }
   },
@@ -28,13 +28,11 @@ export default defineConfig({
           { text: '安装教程', link: '/guide/' },
           {
             text: '使用教程',
-            items: [
-              { text: '音乐播放列表', link: '/guide/used/playList' },
-            ]
+            items: [{ text: '音乐播放列表', link: '/guide/used/playList' }]
           },
           { text: '软件设计文档', link: '/guide/design' },
           { text: '更新日志', link: '/guide/updateLog' },
-          { text: '更新计划', link: '/guide/update'}
+          { text: '更新计划', link: '/guide/update' }
         ]
       },
       {
@@ -64,21 +62,20 @@ export default defineConfig({
       provider: 'local'
     },
     outline: {
-      level: [2,4],
+      level: [2, 4],
       label: '文章导航'
     },
     docFooter: {
       next: '下一篇',
       prev: '上一篇'
     },
-    lastUpdatedText: '上次更新',
-
+    lastUpdatedText: '上次更新'
   },
   sitemap: {
     hostname: 'https://ceru.docs.shiqianjiang.cn'
   },
   lastUpdated: true,
-  head: [['link', { rel: 'icon', href: '/logo.svg' }]],
+  head: [['link', { rel: 'icon', href: '/logo.svg' }]]
 })
 console.log(process.env.BASE_URL_DOCS)
 // Smooth scrolling functions

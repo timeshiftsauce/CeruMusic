@@ -3,6 +3,7 @@
 ## 概述
 
 CeruMusic 支持两种类型的插件：
+
 1. **CeruMusic 原生插件**：基于 CeruMusic API 的插件格式
 2. **LX 兼容插件**：兼容 LX Music 的事件驱动插件格式
 
@@ -67,7 +68,7 @@ const sources = {
     qualities: ['128k', '320k', 'flac', 'flac24bit']
   },
   tx:{
-    name: "QQ音乐", 
+    name: "QQ音乐",
     qualities: ['128k', '320k', 'flac']
   }
 };
@@ -132,23 +133,21 @@ module.exports = {
 > #### PS:
 >
 > - `sources key` 取值
->
 >   - wy 网易云音乐 |
->   -  tx QQ音乐 |
->   -  kg 酷狗音乐 |
->   -  mg 咪咕音乐 | 
+>   - tx QQ音乐 |
+>   - kg 酷狗音乐 |
+>   - mg 咪咕音乐 |
 >   - kw 酷我音乐
 >
 > - 导出
 >
 >   ```javascript
 >   module.exports = {
->     sources, // 你的音源支持
->   };
+>     sources // 你的音源支持
+>   }
 >   ```
 >
 > - 支持的音质 ` sources.qualities: ['128k', '320k', 'flac']`
->
 >   - `128k`: 128kbps
 >   - `320k`: 320kbps
 >   - `flac`: FLAC 无损
@@ -157,8 +156,6 @@ module.exports = {
 >   - `atmos`: 杜比全景声
 >   - `master`: 母带音质
 
-
-
 ### CeruMusic API 参考
 
 #### cerumusic.request(url, options)
@@ -166,6 +163,7 @@ module.exports = {
 HTTP 请求方法，返回 Promise。
 
 **参数：**
+
 - `url` (string): 请求地址
 - `options` (object): 请求选项
   - `method`: 请求方法 (GET, POST, PUT, DELETE 等)
@@ -174,6 +172,7 @@ HTTP 请求方法，返回 Promise。
   - `timeout`: 超时时间（毫秒）
 
 **返回值：**
+
 ```javascript
 {
   statusCode: 200,
@@ -206,16 +205,17 @@ cerumusic.utils.crypto.rsaEncrypt(data, key)
 cerumusic.NoticeCenter('info', {
   title: '通知标题',
   content: '通知内容',
-  url: 'https://example.com',  // 可选 当通知为update 版本跟新可传
+  url: 'https://example.com', // 可选 当通知为update 版本跟新可传
   version: '版本号', // 当通知为update 版本跟新可传
   pluginInfo: {
     name: '插件名称',
-    type: 'cr', // 固定唯一标识
-  }// 当通知为update 版本跟新可传
-});
+    type: 'cr' // 固定唯一标识
+  } // 当通知为update 版本跟新可传
+})
 ```
 
 **通知类型：**
+
 - `'info'`: 信息通知
 - `'success'`: 成功通知
 - `'warn'`: 警告通知
@@ -247,46 +247,47 @@ const qualitys = {
     '128k': '128',
     '320k': '320',
     flac: 'flac',
-    flac24bit: 'flac24bit',
+    flac24bit: 'flac24bit'
   },
-  local: {},
+  local: {}
 }
 
 // HTTP 请求封装
-const httpRequest = (url, options) => new Promise((resolve, reject) => {
-  request(url, options, (err, resp) => {
-    if (err) return reject(err)
-    resolve(resp.body)
+const httpRequest = (url, options) =>
+  new Promise((resolve, reject) => {
+    request(url, options, (err, resp) => {
+      if (err) return reject(err)
+      resolve(resp.body)
+    })
   })
-})
 
 // API 实现
 const apis = {
   kw: {
     musicUrl({ songmid }, quality) {
-      return httpRequest('http://xxx').then(data => {
+      return httpRequest('http://xxx').then((data) => {
         return data.url
       })
-    },
+    }
   },
   local: {
     musicUrl(info) {
-      return httpRequest('http://xxx').then(data => {
+      return httpRequest('http://xxx').then((data) => {
         return data.url
       })
     },
     pic(info) {
-      return httpRequest('http://xxx').then(data => {
+      return httpRequest('http://xxx').then((data) => {
         return data.url
       })
     },
     lyric(info) {
-      return httpRequest('http://xxx').then(data => {
+      return httpRequest('http://xxx').then((data) => {
         return {
           lyric: '...', // 歌曲歌词
           tlyric: '...', // 翻译歌词，没有可为 null
           rlyric: '...', // 罗马音歌词，没有可为 null
-          lxlyric: '...', // lx 逐字歌词，没有可为 null
+          lxlyric: '...' // lx 逐字歌词，没有可为 null
         }
       })
     }
@@ -313,15 +314,15 @@ send(EVENT_NAMES.inited, {
       name: '酷我音乐',
       type: 'music',
       actions: ['musicUrl'],
-      qualitys: ['128k', '320k', 'flac', 'flac24bit'],
+      qualitys: ['128k', '320k', 'flac', 'flac24bit']
     },
     local: {
       name: '本地音乐',
       type: 'music',
       actions: ['musicUrl', 'lyric', 'pic'],
-      qualitys: [],
-    },
-  },
+      qualitys: []
+    }
+  }
 })
 ```
 
@@ -342,8 +343,8 @@ send(EVENT_NAMES.inited, {
 ```javascript
 lx.on(lx.EVENT_NAMES.request, ({ source, action, info }) => {
   // 必须返回 Promise
-  return Promise.resolve(result);
-});
+  return Promise.resolve(result)
+})
 ```
 
 #### globalThis.lx.send(eventName, data)
@@ -369,18 +370,22 @@ lx.send(lx.EVENT_NAMES.updateAlert, {
 HTTP 请求方法：
 
 ```javascript
-lx.request('https://api.example.com', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(data),
-  timeout: 10000
-}, (err, resp) => {
-  if (err) {
-    console.error('请求失败:', err);
-    return;
+lx.request(
+  'https://api.example.com',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+    timeout: 10000
+  },
+  (err, resp) => {
+    if (err) {
+      console.error('请求失败:', err)
+      return
+    }
+    console.log('响应:', resp.body)
   }
-  console.log('响应:', resp.body);
-});
+)
 ```
 
 #### globalThis.lx.utils
@@ -433,28 +438,28 @@ async function musicUrl(source, musicInfo, quality) {
   try {
     // 参数验证
     if (!musicInfo || !musicInfo.id) {
-      throw new Error('音乐信息不完整');
+      throw new Error('音乐信息不完整')
     }
 
     // API 调用
-    const result = await cerumusic.request(url, options);
-    
+    const result = await cerumusic.request(url, options)
+
     // 结果验证
     if (!result || result.statusCode !== 200) {
-      throw new Error(`API 请求失败: ${result?.statusCode || 'Unknown'}`);
+      throw new Error(`API 请求失败: ${result?.statusCode || 'Unknown'}`)
     }
 
     if (!result.body || !result.body.url) {
-      throw new Error('返回数据格式错误');
+      throw new Error('返回数据格式错误')
     }
 
-    return result.body.url;
+    return result.body.url
   } catch (error) {
     // 记录错误日志
-    console.error(`[${source}] 获取音乐链接失败:`, error.message);
-    
+    console.error(`[${source}] 获取音乐链接失败:`, error.message)
+
     // 重新抛出错误供上层处理
-    throw new Error(`获取 ${source} 音乐链接失败: ${error.message}`);
+    throw new Error(`获取 ${source} 音乐链接失败: ${error.message}`)
   }
 }
 ```
@@ -473,9 +478,9 @@ async function musicUrl(source, musicInfo, quality) {
 ### 1. 使用 console.log
 
 ```javascript
-console.log('[插件名] 调试信息:', data);
-console.warn('[插件名] 警告信息:', warning);
-console.error('[插件名] 错误信息:', error);
+console.log('[插件名] 调试信息:', data)
+console.warn('[插件名] 警告信息:', warning)
+console.error('[插件名] 错误信息:', error)
 ```
 
 ### 2. LX 插件开发者工具
@@ -491,8 +496,8 @@ send(EVENT_NAMES.inited, {
 
 ```javascript
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('未处理的 Promise 拒绝:', reason);
-});
+  console.error('未处理的 Promise 拒绝:', reason)
+})
 ```
 
 ---
@@ -502,17 +507,17 @@ process.on('unhandledRejection', (reason, promise) => {
 ### 1. 请求缓存
 
 ```javascript
-const cache = new Map();
+const cache = new Map()
 
 async function getCachedData(key, fetcher, ttl = 300000) {
-  const cached = cache.get(key);
+  const cached = cache.get(key)
   if (cached && Date.now() - cached.timestamp < ttl) {
-    return cached.data;
+    return cached.data
   }
-  
-  const data = await fetcher();
-  cache.set(key, { data, timestamp: Date.now() });
-  return data;
+
+  const data = await fetcher()
+  cache.set(key, { data, timestamp: Date.now() })
+  return data
 }
 ```
 
@@ -521,21 +526,21 @@ async function getCachedData(key, fetcher, ttl = 300000) {
 ```javascript
 const result = await cerumusic.request(url, {
   timeout: 10000 // 10秒超时
-});
+})
 ```
 
 ### 3. 并发控制
 
 ```javascript
 // 限制并发请求数量
-const semaphore = new Semaphore(3); // 最多3个并发请求
+const semaphore = new Semaphore(3) // 最多3个并发请求
 
 async function limitedRequest(url, options) {
-  await semaphore.acquire();
+  await semaphore.acquire()
   try {
-    return await cerumusic.request(url, options);
+    return await cerumusic.request(url, options)
   } finally {
-    semaphore.release();
+    semaphore.release()
   }
 }
 ```
@@ -549,14 +554,14 @@ async function limitedRequest(url, options) {
 ```javascript
 function validateMusicInfo(musicInfo) {
   if (!musicInfo || typeof musicInfo !== 'object') {
-    throw new Error('音乐信息格式错误');
+    throw new Error('音乐信息格式错误')
   }
-  
+
   if (!musicInfo.id || typeof musicInfo.id !== 'string') {
-    throw new Error('音乐 ID 无效');
+    throw new Error('音乐 ID 无效')
   }
-  
-  return true;
+
+  return true
 }
 ```
 
@@ -565,10 +570,10 @@ function validateMusicInfo(musicInfo) {
 ```javascript
 function isValidUrl(url) {
   try {
-    const urlObj = new URL(url);
-    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    const urlObj = new URL(url)
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
   } catch {
-    return false;
+    return false
   }
 }
 ```
@@ -581,7 +586,7 @@ console.log('请求参数:', {
   ...params,
   token: '***', // 隐藏敏感信息
   password: '***'
-});
+})
 ```
 
 ---
@@ -605,13 +610,13 @@ async function testMusicUrl() {
     id: 'test123',
     name: '测试歌曲',
     artist: '测试歌手'
-  };
-  
+  }
+
   try {
-    const url = await musicUrl('kw', testMusicInfo, '320k');
-    console.log('测试通过:', url);
+    const url = await musicUrl('kw', testMusicInfo, '320k')
+    console.log('测试通过:', url)
   } catch (error) {
-    console.error('测试失败:', error);
+    console.error('测试失败:', error)
   }
 }
 ```
@@ -619,6 +624,7 @@ async function testMusicUrl() {
 ### 3. 版本管理
 
 使用语义化版本号：
+
 - `1.0.0`: 主版本.次版本.修订版本
 - 主版本：不兼容的 API 修改
 - 次版本：向下兼容的功能性新增
@@ -631,6 +637,7 @@ async function testMusicUrl() {
 ### Q: 插件加载失败怎么办？
 
 A: 检查以下几点：
+
 1. 文件编码是否为 UTF-8
 2. 插件信息注释格式是否正确
 3. JavaScript 语法是否有错误
@@ -645,20 +652,21 @@ A: CeruMusic 的请求方法不受浏览器跨域限制，可以直接请求任�
 A: 使用 `cerumusic.NoticeCenter` 事件通知用户更新：
 
 ```javascript
-cerumusic.NoticeCenter('update',{
-  title:'新版本更新',
-  content:'xxxx',
+cerumusic.NoticeCenter('update', {
+  title: '新版本更新',
+  content: 'xxxx',
   version: 'v1.0.3',
-  url:'https://shiqianjiang.cn',
-  pluginInfo:{
-    type:'cr'
+  url: 'https://shiqianjiang.cn',
+  pluginInfo: {
+    type: 'cr'
   }
 })
 ```
 
 ### Q: 如何调试插件？
 
-A: 
+A:
+
 1. 使用 `console.log` 输出调试信息 可在设置—>插件管理—>日志 查看调试
 2. LX 插件可以设置 `openDevTools: true` 打开开发者工具
 3. 查看 CeruMusic 的插件日志
@@ -668,5 +676,6 @@ A:
 ## 技术支持
 
 如有问题或建议，请通过以下方式联系：
+
 - GitHub Issues: [CeruMusic Issues](https://github.com/timeshiftsauce/CeruMusic/issues)
 - Blog (最好登录，否则需要审核): [CeruMusic Blog](https://shiqianjiang.cn/blog/4966904626407280640)

@@ -2,11 +2,18 @@
 import { ref, onMounted, computed, toRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { Edit2Icon, ListIcon } from 'tdesign-icons-vue-next'
+import { Edit2Icon, ListIcon, PlayCircleIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
+import {
+  createMenuItem,
+  createSeparator,
+  calculateMenuPosition
+} from '@renderer/components/ContextMenu/utils'
+import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -133,6 +140,11 @@ const editPlaylistForm = ref({
 
 // 当前编辑的歌单
 const currentEditingPlaylist = ref<SongList | null>(null)
+
+// 右键菜单状态
+const contextMenuVisible = ref(false)
+const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
+const contextMenuPlaylist = ref<SongList | null>(null)
 
 // 将时长字符串转换为秒数
 const parseInterval = (interval: string): number => {
@@ -830,6 +842,80 @@ const deleteSong = (song: Songs): void => {
   })
 }
 
+// 右键菜单项配置
+const contextMenuItems = computed((): ContextMenuItem[] => {
+  if (!contextMenuPlaylist.value) return []
+
+  return [
+    createMenuItem('play', '播放歌单', {
+      icon: PlayCircleIcon,
+      onClick: () => {
+        if (contextMenuPlaylist.value) {
+          playPlaylist(contextMenuPlaylist.value)
+        }
+      }
+    }),
+    createMenuItem('view', '查看详情', {
+      icon: ListIcon,
+      onClick: () => {
+        if (contextMenuPlaylist.value) {
+          viewPlaylist(contextMenuPlaylist.value)
+        }
+      }
+    }),
+    createSeparator(),
+    createMenuItem('edit', '编辑歌单', {
+      icon: Edit2Icon,
+      onClick: () => {
+        if (contextMenuPlaylist.value) {
+          editPlaylist(contextMenuPlaylist.value)
+        }
+      }
+    }),
+    createMenuItem('delete', '删除歌单', {
+      icon: DeleteIcon,
+      onClick: async () => {
+        if (contextMenuPlaylist.value) {
+          try {
+            const result = await songListAPI.delete(contextMenuPlaylist.value.id)
+            if (result.success) {
+              MessagePlugin.success('歌单删除成功')
+              await loadPlaylists()
+            } else {
+              MessagePlugin.error(result.error || '删除歌单失败')
+            }
+          } catch (error) {
+            console.error('删除歌单失败:', error)
+            MessagePlugin.error('删除歌单失败')
+          }
+        }
+      }
+    })
+  ]
+})
+
+// 处理歌单右键菜单
+const handlePlaylistContextMenu = (event: MouseEvent, playlist: SongList) => {
+  event.preventDefault()
+  event.stopPropagation()
+
+  contextMenuPlaylist.value = playlist
+  contextMenuPosition.value = calculateMenuPosition(event)
+  contextMenuVisible.value = true
+}
+
+// 处理右键菜单项点击
+const handleContextMenuItemClick = (_item: ContextMenuItem, _event: MouseEvent) => {
+  // 菜单项的 onClick 回调已经在 ContextMenuItem 组件中调用
+  // 这里不需要额外处理
+}
+
+// 关闭右键菜单
+const closeContextMenu = () => {
+  contextMenuVisible.value = false
+  contextMenuPlaylist.value = null
+}
+
 // 组件挂载时加载数据
 onMounted(() => {
   loadPlaylists()
@@ -894,7 +980,12 @@ onMounted(() => {
 
         <!-- 歌单网格 -->
         <div v-else-if="playlists.length > 0" class="playlists-grid">
-          <div v-for="playlist in playlists" :key="playlist.id" class="playlist-card">
+          <div
+            v-for="playlist in playlists"
+            :key="playlist.id"
+            class="playlist-card"
+            @contextmenu="handlePlaylistContextMenu($event, playlist)"
+          >
             <div class="playlist-cover" @click="viewPlaylist(playlist)">
               <img
                 v-if="playlist.coverImgUrl"
@@ -1311,6 +1402,15 @@ onMounted(() => {
         </div>
       </div>
     </t-dialog>
+
+    <!-- 歌单右键菜单 -->
+    <ContextMenu
+      v-model:visible="contextMenuVisible"
+      :position="contextMenuPosition"
+      :items="contextMenuItems"
+      @item-click="handleContextMenuItemClick"
+      @close="closeContextMenu"
+    />
   </div>
 </template>
 
