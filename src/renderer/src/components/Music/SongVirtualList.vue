@@ -2,7 +2,7 @@
   <div class="song-virtual-list">
     <!-- 表头 -->
     <div class="list-header">
-      <div v-if="showIndex" class="col-index"></div>
+      <div v-if="showIndex" class="col-index">#</div>
       <div class="col-title">标题</div>
       <div v-if="showAlbum" class="col-album">专辑</div>
       <div class="col-like">喜欢</div>
@@ -105,7 +105,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, toRaw } from 'vue'
-import { DownloadIcon, PlayCircleIcon, AddIcon, FolderIcon } from 'tdesign-icons-vue-next'
+import {
+  DownloadIcon,
+  PlayCircleIcon,
+  AddIcon,
+  FolderIcon,
+  DeleteIcon
+} from 'tdesign-icons-vue-next'
 import ContextMenu from '../ContextMenu/ContextMenu.vue'
 import { createMenuItem, createSeparator, calculateMenuPosition } from '../ContextMenu/utils'
 import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
@@ -136,6 +142,8 @@ interface Props {
   showIndex?: boolean
   showAlbum?: boolean
   showDuration?: boolean
+  isLocalPlaylist?: boolean
+  playlistId?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -143,10 +151,19 @@ const props = withDefaults(defineProps<Props>(), {
   isPlaying: false,
   showIndex: true,
   showAlbum: true,
-  showDuration: true
+  showDuration: true,
+  isLocalPlaylist: false,
+  playlistId: ''
 })
 
-const emit = defineEmits(['play', 'pause', 'addToPlaylist', 'download', 'scroll'])
+const emit = defineEmits([
+  'play',
+  'pause',
+  'addToPlaylist',
+  'download',
+  'scroll',
+  'removeFromLocalPlaylist'
+])
 
 // 虚拟滚动相关状态
 const scrollContainer = ref<HTMLElement>()
@@ -299,9 +316,6 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
     )
   }
 
-  // 添加分隔线
-  baseItems.push(createSeparator())
-
   baseItems.push(
     createMenuItem('download', '下载', {
       icon: DownloadIcon,
@@ -312,6 +326,21 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       }
     })
   )
+  // 添加分隔线
+  baseItems.push(createSeparator())
+  // 如果是本地歌单，添加"移出本地歌单"选项
+  if (props.isLocalPlaylist) {
+    baseItems.push(
+      createMenuItem('removeFromLocalPlaylist', '移出当前歌单', {
+        icon: DeleteIcon,
+        onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+          if (contextMenuSong.value) {
+            emit('removeFromLocalPlaylist', contextMenuSong.value)
+          }
+        }
+      })
+    )
+  }
 
   return baseItems
 })
@@ -426,7 +455,7 @@ onMounted(() => {
   }
 
   .col-title {
-    padding-left: 10px;
+    padding-left: 20px;
     display: flex;
     align-items: center;
   }

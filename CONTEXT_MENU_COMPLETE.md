@@ -7,24 +7,28 @@
 ## 🚀 核心功能特性
 
 ### 📋 基础功能
+
 - ✅ **可配置菜单项** - 支持图标、文字、快捷键显示
 - ✅ **多级子菜单** - 支持无限层级嵌套
 - ✅ **菜单项状态** - 支持禁用、隐藏、分割线
 - ✅ **事件回调** - 完整的点击事件处理机制
 
 ### 🎨 样式与主题
+
 - ✅ **自定义主题** - 支持亮色/暗色/自动主题切换
 - ✅ **现代化设计** - 圆角、阴影、渐变、动画效果
 - ✅ **响应式布局** - 适配不同屏幕尺寸
 - ✅ **无障碍支持** - 高对比度、减少动画模式
 
 ### 🔧 智能定位与边界处理
+
 - ✅ **智能定位** - 自动检测屏幕边界并调整位置
 - ✅ **向上展开** - 底部空间不足时自动向上显示
 - ✅ **滚动支持** - 菜单过长时支持滚动和滚动指示器
 - ✅ **子菜单定位** - 子菜单智能避让边界
 
 ### ⌨️ 交互优化
+
 - ✅ **键盘导航** - 支持方向键、ESC、回车等快捷键
 - ✅ **鼠标交互** - 悬停显示子菜单，点击外部关闭
 - ✅ **滚轮支持** - 长菜单支持滚轮滚动
@@ -48,10 +52,8 @@ src/renderer/src/components/ContextMenu/
 
 ```vue
 <template>
-  <div @contextmenu="handleContextMenu">
-    右键点击此区域
-  </div>
-  
+  <div @contextmenu="handleContextMenu">右键点击此区域</div>
+
   <ContextMenu
     v-model:visible="visible"
     :items="menuItems"
@@ -124,12 +126,14 @@ const menuItems = [
 ## 🎨 样式特性
 
 ### 现代化视觉效果
+
 - **毛玻璃效果** - `backdrop-filter: blur(8px)`
 - **多层阴影** - 立体感阴影效果
 - **流畅动画** - `cubic-bezier` 缓动函数
 - **悬停反馈** - 微妙的变换和颜色变化
 
 ### 响应式设计
+
 - **桌面端** - 最小宽度 160px，最大宽度 300px
 - **平板端** - 适配中等屏幕尺寸
 - **移动端** - 优化触摸交互，增大点击区域
@@ -137,6 +141,7 @@ const menuItems = [
 ## 🔧 高级功能
 
 ### 智能边界处理
+
 ```javascript
 // 自动检测屏幕边界
 if (x + menuWidth > viewportWidth) {
@@ -150,12 +155,14 @@ if (availableHeight < 200 && availableHeightFromTop > availableHeight) {
 ```
 
 ### 滚动功能
+
 - **自动滚动** - 菜单超出屏幕高度时启用
 - **滚动指示器** - 显示可滚动方向
 - **键盘滚动** - 支持方向键和 Home/End 键
 - **鼠标滚轮** - 平滑滚动体验
 
 ### 无障碍支持
+
 - **高对比度模式** - 自动适配系统设置
 - **减少动画模式** - 尊重用户偏好设置
 - **键盘导航** - 完整的键盘操作支持
@@ -173,12 +180,14 @@ if (availableHeight < 200 && availableHeightFromTop > availableHeight) {
 ## 🎯 集成状态
 
 ### 已集成页面
+
 - ✅ **本地音乐页面** (`src/renderer/src/views/music/local.vue`)
   - 歌曲右键菜单
   - 播放、收藏、添加到歌单等功能
   - 多级歌单选择
 
 ### 菜单功能
+
 - ✅ 播放歌曲
 - ✅ 下一首播放
 - ✅ 收藏歌曲
@@ -190,11 +199,13 @@ if (availableHeight < 200 && availableHeightFromTop > availableHeight) {
 ## 🚀 性能优化
 
 ### 渲染优化
+
 - **Teleport 渲染** - 避免 z-index 冲突
 - **按需渲染** - 只在显示时渲染菜单
 - **事件委托** - 高效的事件处理
 
 ### 内存管理
+
 - **自动清理** - 组件卸载时清理事件监听
 - **防抖处理** - 避免频繁的位置计算
 - **缓存优化** - 计算结果缓存
@@ -202,6 +213,7 @@ if (availableHeight < 200 && availableHeightFromTop > availableHeight) {
 ## 🔮 扩展性
 
 ### 自定义组件
+
 ```javascript
 // 支持自定义图标组件
 createMenuItem('custom', '自定义', {
@@ -211,6 +223,7 @@ createMenuItem('custom', '自定义', {
 ```
 
 ### 主题扩展
+
 ```css
 /* 自定义主题变量 */
 :root {

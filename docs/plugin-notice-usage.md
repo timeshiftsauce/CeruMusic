@@ -81,27 +81,27 @@ this.cerumusic.NoticeCenter('update', {
 
 #### 通用参数 (data 对象)
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| title | string | 否 | 通知标题，不提供时使用默认标题 |
-| message | string | 否 | 通知消息内容 |
-| content | string | 否 | 详细内容（与 message 二选一） |
+| 参数    | 类型   | 必填 | 说明                           |
+| ------- | ------ | ---- | ------------------------------ |
+| title   | string | 否   | 通知标题，不提供时使用默认标题 |
+| message | string | 否   | 通知消息内容                   |
+| content | string | 否   | 详细内容（与 message 二选一）  |
 
 #### 更新通知特有参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| url | string | 是 | 插件更新下载链接 |
-| version | string | 否 | 新版本号 |
-| pluginInfo.name | string | 否 | 插件名称 |
-| pluginInfo.type | 'cr' \| 'lx' | 否 | 插件类型 |
-| pluginInfo.forcedUpdate | boolean | 否 | 是否强制更新 |
+| 参数                    | 类型         | 必填 | 说明             |
+| ----------------------- | ------------ | ---- | ---------------- |
+| url                     | string       | 是   | 插件更新下载链接 |
+| version                 | string       | 否   | 新版本号         |
+| pluginInfo.name         | string       | 否   | 插件名称         |
+| pluginInfo.type         | 'cr' \| 'lx' | 否   | 插件类型         |
+| pluginInfo.forcedUpdate | boolean      | 否   | 是否强制更新     |
 
 #### 错误通知特有参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| error | string | 否 | 具体错误信息 |
+| 参数  | 类型   | 必填 | 说明         |
+| ----- | ------ | ---- | ------------ |
+| error | string | 否   | 具体错误信息 |
 
 ## 实现原理
 
@@ -208,6 +208,7 @@ window.api.on('plugin-notice', (_, notice) => {
 ## 更新日志
 
 ### v1.0.0 (2025-09-20)
+
 - ✨ 初始版本发布
 - ✨ 支持 5 种通知类型
 - ✨ 完整的 TypeScript 类型定义

@@ -79,7 +79,7 @@ interface CustomAPI {
     start: () => undefined
     stop: () => undefined
   }
-  
+
   // 目录设置API
   directorySettings: {
     getDirectories: () => Promise<{
@@ -96,10 +96,7 @@ interface CustomAPI {
       path?: string
       message?: string
     }>
-    saveDirectories: (directories: {
-      cacheDir: string
-      downloadDir: string
-    }) => Promise<{
+    saveDirectories: (directories: { cacheDir: string; downloadDir: string }) => Promise<{
       success: boolean
       message: string
     }>
@@ -119,15 +116,14 @@ interface CustomAPI {
       size: number
       formatted: string
     }>
-
   }
-  
+
   // 用户配置API
   getUserConfig: () => Promise<any>
 
   pluginNotice: {
-    onPluginNotice: (listener: (...args: any[]) => void) => ()=>void
-  } 
+    onPluginNotice: (listener: (...args: any[]) => void) => () => void
+  }
 }
 
 declare global {
