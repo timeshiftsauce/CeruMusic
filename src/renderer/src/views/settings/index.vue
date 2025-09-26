@@ -21,8 +21,13 @@ import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettin
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
+import { useSettingsStore } from '@renderer/store/Settings'
 const Store = LocalUserDetailStore()
 const { userInfo } = storeToRefs(Store)
+
+// 设置存储
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
 
 // 当前选择的设置分类
 const activeCategory = ref<string>('appearance')
@@ -308,6 +313,30 @@ const getCurrentSourceName = () => {
 const openLink = (url: string) => {
   window.open(url, '_blank')
 }
+
+// 标签写入选项
+const tagWriteOptions = ref({
+  basicInfo: settings.value.tagWriteOptions?.basicInfo ?? true,
+  cover: settings.value.tagWriteOptions?.cover ?? true,
+  lyrics: settings.value.tagWriteOptions?.lyrics ?? true
+})
+
+// 更新标签写入选项
+const updateTagWriteOptions = () => {
+  settingsStore.updateSettings({
+    tagWriteOptions: { ...tagWriteOptions.value }
+  })
+}
+
+// 获取标签选项状态描述
+const getTagOptionsStatus = () => {
+  const enabled: string[] = []
+  if (tagWriteOptions.value.basicInfo) enabled.push('基础信息')
+  if (tagWriteOptions.value.cover) enabled.push('封面')
+  if (tagWriteOptions.value.lyrics) enabled.push('歌词')
+
+  return enabled.length > 0 ? enabled.join('、') : '未选择任何选项'
+}
 </script>
 
 <template>
@@ -581,6 +610,44 @@ const openLink = (url: string) => {
               />
               <div style="margin-top: 20px" class="setting-group">
                 <MusicCache ref="musicCacheRef" @cache-cleared="handleCacheCleared" />
+              </div>
+
+              <!-- 标签写入设置 -->
+              <div class="setting-group">
+                <h3>下载标签写入设置</h3>
+                <p>选择下载歌曲时要写入的标签信息</p>
+
+                <div class="tag-options">
+                  <div class="tag-option">
+                    <t-checkbox v-model="tagWriteOptions.basicInfo" @change="updateTagWriteOptions">
+                      基础信息
+                    </t-checkbox>
+                    <p class="option-desc">包括歌曲标题、艺术家、专辑名称等基本信息</p>
+                  </div>
+
+                  <div class="tag-option">
+                    <t-checkbox v-model="tagWriteOptions.cover" @change="updateTagWriteOptions">
+                      封面
+                    </t-checkbox>
+                    <p class="option-desc">将专辑封面嵌入到音频文件中</p>
+                  </div>
+
+                  <div class="tag-option">
+                    <t-checkbox v-model="tagWriteOptions.lyrics" @change="updateTagWriteOptions">
+                      普通歌词
+                    </t-checkbox>
+                    <p class="option-desc">将歌词信息写入到音频文件的标签中</p>
+                  </div>
+                </div>
+
+                <div class="tag-options-status">
+                  <div class="status-summary">
+                    <span class="status-label">当前配置：</span>
+                    <span class="status-value">
+                      {{ getTagOptionsStatus() }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1780,6 +1847,53 @@ const openLink = (url: string) => {
   .contact-actions {
     display: flex;
     gap: 0.75rem;
+  }
+}
+
+// 标签写入设置样式
+.tag-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+
+  .tag-option {
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+
+    .option-desc {
+      margin: 0.5rem 0 0 1.5rem;
+      font-size: 0.875rem;
+      color: #64748b;
+      line-height: 1.4;
+    }
+  }
+}
+
+.tag-options-status {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+
+  .status-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    .status-label {
+      font-weight: 500;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 0.875rem;
+    }
   }
 }
 

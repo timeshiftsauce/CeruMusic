@@ -1,12 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+export interface TagWriteOptions {
+  basicInfo: boolean // 基础信息（标题、艺术家、专辑）
+  cover: boolean // 封面
+  lyrics: boolean // 普通歌词
+}
+
 export interface SettingsState {
   showFloatBall: boolean
   directories?: {
     cacheDir: string
     downloadDir: string
   }
+  tagWriteOptions?: TagWriteOptions
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -23,7 +30,12 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // 默认设置
     return {
-      showFloatBall: true
+      showFloatBall: true,
+      tagWriteOptions: {
+        basicInfo: true,
+        cover: true,
+        lyrics: true
+      }
     }
   }
 

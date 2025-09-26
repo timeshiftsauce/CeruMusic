@@ -146,7 +146,7 @@ const handlePause = () => {
   }
 }
 
-const handleDownload = (song: MusicItem) => {
+const handleDownload = (song: any) => {
   downloadSingleSong(song)
 }
 
