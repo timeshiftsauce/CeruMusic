@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, toRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { Edit2Icon, ListIcon, PlayCircleIcon, DeleteIcon } from 'tdesign-icons-vue-next'
+import { Edit2Icon, PlayCircleIcon, DeleteIcon, ViewListIcon } from 'tdesign-icons-vue-next'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
@@ -856,7 +856,7 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       }
     }),
     createMenuItem('view', '查看详情', {
-      icon: ListIcon,
+      icon: ViewListIcon,
       onClick: () => {
         if (contextMenuPlaylist.value) {
           viewPlaylist(contextMenuPlaylist.value)
@@ -1035,7 +1035,11 @@ onMounted(() => {
                   size="small"
                   @click="viewPlaylist(playlist)"
                 >
-                  <ListIcon />
+                  <view-list-icon
+                    :fill-color="'transparent'"
+                    :stroke-color="'#000000'"
+                    :stroke-width="1.5"
+                  />
                 </t-button>
               </t-tooltip>
               <t-tooltip content="编辑歌单">
