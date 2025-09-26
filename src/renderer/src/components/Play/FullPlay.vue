@@ -691,8 +691,8 @@ const lightMainColor = computed(() => {
 
         // bottom: max(2vw, 29px);
 
-        height: 200%;
-        transform: translateY(-25%);
+        height: 150%;
+        transform: translateY(-12.5%);
 
         * [class^='lyricMainLine'] {
           font-weight: 600 !important;
