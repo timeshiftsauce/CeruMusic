@@ -65,6 +65,7 @@
     "node-fetch": "2",
     "node-id3": "^0.2.9",
     "pinia": "^3.0.3",
+    "tdesign-icons-vue-next": "^0.4.1",
     "tdesign-vue-next": "^1.15.2",
     "vue-router": "^4.5.1",
     "zlib": "^1.0.5"
