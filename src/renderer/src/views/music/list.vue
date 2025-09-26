@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, toRaw, computed } from 'vue'
+import { ref, onMounted, onUnmounted, toRaw, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -190,7 +190,7 @@ const handlePause = () => {
   }
 }
 
-const handleDownload = (song: MusicItem) => {
+const handleDownload = (song: any) => {
   downloadSingleSong(song)
 }
 
@@ -231,6 +231,12 @@ const isLocalPlaylist = computed(() => {
 
 // 文件选择器引用
 const fileInputRef = ref<HTMLInputElement | null>(null)
+
+// 滚动相关状态
+const scrollY = ref(0)
+const isHeaderCompact = ref(false)
+const scrollContainer = ref<HTMLElement | null>(null)
+const songListRef = ref<any>(null)
 
 // 点击封面修改图片（仅本地歌单）
 const handleCoverClick = () => {
@@ -383,18 +389,54 @@ const handleShufflePlaylist = () => {
     }
   })
 }
+// 滚动事件处理
+const handleScroll = (event?: Event) => {
+  let scrollTop = 0
+
+  if (event && event.target) {
+    scrollTop = (event.target as HTMLElement).scrollTop
+  } else if (scrollContainer.value) {
+    scrollTop = scrollContainer.value.scrollTop
+  }
+
+  scrollY.value = scrollTop
+  // 当滚动超过100px时，启用紧凑模式
+  isHeaderCompact.value = scrollY.value > 100
+}
+
 // 组件挂载时获取数据
 onMounted(() => {
   fetchPlaylistSongs()
+
+  // 延迟添加滚动事件监听，等待 SongVirtualList 组件渲染完成
+  setTimeout(() => {
+    // 查找 SongVirtualList 内部的虚拟滚动容器
+    const virtualListContainer = document.querySelector('.virtual-scroll-container')
+
+    if (virtualListContainer) {
+      scrollContainer.value = virtualListContainer as HTMLElement
+      virtualListContainer.addEventListener('scroll', handleScroll, { passive: true })
+      console.log('滚动监听器已添加到:', virtualListContainer)
+    } else {
+      console.warn('未找到虚拟滚动容器')
+    }
+  }, 200)
+})
+
+// 组件卸载时清理事件监听
+onUnmounted(() => {
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('scroll', handleScroll)
+  }
 })
 </script>
 
 <template>
   <div class="list-container">
     <!-- 固定头部区域 -->
-    <div class="fixed-header">
+    <div class="fixed-header" :class="{ compact: isHeaderCompact }">
       <!-- 歌单信息 -->
-      <div class="playlist-header">
+      <div class="playlist-header" :class="{ compact: isHeaderCompact }">
         <div
           class="playlist-cover"
           :class="{ clickable: isLocalPlaylist }"
@@ -421,11 +463,15 @@ onMounted(() => {
         />
         <div class="playlist-details">
           <h1 class="playlist-title">{{ playlistInfo.title }}</h1>
-          <p class="playlist-author">by {{ playlistInfo.author }}</p>
-          <p class="playlist-stats">{{ playlistInfo.total }} 首歌曲</p>
+          <p class="playlist-author" :class="{ hidden: isHeaderCompact }">
+            by {{ playlistInfo.author }}
+          </p>
+          <p class="playlist-stats" :class="{ hidden: isHeaderCompact }">
+            {{ playlistInfo.total || songs.length }} 首歌曲
+          </p>
 
           <!-- 播放控制按钮 -->
-          <div class="playlist-actions">
+          <div class="playlist-actions" :class="{ compact: isHeaderCompact }">
             <t-button
               theme="primary"
               size="medium"
@@ -473,6 +519,7 @@ onMounted(() => {
 
       <div v-else class="song-list-wrapper">
         <SongVirtualList
+          ref="songListRef"
           :songs="songs"
           :current-song="currentSong"
           :is-playing="isPlaying"
@@ -486,6 +533,7 @@ onMounted(() => {
           @download="handleDownload"
           @add-to-playlist="handleAddToPlaylist"
           @remove-from-local-playlist="handleRemoveFromLocalPlaylist"
+          @scroll="handleScroll"
         />
       </div>
     </div>
@@ -495,7 +543,7 @@ onMounted(() => {
 <style lang="scss" scoped>
 .list-container {
   box-sizing: border-box;
-  background: #fafafa;
+  // background: #fafafa;
   box-sizing: border-box;
   width: 100%;
   padding: 20px;
@@ -564,7 +612,17 @@ onMounted(() => {
   background: #fff;
   border-radius: 0.75rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
+  &.compact {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  &.compact .playlist-cover {
+    width: 80px !important;
+    height: 80px !important;
+  }
   .playlist-cover {
     width: 120px;
     height: 120px;
@@ -572,6 +630,7 @@ onMounted(() => {
     overflow: hidden;
     flex-shrink: 0;
     position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     img {
       width: 100%;
@@ -628,39 +687,85 @@ onMounted(() => {
 
   .playlist-details {
     flex: 1;
-
     .playlist-title {
       font-size: 1.5rem;
       font-weight: 600;
       color: #111827;
       margin: 0 0 0.5rem 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+      .playlist-header.compact & {
+        font-size: 1.25rem;
+        margin: 0 0 0.25rem 0;
+      }
     }
 
     .playlist-author {
       font-size: 1rem;
       color: #6b7280;
       margin: 0 0 0.5rem 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 1;
+      transform: translateY(0);
+
+      &.hidden {
+        opacity: 0;
+        transform: translateY(-10px);
+        margin: 0;
+        height: 0;
+        overflow: hidden;
+      }
     }
 
     .playlist-stats {
       font-size: 0.875rem;
       color: #9ca3af;
       margin: 0 0 1rem 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 1;
+      transform: translateY(0);
+
+      &.hidden {
+        opacity: 0;
+        transform: translateY(-10px);
+        margin: 0;
+        height: 0;
+        overflow: hidden;
+      }
     }
 
     .playlist-actions {
       display: flex;
       gap: 0.75rem;
       margin-top: 1rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+      &.compact {
+        margin-top: 0.5rem;
+        gap: 0.5rem;
+      }
 
       .play-btn,
       .shuffle-btn {
         min-width: 120px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+        .playlist-actions.compact & {
+          min-width: 100px;
+          padding: 6px 12px;
+          font-size: 0.875rem;
+        }
 
         .play-icon,
         .shuffle-icon {
           width: 16px;
           height: 16px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+          .playlist-actions.compact & {
+            width: 14px;
+            height: 14px;
+          }
         }
       }
     }

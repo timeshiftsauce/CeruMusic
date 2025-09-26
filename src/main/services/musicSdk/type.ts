@@ -90,6 +90,13 @@ export interface PlaylistDetailResult {
   info: PlaylistInfo
 }
 
+export interface TagWriteOptions {
+  basicInfo?: boolean
+  cover?: boolean
+  lyrics?: boolean
+}
+
 export interface DownloadSingleSongArgs extends GetMusicUrlArg {
   path?: string
+  tagWriteOptions?: TagWriteOptions
 }
