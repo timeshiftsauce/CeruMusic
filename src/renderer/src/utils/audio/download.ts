@@ -200,13 +200,13 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
           source: songInfo.source,
           quality,
           songInfo: toRaw(songInfo) as any,
-          tagWriteOptions: settingsStore.settings.tagWriteOptions
+          tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions)
         })
 
         ;(await tip).close()
 
         // 如果成功获取特殊音质链接，处理结果并返回
-        if (specialResult && 'error' in specialResult && !specialResult.error) {
+        if (specialResult) {
           if (!Object.hasOwn(specialResult, 'path')) {
             MessagePlugin.info(specialResult.message)
           } else {
