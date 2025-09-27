@@ -1,0 +1,215 @@
+name: AutoBuild # 工作流的名称
+
+permissions:
+  contents: write # 给予写入仓库内容的权限
+
+on:
+  push:
+    tags:
+      - 'v*' # 当推送以v开头的标签时触发此工作流
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: build and release electron app # 任务名称
+    runs-on: ${{ matrix.os }} # 在matrix.os定义的操作系统上运行
+    strategy:
+      fail-fast: false # 如果一个任务失败,其他任务继续运行
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest] # 在Windows和macOS上运行任务
+
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v4 # 检出代码仓库
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22 # 安装Node.js 22 （这里node环境是能够运行代码的环境）
+
+      - name: Install Dependencies
+        run: |
+          npm i -g yarn
+          yarn install  # 安装项目依赖
+
+      - name: Build Electron App for windows
+        if: matrix.os == 'windows-latest' # 只在Windows上运行
+        run: yarn run build:win # 构建Windows版应用
+
+      - name: Build Electron App for macos
+        if: matrix.os == 'macos-latest' # 只在macOS上运行
+        run: |
+          yarn run build:mac
+
+      - name: Build Electron App for linux
+        if: matrix.os == 'ubuntu-latest' # 只在Linux上运行
+        run: yarn run build:linux # 构建Linux版应用
+
+      - name: Cleanup Artifacts for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"  # 清理Windows构建产物,只保留特定文件
+
+      - name: Cleanup Artifacts for MacOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"  # 清理macOS构建产物,只保留特定文件
+
+      - name: Cleanup Artifacts for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|latest*.yml)"  # 清理Linux构建产物,只保留特定文件
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: dist # 上传构建产物作为工作流artifact
+
+      - name: release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: 'dist/**' # 将dist目录下所有文件添加到release
+
+  # 新增：自动同步到 WebDAV
+  sync-to-webdav:
+    name: Sync to WebDAV
+    needs: release # 等待 release 任务完成
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') # 只在标签推送时执行
+    steps:
+      - name: Wait for release to be ready
+        run: |
+          echo "等待 Release 准备就绪..."
+          sleep 30 # 等待30秒确保 release 完全创建
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Get latest release info
+        id: get-release
+        run: |
+          # 获取当前标签对应的 release 信息
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          # 获取 release 详细信息
+          response=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
+
+          release_id=$(echo "$response" | jq -r '.id')
+          echo "release_id=$release_id" >> $GITHUB_OUTPUT
+          echo "找到 Release ID: $release_id"
+
+      - name: Sync release to WebDAV
+        run: |
+          TAG_NAME="${{ steps.get-release.outputs.tag_name }}"
+          RELEASE_ID="${{ steps.get-release.outputs.release_id }}"
+
+          echo "🚀 开始同步版本 $TAG_NAME 到 WebDAV..."
+          echo "Release ID: $RELEASE_ID"
+          echo "WebDAV 根路径: ${{ secrets.WEBDAV_BASE_URL }}/yd/ceru"
+
+          # 获取该release的所有资源文件
+          assets_json=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets")
+
+          assets_count=$(echo "$assets_json" | jq '. | length')
+          echo "找到 $assets_count 个资源文件"
+
+          if [ "$assets_count" -eq 0 ]; then
+            echo "⚠️  该版本没有资源文件，跳过同步"
+            exit 0
+          fi
+
+          # 先创建版本目录
+          dir_path="/yd/ceru/$TAG_NAME"
+          dir_url="${{ secrets.WEBDAV_BASE_URL }}$dir_path"
+
+          echo "创建版本目录: $dir_path"
+          curl -s -X MKCOL \
+            -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+            "$dir_url" || echo "目录可能已存在"
+
+          # 处理每个asset
+          success_count=0
+          failed_count=0
+
+          for i in $(seq 0 $(($assets_count - 1))); do
+            asset=$(echo "$assets_json" | jq -c ".[$i]")
+            asset_name=$(echo "$asset" | jq -r '.name')
+            asset_url=$(echo "$asset" | jq -r '.url')
+            asset_size=$(echo "$asset" | jq -r '.size')
+            
+            echo "📦 处理资源: $asset_name (大小: $asset_size bytes)"
+
+            # 下载资源文件
+            safe_filename="./temp_${TAG_NAME}_$(date +%s)_$i"
+            
+            if ! curl -sL -o "$safe_filename" \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/octet-stream" \
+              "$asset_url"; then
+              echo "❌ 下载失败: $asset_name"
+              failed_count=$((failed_count + 1))
+              continue
+            fi
+            
+            if [ -f "$safe_filename" ]; then
+              actual_size=$(wc -c < "$safe_filename")
+              if [ "$actual_size" -ne "$asset_size" ]; then
+                echo "❌ 文件大小不匹配: $asset_name (期望: $asset_size, 实际: $actual_size)"
+                rm -f "$safe_filename"
+                failed_count=$((failed_count + 1))
+                continue
+              fi
+
+              echo "⬆️  上传到 WebDAV: $asset_name"
+              
+              # 构建远程路径
+              remote_path="/yd/ceru/$TAG_NAME/$asset_name"
+              full_url="${{ secrets.WEBDAV_BASE_URL }}$remote_path"
+              
+              # 使用 WebDAV PUT 方法上传文件
+              if curl -s -f -X PUT \
+                -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
+                -T "$safe_filename" \
+                "$full_url"; then
+                
+                echo "✅ 上传成功: $asset_name"
+                success_count=$((success_count + 1))
+                
+              else
+                echo "❌ 上传失败: $asset_name"
+                failed_count=$((failed_count + 1))
+              fi
+              
+              # 清理临时文件
+              rm -f "$safe_filename"
+              echo "----------------------------------------"
+            else
+              echo "❌ 临时文件不存在: $safe_filename"
+              failed_count=$((failed_count + 1))
+            fi
+          done
+
+          echo "========================================"
+          echo "🎉 同步完成！"
+          echo "成功: $success_count 个文件"
+          echo "失败: $failed_count 个文件"
+          echo "总计: $assets_count 个文件"
+
+      - name: Notify completion
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 版本 ${{ steps.get-release.outputs.tag_name }} 已成功同步到 alist"
+          else
+            echo "❌ 版本 ${{ steps.get-release.outputs.tag_name }} 同步失败"
+          fi
