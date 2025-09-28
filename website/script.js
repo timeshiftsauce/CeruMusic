@@ -11,160 +11,49 @@ function scrollToFeatures() {
   })
 }
 
-// Alist API configuration
-const ALIST_BASE_URL = 'https://alist.shiqianjiang.cn'
-const ALIST_USERNAME = 'ceruupdate'
-const ALIST_PASSWORD = '123456'
-
-// GitHub repository configuration (for fallback)
+// GitHub repository configuration
 const GITHUB_REPO = 'timeshiftsauce/CeruMusic'
+const GITHUB_PROXY = 'https://gh-proxy.com/'
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+const GITHUB_RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`
 
 // Cache for release data
 let releaseData = null
 let releaseDataTimestamp = null
-let alistToken = null
+let allReleasesData = null
+let allReleasesTimestamp = null
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
-// Alist authentication
-async function getAlistToken() {
-  if (alistToken) {
-    return alistToken
+// Get all releases from GitHub API
+async function getAllReleases() {
+  // Check cache first
+  const now = Date.now()
+  if (allReleasesData && allReleasesTimestamp && now - allReleasesTimestamp < CACHE_DURATION) {
+    return allReleasesData
   }
 
   try {
-    const response = await fetch(`${ALIST_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        username: ALIST_USERNAME,
-        password: ALIST_PASSWORD
-      })
-    })
+    const response = await fetch(GITHUB_RELEASES_API_URL)
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`)
+    }
 
     const data = await response.json()
 
-    if (data.code === 200) {
-      alistToken = data.data.token
-      return alistToken
-    } else {
-      throw new Error(`Alist authentication failed: ${data.message}`)
-    }
+    // Filter and sort releases by version
+    const releases = data
+      .filter(release => !release.draft && !release.prerelease)
+      .sort((a, b) => compareVersions(b.tag_name, a.tag_name))
+
+    // Cache the data
+    allReleasesData = releases
+    allReleasesTimestamp = now
+
+    return releases
   } catch (error) {
-    console.error('Alist authentication error:', error)
-    throw error
-  }
-}
-
-// Get available versions from Alist
-async function getAlistVersions() {
-  try {
-    const token = await getAlistToken()
-
-    const response = await fetch(`${ALIST_BASE_URL}/api/fs/list`, {
-      method: 'POST',
-      headers: {
-        Authorization: token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        path: '/',
-        password: '',
-        page: 1,
-        per_page: 100,
-        refresh: false
-      })
-    })
-
-    const data = await response.json()
-
-    if (data.code === 200) {
-      // Filter directories that look like version numbers
-      const versions = data.data.content
-        .filter((item) => item.is_dir && /^v?\d+\.\d+\.\d+/.test(item.name))
-        .sort((a, b) => b.name.localeCompare(a.name)) // Sort by version desc
-
-      return versions
-    } else {
-      throw new Error(`Failed to get versions: ${data.message}`)
-    }
-  } catch (error) {
-    console.error('Failed to get Alist versions:', error)
+    console.error('Failed to fetch releases data:', error)
     return []
-  }
-}
-
-// Get files in a specific version directory
-async function getAlistVersionFiles(version) {
-  try {
-    const token = await getAlistToken()
-
-    const response = await fetch(`${ALIST_BASE_URL}/api/fs/list`, {
-      method: 'POST',
-      headers: {
-        Authorization: token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        path: `/${version}`,
-        password: '',
-        page: 1,
-        per_page: 100,
-        refresh: false
-      })
-    })
-
-    const data = await response.json()
-
-    if (data.code === 200) {
-      return data.data.content.filter((item) => !item.is_dir)
-    } else {
-      throw new Error(`Failed to get version files: ${data.message}`)
-    }
-  } catch (error) {
-    console.error('Failed to get version files:', error)
-    return []
-  }
-}
-
-// Get direct download URL from Alist
-async function getAlistDownloadUrl(version, fileName) {
-  try {
-    const token = await getAlistToken()
-    const filePath = `/${version}/${fileName}`
-
-    const response = await fetch(`${ALIST_BASE_URL}/api/fs/get`, {
-      method: 'POST',
-      headers: {
-        Authorization: token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        path: filePath
-      })
-    })
-
-    const data = await response.json()
-
-    if (data.code === 200) {
-      const fileInfo = data.data
-
-      // Try different URL formats
-      if (fileInfo.raw_url) {
-        return fileInfo.raw_url
-      } else if (fileInfo.sign) {
-        return `${ALIST_BASE_URL}/d${filePath}?sign=${fileInfo.sign}`
-      } else {
-        return `${ALIST_BASE_URL}/d${filePath}`
-      }
-    } else {
-      throw new Error(`Failed to get download URL: ${data.message}`)
-    }
-  } catch (error) {
-    console.error('Failed to get Alist download URL:', error)
-    throw error
   }
 }
 
@@ -186,54 +75,48 @@ async function downloadApp(platform) {
     // Detect user's architecture for better matching
     const userArch = detectArchitecture()
 
-    // Try Alist first
-    const versions = await getAlistVersions()
+    // Get latest release from GitHub
+    const release = await getLatestRelease()
 
-    if (versions.length > 0) {
-      const latestVersion = versions[0]
-      const files = await getAlistVersionFiles(latestVersion.name)
-
-      // Find the appropriate file for the platform and architecture
-      const fileName = findFileForPlatform(files, platform, userArch)
-
-      if (fileName) {
-        const downloadUrl = await getAlistDownloadUrl(latestVersion.name, fileName)
-
-        // Show success notification with architecture info
-        const archInfo = getArchitectureInfo(fileName)
-        showNotification(
-          `正在下载 ${getPlatformName(platform)} ${archInfo} 版本 ${latestVersion.name}...`,
-          'success'
-        )
-
-        // Start download
-        window.open(downloadUrl, '_blank')
-
-        // Track download
-        trackDownload(platform, latestVersion.name, fileName)
-
-        return // Success, exit function
-      }
+    if (!release) {
+      throw new Error('无法获取最新版本信息')
     }
 
-    // Fallback to GitHub if Alist fails
-    await downloadFromGitHub(platform)
+    const downloadUrl = findDownloadAsset(release.assets, platform, userArch)
+
+    if (!downloadUrl) {
+      throw new Error(`暂无 ${getPlatformName(platform)} 版本下载`)
+    }
+
+    // Find the asset to get architecture info
+    const asset = release.assets.find((a) => a.browser_download_url === downloadUrl)
+    const archInfo = asset ? getArchitectureInfo(asset.name) : ''
+
+    // Show success notification
+    showNotification(
+      `正在下载 ${getPlatformName(platform)} ${archInfo} 版本 ${release.tag_name}...`,
+      'success'
+    )
+
+    // Use proxy for download if it's a GitHub URL
+    const finalDownloadUrl = downloadUrl.includes('github.com') ? 
+      `${GITHUB_PROXY}${downloadUrl}` : downloadUrl
+    
+    // Start download
+    window.open(finalDownloadUrl, '_blank')
+
+    // Track download
+    trackDownload(platform, release.tag_name, asset ? asset.name : '')
+
   } catch (error) {
     console.error('Download error:', error)
+    showNotification(`下载失败: ${error.message}`, 'error')
 
-    // Try GitHub fallback
-    try {
-      await downloadFromGitHub(platform)
-    } catch (fallbackError) {
-      console.error('GitHub fallback also failed:', fallbackError)
-      showNotification(`下载失败: ${error.message}`, 'error')
-
-      // Final fallback to GitHub releases page
-      setTimeout(() => {
-        showNotification('正在跳转到GitHub下载页面...', 'info')
-        window.open(`https://github.com/${GITHUB_REPO}/releases/latest`, '_blank')
-      }, 2000)
-    }
+    // Fallback to GitHub releases page
+    setTimeout(() => {
+      showNotification('正在跳转到GitHub下载页面...', 'info')
+      window.open(`https://github.com/${GITHUB_REPO}/releases/latest`, '_blank')
+    }, 2000)
   } finally {
     // Restore button state
     setTimeout(() => {
@@ -243,37 +126,7 @@ async function downloadApp(platform) {
   }
 }
 
-// GitHub fallback function
-async function downloadFromGitHub(platform) {
-  const release = await getLatestRelease()
 
-  if (!release) {
-    throw new Error('无法获取最新版本信息')
-  }
-
-  const userArch = detectArchitecture()
-  const downloadUrl = findDownloadAsset(release.assets, platform, userArch)
-
-  if (!downloadUrl) {
-    throw new Error(`暂无 ${getPlatformName(platform)} 版本下载`)
-  }
-
-  // Find the asset to get architecture info
-  const asset = release.assets.find((a) => a.browser_download_url === downloadUrl)
-  const archInfo = asset ? getArchitectureInfo(asset.name) : ''
-
-  // Show success notification
-  showNotification(
-    `正在下载 ${getPlatformName(platform)} ${archInfo} 版本 v${release.tag_name}...`,
-    'success'
-  )
-
-  // Start download
-  window.open(downloadUrl, '_blank')
-
-  // Track download
-  trackDownload(platform, release.tag_name, asset ? asset.name : '')
-}
 
 // Get latest release from GitHub API
 async function getLatestRelease() {
@@ -303,129 +156,7 @@ async function getLatestRelease() {
   }
 }
 
-// Find appropriate file for platform from Alist files
-function findFileForPlatform(files, platform, userArch = null) {
-  if (!files || !Array.isArray(files)) {
-    return null
-  }
 
-  // Filter out unwanted files (yml, yaml, txt, md, etc.)
-  const filteredFiles = files.filter((file) => {
-    const name = file.name.toLowerCase()
-    return (
-      !name.endsWith('.yml') &&
-      !name.endsWith('.yaml') &&
-      !name.endsWith('.txt') &&
-      !name.endsWith('.md') &&
-      !name.endsWith('.json') &&
-      !name.includes('latest') &&
-      !name.includes('blockmap')
-    )
-  })
-
-  // If no user architecture provided, detect it
-  if (!userArch) {
-    userArch = detectArchitecture()
-  }
-
-  // Define architecture-specific patterns for each platform
-  const archPatterns = {
-    windows: {
-      x64: [
-        /ceru-music.*x64.*setup\.exe$/i,
-        /ceru-music.*win.*x64.*setup\.exe$/i,
-        /ceru-music.*x64.*\.zip$/i,
-        /ceru-music.*win.*x64.*\.zip$/i
-      ],
-      ia32: [
-        /ceru-music.*ia32.*setup\.exe$/i,
-        /ceru-music.*win.*ia32.*setup\.exe$/i,
-        /ceru-music.*ia32.*\.zip$/i,
-        /ceru-music.*win.*ia32.*\.zip$/i
-      ],
-      fallback: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win.*\.zip$/i]
-    },
-    macos: {
-      universal: [/ceru-music.*universal\\.dmg$/i, /ceru-music.*universal\\.zip$/i],
-      arm64: [
-        /ceru-music.*arm64\\.dmg$/i,
-        /ceru-music.*arm64\\.zip$/i,
-        /ceru-music.*universal\\.dmg$/i,
-        /ceru-music.*universal\\.zip$/i
-      ],
-      x64: [
-        /ceru-music.*x64\\.dmg$/i,
-        /ceru-music.*x64\\.zip$/i,
-        /ceru-music.*universal\\.dmg$/i,
-        /ceru-music.*universal\\.zip$/i
-      ],
-      fallback: [
-        /ceru-music.*\\.dmg$/i,
-        /\\.dmg$/i,
-        /darwin.*\\.zip$/i,
-        /macos.*\\.zip$/i,
-        /mac.*\\.zip$/i
-      ]
-    },
-    linux: {
-      x64: [
-        /ceru-music.*linux.*x64\\.AppImage$/i,
-        /ceru-music.*linux.*x64\\.deb$/i,
-        /ceru-music.*x64\\.AppImage$/i,
-        /ceru-music.*x64\\.deb$/i
-      ],
-      fallback: [
-        /ceru-music.*\\.AppImage$/i,
-        /ceru-music.*\\.deb$/i,
-        /\\.AppImage$/i,
-        /\\.deb$/i,
-        /linux.*\\.zip$/i
-      ]
-    }
-  }
-
-  const platformArchPatterns = archPatterns[platform]
-  if (!platformArchPatterns) {
-    return null
-  }
-
-  // Try architecture-specific patterns first
-  const archSpecificPatterns = platformArchPatterns[userArch] || []
-
-  for (const pattern of archSpecificPatterns) {
-    const file = filteredFiles.find((file) => pattern.test(file.name))
-    if (file) {
-      return file.name
-    }
-  }
-
-  // Try fallback patterns
-  const fallbackPatterns = platformArchPatterns.fallback || []
-
-  for (const pattern of fallbackPatterns) {
-    const file = filteredFiles.find((file) => pattern.test(file.name))
-    if (file) {
-      return file.name
-    }
-  }
-
-  // Final fallback: look for any file that might match the platform
-  const finalFallbackPatterns = {
-    windows: /win|exe/i,
-    macos: /mac|darwin|dmg/i,
-    linux: /linux|appimage|deb|rpm/i
-  }
-
-  const finalPattern = finalFallbackPatterns[platform]
-  if (finalPattern) {
-    const file = filteredFiles.find((file) => finalPattern.test(file.name))
-    if (file) {
-      return file.name
-    }
-  }
-
-  return null
-}
 
 // Find appropriate download asset based on platform
 function findDownloadAsset(assets, platform) {
@@ -869,40 +600,7 @@ window.addEventListener('error', (e) => {
 // Update version information on page
 async function updateVersionInfo() {
   try {
-    // Try to get version info from Alist first
-    const versions = await getAlistVersions()
-
-    if (versions.length > 0) {
-      const latestVersion = versions[0]
-      const versionElement = document.querySelector('.version')
-      const versionInfoElement = document.querySelector('.version-info p')
-
-      if (versionElement) {
-        versionElement.textContent = latestVersion.name
-      }
-
-      if (versionInfoElement) {
-        const modifyDate = new Date(latestVersion.modified)
-        const formattedDate = modifyDate.toLocaleDateString('zh-CN', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        })
-        const formattedTime = modifyDate.toLocaleTimeString('zh-CN', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-        versionInfoElement.innerHTML = `当前版本: <span class="version">${latestVersion.name}</span> | 更新时间: ${formattedDate} ${formattedTime}`
-      }
-
-      // Update download button text with file info from Alist
-      const files = await getAlistVersionFiles(latestVersion.name)
-      updateDownloadButtonsWithAlistFiles(files)
-
-      return // Success, exit function
-    }
-
-    // Fallback to GitHub if Alist fails
+    // Get latest release from GitHub
     const release = await getLatestRelease()
     if (release) {
       const versionElement = document.querySelector('.version')
@@ -934,30 +632,100 @@ async function updateVersionInfo() {
   }
 }
 
-// Update download buttons with Alist file information
-function updateDownloadButtonsWithAlistFiles(files) {
-  if (!files || !Array.isArray(files)) return
 
-  const downloadCards = document.querySelectorAll('.download-card')
-  const platforms = ['windows', 'macos', 'linux']
 
-  downloadCards.forEach((card, index) => {
-    const platform = platforms[index]
-    const fileName = findFileForPlatform(files, platform)
-
-    if (fileName) {
-      const file = files.find((f) => f.name === fileName)
-      const button = card.querySelector('.btn-download')
-      const sizeText = formatFileSize(file.size)
-      const originalText = button.innerHTML
-
-      // Add file size info
-      button.innerHTML = originalText.replace(
-        /下载 \..*?$/,
-        `下载 .${getFileExtension(fileName)} (${sizeText})`
-      )
-    }
+// Find asset for platform (helper function)
+function findAssetForPlatform(assets, platform) {
+  const userArch = detectArchitecture()
+  
+  // Filter out unwanted files
+  const filteredAssets = assets.filter((asset) => {
+    const name = asset.name.toLowerCase()
+    return (
+      !name.endsWith('.yml') &&
+      !name.endsWith('.yaml') &&
+      !name.endsWith('.txt') &&
+      !name.endsWith('.md') &&
+      !name.endsWith('.json') &&
+      !name.includes('latest') &&
+      !name.includes('blockmap')
+    )
   })
+
+  // Define architecture-specific patterns for each platform
+  const archPatterns = {
+    windows: {
+      x64: [
+        /ceru-music.*x64.*setup\.exe$/i,
+        /ceru-music.*win.*x64.*setup\.exe$/i,
+        /ceru-music.*x64.*\.zip$/i,
+        /ceru-music.*win.*x64.*\.zip$/i
+      ],
+      ia32: [
+        /ceru-music.*ia32.*setup\.exe$/i,
+        /ceru-music.*win.*ia32.*setup\.exe$/i,
+        /ceru-music.*ia32.*\.zip$/i,
+        /ceru-music.*win.*ia32.*\.zip$/i
+      ],
+      fallback: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win.*\.zip$/i]
+    },
+    macos: {
+      universal: [/ceru-music.*universal\.dmg$/i, /ceru-music.*universal\.zip$/i],
+      arm64: [
+        /ceru-music.*arm64\.dmg$/i,
+        /ceru-music.*arm64\.zip$/i,
+        /ceru-music.*universal\.dmg$/i,
+        /ceru-music.*universal\.zip$/i
+      ],
+      x64: [
+        /ceru-music.*x64\.dmg$/i,
+        /ceru-music.*x64\.zip$/i,
+        /ceru-music.*universal\.dmg$/i,
+        /ceru-music.*universal\.zip$/i
+      ],
+      fallback: [
+        /ceru-music.*\.dmg$/i,
+        /\.dmg$/i,
+        /darwin.*\.zip$/i,
+        /macos.*\.zip$/i,
+        /mac.*\.zip$/i
+      ]
+    },
+    linux: {
+      x64: [
+        /ceru-music.*linux.*x64\.AppImage$/i,
+        /ceru-music.*linux.*x64\.deb$/i,
+        /ceru-music.*x64\.AppImage$/i,
+        /ceru-music.*x64\.deb$/i
+      ],
+      fallback: [
+        /ceru-music.*\.AppImage$/i,
+        /ceru-music.*\.deb$/i,
+        /\.AppImage$/i,
+        /\.deb$/i,
+        /linux.*\.zip$/i
+      ]
+    }
+  }
+
+  const platformArchPatterns = archPatterns[platform]
+  if (!platformArchPatterns) return null
+
+  // Try architecture-specific patterns first
+  const archSpecificPatterns = platformArchPatterns[userArch] || []
+  for (const pattern of archSpecificPatterns) {
+    const asset = filteredAssets.find((asset) => pattern.test(asset.name))
+    if (asset) return asset
+  }
+
+  // Try fallback patterns
+  const fallbackPatterns = platformArchPatterns.fallback || []
+  for (const pattern of fallbackPatterns) {
+    const asset = filteredAssets.find((asset) => pattern.test(asset.name))
+    if (asset) return asset
+  }
+
+  return null
 }
 
 // Update download buttons with asset information
@@ -985,8 +753,12 @@ function updateDownloadButtonsWithAssets(assets) {
   })
 }
 
-// Updated function name to match usage
+// Find appropriate download asset based on platform and architecture
 function findDownloadAsset(assets, platform, userArch = null) {
+  if (!assets || !Array.isArray(assets)) {
+    return null
+  }
+
   if (!userArch) {
     userArch = detectArchitecture()
   }
@@ -1070,14 +842,27 @@ function findDownloadAsset(assets, platform, userArch = null) {
   const archSpecificPatterns = platformArchPatterns[userArch] || []
   for (const pattern of archSpecificPatterns) {
     const asset = filteredAssets.find((asset) => pattern.test(asset.name))
-    if (asset) return asset
+    if (asset) return asset.browser_download_url
   }
 
   // Try fallback patterns
   const fallbackPatterns = platformArchPatterns.fallback || []
   for (const pattern of fallbackPatterns) {
     const asset = filteredAssets.find((asset) => pattern.test(asset.name))
-    if (asset) return asset
+    if (asset) return asset.browser_download_url
+  }
+
+  // Final fallback: look for any asset that might match the platform
+  const finalFallbackPatterns = {
+    windows: /win|exe/i,
+    macos: /mac|darwin|dmg/i,
+    linux: /linux|appimage|deb|rpm/i
+  }
+
+  const finalPattern = finalFallbackPatterns[platform]
+  if (finalPattern) {
+    const asset = filteredAssets.find((asset) => finalPattern.test(asset.name))
+    if (asset) return asset.browser_download_url
   }
 
   return null
@@ -1127,6 +912,30 @@ function trackDownload(platform, version, filename = '') {
   //     'event_label': `${platform}_${archInfo}`,
   //     'value': version
   // });
+}
+
+// Version comparison function to handle complex version numbers like v1.3.10, v1.3.3.1
+function compareVersions(a, b) {
+  // Remove 'v' prefix if present
+  const versionA = a.replace(/^v/, '')
+  const versionB = b.replace(/^v/, '')
+  
+  // Split version numbers into parts
+  const partsA = versionA.split('.').map(num => parseInt(num, 10))
+  const partsB = versionB.split('.').map(num => parseInt(num, 10))
+  
+  // Compare each part
+  const maxLength = Math.max(partsA.length, partsB.length)
+  
+  for (let i = 0; i < maxLength; i++) {
+    const partA = partsA[i] || 0
+    const partB = partsB[i] || 0
+    
+    if (partA > partB) return 1
+    if (partA < partB) return -1
+  }
+  
+  return 0
 }
 
 // Add GitHub link functionality
