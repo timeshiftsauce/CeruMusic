@@ -70,3 +70,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: 'dist/**' # 将dist目录下所有文件添加到release
+          body: ${{ github.event.head_commit.message }} # 自动将commit message写入release描述
