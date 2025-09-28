@@ -923,7 +923,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
+  <div class="page">
     <div class="local-container">
       <!-- 页面标题和操作 -->
       <div class="page-header">
@@ -1419,6 +1419,10 @@ onMounted(() => {
 </template>
 
 <style lang="scss" scoped>
+.page {
+  width: 100%;
+  // height: 100%;
+}
 .local-container {
   padding: 2rem;
   margin: 0 auto;

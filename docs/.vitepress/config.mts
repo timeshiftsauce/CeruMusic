@@ -41,7 +41,8 @@ export default defineConfig({
           { text: '插件类使用', link: '/guide/CeruMusicPluginHost' },
           { text: '澜音插件开发文档（重点）', link: '/guide/CeruMusicPluginDev' }
         ]
-      },{
+      },
+      {
         text: '鸣谢名单',
         link: '/guide/sponsorship'
       }

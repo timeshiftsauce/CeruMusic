@@ -394,8 +394,10 @@ const lightMainColor = computed(() => {
 .fullscreen-btn,
 .putawayscreen-btn {
   position: absolute;
-  top: 40px;
-  left: 40px;
+
+  -webkit-app-region: no-drag;
+  top: 25px;
+  left: 30px;
   padding: 10px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.1);
@@ -442,7 +444,7 @@ const lightMainColor = computed(() => {
 }
 
 .putawayscreen-btn {
-  left: 100px;
+  left: 90px;
 }
 
 .full-play {
@@ -468,8 +470,8 @@ const lightMainColor = computed(() => {
   .top {
     position: absolute;
     width: calc(100% - 200px);
-    margin-left: 200px;
     z-index: 1;
+    right: 0;
     padding: 30px 30px;
     padding-bottom: 10px;
   }

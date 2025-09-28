@@ -34,7 +34,7 @@
             </div>
 
             <!-- 歌曲信息 -->
-            <div class="col-title" @dblclick="handleAddToPlaylist(song)">
+            <div class="col-title" @click="handleSongClick(song)">
               <div v-if="song.img" class="song-cover">
                 <img :src="song.img" loading="lazy" alt="封面" />
               </div>
@@ -175,6 +175,11 @@ const scrollTop = ref(0)
 const visibleStartIndex = ref(0)
 const visibleEndIndex = ref(0)
 
+// 点击防抖相关状态
+let clickTimer: NodeJS.Timeout | null = null
+let lastClickTime = 0
+const doubleClickDelay = 300 // 300ms 内的第二次点击视为双击
+
 // 右键菜单相关状态
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
@@ -209,26 +214,39 @@ const visibleItems = computed(() => {
   return props.songs.slice(visibleStartIndex.value, visibleEndIndex.value)
 })
 
-// 判断是否为当前歌曲
-const isCurrentSong = (song: Song) => {
-  return (
-    props.currentSong &&
-    (song.id === props.currentSong.id || song.songmid === props.currentSong.songmid)
-  )
-}
-
 // 处理播放
 const handlePlay = (song: Song) => {
-  if (isCurrentSong(song) && props.isPlaying) {
-    emit('pause')
-  } else {
-    emit('play', song)
-  }
+  emit('play', song)
 }
 
 // 处理添加到播放列表
 const handleAddToPlaylist = (song: Song) => {
   emit('addToPlaylist', song)
+}
+
+// 处理歌曲点击事件
+const handleSongClick = (song: Song) => {
+  const currentTime = Date.now()
+  const timeDiff = currentTime - lastClickTime
+
+  // 清除之前的定时器
+  if (clickTimer) {
+    clearTimeout(clickTimer)
+    clickTimer = null
+  }
+
+  if (timeDiff < doubleClickDelay && timeDiff > 0) {
+    // 双击：立即执行播放操作
+    handlePlay(song)
+    lastClickTime = 0 // 重置时间，防止三击
+  } else {
+    // 单击：延迟执行添加到播放列表
+    lastClickTime = currentTime
+    clickTimer = setTimeout(() => {
+      handleAddToPlaylist(song)
+      clickTimer = null
+    }, doubleClickDelay)
+  }
 }
 
 // 格式化时长
@@ -326,10 +344,10 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       }
     })
   )
-  // 添加分隔线
-  baseItems.push(createSeparator())
   // 如果是本地歌单，添加"移出本地歌单"选项
   if (props.isLocalPlaylist) {
+    // 添加分隔线
+    baseItems.push(createSeparator())
     baseItems.push(
       createMenuItem('removeFromLocalPlaylist', '移出当前歌单', {
         icon: DeleteIcon,

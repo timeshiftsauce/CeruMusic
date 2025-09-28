@@ -2,6 +2,8 @@
 import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { MessagePlugin, Popconfirm } from 'tdesign-vue-next'
+import { LocationIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import type { SongList } from '@renderer/types/audio'
 
 // Props
@@ -413,6 +415,33 @@ onUnmounted(() => {
   stopAutoScroll()
 })
 
+// 清空播放列表
+const handleClearPlaylist = () => {
+  if (list.value.length === 0) {
+    MessagePlugin.warning('播放列表已为空')
+    return
+  }
+
+  localUserStore.clearList()
+  MessagePlugin.success('播放列表已清空')
+}
+
+// 定位到当前播放歌曲
+const handleLocateCurrentSong = () => {
+  if (!props.currentSongId) {
+    MessagePlugin.info('当前没有正在播放的歌曲')
+    return
+  }
+
+  const currentSongExists = list.value.some((song) => song.songmid === props.currentSongId)
+  if (!currentSongExists) {
+    MessagePlugin.warning('当前播放的歌曲不在播放列表中')
+    return
+  }
+
+  scrollToCurrentSong()
+}
+
 // 暴露方法给父组件
 defineExpose({
   scrollToCurrentSong
@@ -484,6 +513,35 @@ defineExpose({
           </div>
         </TransitionGroup>
       </div>
+
+      <!-- 底部操作按钮 -->
+      <div v-if="list.length > 0" class="playlist-footer">
+        <button
+          class="playlist-action-btn locate-btn"
+          :disabled="!currentSongId"
+          @click="handleLocateCurrentSong"
+        >
+          <LocationIcon size="16" />
+          <span>定位当前播放</span>
+        </button>
+        <Popconfirm
+          content="确定要清空播放列表吗？此操作不可撤销。"
+          :confirm-btn="{ content: '确认清空', theme: 'danger' }"
+          cancel-btn="取消"
+          placement="top"
+          theme="warning"
+          :popup-props="{
+            zIndex: 9999,
+            overlayStyle: { zIndex: 9998 }
+          }"
+          @confirm="handleClearPlaylist"
+        >
+          <button class="playlist-action-btn clear-btn">
+            <DeleteIcon size="16" />
+            <span>清空播放列表</span>
+          </button>
+        </Popconfirm>
+      </div>
     </div>
   </transition>
 </template>
@@ -509,6 +567,7 @@ defineExpose({
   flex-direction: column;
   color: #333;
   transform: translateX(0);
+  overflow: hidden;
   /* 初始位置 */
 }
 
@@ -539,6 +598,7 @@ defineExpose({
 
 /* 全屏模式下的滚动条样式 - 只显示滑块 */
 .playlist-container .playlist-content {
+  scrollbar-arrow-color: transparent;
   scrollbar-width: thin;
   scrollbar-color: rgba(91, 91, 91, 0.3) transparent;
 }
@@ -834,6 +894,153 @@ defineExpose({
   transform: translateX(100%);
 }
 
+/* 播放列表底部操作按钮 */
+.playlist-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  // background: rgba(255, 255, 255, 0.3);
+  // backdrop-filter: blur(10px);
+}
+
+.playlist-container.full-screen-mode .playlist-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  // background: rgba(0, 0, 0, 0.2);
+}
+
+.playlist-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  -webkit-app-region: no-drag;
+}
+
+.locate-btn {
+  background: rgba(35, 115, 206, 0.1);
+  color: #2373ce;
+  border: 1px solid rgba(35, 115, 206, 0.2);
+}
+
+.locate-btn:hover:not(:disabled) {
+  background: rgba(35, 115, 206, 0.15);
+  border-color: rgba(35, 115, 206, 0.3);
+  transform: translateY(-1px);
+}
+
+.locate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #999;
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.clear-btn {
+  background: rgba(229, 72, 77, 0.1);
+  color: #e5484d;
+  border: 1px solid rgba(229, 72, 77, 0.2);
+}
+
+.clear-btn:hover {
+  background: rgba(229, 72, 77, 0.15);
+  border-color: rgba(229, 72, 77, 0.3);
+  transform: translateY(-1px);
+}
+
+// /* 全屏模式下的按钮样式 */
+// .playlist-container.full-screen-mode .locate-btn {
+//   background: rgba(255, 255, 255, 0.1);
+//   color: #87ceeb;
+//   border-color: rgba(255, 255, 255, 0.2);
+// }
+
+// .playlist-container.full-screen-mode .locate-btn:hover:not(:disabled) {
+//   background: rgba(255, 255, 255, 0.15);
+//   border-color: rgba(255, 255, 255, 0.3);
+// }
+
+// .playlist-container.full-screen-mode .locate-btn:disabled {
+//   color: #666;
+//   background: rgba(255, 255, 255, 0.05);
+//   border-color: rgba(255, 255, 255, 0.1);
+// }
+
+// .playlist-container.full-screen-mode .clear-btn {
+//   background: rgba(255, 255, 255, 0.1);
+//   color: #ff6b6b;
+//   border-color: rgba(255, 255, 255, 0.2);
+// }
+
+// .playlist-container.full-screen-mode .clear-btn:hover {
+//   background: rgba(255, 255, 255, 0.15);
+//   border-color: rgba(255, 255, 255, 0.3);
+// }
+
+// /* Popconfirm 样式适配 */
+// .playlist-container :deep(.t-popup__content) {
+//   background: rgba(255, 255, 255, 0.95) !important;
+//   backdrop-filter: blur(20px) !important;
+//   border: 1px solid rgba(0, 0, 0, 0.1) !important;
+//   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+//   border-radius: 8px !important;
+// }
+
+// .playlist-container.full-screen-mode :deep(.t-popup__content) {
+//   background: rgba(0, 0, 0, 0.85) !important;
+//   backdrop-filter: blur(20px) !important;
+//   border: 1px solid rgba(255, 255, 255, 0.2) !important;
+//   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+// }
+
+// .playlist-container.full-screen-mode :deep(.t-popconfirm__content) {
+//   color: #fff !important;
+// }
+
+// .playlist-container.full-screen-mode :deep(.t-button--theme-default) {
+//   background: rgba(255, 255, 255, 0.1) !important;
+//   border-color: rgba(255, 255, 255, 0.2) !important;
+//   color: #fff !important;
+// }
+
+// .playlist-container.full-screen-mode :deep(.t-button--theme-default:hover) {
+//   background: rgba(255, 255, 255, 0.15) !important;
+//   border-color: rgba(255, 255, 255, 0.3) !important;
+// }
+
+// .playlist-container.full-screen-mode :deep(.t-button--theme-danger) {
+//   background: rgba(229, 72, 77, 0.8) !important;
+//   border-color: rgba(229, 72, 77, 0.9) !important;
+// }
+
+// .playlist-container.full-screen-mode :deep(.t-button--theme-danger:hover) {
+//   background: rgba(229, 72, 77, 0.9) !important;
+//   border-color: rgba(229, 72, 77, 1) !important;
+// }
+
+// /* 普通模式下的按钮样式优化 */
+// .playlist-container :deep(.t-button--theme-danger) {
+//   background: rgba(229, 72, 77, 0.1) !important;
+//   border-color: rgba(229, 72, 77, 0.3) !important;
+//   color: #e5484d !important;
+// }
+
+// .playlist-container :deep(.t-button--theme-danger:hover) {
+//   background: rgba(229, 72, 77, 0.15) !important;
+//   border-color: rgba(229, 72, 77, 0.4) !important;
+// }
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .playlist-container {
@@ -841,5 +1048,22 @@ defineExpose({
     right: 0;
     border-radius: 8px 8px 0 0;
   }
+
+  .playlist-footer {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .playlist-action-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  // /* 移动端 Popconfirm 适配 */
+  // :deep(.playlist-popconfirm .t-popup__content),
+  // :deep(.playlist-popconfirm-fullscreen .t-popup__content) {
+  //   max-width: 280px;
+  //   font-size: 14px;
+  // }
 }
 </style>

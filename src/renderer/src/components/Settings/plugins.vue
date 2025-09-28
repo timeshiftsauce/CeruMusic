@@ -1,32 +1,34 @@
 <template>
   <div class="page">
-    <TitleBarControls title="插件管理" :show-back="true" class="header"></TitleBarControls>
+    <!-- <TitleBarControls title="插件管理" :show-back="true" class="header"></TitleBarControls> -->
     <div class="plugins-container">
-      <h2>插件管理</h2>
+      <div class="plugin-actions-hearder">
+        <h2>插件管理</h2>
 
-      <div class="plugin-actions">
-        <t-button theme="primary" @click="plugTypeDialog = true">
-          <template #icon><t-icon name="add" /></template> 添加插件
-        </t-button>
-        <t-dialog
-          :visible="plugTypeDialog"
-          :close-btn="true"
-          confirm-btn="确定"
-          cancel-btn="取消"
-          :on-confirm="addPlug"
-          :on-close="() => (plugTypeDialog = false)"
-        >
-          <template #header>请选择你的插件类别</template>
-          <template #body>
-            <t-radio-group v-model="type" variant="primary-filled" default-value="cr">
-              <t-radio-button value="cr">澜音插件</t-radio-button>
-              <t-radio-button value="lx">洛雪插件</t-radio-button>
-            </t-radio-group>
-          </template>
-        </t-dialog>
-        <t-button theme="default" @click="refreshPlugins">
-          <template #icon><t-icon name="refresh" /></template> 刷新
-        </t-button>
+        <div class="plugin-actions">
+          <t-button theme="primary" @click="plugTypeDialog = true">
+            <template #icon><t-icon name="add" /></template> 添加插件
+          </t-button>
+          <t-dialog
+            :visible="plugTypeDialog"
+            :close-btn="true"
+            confirm-btn="确定"
+            cancel-btn="取消"
+            :on-confirm="addPlug"
+            :on-close="() => (plugTypeDialog = false)"
+          >
+            <template #header>请选择你的插件类别</template>
+            <template #body>
+              <t-radio-group v-model="type" variant="primary-filled" default-value="cr">
+                <t-radio-button value="cr">澜音插件</t-radio-button>
+                <t-radio-button value="lx">洛雪插件</t-radio-button>
+              </t-radio-group>
+            </template>
+          </t-dialog>
+          <t-button theme="default" @click="refreshPlugins">
+            <template #icon><t-icon name="refresh" /></template> 刷新
+          </t-button>
+        </div>
       </div>
 
       <div v-if="loading" class="loading">
@@ -179,7 +181,6 @@
 </template>
 
 <script setup lang="ts">
-import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import { ref, onMounted, nextTick } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -514,6 +515,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  h2 {
+    font-weight: 600;
+  }
 }
 .header {
   -webkit-app-region: drag;
@@ -540,7 +544,7 @@ onMounted(async () => {
 
 .plugin-actions {
   display: flex;
-  gap: 10px;
+  margin-top: 10px;
   margin-bottom: 20px;
 }
 
@@ -613,7 +617,7 @@ onMounted(async () => {
   align-items: center;
   padding: 15px;
   border-radius: 8px;
-  background-color: var(--color-background-soft, #f8f9fa);
+  background-color: #fefefe;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
   border: 2px solid transparent;

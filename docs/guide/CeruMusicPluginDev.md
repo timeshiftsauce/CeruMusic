@@ -138,7 +138,6 @@ module.exports = {
 >   - kg 酷狗音乐 |
 >   - mg 咪咕音乐 |
 >   - kw 酷我音乐
->
 > - 导出
 >
 >   ```javascript
