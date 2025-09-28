@@ -25,18 +25,10 @@ win:
       arch:
         - x64
         - ia32
-  # 简化版本信息设置，避免rcedit错误
   fileAssociations:
     - ext: cerumusic
       name: CeruMusic File
       description: CeruMusic playlist file
-  # 如果有证书文件，取消注释以下配置
-  # certificateFile: path/to/certificate.p12
-  # certificatePassword: your-password
-  # 或者使用证书存储
-  # certificateSubjectName: "Your Company Name"
-zip:
-  artifactName: ${name}-${version}-win-${arch}.${ext}
 nsis:
   artifactName: ${name}-${version}-win-${arch}-setup.${ext}
   shortcutName: ${productName}
@@ -59,7 +51,7 @@ mac:
         - universal
   extendInfo:
     - NSDocumentsFolderUsageDescription: 需要访问文档文件夹来保存和打开您创建的文件。
-    - NSDownloadsFolderUsageDescription: 需要访问下载文件夹来管理您下载的内容。
+    - NSDownloadsFolderUsageDescription: 需要访问下载文件夹来管理您下载的歌曲。
   notarize: false
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
