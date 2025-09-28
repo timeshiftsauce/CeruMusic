@@ -42,6 +42,7 @@ declare module 'vue' {
     TFormItem: typeof import('tdesign-vue-next')['FormItem']
     ThemeSelector: typeof import('./src/components/ThemeSelector.vue')['default']
     TIcon: typeof import('tdesign-vue-next')['Icon']
+    TImage: typeof import('tdesign-vue-next')['Image']
     TInput: typeof import('tdesign-vue-next')['Input']
     TitleBarControls: typeof import('./src/components/TitleBarControls.vue')['default']
     TLayout: typeof import('tdesign-vue-next')['Layout']
