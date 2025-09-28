@@ -1011,7 +1011,7 @@ watch(showFullPlay, (val) => {
 /* 进度条样式 */
 .progress-bar-container {
   width: 100%;
-  height: 2px;
+  height: 4px;
   position: absolute;
   // padding-top: 2px;
   cursor: pointer;
@@ -1019,7 +1019,7 @@ watch(showFullPlay, (val) => {
 
   &:has(.progress-handle.dragging, *:hover) {
     // margin-bottom: 0;
-    height: 4px;
+    height: 6px;
   }
 
   .progress-bar {
