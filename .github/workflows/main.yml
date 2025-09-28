@@ -39,7 +39,7 @@ jobs:
       - name: Build Electron App for macos
         if: matrix.os == 'macos-latest' # 只在macOS上运行
         run: |
-          yarn run build:mac
+          yarn run build:mac:universal
 
       - name: Build Electron App for linux
         if: matrix.os == 'ubuntu-latest' # 只在Linux上运行

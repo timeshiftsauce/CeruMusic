@@ -183,6 +183,9 @@ async function downloadApp(platform) {
   button.disabled = true
 
   try {
+    // Detect user's architecture for better matching
+    const userArch = detectArchitecture()
+
     // Try Alist first
     const versions = await getAlistVersions()
 
@@ -190,15 +193,16 @@ async function downloadApp(platform) {
       const latestVersion = versions[0]
       const files = await getAlistVersionFiles(latestVersion.name)
 
-      // Find the appropriate file for the platform
-      const fileName = findFileForPlatform(files, platform)
+      // Find the appropriate file for the platform and architecture
+      const fileName = findFileForPlatform(files, platform, userArch)
 
       if (fileName) {
         const downloadUrl = await getAlistDownloadUrl(latestVersion.name, fileName)
 
-        // Show success notification
+        // Show success notification with architecture info
+        const archInfo = getArchitectureInfo(fileName)
         showNotification(
-          `正在下载 ${getPlatformName(platform)} 版本 ${latestVersion.name}...`,
+          `正在下载 ${getPlatformName(platform)} ${archInfo} 版本 ${latestVersion.name}...`,
           'success'
         )
 
@@ -206,21 +210,19 @@ async function downloadApp(platform) {
         window.open(downloadUrl, '_blank')
 
         // Track download
-        trackDownload(platform, latestVersion.name)
+        trackDownload(platform, latestVersion.name, fileName)
 
         return // Success, exit function
       }
     }
 
     // Fallback to GitHub if Alist fails
-    console.log('Alist download failed, trying GitHub fallback...')
     await downloadFromGitHub(platform)
   } catch (error) {
     console.error('Download error:', error)
 
     // Try GitHub fallback
     try {
-      console.log('Trying GitHub fallback...')
       await downloadFromGitHub(platform)
     } catch (fallbackError) {
       console.error('GitHub fallback also failed:', fallbackError)
@@ -249,20 +251,28 @@ async function downloadFromGitHub(platform) {
     throw new Error('无法获取最新版本信息')
   }
 
-  const downloadUrl = findDownloadAsset(release.assets, platform)
+  const userArch = detectArchitecture()
+  const downloadUrl = findDownloadAsset(release.assets, platform, userArch)
 
   if (!downloadUrl) {
     throw new Error(`暂无 ${getPlatformName(platform)} 版本下载`)
   }
 
+  // Find the asset to get architecture info
+  const asset = release.assets.find((a) => a.browser_download_url === downloadUrl)
+  const archInfo = asset ? getArchitectureInfo(asset.name) : ''
+
   // Show success notification
-  showNotification(`正在下载 ${getPlatformName(platform)} 版本 v${release.tag_name}...`, 'success')
+  showNotification(
+    `正在下载 ${getPlatformName(platform)} ${archInfo} 版本 v${release.tag_name}...`,
+    'success'
+  )
 
   // Start download
   window.open(downloadUrl, '_blank')
 
   // Track download
-  trackDownload(platform, release.tag_name)
+  trackDownload(platform, release.tag_name, asset ? asset.name : '')
 }
 
 // Get latest release from GitHub API
@@ -294,7 +304,7 @@ async function getLatestRelease() {
 }
 
 // Find appropriate file for platform from Alist files
-function findFileForPlatform(files, platform) {
+function findFileForPlatform(files, platform, userArch = null) {
   if (!files || !Array.isArray(files)) {
     return null
   }
@@ -313,53 +323,102 @@ function findFileForPlatform(files, platform) {
     )
   })
 
-  // Define file patterns for each platform (ordered by priority)
-  const patterns = {
-    windows: [
-      /ceru-music.*setup\\.exe$/i,
-      /\\.exe$/i,
-      /windows.*\\.zip$/i,
-      /win32.*\\.zip$/i,
-      /win.*x64.*\\.zip$/i
-    ],
-    macos: [
-      /ceru-music.*\\.dmg$/i,
-      /\\.dmg$/i,
-      /darwin.*\\.zip$/i,
-      /macos.*\\.zip$/i,
-      /mac.*\\.zip$/i,
-      /osx.*\\.zip$/i
-    ],
-    linux: [
-      /ceru-music.*amd64\\.deb$/i,
-      /\\.deb$/i,
-      /\\.AppImage$/i,
-      /linux.*\\.zip$/i,
-      /linux.*\\.tar\\.gz$/i,
-      /\\.rpm$/i
-    ]
+  // If no user architecture provided, detect it
+  if (!userArch) {
+    userArch = detectArchitecture()
   }
 
-  const platformPatterns = patterns[platform] || []
+  // Define architecture-specific patterns for each platform
+  const archPatterns = {
+    windows: {
+      x64: [
+        /ceru-music.*x64.*setup\.exe$/i,
+        /ceru-music.*win.*x64.*setup\.exe$/i,
+        /ceru-music.*x64.*\.zip$/i,
+        /ceru-music.*win.*x64.*\.zip$/i
+      ],
+      ia32: [
+        /ceru-music.*ia32.*setup\.exe$/i,
+        /ceru-music.*win.*ia32.*setup\.exe$/i,
+        /ceru-music.*ia32.*\.zip$/i,
+        /ceru-music.*win.*ia32.*\.zip$/i
+      ],
+      fallback: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win.*\.zip$/i]
+    },
+    macos: {
+      universal: [/ceru-music.*universal\\.dmg$/i, /ceru-music.*universal\\.zip$/i],
+      arm64: [
+        /ceru-music.*arm64\\.dmg$/i,
+        /ceru-music.*arm64\\.zip$/i,
+        /ceru-music.*universal\\.dmg$/i,
+        /ceru-music.*universal\\.zip$/i
+      ],
+      x64: [
+        /ceru-music.*x64\\.dmg$/i,
+        /ceru-music.*x64\\.zip$/i,
+        /ceru-music.*universal\\.dmg$/i,
+        /ceru-music.*universal\\.zip$/i
+      ],
+      fallback: [
+        /ceru-music.*\\.dmg$/i,
+        /\\.dmg$/i,
+        /darwin.*\\.zip$/i,
+        /macos.*\\.zip$/i,
+        /mac.*\\.zip$/i
+      ]
+    },
+    linux: {
+      x64: [
+        /ceru-music.*linux.*x64\\.AppImage$/i,
+        /ceru-music.*linux.*x64\\.deb$/i,
+        /ceru-music.*x64\\.AppImage$/i,
+        /ceru-music.*x64\\.deb$/i
+      ],
+      fallback: [
+        /ceru-music.*\\.AppImage$/i,
+        /ceru-music.*\\.deb$/i,
+        /\\.AppImage$/i,
+        /\\.deb$/i,
+        /linux.*\\.zip$/i
+      ]
+    }
+  }
 
-  // Try to find exact match
-  for (const pattern of platformPatterns) {
+  const platformArchPatterns = archPatterns[platform]
+  if (!platformArchPatterns) {
+    return null
+  }
+
+  // Try architecture-specific patterns first
+  const archSpecificPatterns = platformArchPatterns[userArch] || []
+
+  for (const pattern of archSpecificPatterns) {
     const file = filteredFiles.find((file) => pattern.test(file.name))
     if (file) {
       return file.name
     }
   }
 
-  // Fallback: look for any file that might match the platform
-  const fallbackPatterns = {
+  // Try fallback patterns
+  const fallbackPatterns = platformArchPatterns.fallback || []
+
+  for (const pattern of fallbackPatterns) {
+    const file = filteredFiles.find((file) => pattern.test(file.name))
+    if (file) {
+      return file.name
+    }
+  }
+
+  // Final fallback: look for any file that might match the platform
+  const finalFallbackPatterns = {
     windows: /win|exe/i,
     macos: /mac|darwin|dmg/i,
     linux: /linux|appimage|deb|rpm/i
   }
 
-  const fallbackPattern = fallbackPatterns[platform]
-  if (fallbackPattern) {
-    const file = filteredFiles.find((file) => fallbackPattern.test(file.name))
+  const finalPattern = finalFallbackPatterns[platform]
+  if (finalPattern) {
+    const file = filteredFiles.find((file) => finalPattern.test(file.name))
     if (file) {
       return file.name
     }
@@ -391,21 +450,33 @@ function findDownloadAsset(assets, platform) {
   // Define file patterns for each platform (ordered by priority)
   const patterns = {
     windows: [
+      /ceru-music.*win.*x64.*setup\.exe$/i,
+      /ceru-music.*win.*ia32.*setup\.exe$/i,
       /ceru-music.*setup\.exe$/i,
       /\.exe$/i,
+      /ceru-music.*win.*x64.*\.zip$/i,
+      /ceru-music.*win.*ia32.*\.zip$/i,
       /windows.*\.zip$/i,
       /win32.*\.zip$/i,
       /win.*x64.*\.zip$/i
     ],
     macos: [
+      /ceru-music.*universal\.dmg$/i,
+      /ceru-music.*arm64\.dmg$/i,
+      /ceru-music.*x64\.dmg$/i,
       /ceru-music.*\.dmg$/i,
       /\.dmg$/i,
+      /ceru-music.*universal\.zip$/i,
+      /ceru-music.*arm64\.zip$/i,
+      /ceru-music.*x64\.zip$/i,
       /darwin.*\.zip$/i,
       /macos.*\.zip$/i,
       /mac.*\.zip$/i,
       /osx.*\.zip$/i
     ],
     linux: [
+      /ceru-music.*linux.*x64\.deb$/i,
+      /ceru-music.*linux.*x64\.AppImage$/i,
       /ceru-music.*amd64\.deb$/i,
       /\.deb$/i,
       /\.AppImage$/i,
@@ -604,7 +675,7 @@ function setupAnimations() {
   })
 }
 
-// Auto-detect user's operating system
+// Auto-detect user's operating system and architecture
 function detectOS() {
   const userAgent = navigator.userAgent.toLowerCase()
   if (userAgent.includes('win')) return 'windows'
@@ -613,9 +684,52 @@ function detectOS() {
   return 'windows' // default
 }
 
+// Detect user's architecture
+function detectArchitecture() {
+  const userAgent = navigator.userAgent.toLowerCase()
+  const platform = navigator.platform.toLowerCase()
+
+  // For macOS, detect Apple Silicon vs Intel
+  if (userAgent.includes('mac')) {
+    // Check for Apple Silicon indicators
+    if (userAgent.includes('arm') || platform.includes('arm')) {
+      return 'arm64'
+    }
+    // Default to universal for macOS (works on both Intel and Apple Silicon)
+    return 'universal'
+  }
+
+  // For Windows, detect 32-bit vs 64-bit
+  if (userAgent.includes('win')) {
+    if (userAgent.includes('wow64') || userAgent.includes('win64') || userAgent.includes('x64')) {
+      return 'x64'
+    }
+    return 'ia32'
+  }
+
+  // For Linux, assume 64-bit
+  if (userAgent.includes('linux')) {
+    return 'x64'
+  }
+
+  return 'x64' // default
+}
+
+// Get architecture display name
+function getArchitectureName(arch) {
+  const names = {
+    x64: '64位',
+    ia32: '32位',
+    arm64: 'Apple Silicon',
+    universal: 'Universal (Intel + Apple Silicon)'
+  }
+  return names[arch] || arch
+}
+
 // Highlight user's OS download option
 function highlightUserOS() {
   const userOS = detectOS()
+  const userArch = detectArchitecture()
   const downloadCards = document.querySelectorAll('.download-card')
 
   downloadCards.forEach((card, index) => {
@@ -624,10 +738,11 @@ function highlightUserOS() {
       card.style.border = '2px solid var(--primary-color)'
       card.style.transform = 'scale(1.02)'
 
-      // Add "推荐" badge
+      // Add "推荐" badge with architecture info
       const badge = document.createElement('div')
       badge.className = 'recommended-badge'
-      badge.textContent = '推荐'
+      const archName = getArchitectureName(userArch)
+      badge.textContent = `推荐 (${archName})`
       badge.style.cssText = `
                 position: absolute;
                 top: -10px;
@@ -638,9 +753,22 @@ function highlightUserOS() {
                 border-radius: 12px;
                 font-size: 0.75rem;
                 font-weight: 600;
+                white-space: nowrap;
             `
       card.style.position = 'relative'
       card.appendChild(badge)
+
+      // Add architecture info to the card description
+      const description = card.querySelector('p')
+      if (description && userOS === 'macos') {
+        if (userArch === 'arm64') {
+          description.innerHTML +=
+            '<br><small style="color: var(--text-muted);">检测到 Apple Silicon Mac，推荐 Universal 版本</small>'
+        } else if (userArch === 'universal') {
+          description.innerHTML +=
+            '<br><small style="color: var(--text-muted);">Universal 版本兼容 Intel 和 Apple Silicon Mac</small>'
+        }
+      }
     }
   })
 }
@@ -757,9 +885,14 @@ async function updateVersionInfo() {
         const modifyDate = new Date(latestVersion.modified)
         const formattedDate = modifyDate.toLocaleDateString('zh-CN', {
           year: 'numeric',
-          month: 'long'
+          month: 'long',
+          day: 'numeric'
         })
-        versionInfoElement.innerHTML = `当前版本: <span class="version">${latestVersion.name}</span> | 更新时间: ${formattedDate}`
+        const formattedTime = modifyDate.toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        versionInfoElement.innerHTML = `当前版本: <span class="version">${latestVersion.name}</span> | 更新时间: ${formattedDate} ${formattedTime}`
       }
 
       // Update download button text with file info from Alist
@@ -770,7 +903,6 @@ async function updateVersionInfo() {
     }
 
     // Fallback to GitHub if Alist fails
-    console.log('Alist version info failed, trying GitHub fallback...')
     const release = await getLatestRelease()
     if (release) {
       const versionElement = document.querySelector('.version')
@@ -784,9 +916,14 @@ async function updateVersionInfo() {
         const publishDate = new Date(release.published_at)
         const formattedDate = publishDate.toLocaleDateString('zh-CN', {
           year: 'numeric',
-          month: 'long'
+          month: 'long',
+          day: 'numeric'
         })
-        versionInfoElement.innerHTML = `当前版本: <span class="version">${release.tag_name}</span> | 更新时间: ${formattedDate}`
+        const formattedTime = publishDate.toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        versionInfoElement.innerHTML = `当前版本: <span class="version">${release.tag_name}</span> | 更新时间: ${formattedDate} ${formattedTime}`
       }
 
       // Update download button text with file sizes if available
@@ -848,18 +985,98 @@ function updateDownloadButtonsWithAssets(assets) {
   })
 }
 
-// Helper function to find asset for platform
-function findAssetForPlatform(assets, platform) {
-  const patterns = {
-    windows: [/\.exe$/i, /windows.*\.zip$/i, /win32.*\.zip$/i],
-    macos: [/\.dmg$/i, /darwin.*\.zip$/i, /macos.*\.zip$/i],
-    linux: [/\.AppImage$/i, /linux.*\.zip$/i, /\.deb$/i]
+// Updated function name to match usage
+function findDownloadAsset(assets, platform, userArch = null) {
+  if (!userArch) {
+    userArch = detectArchitecture()
   }
 
-  const platformPatterns = patterns[platform] || []
+  // Filter out unwanted files
+  const filteredAssets = assets.filter((asset) => {
+    const name = asset.name.toLowerCase()
+    return (
+      !name.endsWith('.yml') &&
+      !name.endsWith('.yaml') &&
+      !name.endsWith('.txt') &&
+      !name.endsWith('.md') &&
+      !name.endsWith('.json') &&
+      !name.includes('latest') &&
+      !name.includes('blockmap')
+    )
+  })
 
-  for (const pattern of platformPatterns) {
-    const asset = assets.find((asset) => pattern.test(asset.name))
+  // Define architecture-specific patterns for each platform
+  const archPatterns = {
+    windows: {
+      x64: [
+        /ceru-music.*x64.*setup\.exe$/i,
+        /ceru-music.*win.*x64.*setup\.exe$/i,
+        /ceru-music.*x64.*\.zip$/i,
+        /ceru-music.*win.*x64.*\.zip$/i
+      ],
+      ia32: [
+        /ceru-music.*ia32.*setup\.exe$/i,
+        /ceru-music.*win.*ia32.*setup\.exe$/i,
+        /ceru-music.*ia32.*\.zip$/i,
+        /ceru-music.*win.*ia32.*\.zip$/i
+      ],
+      fallback: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win.*\.zip$/i]
+    },
+    macos: {
+      universal: [/ceru-music.*universal\.dmg$/i, /ceru-music.*universal\.zip$/i],
+      arm64: [
+        /ceru-music.*arm64\.dmg$/i,
+        /ceru-music.*arm64\.zip$/i,
+        /ceru-music.*universal\.dmg$/i,
+        /ceru-music.*universal\.zip$/i
+      ],
+      x64: [
+        /ceru-music.*x64\.dmg$/i,
+        /ceru-music.*x64\.zip$/i,
+        /ceru-music.*universal\.dmg$/i,
+        /ceru-music.*universal\.zip$/i
+      ],
+      fallback: [
+        /ceru-music.*\.dmg$/i,
+        /\.dmg$/i,
+        /darwin.*\.zip$/i,
+        /macos.*\.zip$/i,
+        /mac.*\.zip$/i
+      ]
+    },
+    linux: {
+      x64: [
+        /ceru-music.*linux.*x64\.AppImage$/i,
+        /ceru-music.*linux.*x64\.deb$/i,
+        /ceru-music.*x64\.AppImage$/i,
+        /ceru-music.*x64\.deb$/i
+      ],
+      fallback: [
+        /ceru-music.*\.AppImage$/i,
+        /ceru-music.*\.deb$/i,
+        /\.AppImage$/i,
+        /\.deb$/i,
+        /linux.*\.zip$/i
+      ]
+    }
+  }
+
+  const platformArchPatterns = archPatterns[platform]
+  if (!platformArchPatterns) {
+    return null
+  }
+
+  // Try architecture-specific patterns first
+  const archSpecificPatterns = platformArchPatterns[userArch] || []
+  for (const pattern of archSpecificPatterns) {
+    const asset = filteredAssets.find((asset) => pattern.test(asset.name))
+    if (asset) return asset
+  }
+
+  // Try fallback patterns
+  const fallbackPatterns = platformArchPatterns.fallback || []
+  for (const pattern of fallbackPatterns) {
+    const asset = filteredAssets.find((asset) => pattern.test(asset.name))
     if (asset) return asset
   }
 
@@ -882,15 +1099,32 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
+// Get architecture information from filename
+function getArchitectureInfo(filename) {
+  if (!filename) return ''
+
+  const name = filename.toLowerCase()
+
+  if (name.includes('universal')) return '(Universal)'
+  if (name.includes('arm64')) return '(Apple Silicon)'
+  if (name.includes('x64')) return '(64位)'
+  if (name.includes('ia32')) return '(32位)'
+  if (name.includes('win') && name.includes('x64')) return '(64位)'
+  if (name.includes('win') && name.includes('ia32')) return '(32位)'
+  if (name.includes('linux') && name.includes('x64')) return '(64位)'
+
+  return ''
+}
+
 // Analytics tracking (placeholder)
-function trackDownload(platform, version) {
+function trackDownload(platform, version, filename = '') {
   // Add your analytics tracking code here
-  console.log(`Download tracked: ${platform} v${version}`)
+  const archInfo = getArchitectureInfo(filename)
 
   // Example: Google Analytics
   // gtag('event', 'download', {
   //     'event_category': 'software',
-  //     'event_label': platform,
+  //     'event_label': `${platform}_${archInfo}`,
   //     'value': version
   // });
 }

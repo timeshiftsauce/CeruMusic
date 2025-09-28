@@ -46,12 +46,12 @@ const routes: RouteRecordRaw[] = [
       transitionOut: 'animate__fadeOut'
     },
     component: () => import('@renderer/views/settings/index.vue')
-  },
-  {
-    path: '/plugins',
-    name: 'plugins',
-    component: () => import('@renderer/views/settings/plugins.vue')
   }
+  // {
+  //   path: '/plugins',
+  //   name: 'plugins',
+  //   component: () => import('@renderer/views/settings/plugins.vue')
+  // }
 ]
 function setAnimate(routerObj: RouteRecordRaw[]) {
   for (let i = 0; i < routerObj.length; i++) {

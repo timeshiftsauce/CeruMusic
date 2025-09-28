@@ -6,5 +6,5 @@
 // biome-ignore lint: disable
 export {}
 declare global {
-
+  const DialogPlugin: (typeof import('tdesign-vue-next'))['DialogPlugin']
 }

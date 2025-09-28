@@ -14,7 +14,6 @@ import {
   SaveIcon
 } from 'tdesign-icons-vue-next'
 import fonts from '@renderer/assets/icon_font/icons'
-import { useRouter } from 'vue-router'
 import DirectorySettings from '@renderer/components/Settings/DirectorySettings.vue'
 import MusicCache from '@renderer/components/Settings/MusicCache.vue'
 import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
@@ -180,9 +179,8 @@ const clearAPIKey = (): void => {
   console.log('DeepSeek API Key 已清空')
 }
 
-const router = useRouter()
 const goPlugin = () => {
-  router.push('/plugins')
+  switchCategory('plugins')
 }
 
 // 音乐源和音质配置相关
@@ -497,14 +495,15 @@ const getTagOptionsStatus = () => {
 
             <!-- 插件管理 -->
             <div v-else-if="activeCategory === 'plugins'" key="plugins" class="settings-section">
-              <div class="setting-group">
+              <!-- <div class="setting-group">
                 <h3>插件管理</h3>
                 <p>管理和配置应用插件，扩展音乐播放器功能</p>
                 <t-button theme="primary" @click="goPlugin">
                   <TreeRoundDotIcon style="margin-right: 0.5em" />
                   打开插件管理
                 </t-button>
-              </div>
+              </div> -->
+              <plugins />
             </div>
 
             <!-- 音乐源配置 -->
