@@ -217,7 +217,6 @@ const handleScroll = (event: Event) => {
 
 <style lang="scss" scoped>
 .search-container {
-  background: #fafafa;
   box-sizing: border-box;
   width: 100%;
   padding: 20px;
