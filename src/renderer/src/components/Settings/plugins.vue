@@ -12,9 +12,9 @@
           <t-dialog
             :visible="plugTypeDialog"
             :close-btn="true"
-            confirm-btn="确定"
+            confirm-btn="下一步"
             cancel-btn="取消"
-            :on-confirm="addPlug"
+            :on-confirm="showImportMethodDialog"
             :on-close="() => (plugTypeDialog = false)"
           >
             <template #header>请选择你的插件类别</template>
@@ -23,6 +23,45 @@
                 <t-radio-button value="cr">澜音插件</t-radio-button>
                 <t-radio-button value="lx">洛雪插件</t-radio-button>
               </t-radio-group>
+            </template>
+          </t-dialog>
+
+          <!-- 导入方式选择对话框 -->
+          <t-dialog
+            :visible="importMethodDialog"
+            :close-btn="true"
+            confirm-btn="确定"
+            cancel-btn="返回"
+            :on-confirm="handleImport"
+            :on-close="() => (importMethodDialog = false)"
+            :on-cancel="backToTypeSelection"
+          >
+            <template #header>选择导入方式</template>
+            <template #body>
+              <div class="import-method-container">
+                <t-radio-group
+                  v-model="importMethod"
+                  variant="primary-filled"
+                  default-value="local"
+                >
+                  <t-radio-button value="local">本地导入</t-radio-button>
+                  <t-radio-button value="online">在线导入</t-radio-button>
+                </t-radio-group>
+
+                <div v-if="importMethod === 'online'" class="online-input-container">
+                  <t-input
+                    v-model="onlineUrl"
+                    placeholder="请输入插件下载地址"
+                    size="large"
+                    style="margin-top: 15px"
+                  />
+                  <p class="hint-text">支持 HTTP/HTTPS 链接，插件文件应为 .js 或 .zip 格式</p>
+                </div>
+
+                <div v-else class="local-hint-container">
+                  <p class="hint-text">将从本地文件选择插件文件进行导入</p>
+                </div>
+              </div>
             </template>
           </t-dialog>
           <t-button theme="default" @click="refreshPlugins">
@@ -216,7 +255,10 @@ const plugins = ref<Plugin[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const plugTypeDialog = ref(false)
+const importMethodDialog = ref(false)
 const type = ref<'lx' | 'cr'>('cr')
+const importMethod = ref<'local' | 'online'>('local')
+const onlineUrl = ref('')
 
 // 日志相关状态
 const logDialogVisible = ref(false)
@@ -328,14 +370,52 @@ async function getPlugins() {
   }
 }
 
-async function addPlug() {
-  try {
-    // 调用主进程的文件选择和添加插件API
-    plugTypeDialog.value = false
-    console.log(type.value)
-    const result = (await window.api.plugins.selectAndAddPlugin(type.value)) as ApiResult
+// 显示导入方式选择对话框
+function showImportMethodDialog() {
+  plugTypeDialog.value = false
+  importMethodDialog.value = true
+}
 
-    // 检查用户是否取消了文件选择
+// 返回到插件类型选择
+function backToTypeSelection() {
+  importMethodDialog.value = false
+  plugTypeDialog.value = true
+  onlineUrl.value = '' // 清空在线地址
+}
+
+// 处理导入操作
+async function handleImport() {
+  try {
+    importMethodDialog.value = false
+    let result: ApiResult
+
+    if (importMethod.value === 'local') {
+      // 本地导入：调用文件选择API
+      result = (await window.api.plugins.selectAndAddPlugin(type.value)) as ApiResult
+    } else {
+      // 在线导入：调用在线下载API
+      if (!onlineUrl.value.trim()) {
+        MessagePlugin.warning('请输入插件下载地址')
+        importMethodDialog.value = true
+        return
+      }
+
+      // 验证URL格式
+      try {
+        new URL(onlineUrl.value)
+      } catch {
+        MessagePlugin.warning('请输入有效的URL地址')
+        importMethodDialog.value = true
+        return
+      }
+
+      result = (await window.api.plugins.downloadAndAddPlugin(
+        onlineUrl.value,
+        type.value
+      )) as ApiResult
+    }
+
+    // 检查用户是否取消了操作
     if (result && result.canceled) {
       return
     }
@@ -354,6 +434,9 @@ async function addPlug() {
         MessagePlugin.success('插件安装成功！')
       }
     }
+
+    // 重置状态
+    onlineUrl.value = ''
   } catch (err: any) {
     console.error('安装插件失败:', err)
     MessagePlugin.error(`安装插件失败: ${err.message || '未知错误'}`)
@@ -1015,6 +1098,26 @@ onMounted(async () => {
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* 导入方式选择样式 */
+.import-method-container {
+  padding: 10px 0;
+}
+
+.online-input-container {
+  margin-top: 15px;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.local-hint-container {
+  margin-top: 15px;
 }
 
 /* 响应式设计 */

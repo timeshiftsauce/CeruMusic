@@ -37,6 +37,8 @@ const api = {
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') =>
       ipcRenderer.invoke('service-plugin-selectAndAddPlugin', type),
+    downloadAndAddPlugin: (url: string, type: 'lx' | 'cr') =>
+      ipcRenderer.invoke('service-plugin-downloadAndAddPlugin', url, type),
     addPlugin: (pluginCode: string, pluginName: string) =>
       ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName),
     getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),

@@ -215,6 +215,15 @@ ipcMain.handle('service-plugin-selectAndAddPlugin', async (_, type): Promise<any
   }
 })
 
+ipcMain.handle('service-plugin-downloadAndAddPlugin', async (_, url, type): Promise<any> => {
+  try {
+    return await pluginService.downloadAndAddPlugin(url, type)
+  } catch (error: any) {
+    console.error('Error downloading and adding plugin:', error)
+    return { error: error.message }
+  }
+})
+
 ipcMain.handle('service-plugin-addPlugin', async (_, pluginCode, pluginName): Promise<any> => {
   try {
     return await pluginService.addPlugin(pluginCode, pluginName)

@@ -4,6 +4,7 @@ import fsPromise from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { dialog } from 'electron'
 import { getAppDirPath } from '../../utils/path'
+import axios from 'axios'
 
 import CeruMusicPluginHost from './manager/CeruMusicPluginHost'
 import convertEventDrivenPlugin from './manager/converter-event-driven'
@@ -221,6 +222,60 @@ const pluginService = {
         supportedSources: ceruPluginManager.getSupportedSources()
       }
     })
+  },
+
+  async downloadAndAddPlugin(url: string, type: 'lx' | 'cr') {
+    try {
+      // 验证URL
+      if (!url || typeof url !== 'string') {
+        throw new Error('无效的URL地址')
+      }
+
+      // 下载文件
+      let pluginCode = await this.downloadFile(url)
+
+      // 生成临时文件名
+      const fileName = `downloaded_${Date.now()}.js`
+      if (type == 'lx') {
+        pluginCode = convertEventDrivenPlugin(pluginCode)
+      }
+      // 调用现有的添加插件方法
+      return await this.addPlugin(pluginCode, fileName)
+    } catch (error: any) {
+      console.error('下载并添加插件失败:', error)
+      return { error: error.message || '下载插件失败' }
+    }
+  },
+
+  async downloadFile(url: string): Promise<string> {
+    try {
+      const response = await axios.get(url, {
+        timeout: 30000, // 30秒超时
+        responseType: 'text',
+        headers: {
+          'User-Agent': 'CeruMusic/1.0'
+        }
+      })
+
+      if (response.status !== 200) {
+        throw new Error(`下载失败: HTTP ${response.status}`)
+      }
+
+      const data = response.data
+      if (!data || !data.trim()) {
+        throw new Error('下载的文件内容为空')
+      }
+
+      return data
+    } catch (error: any) {
+      if (error.response) {
+        throw new Error(`下载失败: HTTP ${error.response.status}`)
+      } else if (error.request) {
+        throw new Error('网络错误: 无法连接到服务器')
+      } else {
+        throw new Error(`下载错误: ${error.message}`)
+      }
+    }
   },
 
   async getPluginLog(pluginId: string) {
