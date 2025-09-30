@@ -65,11 +65,11 @@ const pluginInfo = {
 const sources = {
   kw:{
     name: "酷我音乐",
-    qualities: ['128k', '320k', 'flac', 'flac24bit']
+    qualitys: ['128k', '320k', 'flac', 'flac24bit']
   },
   tx:{
     name: "QQ音乐",
-    qualities: ['128k', '320k', 'flac']
+    qualitys: ['128k', '320k', 'flac']
   }
 };
 
@@ -85,7 +85,7 @@ async function musicUrl(source, musicInfo, quality) {
       },
       body: JSON.stringify({
         id: musicInfo.id,
-        quality: quality
+        qualitys: quality
       })
     });
 
@@ -146,7 +146,7 @@ module.exports = {
 >   }
 >   ```
 >
-> - 支持的音质 ` sources.qualities: ['128k', '320k', 'flac']`
+> - 支持的音质 ` sources.qualitys: ['128k', '320k', 'flac']`
 >   - `128k`: 128kbps
 >   - `320k`: 320kbps
 >   - `flac`: FLAC 无损
