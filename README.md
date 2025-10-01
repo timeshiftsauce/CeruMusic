@@ -352,8 +352,8 @@ CeruMuisc/
 
 ## 文档与资源
 
-- [产品设计文档](https://www.doubao.com/thread/docs/design.md)：涵盖项目架构、核心功能设计和开发规范（不含任何音乐数据源信息）。
-- [插件开发文档](https://www.doubao.com/thread/docs/CeruMusic插件开发文档.md)：仅提供插件开发技术规范，**明确要求插件开发者需遵守数据来源平台的用户协议与版权法**，禁止开发、传播获取非公开数据的插件。
+- 产品设计文档：涵盖项目架构、核心功能设计和开发规范（不含任何音乐数据源信息）。
+- [插件开发文档](https://ceru.docs.shiqianjiang.cn/guide/CeruMusicPluginDev.html)：仅提供插件开发技术规范，**明确要求插件开发者需遵守数据来源平台的用户协议与版权法**，禁止开发、传播获取非公开数据的插件。
 
 ## 开源许可
 
@@ -364,7 +364,7 @@ CeruMuisc/
 欢迎开发者贡献代码与反馈建议，贡献内容需符合以下要求：
 
 1. 仅涉及播放器框架功能优化、bug 修复、文档完善，不包含任何音乐数据源相关代码。
-2. 遵循 [Git 提交规范](https://www.doubao.com/thread/docs/design.md#git提交规范) 并确保代码符合项目风格指南。
+2. 遵循 [Git 提交规范](#) 并确保代码符合项目风格指南。
 3. 贡献的代码需无第三方版权纠纷，且不违反开源许可协议。
 
 ## 联系方式
@@ -431,3 +431,8 @@ CeruMuisc/
 
 若您认可本项目的技术价值，欢迎通过以下方式支持开发者（仅用于项目技术维护与迭代）：
 <img src="assets/image-20250827175356006.png" alt="赞助方式1" style="zoom:33%;" /><img src="assets/image-20250827175547444.png" alt="赞助方式2" style="zoom: 33%;" />
+
+## 联系
+
+关于项目问题也可联系
+邮箱：sqj@shiqianjiang.cn
