@@ -206,9 +206,11 @@ const formatPlayTime = (timeStr: string): string => {
 
 <style lang="scss" scoped>
 .recent-container {
+  // background: var(--recent-bg);
   padding: 2rem;
   max-width: 1200px;
   margin: 0 auto;
+  min-height: 100vh;
 }
 
 .page-header {
@@ -219,14 +221,14 @@ const formatPlayTime = (timeStr: string): string => {
 
   .header-left {
     h2 {
-      color: #111827;
+      color: var(--recent-title-color);
       margin-bottom: 0.5rem;
       font-size: 1.875rem;
       font-weight: 600;
     }
 
     p {
-      color: #6b7280;
+      color: var(--recent-subtitle-color);
       font-size: 1rem;
     }
   }
@@ -236,7 +238,7 @@ const formatPlayTime = (timeStr: string): string => {
   margin-bottom: 3rem;
 
   .section-title {
-    color: #111827;
+    color: var(--recent-section-title);
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 1.5rem;
@@ -253,15 +255,15 @@ const formatPlayTime = (timeStr: string): string => {
   display: flex;
   align-items: center;
   padding: 1rem;
-  background: #fff;
+  background: var(--recent-card-bg);
   border-radius: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--recent-card-shadow);
   cursor: pointer;
   transition: all 0.3s ease;
 
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--recent-card-shadow-hover);
 
     .play-overlay {
       opacity: 1;
@@ -308,13 +310,13 @@ const formatPlayTime = (timeStr: string): string => {
     .playlist-title {
       font-size: 1rem;
       font-weight: 600;
-      color: #111827;
+      color: var(--recent-playlist-title);
       margin-bottom: 0.25rem;
     }
 
     .playlist-desc {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: var(--recent-playlist-desc);
       margin-bottom: 0.5rem;
     }
 
@@ -322,7 +324,7 @@ const formatPlayTime = (timeStr: string): string => {
       display: flex;
       gap: 1rem;
       font-size: 0.75rem;
-      color: #9ca3af;
+      color: var(--recent-playlist-meta);
 
       span {
         &:not(:last-child)::after {
@@ -336,17 +338,17 @@ const formatPlayTime = (timeStr: string): string => {
 }
 
 .song-list {
-  background: #fff;
+  background: var(--recent-card-bg);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--recent-card-shadow);
 }
 
 .song-item {
   display: flex;
   align-items: center;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--recent-song-item-border);
   cursor: pointer;
   transition: background-color 0.2s ease;
 
@@ -355,7 +357,7 @@ const formatPlayTime = (timeStr: string): string => {
   }
 
   &:hover {
-    background-color: #f9fafb;
+    background-color: var(--recent-song-item-hover);
 
     .song-actions {
       opacity: 1;
@@ -366,7 +368,7 @@ const formatPlayTime = (timeStr: string): string => {
     width: 2rem;
     text-align: center;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--recent-song-index);
     font-weight: 500;
   }
 
@@ -377,13 +379,13 @@ const formatPlayTime = (timeStr: string): string => {
     .song-title {
       font-size: 0.875rem;
       font-weight: 500;
-      color: #111827;
+      color: var(--recent-song-title);
       margin-bottom: 0.25rem;
     }
 
     .song-artist {
       font-size: 0.75rem;
-      color: #6b7280;
+      color: var(--recent-song-artist);
     }
   }
 
@@ -393,19 +395,19 @@ const formatPlayTime = (timeStr: string): string => {
 
     .play-count {
       font-size: 0.75rem;
-      color: #6b7280;
+      color: var(--recent-song-stats);
       margin-bottom: 0.125rem;
     }
 
     .play-time {
       font-size: 0.75rem;
-      color: #9ca3af;
+      color: var(--recent-playlist-meta);
     }
   }
 
   .song-duration {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: var(--recent-song-duration);
     margin-right: 1rem;
     font-variant-numeric: tabular-nums;
   }
@@ -427,19 +429,19 @@ const formatPlayTime = (timeStr: string): string => {
 
     .iconfont {
       font-size: 4rem;
-      color: #d1d5db;
+      color: var(--recent-empty-icon);
     }
   }
 
   h3 {
-    color: #111827;
+    color: var(--recent-empty-title);
     margin-bottom: 0.5rem;
     font-size: 1.25rem;
     font-weight: 600;
   }
 
   p {
-    color: #6b7280;
+    color: var(--recent-empty-text);
   }
 }
 </style>

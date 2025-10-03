@@ -890,22 +890,22 @@ const getTagOptionsStatus = () => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: var(--settings-main-bg);
 }
 
 .header {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
-  background: #ffffff;
+  background: var(--settings-header-bg);
   padding: 1.5rem;
-  // border-bottom: 1px solid #e2e8f0;
-  // box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  // border-bottom: 1px solid var(--settings-sidebar-border);
+  // box-shadow: 0 1px 3px var(--settings-group-shadow);
   z-index: 1000;
 }
 
 .settings-layout {
-  margin: 0px 6px;
+  // margin: 0px 6px;
 
   display: flex;
   flex: 1;
@@ -915,22 +915,22 @@ const getTagOptionsStatus = () => {
 // 左侧导航栏
 .sidebar {
   width: 280px;
-  background: #ffffff;
-  // border-right: 1px solid #e2e8f0;
+  background: var(--settings-sidebar-bg);
+  // border-right: 1px solid var(--settings-sidebar-border);
   padding-right: 5px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-
+  padding-left: 5px;
   .sidebar-header {
     // padding: 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--settings-sidebar-border);
 
     h3 {
       margin: 0;
       font-size: 1.125rem;
       font-weight: 600;
-      color: #1e293b;
+      color: var(--settings-text-primary);
     }
   }
 
@@ -950,19 +950,19 @@ const getTagOptionsStatus = () => {
     border-left: 3px solid transparent;
 
     &:hover {
-      background: #f1f5f9;
+      background: var(--settings-nav-hover-bg);
     }
 
     &.active {
-      background: var(--td-brand-color-1);
-      border-left-color: var(--td-brand-color-5);
+      background: var(--settings-nav-active-bg);
+      border-left-color: var(--settings-nav-active-border);
 
       .nav-icon {
-        color: var(--td-brand-color-5);
+        color: var(--settings-nav-icon-active);
       }
 
       .nav-label {
-        color: var(--td-brand-color-6);
+        color: var(--settings-nav-label-active);
         font-weight: 600;
       }
     }
@@ -970,7 +970,7 @@ const getTagOptionsStatus = () => {
     .nav-icon {
       width: 20px;
       height: 20px;
-      color: #64748b;
+      color: var(--settings-nav-icon-color);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -990,14 +990,14 @@ const getTagOptionsStatus = () => {
       .nav-label {
         font-size: 0.875rem;
         font-weight: 500;
-        color: #334155;
+        color: var(--settings-nav-label-color);
         margin-bottom: 0.125rem;
         transition: color 0.2s ease;
       }
 
       .nav-description {
         font-size: 0.75rem;
-        color: #64748b;
+        color: var(--settings-nav-desc-color);
         line-height: 1.3;
       }
     }
@@ -1014,19 +1014,19 @@ const getTagOptionsStatus = () => {
 
   .panel-header {
     padding: 2rem 2rem 1rem;
-    background: #ffffff;
-    border-bottom: 1px solid #e2e8f0;
+    background: var(--settings-header-bg);
+    border-bottom: 1px solid var(--settings-sidebar-border);
 
     h2 {
       margin: 0 0 0.5rem;
       font-size: 1.5rem;
       font-weight: 700;
-      color: #1e293b;
+      color: var(--settings-text-primary);
     }
 
     p {
       margin: 0;
-      color: #64748b;
+      color: var(--settings-text-secondary);
       font-size: 0.875rem;
     }
   }
@@ -1035,30 +1035,30 @@ const getTagOptionsStatus = () => {
     flex: 1;
     overflow-y: auto;
     // padding: 2rem;
-    background: #f8fafc;
+    background: var(--settings-main-bg);
   }
 }
 
 // 设置区域
 .settings-section {
   .setting-group {
-    background: #ffffff;
+    background: var(--settings-group-bg);
     border-radius: 0.75rem;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--settings-group-border);
+    box-shadow: 0 1px 3px var(--settings-group-shadow);
 
     h3 {
       margin: 0 0 0.5rem;
       font-size: 1.125rem;
       font-weight: 600;
-      color: #1e293b;
+      color: var(--settings-text-primary);
     }
 
     > p {
       margin: 0 0 1.5rem;
-      color: #64748b;
+      color: var(--settings-text-secondary);
       font-size: 0.875rem;
     }
   }
@@ -1078,16 +1078,16 @@ const getTagOptionsStatus = () => {
   gap: 1rem;
 
   .preview-item {
-    background: #f8fafc;
+    background: var(--settings-preview-bg);
     padding: 1rem;
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-preview-border);
 
     h4 {
       margin: 0 0 0.75rem;
       font-size: 0.875rem;
       font-weight: 600;
-      color: #374151;
+      color: var(--settings-text-primary);
     }
   }
 }
@@ -1097,13 +1097,13 @@ const getTagOptionsStatus = () => {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background: #f6f6f6;
+  background: var(--settings-mock-titlebar-bg);
   border-radius: 0.375rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--settings-mock-titlebar-border);
 
   .mock-title {
     font-weight: 500;
-    color: #374151;
+    color: var(--settings-text-primary);
     font-size: 0.875rem;
   }
 }
@@ -1119,9 +1119,9 @@ const getTagOptionsStatus = () => {
     align-items: flex-start;
     gap: 0.75rem;
     padding: 1rem;
-    background: #f8fafc;
+    background: var(--settings-feature-bg);
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-feature-border);
 
     .iconfont {
       font-size: 1.125rem;
@@ -1134,13 +1134,13 @@ const getTagOptionsStatus = () => {
 
       strong {
         display: block;
-        color: #1e293b;
+        color: var(--settings-text-primary);
         margin-bottom: 0.25rem;
         font-weight: 600;
       }
 
       p {
-        color: #64748b;
+        color: var(--settings-text-secondary);
         font-size: 0.875rem;
         margin: 0;
         line-height: 1.4;
@@ -1157,7 +1157,7 @@ const getTagOptionsStatus = () => {
     label {
       display: block;
       font-weight: 600;
-      color: #1e293b;
+      color: var(--settings-text-primary);
       margin-bottom: 0.5rem;
       font-size: 0.875rem;
     }
@@ -1203,19 +1203,19 @@ const getTagOptionsStatus = () => {
 
       .status-text {
         font-size: 0.875rem;
-        color: #64748b;
+        color: var(--settings-text-secondary);
       }
     }
   }
 
   .api-key-tips {
-    background: #f8fafc;
+    background: var(--settings-api-tips-bg);
     padding: 1rem;
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-api-tips-border);
 
     h4 {
-      color: #1e293b;
+      color: var(--settings-text-primary);
       margin: 0 0 0.75rem 0;
       font-size: 0.875rem;
       font-weight: 600;
@@ -1226,7 +1226,7 @@ const getTagOptionsStatus = () => {
       padding-left: 1.25rem;
 
       li {
-        color: #64748b;
+        color: var(--settings-text-secondary);
         font-size: 0.875rem;
         margin-bottom: 0.5rem;
 
@@ -1285,32 +1285,32 @@ const getTagOptionsStatus = () => {
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: #ffffff;
-    border: 2px solid #e2e8f0;
+    background: var(--settings-source-card-bg);
+    border: 2px solid var(--settings-source-card-border);
     border-radius: 0.75rem;
     cursor: pointer;
     transition: all 0.2s ease;
 
     &:hover {
-      border-color: var(--td-brand-color-3);
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      border-color: var(--settings-source-card-hover-border);
+      box-shadow: 0 4px 6px -1px var(--settings-group-shadow);
     }
 
     &.active {
-      border-color: var(--td-brand-color-5);
-      background: var(--td-brand-color-1);
+      border-color: var(--settings-source-card-active-border);
+      background: var(--settings-source-card-active-bg);
       box-shadow: 0 0 0 3px var(--td-brand-color-2);
     }
 
     .source-icon {
       width: 2.5rem;
       height: 2.5rem;
-      background: #f1f5f9;
+      background: var(--settings-source-icon-bg);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #64748b;
+      color: var(--settings-text-secondary);
     }
 
     .source-info {
@@ -1319,13 +1319,13 @@ const getTagOptionsStatus = () => {
       .source-name {
         font-weight: 600;
         font-size: 0.875rem;
-        color: #1e293b;
+        color: var(--settings-text-primary);
         margin-bottom: 0.125rem;
       }
 
       .source-type {
         font-size: 0.75rem;
-        color: #64748b;
+        color: var(--settings-text-secondary);
       }
     }
 
@@ -1336,10 +1336,10 @@ const getTagOptionsStatus = () => {
   }
 
   .quality-slider-container {
-    background: #f8fafc;
+    background: var(--settings-quality-container-bg);
     padding: 1.5rem;
     border-radius: 0.75rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-quality-container-border);
 
     .quality-slider {
       margin-bottom: 1rem;
@@ -1356,12 +1356,12 @@ const getTagOptionsStatus = () => {
       &:first-child {
         font-size: 1rem;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--settings-text-primary);
       }
 
       &.quality-hint {
         font-size: 0.875rem;
-        color: #64748b;
+        color: var(--settings-text-secondary);
       }
     }
   }
@@ -1376,19 +1376,19 @@ const getTagOptionsStatus = () => {
       justify-content: space-between;
       align-items: center;
       padding: 1rem;
-      background: #f8fafc;
+      background: var(--settings-status-item-bg);
       border-radius: 0.5rem;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--settings-status-item-border);
 
       .status-label {
         font-weight: 500;
-        color: #64748b;
+        color: var(--settings-text-secondary);
         font-size: 0.875rem;
       }
 
       .status-value {
         font-weight: 600;
-        color: #1e293b;
+        color: var(--settings-text-primary);
         font-size: 0.875rem;
       }
     }
@@ -1401,9 +1401,9 @@ const getTagOptionsStatus = () => {
   align-items: center;
   gap: 1.5rem;
   padding: 2rem;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--settings-plugin-prompt-bg);
   border-radius: 1rem;
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--settings-plugin-prompt-border);
 
   .prompt-icon {
     width: 3rem;
@@ -1422,14 +1422,14 @@ const getTagOptionsStatus = () => {
     flex: 1;
 
     h4 {
-      color: #1e293b;
+      color: var(--settings-text-primary);
       margin: 0 0 0.5rem 0;
       font-size: 1.125rem;
       font-weight: 600;
     }
 
     p {
-      color: #64748b;
+      color: var(--settings-text-secondary);
       margin: 0 0 1.5rem 0;
       line-height: 1.5;
     }
@@ -1669,7 +1669,7 @@ const getTagOptionsStatus = () => {
         margin: 0;
         font-size: 1.5rem;
         font-weight: 700;
-        color: #1e293b;
+        color: var(--settings-text-primary);
       }
 
       .app-version {
@@ -1692,7 +1692,7 @@ const getTagOptionsStatus = () => {
 
     .app-description {
       margin: 0;
-      color: #64748b;
+      color: var(--settings-text-secondary);
       line-height: 1.5;
     }
   }
@@ -1708,19 +1708,19 @@ const getTagOptionsStatus = () => {
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem;
-    background: #f8fafc;
+    background: var(--settings-tech-item-bg);
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-tech-item-border);
     transition: 0.3s;
 
     .tech-name {
       font-weight: 600;
-      color: #1e293b;
+      color: var(--settings-text-primary);
     }
 
     .tech-desc {
       font-size: 0.875rem;
-      color: #64748b;
+      color: var(--settings-text-secondary);
     }
 
     &.link:hover {
@@ -1745,13 +1745,13 @@ const getTagOptionsStatus = () => {
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    background: #f8fafc;
+    background: var(--settings-developer-item-bg);
     border-radius: 0.75rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-developer-item-border);
     transition: all 0.2s ease;
 
     &:hover {
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 6px -1px var(--settings-group-shadow);
     }
 
     .developer-avatar {
@@ -1775,13 +1775,13 @@ const getTagOptionsStatus = () => {
         margin: 0 0 0.25rem;
         font-size: 1rem;
         font-weight: 600;
-        color: #1e293b;
+        color: var(--settings-text-primary);
       }
 
       p {
         margin: 0;
         font-size: 0.875rem;
-        color: #64748b;
+        color: var(--settings-text-secondary);
       }
     }
   }
@@ -1790,7 +1790,7 @@ const getTagOptionsStatus = () => {
 .license-info {
   p {
     margin: 0 0 1rem;
-    color: #64748b;
+    color: var(--settings-text-secondary);
     line-height: 1.5;
   }
 
@@ -1812,13 +1812,13 @@ const getTagOptionsStatus = () => {
       margin: 0 0 0.5rem;
       font-size: 0.875rem;
       font-weight: 600;
-      color: #1e293b;
+      color: var(--settings-text-primary);
     }
 
     p {
       margin: 0;
       font-size: 0.875rem;
-      color: #64748b;
+      color: var(--settings-text-secondary);
       line-height: 1.5;
     }
   }
@@ -1858,24 +1858,24 @@ const getTagOptionsStatus = () => {
 
   .tag-option {
     padding: 1rem;
-    background: #f8fafc;
+    background: var(--settings-tag-option-bg);
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--settings-tag-option-border);
 
     .option-desc {
       margin: 0.5rem 0 0 1.5rem;
       font-size: 0.875rem;
-      color: #64748b;
+      color: var(--settings-text-secondary);
       line-height: 1.4;
     }
   }
 }
 
 .tag-options-status {
-  background: #f8fafc;
+  background: var(--settings-tag-status-bg);
   padding: 1rem;
   border-radius: 0.5rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--settings-tag-status-border);
 
   .status-summary {
     display: flex;
@@ -1884,13 +1884,13 @@ const getTagOptionsStatus = () => {
 
     .status-label {
       font-weight: 500;
-      color: #64748b;
+      color: var(--settings-text-secondary);
       font-size: 0.875rem;
     }
 
     .status-value {
       font-weight: 600;
-      color: #1e293b;
+      color: var(--settings-text-primary);
       font-size: 0.875rem;
     }
   }

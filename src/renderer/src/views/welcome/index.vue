@@ -59,7 +59,7 @@ onMounted(async () => {
 .welcome-container {
   width: 100vw;
   height: 100vh;
-  background: #ffffff;
+  background: var(--welcome-bg);
   display: flex;
   align-items: center;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
@@ -131,7 +131,7 @@ onMounted(async () => {
 
 .brand-subtitle {
   font-size: 1.5rem;
-  color: #666666;
+  color: var(--welcome-subtitle-color);
   margin: 1rem 0 5rem 0;
   font-weight: 400;
 }
@@ -144,7 +144,7 @@ onMounted(async () => {
 .progress-bar {
   width: 100%;
   height: 4px;
-  background: #f0f0f0;
+  background: var(--welcome-progress-bg);
   border-radius: 2px;
   overflow: hidden;
   margin-bottom: 1rem;
@@ -159,7 +159,7 @@ onMounted(async () => {
 
 .loading-text {
   font-size: 0.9rem;
-  color: #888888;
+  color: var(--welcome-loading-text);
   margin: 0;
   font-weight: 400;
 }
@@ -173,11 +173,11 @@ onMounted(async () => {
 
 .tag {
   padding: 0.4rem 0.8rem;
-  background: #b8f1ce;
-  border: 1px solid #e9ecef;
+  background: var(--welcome-tag-bg);
+  border: 1px solid var(--welcome-tag-border);
   border-radius: 20px;
   font-size: 0.8rem;
-  color: #333333;
+  color: var(--welcome-tag-color);
   transition: all 0.3s ease;
   opacity: 0.5;
 }
@@ -197,7 +197,7 @@ onMounted(async () => {
   bottom: 2rem;
   right: 2rem;
   font-size: 0.8rem;
-  color: #9e9e9e;
+  color: var(--welcome-version-color);
   font-weight: 300;
 }
 
@@ -273,32 +273,5 @@ onMounted(async () => {
   }
 } */
 
-/* 暗色主题适配 */
-@media (prefers-color-scheme: dark) {
-  .welcome-container {
-    background: #1a1a1a;
-  }
-
-  .brand-subtitle {
-    color: #999999;
-  }
-
-  .loading-text {
-    color: #aaaaaa;
-  }
-
-  .progress-bar {
-    background: #333333;
-  }
-
-  .tag {
-    background: #2d2d2d;
-    border-color: #404040;
-    color: #cccccc;
-  }
-
-  .version-info {
-    color: #666666;
-  }
-}
+/* 暗色主题适配已通过 CSS 变量实现 */
 </style>

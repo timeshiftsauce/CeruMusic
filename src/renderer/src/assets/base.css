@@ -60,22 +60,22 @@ body {
   }
 
   &::-webkit-scrollbar-track {
-    background: #f1f5f9;
+    background: var(--td-scroll-track-color);
     border-radius: 0.1875rem;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background: var(--td-scrollbar-color);
     border-radius: 0.1875rem;
     transition: background-color 0.2s ease;
 
     &:hover {
-      background: #94a3b8;
+      background: var(--td-scrollbar-hover-color);
     }
   }
   /* Firefox 滚动条样式 */
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 #f1f5f9;
+  scrollbar-color: var(--td-scrollbar-color) var(--td-scroll-track-color);
 }
 .t-dialog__mask {
   backdrop-filter: blur(5px);

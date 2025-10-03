@@ -1,4 +1,5 @@
-:root[theme-mode='cyan'] {
+:root[theme-mode='cyan'][data-theme='light'],
+:root[theme-mode='cyan']:not([data-theme]) {
   --td-brand-color-1: #e3fcf8;
   --td-brand-color-2: #beefe9;
   --td-brand-color-3: #86dad1;
@@ -136,7 +137,7 @@
   --td-mask-disabled: rgba(255, 255, 255, 0.6);
 }
 
-:root[theme-mode='dark'] {
+:root[theme-mode='cyan'][data-theme='dark'] {
   --td-brand-color-1: #00a59b20;
   --td-brand-color-2: #003b36;
   --td-brand-color-3: #00524c;

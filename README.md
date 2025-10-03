@@ -27,16 +27,7 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 ```ast
 CeruMuisc/
     ├── .github/
-    │   └── workflows/
-    │       ├── auto-sync-release.yml
-    │       ├── deploydocs.yml
-    │       ├── main.yml
-    │       ├── sync-releases-to-webdav.yml
-    │       └── uploadpan.yml
     ├── scripts/
-    │   ├── auth-test.js
-    │   ├── genAst.js
-    │   └── test-alist.js
     ├── src/
     │   ├── common/
     │   │   ├── types/
@@ -56,6 +47,7 @@ CeruMuisc/
     │   │   │   ├── autoUpdate.ts
     │   │   │   ├── directorySettings.ts
     │   │   │   ├── musicCache.ts
+    │   │   │   ├── pluginNotice.ts
     │   │   │   └── songList.ts
     │   │   ├── services/
     │   │   │   ├── music/
@@ -77,91 +69,10 @@ CeruMuisc/
     │   │   │   ├── songList/
     │   │   │   │   ├── ManageSongList.ts
     │   │   │   │   └── PlayListSongs.ts
-    │   │   │   └── ai-service.ts
+    │   │   │   ├── ai-service.ts
+    │   │   │   └── ConfigManager.ts
     │   │   ├── utils/
     │   │   │   ├── musicSdk/
-    │   │   │   │   ├── kg/
-    │   │   │   │   │   ├── temp/
-    │   │   │   │   │   │   ├── musicSearch-new.js
-    │   │   │   │   │   │   └── songList-new.js
-    │   │   │   │   │   ├── vendors/
-    │   │   │   │   │   │   └── infSign.min.js
-    │   │   │   │   │   ├── album.js
-    │   │   │   │   │   ├── api-test.js
-    │   │   │   │   │   ├── comment.js
-    │   │   │   │   │   ├── hotSearch.js
-    │   │   │   │   │   ├── index.js
-    │   │   │   │   │   ├── leaderboard.js
-    │   │   │   │   │   ├── lyric.js
-    │   │   │   │   │   ├── musicInfo.js
-    │   │   │   │   │   ├── musicSearch.js
-    │   │   │   │   │   ├── pic.js
-    │   │   │   │   │   ├── singer.js
-    │   │   │   │   │   ├── songList.js
-    │   │   │   │   │   ├── tipSearch.js
-    │   │   │   │   │   └── util.js
-    │   │   │   │   ├── kw/
-    │   │   │   │   │   ├── album.js
-    │   │   │   │   │   ├── api-temp.js
-    │   │   │   │   │   ├── api-test.js
-    │   │   │   │   │   ├── comment.js
-    │   │   │   │   │   ├── hotSearch.js
-    │   │   │   │   │   ├── index.js
-    │   │   │   │   │   ├── kwdecode.ts
-    │   │   │   │   │   ├── leaderboard.js
-    │   │   │   │   │   ├── lyric.js
-    │   │   │   │   │   ├── musicSearch.js
-    │   │   │   │   │   ├── pic.js
-    │   │   │   │   │   ├── songList.js
-    │   │   │   │   │   ├── tipSearch.js
-    │   │   │   │   │   └── util.js
-    │   │   │   │   ├── mg/
-    │   │   │   │   │   ├── temp/
-    │   │   │   │   │   │   └── leaderboard-old.js
-    │   │   │   │   │   ├── utils/
-    │   │   │   │   │   │   ├── index.js
-    │   │   │   │   │   │   └── mrc.js
-    │   │   │   │   │   ├── album.js
-    │   │   │   │   │   ├── api-test.js
-    │   │   │   │   │   ├── comment.js
-    │   │   │   │   │   ├── hotSearch.js
-    │   │   │   │   │   ├── index.js
-    │   │   │   │   │   ├── leaderboard.js
-    │   │   │   │   │   ├── lyric.js
-    │   │   │   │   │   ├── musicInfo.js
-    │   │   │   │   │   ├── musicSearch.js
-    │   │   │   │   │   ├── pic.js
-    │   │   │   │   │   ├── songId.js
-    │   │   │   │   │   ├── songList.js
-    │   │   │   │   │   └── tipSearch.js
-    │   │   │   │   ├── tx/
-    │   │   │   │   │   ├── api-test.js
-    │   │   │   │   │   ├── comment.js
-    │   │   │   │   │   ├── hotSearch.js
-    │   │   │   │   │   ├── index.js
-    │   │   │   │   │   ├── leaderboard.js
-    │   │   │   │   │   ├── lyric.js
-    │   │   │   │   │   ├── musicInfo.js
-    │   │   │   │   │   ├── musicSearch.js
-    │   │   │   │   │   ├── singer.js
-    │   │   │   │   │   ├── songList.js
-    │   │   │   │   │   └── tipSearch.js
-    │   │   │   │   ├── wy/
-    │   │   │   │   │   ├── utils/
-    │   │   │   │   │   │   ├── crypto.js
-    │   │   │   │   │   │   └── index.js
-    │   │   │   │   │   ├── api-test.js
-    │   │   │   │   │   ├── comment.js
-    │   │   │   │   │   ├── hotSearch.js
-    │   │   │   │   │   ├── index.js
-    │   │   │   │   │   ├── leaderboard.js
-    │   │   │   │   │   ├── lyric.js
-    │   │   │   │   │   ├── musicDetail.js
-    │   │   │   │   │   ├── musicInfo.js
-    │   │   │   │   │   ├── musicSearch.js
-    │   │   │   │   │   ├── singer.js
-    │   │   │   │   │   ├── songList.js
-    │   │   │   │   │   └── tipSearch.js
     │   │   │   │   ├── api-source-info.ts
     │   │   │   │   ├── index.js
     │   │   │   │   ├── options.js
@@ -190,6 +101,16 @@ CeruMuisc/
     │   │   │   ├── components/
     │   │   │   │   ├── AI/
     │   │   │   │   │   └── FloatBall.vue
+    │   │   │   │   ├── ContextMenu/
+    │   │   │   │   │   ├── composables.ts
+    │   │   │   │   │   ├── ContextMenu.vue
+    │   │   │   │   │   ├── demo.vue
+    │   │   │   │   │   ├── index.ts
+    │   │   │   │   │   ├── README.md
+    │   │   │   │   │   ├── types.ts
+    │   │   │   │   │   └── utils.ts
+    │   │   │   │   ├── layout/
+    │   │   │   │   │   └── HomeLayout.vue
     │   │   │   │   ├── Music/
     │   │   │   │   │   └── SongVirtualList.vue
     │   │   │   │   ├── Play/
@@ -200,14 +121,14 @@ CeruMuisc/
     │   │   │   │   │   ├── PlaylistDrawer.vue
     │   │   │   │   │   ├── PlayMusic.vue
     │   │   │   │   │   └── ShaderBackground.vue
-    │   │   │   │   ├── Search/
-    │   │   │   │   │   └── SearchComponent.vue
     │   │   │   │   ├── Settings/
     │   │   │   │   │   ├── AIFloatBallSettings.vue
     │   │   │   │   │   ├── DirectorySettings.vue
     │   │   │   │   │   ├── MusicCache.vue
     │   │   │   │   │   ├── PlaylistSettings.vue
+    │   │   │   │   │   ├── plugins.vue
     │   │   │   │   │   └── UpdateSettings.vue
+    │   │   │   │   ├── PluginNoticeDialog.vue
     │   │   │   │   ├── ThemeSelector.vue
     │   │   │   │   ├── TitleBarControls.vue
     │   │   │   │   ├── UpdateExample.vue
@@ -215,8 +136,6 @@ CeruMuisc/
     │   │   │   │   └── Versions.vue
     │   │   │   ├── composables/
     │   │   │   │   └── useAutoUpdate.ts
-    │   │   │   ├── layout/
-    │   │   │   │   └── index.vue
     │   │   │   ├── router/
     │   │   │   │   └── index.ts
     │   │   │   ├── services/
@@ -255,10 +174,10 @@ CeruMuisc/
     │   │   │   │   │   ├── recent.vue
     │   │   │   │   │   └── search.vue
     │   │   │   │   ├── settings/
-    │   │   │   │   │   ├── index.vue
-    │   │   │   │   │   └── plugins.vue
-    │   │   │   │   └── welcome/
-    │   │   │   │       └── index.vue
+    │   │   │   │   │   └── index.vue
+    │   │   │   │   ├── welcome/
+    │   │   │   │   │   └── index.vue
+    │   │   │   │   └── ThemeDemo.vue
     │   │   │   ├── App.vue
     │   │   │   ├── env.d.ts
     │   │   │   └── main.ts

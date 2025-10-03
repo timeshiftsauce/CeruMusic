@@ -25,6 +25,7 @@ import './assets/theme/cyan.css'
 
 onMounted(() => {
   userInfo.init()
+  setupSystemThemeListener()
   loadSavedTheme()
 
   // 应用启动后延迟3秒检查更新，避免影响启动速度
@@ -44,24 +45,70 @@ const themes = [
 
 const loadSavedTheme = () => {
   const savedTheme = localStorage.getItem('selected-theme')
+  const savedDarkMode = localStorage.getItem('dark-mode')
+
+  let themeName = 'default'
+  let isDarkMode = false
+
   if (savedTheme && themes.some((t) => t.name === savedTheme)) {
-    applyTheme(savedTheme)
+    themeName = savedTheme
   }
+
+  if (savedDarkMode !== null) {
+    isDarkMode = savedDarkMode === 'true'
+  } else {
+    // 如果没有保存的设置，检测系统偏好
+    isDarkMode = detectSystemTheme()
+  }
+
+  applyTheme(themeName, isDarkMode)
 }
 
-const applyTheme = (themeName) => {
+const applyTheme = (themeName, darkMode = false) => {
   const documentElement = document.documentElement
 
-  // 移除之前的主题
+  // 移除之前的主题属性
   documentElement.removeAttribute('theme-mode')
+  documentElement.removeAttribute('data-theme')
 
-  // 应用新主题（如果不是默认主题）
+  // 应用主题色彩
   if (themeName !== 'default') {
     documentElement.setAttribute('theme-mode', themeName)
   }
 
+  // 应用明暗模式
+  if (darkMode) {
+    documentElement.setAttribute('data-theme', 'dark')
+  } else {
+    documentElement.setAttribute('data-theme', 'light')
+  }
+
   // 保存到本地存储
   localStorage.setItem('selected-theme', themeName)
+  localStorage.setItem('dark-mode', darkMode.toString())
+}
+
+// 检测系统主题偏好
+const detectSystemTheme = () => {
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return true
+  }
+  return false
+}
+
+// 监听系统主题变化
+const setupSystemThemeListener = () => {
+  if (window.matchMedia) {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    mediaQuery.addEventListener('change', (e) => {
+      const savedDarkMode = localStorage.getItem('dark-mode')
+      // 如果用户没有手动设置暗色模式，则跟随系统主题
+      if (savedDarkMode === null) {
+        const savedTheme = localStorage.getItem('selected-theme') || 'default'
+        applyTheme(savedTheme, e.matches)
+      }
+    })
+  }
 }
 </script>
 

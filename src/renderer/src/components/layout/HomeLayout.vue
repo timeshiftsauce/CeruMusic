@@ -164,7 +164,7 @@ const handleKeyDown = () => {
             <i class="iconfont icon-music"></i>
           </div>
           <p class="app-title">
-            <span style="color: #000; font-weight: 800">Ceru Music</span>
+            <span style="font-weight: 800">Ceru Music</span>
           </p>
         </div>
 
@@ -240,13 +240,13 @@ const handleKeyDown = () => {
                       style="display: flex; align-items: center; justify-content: center"
                       @click="handleSearch"
                     >
-                      <SearchIcon style="font-size: 16px; color: #000" />
+                      <SearchIcon style="font-size: 16px; color: var(--td-text-color-primary)" />
                     </t-button>
                   </template>
                 </t-input>
               </div>
 
-              <TitleBarControls :color="'#000'"></TitleBarControls>
+              <TitleBarControls></TitleBarControls>
             </div>
           </div>
 
@@ -305,8 +305,12 @@ const handleKeyDown = () => {
 
 .sidebar {
   width: 15rem;
-  background-image: linear-gradient(to bottom, var(--td-brand-color-4) -140vh, #ffffff 30vh);
-  border-right: 0.0625rem solid #e5e7eb;
+  background-image: linear-gradient(
+    to bottom,
+    var(--td-brand-color-4) -140vh,
+    var(--td-bg-color-container) 30vh
+  );
+  border-right: 0.0625rem solid var(--td-border-level-1-color);
   flex-shrink: 0;
 
   .sidebar-content {
@@ -330,18 +334,17 @@ const handleKeyDown = () => {
 
         .iconfont {
           font-size: 1.25rem;
-          color: white;
+          color: #fff;
         }
       }
 
       .app-title {
         font-weight: 500;
         font-size: 1.125rem;
-        color: #111827;
+        color: var(--td-text-color-primary);
 
         span {
           font-weight: 500;
-          color: #b8f0cc;
         }
       }
     }
@@ -363,22 +366,30 @@ const handleKeyDown = () => {
           margin-right: 0.75rem;
           font-size: 1rem;
         }
-
+        div {
+          display: none !important;
+          visibility: hidden;
+        }
         &.active {
           background-color: var(--td-brand-color-4);
-          color: rgb(255, 255, 255);
+          color: var(--td-text-color-anti);
+          &:active {
+            background-color: var(--td-brand-color-5) !important;
+          }
 
           &:hover {
-            background-color: var(--td-brand-color-5);
+            background-color: var(--td-brand-color-5) !important;
           }
         }
 
         &:not(.active) {
-          color: #6b7280;
+          color: var(--hover-nav-text);
+
+          // color: var(--td-text-color-secondary);
 
           &:hover {
-            color: #111827;
-            background-color: #f3f4f6;
+            color: var(--hover-nav-text-hover);
+            background-color: var(--hover-nav-color);
           }
         }
       }
@@ -393,7 +404,11 @@ const handleKeyDown = () => {
 
 .content {
   padding: 0;
-  background-image: linear-gradient(to bottom, var(--td-brand-color-4) -110vh, #ffffff 15vh);
+  background-image: linear-gradient(
+    to bottom,
+    var(--td-brand-color-4) -110vh,
+    var(--td-bg-color-container) 15vh
+  );
 
   display: flex;
   flex: 1;
@@ -415,11 +430,11 @@ const handleKeyDown = () => {
 
       .iconfont {
         font-size: 1rem;
-        color: #3d4043;
+        color: var(--home-nav-btn-color);
       }
 
       &:hover .iconfont {
-        color: #111827;
+        color: var(--home-nav-btn-hover);
       }
     }
 
@@ -438,7 +453,7 @@ const handleKeyDown = () => {
         width: min(18.75rem, 400px);
         margin-right: 0.5rem;
         border-radius: 1.25rem !important;
-        background-color: #fff;
+        background-color: var(--td-bg-color-container);
         overflow: visible;
         position: relative;
 
@@ -458,7 +473,7 @@ const handleKeyDown = () => {
           transition: background-color 0.2s;
 
           &:hover {
-            background-color: #f3f4f6;
+            background-color: var(--home-source-selector-hover);
           }
 
           .source-arrow {
@@ -489,10 +504,10 @@ const handleKeyDown = () => {
           top: 100%;
           left: 0;
           z-index: 10000000;
-          background: white;
-          border: 1px solid #e5e7eb;
+          background: var(--home-source-list-bg);
+          border: 1px solid var(--home-source-list-border);
           border-radius: 0.5rem;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--home-source-list-shadow);
           min-width: 10rem;
           overflow-y: hidden;
           margin-top: 0.25rem;
@@ -534,7 +549,7 @@ const handleKeyDown = () => {
             }
 
             &:hover {
-              background-color: #f3f4f6;
+              background-color: var(--home-source-item-hover);
             }
 
             &.active {
@@ -568,11 +583,11 @@ const handleKeyDown = () => {
       .settings-btn {
         .iconfont {
           font-size: 1rem;
-          color: #6b7280;
+          color: var(--td-text-color-secondary);
         }
 
         &:hover .iconfont {
-          color: #111827;
+          color: var(--td-text-color-primary);
         }
       }
     }
@@ -591,23 +606,23 @@ const handleKeyDown = () => {
     }
 
     &::-webkit-scrollbar-track {
-      background: #f1f5f9;
+      background: var(--home-scrollbar-track);
       border-radius: 0.1875rem;
     }
 
     &::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
+      background: var(--home-scrollbar-thumb);
       border-radius: 0.1875rem;
       transition: background-color 0.2s ease;
 
       &:hover {
-        background: #94a3b8;
+        background: var(--home-scrollbar-thumb-hover);
       }
     }
 
     /* Firefox 滚动条样式 */
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f1f5f9;
+    scrollbar-color: var(--home-scrollbar-color);
   }
 }
 </style>
