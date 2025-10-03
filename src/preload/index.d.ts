@@ -11,7 +11,6 @@ interface CustomAPI {
   onMusicCtrl: (callback: (event: Event, args: any) => void) => () => void
 
   music: {
-    request: (api: string, args: any) => Promise<any>
     requestSdk: <T extends keyof MainApi>(
       method: T,
       args: {

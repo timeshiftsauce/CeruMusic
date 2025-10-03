@@ -5,6 +5,11 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'Ceru Music',
   base: '/',
+  head: [
+    ['link', { rel: 'icon', href: '/logo.svg' }],
+    ['meta', { name: 'author', href: '时迁酱，无聊的霜霜，star' }],
+    ['meta', { name: 'keywords', content: 'Ceru Music,音乐播放器,音乐播放器工具,音乐播放器软件,音乐播放器下载,音乐播放器下载地址,澜音播放器,免费的音乐播放器,cerumusic,时迁酱,周晨鹭,无聊的霜霜,star,洛雪音乐,洛雪'}]
+  ],
   description:
     'Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。',
   markdown: {
@@ -77,8 +82,7 @@ export default defineConfig({
   sitemap: {
     hostname: 'https://ceru.docs.shiqianjiang.cn'
   },
-  lastUpdated: true,
-  head: [['link', { rel: 'icon', href: '/logo.svg' }]]
+  lastUpdated: true
 })
 console.log(process.env.BASE_URL_DOCS)
 // Smooth scrolling functions
