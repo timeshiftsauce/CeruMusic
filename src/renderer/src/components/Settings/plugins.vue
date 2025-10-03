@@ -5,7 +5,7 @@
       <div class="plugin-actions-hearder">
         <h2>插件管理</h2>
 
-        <div class="plugin-actions">
+        <div class="plugin-actions" style="flex-direction: row">
           <t-button theme="primary" @click="plugTypeDialog = true">
             <template #icon><t-icon name="add" /></template> 添加插件
           </t-button>
@@ -597,38 +597,62 @@ onMounted(async () => {
 .page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  // height: 100%;
+  // max-height: 100vh;
+  background: var(--plugins-bg);
+  color: var(--plugins-text-primary);
+  overflow: hidden;
+
   h2 {
     font-weight: 600;
+    color: var(--plugins-text-primary);
+    margin: 0 0 16px 0;
   }
 }
+
 .header {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
-  background-color: #fff;
+  background-color: var(--plugins-header-bg);
   padding: 1.5rem;
   position: sticky;
   z-index: 1000;
   top: 0;
   left: 0;
   right: 0;
+  border-bottom: 1px solid var(--plugins-border);
+  flex-shrink: 0;
 }
 
 .plugins-container {
   flex: 1;
-  padding: 20px;
+  padding: 24px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   min-height: 0;
+  background: var(--plugins-bg);
+}
+
+.plugin-actions-hearder {
+  margin-bottom: 24px;
+  flex-shrink: 0;
+
+  h2 {
+    margin-bottom: 16px;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--plugins-text-primary);
+  }
 }
 
 .plugin-actions {
   display: flex;
-  margin-top: 10px;
-  margin-bottom: 20px;
+
+  gap: 12px;
+  margin-top: 16px;
 }
 
 .loading {
@@ -636,17 +660,25 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 0;
+  padding: 60px 0;
+  background: var(--plugins-container-bg);
+  border-radius: 12px;
+  margin: 20px 0;
 }
 
 .spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid rgba(0, 0, 0, 0.1);
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--plugins-border);
   border-radius: 50%;
-  border-top-color: var(--color-primary, #007bff);
+  border-top-color: var(--plugins-loading-spinner);
   animation: spin 1s ease-in-out infinite;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+}
+
+.loading span {
+  color: var(--plugins-text-secondary);
+  font-size: 14px;
 }
 
 .error-state {
@@ -654,15 +686,26 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 0;
-  color: #666;
+  padding: 60px 0;
+  color: var(--plugins-text-secondary);
+  background: var(--plugins-container-bg);
+  border-radius: 12px;
+  margin: 20px 0;
+}
+
+.error-state p {
+  color: var(--plugins-text-primary);
+  font-size: 16px;
+  margin: 8px 0;
 }
 
 .error-message {
-  color: #dc3545;
-  margin-bottom: 15px;
+  color: var(--plugins-error-color);
+  margin-bottom: 20px;
   text-align: center;
   max-width: 80%;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 @keyframes spin {
@@ -676,103 +719,167 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 0;
-  color: #666;
+  padding: 60px 0;
+  color: var(--plugins-text-secondary);
+  background: var(--plugins-container-bg);
+  border-radius: 12px;
+  margin: 20px 0;
+}
+
+.empty-state p {
+  color: var(--plugins-text-primary);
+  font-size: 16px;
+  margin: 8px 0;
 }
 
 .hint {
-  font-size: 0.9em;
-  color: #999;
+  font-size: 14px;
+  color: var(--plugins-text-muted);
+  line-height: 1.5;
 }
 
 .plugin-list {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 16px;
   flex: 1;
-  overflow-y: auto;
+  // overflow-y: auto;
+  // overflow-x: hidden;
   min-height: 0;
+  max-height: 100%;
+
+  /* 自定义滚动条 */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--plugins-bg);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--plugins-border);
+    border-radius: 3px;
+
+    &:hover {
+      background: var(--plugins-text-muted);
+    }
+  }
 }
 
 .plugin-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  border-radius: 8px;
-  background-color: #fefefe;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  align-items: flex-start;
+  padding: 20px;
+  border-radius: 12px;
+  background-color: var(--plugins-card-bg);
+  box-shadow: var(--plugins-card-shadow);
   transition: all 0.3s ease;
   border: 2px solid transparent;
+  position: relative;
+
+  // &:hover {
+  //   box-shadow: var(--plugins-card-shadow-hover);
+  //   transform: translateY(-2px);
+  // }
 }
 
 .plugin-item.selected {
-  background-color: #e8f5e8;
-  border: 2px solid #28a745;
+  background-color: var(--plugins-card-selected-bg);
+  border: 2px solid var(--plugins-card-selected-border);
+
+  // &::before {
+  //   content: '';
+  //   position: absolute;
+  //   top: 0;
+  //   left: 0;
+  //   right: 0;
+  //   height: 3px;
+  //   background: linear-gradient(90deg, var(--plugins-card-selected-border), var(--td-brand-color));
+  //   border-radius: 12px 12px 0 0;
+  // }
 }
 
 .plugin-info {
   flex: 1;
+  margin-right: 20px;
 }
 
 .plugin-info h3 {
-  margin: 0 0 5px 0;
-  font-size: 1.1em;
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  color: var(--plugins-text-primary);
+  line-height: 1.4;
 }
 
 .version {
-  font-size: 0.8em;
-  color: #666;
-  font-weight: normal;
+  font-size: 12px;
+  color: var(--plugins-text-muted);
+  font-weight: 500;
+  background: var(--plugins-border);
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
 .current-tag {
-  background-color: var(--td-brand-color-5);
+  background: linear-gradient(135deg, var(--td-brand-color-5), var(--td-brand-color-6));
   color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.75em;
-  font-weight: normal;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 167, 77, 0.2);
 }
 
 .author {
-  margin: 0 0 5px 0;
-  font-size: 0.9em;
-  color: #666;
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: var(--plugins-text-secondary);
 }
 
 .description {
-  margin: 0 0 8px 0;
-  font-size: 0.9em;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--plugins-text-secondary);
+  line-height: 1.5;
+  max-width: 500px;
 }
 
 .plugin-sources {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 8px;
   align-items: center;
-  margin-top: 5px;
+  margin-top: 8px;
 }
 
 .source-label {
-  font-size: 0.85em;
-  color: #666;
+  font-size: 13px;
+  color: var(--plugins-text-muted);
+  font-weight: 500;
 }
 
 .source-tag {
-  background-color: var(--color-primary, #007bff);
+  background: linear-gradient(135deg, var(--td-brand-color-4), var(--td-brand-color-5));
   color: white;
-  padding: 2px 8px;
+  padding: 4px 10px;
   border-radius: 12px;
-  font-size: 0.8em;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 167, 77, 0.2);
 }
 
 .plugin-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
+  min-width: 120px;
 }
 
 /* 日志弹窗样式 */
@@ -780,15 +887,16 @@ onMounted(async () => {
   height: 80vh;
 
   .t-dialog {
-    background: #1e1e1e;
+    background: var(--plugins-console-bg);
     border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--plugins-dialog-shadow, 0 20px 60px rgba(0, 0, 0, 0.4));
     overflow: hidden;
+    border: 1px solid var(--plugins-console-border);
   }
 
   .t-dialog__header {
-    background: #2d2d2d;
-    border-bottom: 1px solid #404040;
+    background: var(--plugins-console-header-bg);
+    border-bottom: 1px solid var(--plugins-console-border);
     padding: 0;
     border-radius: 12px 12px 0 0;
     overflow: hidden;
@@ -796,12 +904,11 @@ onMounted(async () => {
 
   .t-dialog__body {
     padding: 0;
-    background: #1e1e1e;
-    border-left: 2px solid #272727;
-    border-right: 2px solid #272727;
-    border-bottom: 2px solid #272727;
+    background: var(--plugins-console-bg);
+    border-left: 2px solid var(--plugins-console-border);
+    border-right: 2px solid var(--plugins-console-border);
+    border-bottom: 2px solid var(--plugins-console-border);
     border-radius: 0 0 12px 12px;
-    // max-height: 600px;
     overflow: hidden;
   }
 }
@@ -810,7 +917,10 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   padding: 12px 20px;
-  background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);
+  background: var(
+    --plugins-dialog-header-bg,
+    linear-gradient(135deg, var(--plugins-console-header-bg) 0%, var(--plugins-console-bg) 100%)
+  );
   min-height: 48px;
   width: 100%;
 
@@ -818,14 +928,14 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #ffffff;
+    color: var(--plugins-console-text);
     font-weight: 600;
     font-size: 14px;
     flex: 1;
 
     .iconfont {
       font-size: 16px;
-      color: #00d4aa;
+      color: var(--plugins-console-prompt);
     }
   }
 
@@ -836,15 +946,15 @@ onMounted(async () => {
 
     :deep(.t-button) {
       background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #ffffff;
+      border: 1px solid var(--plugins-console-border);
+      color: var(--plugins-console-text);
       font-size: 12px;
       padding: 4px 12px;
       height: auto;
 
       &:hover {
         background: rgba(255, 255, 255, 0.2) !important;
-        border-color: rgba(255, 255, 255, 0.3);
+        border-color: var(--plugins-console-prompt);
       }
 
       .t-icon {
@@ -866,7 +976,7 @@ onMounted(async () => {
       transition: all 0.2s ease;
 
       &.close {
-        background: #ff5f57;
+        background: var(--plugins-mac-close);
 
         &:hover {
           background: #ff3b30;
@@ -874,7 +984,7 @@ onMounted(async () => {
       }
 
       &.minimize {
-        background: #ffbd2e;
+        background: var(--plugins-mac-minimize);
 
         &:hover {
           background: #ff9500;
@@ -882,7 +992,7 @@ onMounted(async () => {
       }
 
       &.maximize {
-        background: #28ca42;
+        background: var(--plugins-mac-maximize);
 
         &:hover {
           background: #30d158;
@@ -893,21 +1003,20 @@ onMounted(async () => {
 }
 
 .console-container {
-  background: #1e1e1e;
-  color: #ffffff;
+  background: var(--plugins-console-bg);
+  color: var(--plugins-console-text);
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.4;
   height: calc(80vh - 64px - 48px);
-  // max-height: 500px;
   min-height: 300px;
   display: flex;
   flex-direction: column;
 }
 
 .console-header {
-  background: #2d2d2d;
-  border-bottom: 1px solid #404040;
+  background: var(--plugins-console-header-bg);
+  border-bottom: 1px solid var(--plugins-console-border);
   padding: 8px 16px;
   flex-shrink: 0;
 
@@ -916,17 +1025,18 @@ onMounted(async () => {
     align-items: center;
     gap: 12px;
     font-size: 12px;
+
     .console-prompt {
-      color: var(--td-brand-color-5);
+      color: var(--plugins-console-prompt);
       font-weight: bold;
     }
 
     .console-path {
-      color: #8a8a8a;
+      color: var(--plugins-console-path);
     }
 
     .console-time {
-      color: #666666;
+      color: var(--plugins-console-time);
       margin-left: auto;
     }
   }
@@ -935,9 +1045,9 @@ onMounted(async () => {
 .console-content {
   flex: 1;
   overflow-y: auto;
-  scrollbar-color: #555555 #2d2d2d;
+  scrollbar-color: var(--plugins-console-scrollbar-thumb) var(--plugins-console-scrollbar-track);
   padding: 16px;
-  background: #1e1e1e;
+  background: var(--plugins-console-bg);
   position: relative;
 
   &.loading {
@@ -952,15 +1062,15 @@ onMounted(async () => {
   }
 
   &::-webkit-scrollbar-track {
-    background: #2d2d2d;
+    background: var(--plugins-console-scrollbar-track);
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #555555;
+    background: var(--plugins-console-scrollbar-thumb);
     border-radius: 4px;
 
     &:hover {
-      background: #666666;
+      background: var(--plugins-console-scrollbar-thumb-hover);
     }
   }
 }
@@ -970,13 +1080,13 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  color: #8a8a8a;
+  color: var(--plugins-console-path);
 
   .loading-spinner {
     width: 20px;
     height: 20px;
-    border: 2px solid #404040;
-    border-top: 2px solid #00d4aa;
+    border: 2px solid var(--plugins-console-border);
+    border-top: 2px solid var(--plugins-console-prompt);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
@@ -986,11 +1096,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #ff6b6b;
+  color: var(--plugins-log-error);
   padding: 12px;
   background: rgba(255, 107, 107, 0.1);
   border-radius: 6px;
-  border-left: 4px solid #ff6b6b;
+  border-left: 4px solid var(--plugins-log-error);
 
   .error-icon {
     font-size: 16px;
@@ -1003,7 +1113,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #8a8a8a;
+  color: var(--plugins-console-path);
   height: 200px;
 
   .empty-icon {
@@ -1025,7 +1135,7 @@ onMounted(async () => {
     }
 
     .log-timestamp {
-      color: #666666;
+      color: var(--plugins-console-time);
       font-size: 11px;
       width: 80px;
       text-align: center;
@@ -1044,47 +1154,47 @@ onMounted(async () => {
     /* 不同日志级别的颜色 */
     &.log-error {
       .log-content {
-        color: #ff6b6b;
+        color: var(--plugins-log-error);
       }
 
       .log-timestamp {
-        color: #ff6b6b;
+        color: var(--plugins-log-error);
       }
     }
 
     &.log-warn {
       .log-content {
-        color: #ffd93d;
+        color: var(--plugins-log-warn);
       }
 
       .log-timestamp {
-        color: #ffd93d;
+        color: var(--plugins-log-warn);
       }
     }
 
     &.log-info {
       .log-content {
-        color: #74b9ff;
+        color: var(--plugins-log-info);
       }
 
       .log-timestamp {
-        color: #74b9ff;
+        color: var(--plugins-log-info);
       }
     }
 
     &.log-debug {
       .log-content {
-        color: #a29bfe;
+        color: var(--plugins-log-debug);
       }
 
       .log-timestamp {
-        color: #a29bfe;
+        color: var(--plugins-log-debug);
       }
     }
 
     &.log-default {
       .log-content {
-        color: #ffffff;
+        color: var(--plugins-console-text);
       }
     }
   }
@@ -1102,26 +1212,49 @@ onMounted(async () => {
 
 /* 导入方式选择样式 */
 .import-method-container {
-  padding: 10px 0;
+  padding: 16px 0;
 }
 
 .online-input-container {
-  margin-top: 15px;
+  margin-top: 16px;
 }
 
 .hint-text {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: var(--plugins-text-muted);
   margin-top: 8px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .local-hint-container {
-  margin-top: 15px;
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--plugins-border);
+  border-radius: 8px;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .plugins-container {
+    padding: 16px;
+  }
+
+  .plugin-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+
+    .plugin-info {
+      margin-right: 0;
+    }
+
+    .plugin-actions {
+      flex-direction: row;
+      justify-content: flex-end;
+      min-width: auto;
+    }
+  }
+
   :deep(.log-dialog) {
     .t-dialog {
       width: 95% !important;

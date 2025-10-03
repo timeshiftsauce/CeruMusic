@@ -43,7 +43,7 @@ async function getAllReleases() {
 
     // Filter and sort releases by version
     const releases = data
-      .filter(release => !release.draft && !release.prerelease)
+      .filter((release) => !release.draft && !release.prerelease)
       .sort((a, b) => compareVersions(b.tag_name, a.tag_name))
 
     // Cache the data
@@ -99,15 +99,15 @@ async function downloadApp(platform) {
     )
 
     // Use proxy for download if it's a GitHub URL
-    const finalDownloadUrl = downloadUrl.includes('github.com') ? 
-      `${GITHUB_PROXY}${downloadUrl}` : downloadUrl
-    
+    const finalDownloadUrl = downloadUrl.includes('github.com')
+      ? `${GITHUB_PROXY}${downloadUrl}`
+      : downloadUrl
+
     // Start download
     window.open(finalDownloadUrl, '_blank')
 
     // Track download
     trackDownload(platform, release.tag_name, asset ? asset.name : '')
-
   } catch (error) {
     console.error('Download error:', error)
     showNotification(`下载失败: ${error.message}`, 'error')
@@ -125,8 +125,6 @@ async function downloadApp(platform) {
     }, 1500)
   }
 }
-
-
 
 // Get latest release from GitHub API
 async function getLatestRelease() {
@@ -155,8 +153,6 @@ async function getLatestRelease() {
     return null
   }
 }
-
-
 
 // Find appropriate download asset based on platform
 function findDownloadAsset(assets, platform) {
@@ -632,12 +628,10 @@ async function updateVersionInfo() {
   }
 }
 
-
-
 // Find asset for platform (helper function)
 function findAssetForPlatform(assets, platform) {
   const userArch = detectArchitecture()
-  
+
   // Filter out unwanted files
   const filteredAssets = assets.filter((asset) => {
     const name = asset.name.toLowerCase()
@@ -919,22 +913,22 @@ function compareVersions(a, b) {
   // Remove 'v' prefix if present
   const versionA = a.replace(/^v/, '')
   const versionB = b.replace(/^v/, '')
-  
+
   // Split version numbers into parts
-  const partsA = versionA.split('.').map(num => parseInt(num, 10))
-  const partsB = versionB.split('.').map(num => parseInt(num, 10))
-  
+  const partsA = versionA.split('.').map((num) => parseInt(num, 10))
+  const partsB = versionB.split('.').map((num) => parseInt(num, 10))
+
   // Compare each part
   const maxLength = Math.max(partsA.length, partsB.length)
-  
+
   for (let i = 0; i < maxLength; i++) {
     const partA = partsA[i] || 0
     const partB = partsB[i] || 0
-    
+
     if (partA > partB) return 1
     if (partA < partB) return -1
   }
-  
+
   return 0
 }
 

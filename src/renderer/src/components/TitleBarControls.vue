@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<Props>(), {
   showSettings: true,
   showBack: false,
   title: '',
-  color: 'black'
+  color: 'var(--titlebar-btn-text-color)'
 })
 const Store = LocalUserDetailStore()
 const { userInfo } = storeToRefs(Store)
@@ -202,7 +202,7 @@ const handleBack = (): void => {
     }
 
     &:hover .iconfont {
-      color: #111827;
+      color: v-bind(color) !important;
     }
   }
 
@@ -222,12 +222,20 @@ const handleBack = (): void => {
         -webkit-app-region: no-drag;
         margin-right: 0.5rem;
         &:hover {
-          background-color: #f3f4f6;
+          background-color: var(--titlebar-btn-hover-bg);
         }
       }
     }
     .title-box {
       flex: 1;
+
+      p {
+        margin: 0;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--settings-text-primary, v-bind(color));
+        line-height: 1.2;
+      }
     }
   }
 
@@ -235,7 +243,7 @@ const handleBack = (): void => {
     margin-right: 0.5rem;
 
     &:hover {
-      background-color: #f3f4f6;
+      background-color: var(--titlebar-btn-hover-bg);
     }
   }
 
@@ -251,23 +259,23 @@ const handleBack = (): void => {
     }
 
     &:hover {
-      background-color: #f3f4f6;
+      background-color: var(--titlebar-btn-hover-bg);
     }
   }
 
   .minimize-btn:hover {
-    background-color: #f3f4f6;
+    background-color: var(--titlebar-btn-hover-bg);
   }
 
   .maximize-btn:hover {
-    background-color: #f3f4f6;
+    background-color: var(--titlebar-btn-hover-bg);
   }
 
   .close-btn:hover {
-    background-color: #fee2e2;
+    background-color: var(--titlebar-close-hover-bg);
 
     .iconfont {
-      color: #dc2626;
+      color: v-bind(color) !important;
     }
   }
 }

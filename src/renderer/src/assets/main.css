@@ -1,15 +1,19 @@
-:root,
-:root[theme-mode='light'] {
-  --td-brand-color-1: #e2fae2;
-  --td-brand-color-2: #c5f4cb;
-  --td-brand-color-3: #91dca1;
-  --td-brand-color-4: #55c277;
-  --td-brand-color-5: #2ba55b;
-  --td-brand-color-6: #008942;
-  --td-brand-color-7: #006d33;
-  --td-brand-color-8: #005426;
-  --td-brand-color-9: #003c19;
-  --td-brand-color-10: #00260d;
+:root[data-theme='light'],
+:root:not([data-theme]) {
+  --hover-nav-color: #f3f4f6;
+  --hover-nav-text: #6b7280;
+  --hover-nav-text-hover: #111827;
+
+  --td-brand-color-1: #ddfbdd;
+  --td-brand-color-2: #bdf6c3;
+  --td-brand-color-3: #80df94;
+  --td-brand-color-4: #03de6d;
+  --td-brand-color-5: #00a74d;
+  --td-brand-color-6: #00893e;
+  --td-brand-color-7: #006d2f;
+  --td-brand-color-8: #005423;
+  --td-brand-color-9: #003c16;
+  --td-brand-color-10: #00260b;
   --td-brand-color-light: var(--td-brand-color-1);
   --td-brand-color-focus: var(--td-brand-color-2);
   --td-brand-color-disabled: var(--td-brand-color-3);
@@ -64,16 +68,16 @@
   --td-success-color-active: var(--td-success-color-6);
   --td-success-color-disabled: var(--td-success-color-3);
   --td-success-color-light: var(--td-success-color-1);
-  --td-gray-color-1: #f0f4f1;
-  --td-gray-color-2: #e9efeb;
-  --td-gray-color-3: #e1eae4;
-  --td-gray-color-4: #d4dfd8;
-  --td-gray-color-5: #bdc8c1;
-  --td-gray-color-6: #9ca8a1;
-  --td-gray-color-7: #808d86;
-  --td-gray-color-8: #6d7873;
-  --td-gray-color-9: #565f5b;
-  --td-gray-color-10: #454c48;
+  --td-gray-color-1: #f3f3f3;
+  --td-gray-color-2: #eee;
+  --td-gray-color-3: #e7e7e7;
+  --td-gray-color-4: #dcdcdc;
+  --td-gray-color-5: #c5c5c5;
+  --td-gray-color-6: #a6a6a6;
+  --td-gray-color-7: #8b8b8b;
+  --td-gray-color-8: #777;
+  --td-gray-color-9: #5e5e5e;
+  --td-gray-color-10: #4b4b4b;
   --td-gray-color-11: #383838;
   --td-gray-color-12: #2c2c2c;
   --td-gray-color-13: #242424;
@@ -133,21 +137,273 @@
   --td-shadow-inset-right: inset 0.5px 0 0 #dcdcdc;
   --td-shadow-inset-bottom: inset 0 -0.5px 0 #dcdcdc;
   --td-shadow-inset-left: inset -0.5px 0 0 #dcdcdc;
-  --td-mask-active: rgba(255, 255, 255, 0.6);
+  --td-mask-active: rgba(0, 0, 0, 0.6);
   --td-mask-disabled: rgba(255, 255, 255, 0.6);
+
+  /* 通用颜色变量 - 亮色主题 */
+  --theme-bg-primary: #ffffff;
+  --theme-bg-secondary: #f8f9fa;
+  --theme-bg-tertiary: #fafafa;
+  --theme-text-primary: #111827;
+  --theme-text-secondary: #6b7280;
+  --theme-text-tertiary: #9ca3af;
+  --theme-text-muted: #9ca3af;
+  --theme-text-disabled: #666666;
+  --theme-border-light: #f3f4f6;
+  --theme-border-medium: #e5e7eb;
+  --theme-border-strong: #f3f3f3;
+  --theme-border: #e5e7eb;
+  --theme-hover-bg: #f9fafb;
+  --theme-overlay: rgba(0, 0, 0, 0.7);
+  --theme-shadow-light: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --theme-shadow-medium: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --theme-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.08);
+  --theme-card-bg: #ffffff;
+  --theme-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --theme-card-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.15);
+  --theme-header-bg: #f9fafb;
+  --theme-badge-bg: #f3f4f6;
+  --theme-tips-bg: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  --theme-warning-bg: #fef3c7;
+  --theme-warning-text: #d97706;
+  --theme-code-bg: rgba(255, 255, 255, 0.6);
+  --theme-code-hover-bg: rgba(255, 255, 255, 0.9);
+  --theme-note-bg: rgba(255, 255, 255, 0.5);
+
+  /* Find 页面专用变量 - 亮色主题 */
+  --find-bg-primary: var(--theme-bg-primary);
+  --find-bg-secondary: var(--theme-bg-secondary);
+  --find-text-primary: var(--theme-text-primary);
+  --find-text-secondary: var(--theme-text-secondary);
+  --find-text-muted: var(--theme-text-muted);
+  --find-card-bg: var(--theme-bg-primary);
+  --find-song-count-bg: rgba(156, 163, 175, 0.1);
+  --find-card-info-bg: rgba(255, 255, 255, 0.95);
+  --find-card-shadow: var(--theme-shadow-light), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --find-card-shadow-hover: var(--theme-shadow-hover);
+  --find-song-bg: var(--theme-bg-primary);
+  --find-song-hover-bg: var(--theme-hover-bg);
+  --find-border-color: var(--theme-border-light);
+  --find-meta-border: rgba(229, 231, 235, 0.5);
+
+  /* HomeLayout 页面专用变量 - 亮色主题 */
+  --home-nav-btn-color: #3d4043;
+  --home-nav-btn-hover: var(--theme-text-primary);
+  --home-source-selector-hover: var(--theme-border-light);
+  --home-source-list-bg: var(--theme-bg-primary);
+  --home-source-list-border: var(--theme-border-medium);
+  --home-source-list-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --home-source-item-hover: var(--theme-border-light);
+  --home-scrollbar-track: #f1f5f9;
+  --home-scrollbar-thumb: #cbd5e1;
+  --home-scrollbar-thumb-hover: #94a3b8;
+  --home-scrollbar-color: #cbd5e1 #f1f5f9;
+
+  /* List 页面专用变量 - 亮色主题 */
+  --list-bg-primary: var(--theme-bg-tertiary);
+  --list-content-bg: var(--theme-bg-primary);
+  --list-header-bg: var(--theme-bg-primary);
+  --list-header-shadow: var(--theme-shadow-medium);
+  --list-content-shadow: var(--theme-shadow-light);
+  --list-title-color: var(--theme-text-primary);
+  --list-author-color: var(--theme-text-secondary);
+  --list-stats-color: var(--theme-text-muted);
+  --list-loading-text: var(--theme-text-disabled);
+  --list-loading-border: var(--theme-border-strong);
+  --list-loading-spinner: var(--td-brand-color);
+  --list-cover-overlay: var(--theme-overlay);
+
+  /* SongVirtualList 组件专用变量 - 亮色主题 */
+  --song-list-header-bg: #fafafa;
+  --song-list-header-border: #e9e9e9;
+  --song-list-header-text: #999999;
+  --song-list-content-bg: var(--theme-bg-primary);
+  --song-list-item-border: #f5f5f5;
+  --song-list-item-hover: #f5f5f5;
+  --song-list-item-current: #f0f7ff;
+  --song-list-item-playing: #e6f7ff;
+  --song-list-track-number: #999999;
+  --song-list-title-color: #333333;
+  --song-list-title-hover: var(--td-brand-color);
+  --song-list-artist-color: #999999;
+  --song-list-album-color: #999999;
+  --song-list-album-hover: var(--td-brand-color);
+  --song-list-duration-color: #999999;
+  --song-list-btn-color: #cccccc;
+  --song-list-btn-hover: var(--td-brand-color);
+  --song-list-btn-bg-hover: var(--td-brand-color-light);
+  --song-list-quality-bg: #fff7e6;
+  --song-list-quality-color: #fa8c16;
+
+  /* Search 页面专用变量 - 亮色主题 */
+  --search-bg: var(--theme-bg-tertiary);
+  --search-title-color: #333333;
+  --search-keyword-color: var(--td-brand-color);
+  --search-info-color: #999999;
+  --search-content-bg: var(--theme-bg-primary);
+  --search-content-shadow: var(--theme-shadow-light);
+  --search-empty-title: #333333;
+  --search-empty-text: #999999;
+  --search-loading-text: #666666;
+  --search-loading-border: #f3f3f3;
+  --search-loading-spinner: var(--td-brand-color);
+
+  /* Recent 页面专用变量 - 亮色主题 */
+  --recent-bg: var(--theme-bg-tertiary);
+  --recent-title-color: #111827;
+  --recent-subtitle-color: #6b7280;
+  --recent-section-title: #111827;
+  --recent-card-bg: var(--theme-bg-primary);
+  --recent-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --recent-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --recent-playlist-title: #111827;
+  --recent-playlist-desc: #6b7280;
+  --recent-playlist-meta: #9ca3af;
+  --recent-song-item-border: #f3f4f6;
+  --recent-song-item-hover: #f9fafb;
+  --recent-song-index: #6b7280;
+  --recent-song-title: #111827;
+  --recent-song-artist: #6b7280;
+  --recent-song-stats: #6b7280;
+  --recent-song-duration: #6b7280;
+  --recent-empty-icon: #d1d5db;
+  --recent-empty-title: #111827;
+  --recent-empty-text: #6b7280;
+
+  /* Local 页面专用变量 - 亮色主题 */
+  --local-bg: var(--theme-bg-tertiary);
+  --local-text-primary: var(--theme-text-primary);
+  --local-text-secondary: var(--theme-text-secondary);
+  --local-text-tertiary: var(--theme-text-tertiary);
+  --local-card-bg: var(--theme-card-bg);
+  --local-card-shadow: var(--theme-card-shadow);
+  --local-card-shadow-hover: var(--theme-card-shadow-hover);
+  --local-border: var(--theme-border);
+  --local-hover-bg: var(--theme-hover-bg);
+  --local-header-bg: var(--theme-header-bg);
+  --local-badge-bg: var(--theme-badge-bg);
+  --local-tips-bg: var(--theme-tips-bg);
+  --local-warning-bg: var(--theme-warning-bg);
+  --local-warning-text: var(--theme-warning-text);
+  --local-code-bg: var(--theme-code-bg);
+  --local-code-hover-bg: var(--theme-code-hover-bg);
+  --local-note-bg: var(--theme-note-bg);
+
+  /* Welcome 页面专用变量 - 亮色主题 */
+  --welcome-bg: #ffffff;
+  --welcome-subtitle-color: #666666;
+  --welcome-loading-text: #888888;
+  --welcome-progress-bg: #f0f0f0;
+  --welcome-tag-bg: #b8f1ce;
+  --welcome-tag-border: #e9ecef;
+  --welcome-tag-color: #333333;
+  --welcome-version-color: #9e9e9e;
+
+  /* TitleBarControls 组件专用变量 - 亮色主题 */
+  --titlebar-icon-color: #111827;
+  --titlebar-icon-hover: #111827;
+  --titlebar-btn-hover-bg: #f3f4f6;
+  --titlebar-close-hover-bg: #fee2e2;
+  --titlebar-close-hover-color: #dc2626;
+
+  /* Settings 页面专用变量 - 亮色主题 */
+  --settings-main-bg: #f8fafc;
+  --settings-header-bg: #ffffff;
+  --settings-sidebar-bg: #ffffff;
+  --settings-sidebar-border: #e2e8f0;
+  --settings-nav-hover-bg: #f1f5f9;
+  --settings-nav-active-bg: var(--td-brand-color-1);
+  --settings-nav-active-border: var(--td-brand-color-5);
+  --settings-nav-icon-color: #64748b;
+  --settings-nav-icon-active: var(--td-brand-color-5);
+  --settings-nav-label-color: #334155;
+  --settings-nav-label-active: var(--td-brand-color-6);
+  --settings-nav-desc-color: #64748b;
+  --settings-content-bg: #f8fafc;
+  --settings-group-bg: #ffffff;
+  --settings-group-border: #e2e8f0;
+  --settings-group-shadow: rgba(0, 0, 0, 0.1);
+  --settings-text-primary: #1e293b;
+  --settings-text-secondary: #64748b;
+  --settings-preview-bg: #f8fafc;
+  --settings-preview-border: #e2e8f0;
+  --settings-mock-titlebar-bg: #f6f6f6;
+  --settings-mock-titlebar-border: #d1d5db;
+  --settings-feature-bg: #f8fafc;
+  --settings-feature-border: #e2e8f0;
+  --settings-api-tips-bg: #f8fafc;
+  --settings-api-tips-border: #e2e8f0;
+  --settings-source-card-bg: #ffffff;
+  --settings-source-card-border: #e2e8f0;
+  --settings-source-card-hover-border: var(--td-brand-color-3);
+  --settings-source-card-active-border: var(--td-brand-color-5);
+  --settings-source-card-active-bg: var(--td-brand-color-1);
+  --settings-source-icon-bg: #f1f5f9;
+  --settings-quality-container-bg: #f8fafc;
+  --settings-quality-container-border: #e2e8f0;
+  --settings-status-item-bg: #f8fafc;
+  --settings-status-item-border: #e2e8f0;
+  --settings-plugin-prompt-bg: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  --settings-plugin-prompt-border: #cbd5e1;
+  --settings-tech-item-bg: #f8fafc;
+  --settings-tech-item-border: #e2e8f0;
+  --settings-developer-item-bg: #f8fafc;
+  --settings-developer-item-border: #e2e8f0;
+  --settings-tag-option-bg: #f8fafc;
+  --settings-tag-option-border: #e2e8f0;
+  --settings-tag-status-bg: #f8fafc;
+  --settings-tag-status-border: #e2e8f0;
+
+  /* Plugins 组件专用变量 - 亮色主题 */
+  --plugins-bg: var(--theme-bg-tertiary);
+  --plugins-container-bg: var(--theme-bg-primary);
+  --plugins-header-bg: var(--theme-bg-primary);
+  --plugins-text-primary: var(--theme-text-primary);
+  --plugins-text-secondary: var(--theme-text-secondary);
+  --plugins-text-muted: var(--theme-text-muted);
+  --plugins-border: var(--theme-border);
+  --plugins-card-bg: var(--theme-card-bg);
+  --plugins-card-shadow: var(--theme-card-shadow);
+  --plugins-card-shadow-hover: var(--theme-card-shadow-hover);
+  --plugins-card-selected-bg: #e8f5e8;
+  --plugins-card-selected-border: #28a745;
+  --plugins-loading-spinner: var(--td-brand-color);
+  --plugins-error-color: #dc3545;
+  --plugins-success-color: #28a745;
+  --plugins-console-bg: #1e1e1e;
+  --plugins-console-header-bg: #2d2d2d;
+  --plugins-console-border: #404040;
+  --plugins-console-text: #ffffff;
+  --plugins-console-prompt: var(--td-brand-color);
+  --plugins-console-path: #8a8a8a;
+  --plugins-console-time: #666666;
+  --plugins-console-scrollbar-track: #2d2d2d;
+  --plugins-console-scrollbar-thumb: #555555;
+  --plugins-console-scrollbar-thumb-hover: #666666;
+  --plugins-log-error: #ff6b6b;
+  --plugins-log-warn: #ffd93d;
+  --plugins-log-info: #74b9ff;
+  --plugins-log-debug: #a29bfe;
+  --plugins-mac-close: #ff5f57;
+  --plugins-mac-minimize: #ffbd2e;
+  --plugins-mac-maximize: #28ca42;
 }
 
-:root[theme-mode='dark'] {
-  --td-brand-color-1: #2ba55b20;
-  --td-brand-color-2: #003c19;
-  --td-brand-color-3: #005426;
-  --td-brand-color-4: #006d33;
-  --td-brand-color-5: #008942;
-  --td-brand-color-6: #2ba55b;
-  --td-brand-color-7: #4cd47c;
-  --td-brand-color-8: #91dca1;
-  --td-brand-color-9: #c5f4cb;
-  --td-brand-color-10: #e2fae2;
+:root[data-theme='dark'] {
+  --hover-nav-color: #ffffff18;
+  --hover-nav-text: #a5a5a5;
+  --hover-nav-text-hover: #f3f4f6;
+
+  --td-brand-color-1: #00a74d20;
+  --td-brand-color-2: #003c16;
+  --td-brand-color-3: #005423;
+  --td-brand-color-4: #006d2f;
+  --td-brand-color-5: #00893e;
+  --td-brand-color-6: #00a74d;
+  --td-brand-color-7: #03de6d;
+  --td-brand-color-8: #80df94;
+  --td-brand-color-9: #bdf6c3;
+  --td-brand-color-10: #ddfbdd;
   --td-brand-color-light: var(--td-brand-color-1);
   --td-brand-color-focus: var(--td-brand-color-2);
   --td-brand-color-disabled: var(--td-brand-color-3);
@@ -184,16 +440,16 @@
   --td-success-color-8: #80d2b6;
   --td-success-color-9: #b4e1d3;
   --td-success-color-10: #deede8;
-  --td-gray-color-1: #f0f4f1;
-  --td-gray-color-2: #e9efeb;
-  --td-gray-color-3: #e1eae4;
-  --td-gray-color-4: #d4dfd8;
-  --td-gray-color-5: #bdc8c1;
-  --td-gray-color-6: #9ca8a1;
-  --td-gray-color-7: #808d86;
-  --td-gray-color-8: #6d7873;
-  --td-gray-color-9: #565f5b;
-  --td-gray-color-10: #454c48;
+  --td-gray-color-1: #f3f3f3;
+  --td-gray-color-2: #eee;
+  --td-gray-color-3: #e7e7e7;
+  --td-gray-color-4: #dcdcdc;
+  --td-gray-color-5: #c5c5c5;
+  --td-gray-color-6: #a6a6a6;
+  --td-gray-color-7: #8b8b8b;
+  --td-gray-color-8: #777;
+  --td-gray-color-9: #5e5e5e;
+  --td-gray-color-10: #4b4b4b;
   --td-gray-color-11: #383838;
   --td-gray-color-12: #2c2c2c;
   --td-gray-color-13: #242424;
@@ -244,8 +500,259 @@
   --td-bg-color-specialcomponent: transparent;
   --td-border-level-1-color: var(--td-gray-color-11);
   --td-border-level-2-color: var(--td-gray-color-9);
-  --td-mask-active: rgba(0, 0, 0, 0.1);
+  --td-mask-active: rgba(0, 0, 0, 0.4);
   --td-mask-disabled: rgba(0, 0, 0, 0.6);
+
+  /* 通用颜色变量 - 暗色主题 */
+  --theme-bg-primary: #2d2d2d;
+  --theme-bg-secondary: #1a1a1a;
+  --theme-bg-tertiary: #1a1a1a;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #b3b3b3;
+  --theme-text-tertiary: #8a8a8a;
+  --theme-text-muted: #8a8a8a;
+  --theme-text-disabled: #b3b3b3;
+  --theme-border-light: #404040;
+  --theme-border-medium: #404040;
+  --theme-border-strong: #404040;
+  --theme-border: #404040;
+  --theme-hover-bg: #3a3a3a;
+  --theme-overlay: rgba(0, 0, 0, 0.8);
+  --theme-shadow-light: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --theme-shadow-medium: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --theme-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.3);
+  --theme-card-bg: #2d2d2d;
+  --theme-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --theme-card-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.4);
+  --theme-header-bg: #2a2a2a;
+  --theme-badge-bg: #404040;
+  --theme-tips-bg: linear-gradient(135deg, #2a2a2a, #333333);
+  --theme-warning-bg: #4a3a2a;
+  --theme-warning-text: #ffa726;
+  --theme-code-bg: rgba(255, 255, 255, 0.1);
+  --theme-code-hover-bg: rgba(255, 255, 255, 0.15);
+  --theme-note-bg: rgba(255, 255, 255, 0.08);
+
+  /* Find 页面专用变量 - 暗色主题 */
+  --find-bg-primary: var(--theme-bg-secondary);
+  --find-bg-secondary: var(--theme-bg-primary);
+  --find-text-primary: var(--theme-text-primary);
+  --find-text-secondary: var(--theme-text-secondary);
+  --find-text-muted: var(--theme-text-muted);
+  --find-card-bg: var(--theme-bg-primary);
+  --find-song-count-bg: rgba(255, 255, 255, 0.1);
+  --find-card-info-bg: rgba(45, 45, 45, 0.95);
+  --find-card-shadow: var(--theme-shadow-medium), 0 1px 4px rgba(0, 0, 0, 0.2);
+  --find-card-shadow-hover: var(--theme-shadow-hover);
+  --find-song-bg: var(--theme-bg-primary);
+  --find-song-hover-bg: var(--theme-hover-bg);
+  --find-border-color: var(--theme-border-light);
+  --find-meta-border: rgba(64, 64, 64, 0.5);
+
+  /* HomeLayout 页面专用变量 - 暗色主题 */
+  --home-nav-btn-color: var(--theme-text-secondary);
+  --home-nav-btn-hover: var(--theme-text-primary);
+  --home-source-selector-hover: var(--theme-hover-bg);
+  --home-source-list-bg: var(--theme-bg-primary);
+  --home-source-list-border: var(--theme-border-light);
+  --home-source-list-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --home-source-item-hover: var(--theme-hover-bg);
+  --home-scrollbar-track: var(--theme-bg-primary);
+  --home-scrollbar-thumb: #4a4a4a;
+  --home-scrollbar-thumb-hover: #5a5a5a;
+  --home-scrollbar-color: #4a4a4a var(--theme-bg-primary);
+
+  /* List 页面专用变量 - 暗色主题 */
+  --list-bg-primary: var(--theme-bg-tertiary);
+  --list-content-bg: var(--theme-bg-primary);
+  --list-header-bg: var(--theme-bg-primary);
+  --list-header-shadow: var(--theme-shadow-medium);
+  --list-content-shadow: var(--theme-shadow-light);
+  --list-title-color: var(--theme-text-primary);
+  --list-author-color: var(--theme-text-secondary);
+  --list-stats-color: var(--theme-text-muted);
+  --list-loading-text: var(--theme-text-disabled);
+  --list-loading-border: var(--theme-border-strong);
+  --list-loading-spinner: var(--td-brand-color);
+  --list-cover-overlay: var(--theme-overlay);
+
+  /* SongVirtualList 组件专用变量 - 暗色主题 */
+  --song-list-header-bg: #2a2a2a;
+  --song-list-header-border: #404040;
+  --song-list-header-text: #8a8a8a;
+  --song-list-content-bg: var(--theme-bg-primary);
+  --song-list-item-border: #3a3a3a;
+  --song-list-item-hover: var(--theme-hover-bg);
+  --song-list-item-current: #1a3a5a;
+  --song-list-item-playing: #1a4a6a;
+  --song-list-track-number: #8a8a8a;
+  --song-list-title-color: var(--theme-text-primary);
+  --song-list-title-hover: var(--td-brand-color);
+  --song-list-artist-color: var(--theme-text-muted);
+  --song-list-album-color: var(--theme-text-muted);
+  --song-list-album-hover: var(--td-brand-color);
+  --song-list-duration-color: var(--theme-text-muted);
+  --song-list-btn-color: #666666;
+  --song-list-btn-hover: var(--td-brand-color);
+  --song-list-btn-bg-hover: var(--td-brand-color-light);
+  --song-list-quality-bg: #3a2a1a;
+  --song-list-quality-color: #fa8c16;
+
+  /* Search 页面专用变量 - 暗色主题 */
+  --search-bg: var(--theme-bg-tertiary);
+  --search-title-color: var(--theme-text-primary);
+  --search-keyword-color: var(--td-brand-color);
+  --search-info-color: var(--theme-text-muted);
+  --search-content-bg: var(--theme-bg-primary);
+  --search-content-shadow: var(--theme-shadow-light);
+  --search-empty-title: var(--theme-text-primary);
+  --search-empty-text: var(--theme-text-muted);
+  --search-loading-text: var(--theme-text-secondary);
+  --search-loading-border: var(--theme-border-light);
+  --search-loading-spinner: var(--td-brand-color);
+
+  /* Recent 页面专用变量 - 暗色主题 */
+  --recent-bg: var(--theme-bg-tertiary);
+  --recent-title-color: var(--theme-text-primary);
+  --recent-subtitle-color: var(--theme-text-secondary);
+  --recent-section-title: var(--theme-text-primary);
+  --recent-card-bg: var(--theme-bg-primary);
+  --recent-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --recent-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --recent-playlist-title: var(--theme-text-primary);
+  --recent-playlist-desc: var(--theme-text-secondary);
+  --recent-playlist-meta: var(--theme-text-muted);
+  --recent-song-item-border: var(--theme-border-light);
+  --recent-song-item-hover: var(--theme-hover-bg);
+  --recent-song-index: var(--theme-text-secondary);
+  --recent-song-title: var(--theme-text-primary);
+  --recent-song-artist: var(--theme-text-secondary);
+  --recent-song-stats: var(--theme-text-secondary);
+  --recent-song-duration: var(--theme-text-secondary);
+  --recent-empty-icon: #666666;
+  --recent-empty-title: var(--theme-text-primary);
+  --recent-empty-text: var(--theme-text-secondary);
+
+  /* Local 页面专用变量 - 暗色主题 */
+  --local-bg: var(--theme-bg-tertiary);
+  --local-text-primary: var(--theme-text-primary);
+  --local-text-secondary: var(--theme-text-secondary);
+  --local-text-tertiary: var(--theme-text-tertiary);
+  --local-card-bg: var(--theme-card-bg);
+  --local-card-shadow: var(--theme-card-shadow);
+  --local-card-shadow-hover: var(--theme-card-shadow-hover);
+  --local-border: var(--theme-border);
+  --local-hover-bg: var(--theme-hover-bg);
+  --local-header-bg: var(--theme-header-bg);
+  --local-badge-bg: var(--theme-badge-bg);
+  --local-tips-bg: var(--theme-tips-bg);
+  --local-warning-bg: var(--theme-warning-bg);
+  --local-warning-text: var(--theme-warning-text);
+  --local-code-bg: var(--theme-code-bg);
+  --local-code-hover-bg: var(--theme-code-hover-bg);
+  --local-note-bg: var(--theme-note-bg);
+
+  /* Welcome 页面专用变量 - 暗色主题 */
+  --welcome-bg: #1a1a1a;
+  --welcome-subtitle-color: #999999;
+  --welcome-loading-text: #aaaaaa;
+  --welcome-progress-bg: #333333;
+  --welcome-tag-bg: #2d2d2d;
+  --welcome-tag-border: #404040;
+  --welcome-tag-color: #cccccc;
+  --welcome-version-color: #666666;
+
+  /* TitleBarControls 组件专用变量 - 暗色主题 */
+  --titlebar-icon-color: #ffffff;
+  --titlebar-icon-hover: #ffffff;
+  --titlebar-btn-hover-bg: #3a3a3a;
+  --titlebar-close-hover-bg: #4a2a2a;
+  --titlebar-close-hover-color: #ff6b6b;
+
+  /* Settings 页面专用变量 - 暗色主题 */
+  --settings-main-bg: #1a1a1a;
+  --settings-header-bg: #2d2d2d;
+  --settings-sidebar-bg: #2d2d2d;
+  --settings-sidebar-border: #404040;
+  --settings-nav-hover-bg: #3a3a3a;
+  --settings-nav-active-bg: var(--td-brand-color-1);
+  --settings-nav-active-border: var(--td-brand-color-5);
+  --settings-nav-icon-color: #8a8a8a;
+  --settings-nav-icon-active: var(--td-brand-color-5);
+  --settings-nav-label-color: #ffffff;
+  --settings-nav-label-active: var(--td-brand-color-6);
+  --settings-nav-desc-color: #8a8a8a;
+  --settings-content-bg: #1a1a1a;
+  --settings-group-bg: #2d2d2d;
+  --settings-group-border: #404040;
+  --settings-group-shadow: rgba(0, 0, 0, 0.3);
+  --settings-text-primary: #ffffff;
+  --settings-text-secondary: #b3b3b3;
+  --settings-text-tertiary: #8a8a8a;
+  --settings-footer-bg: #2d2d2d;
+  --settings-version-bg: #404040;
+  --settings-preview-bg: #2a2a2a;
+  --settings-preview-border: #404040;
+  --settings-mock-titlebar-bg: #333333;
+  --settings-mock-titlebar-border: #555555;
+  --settings-feature-bg: #2a2a2a;
+  --settings-feature-border: #404040;
+  --settings-api-tips-bg: #2a2a2a;
+  --settings-api-tips-border: #404040;
+  --settings-source-card-bg: #2d2d2d;
+  --settings-source-card-border: #404040;
+  --settings-source-card-hover-border: var(--td-brand-color-3);
+  --settings-source-card-active-border: var(--td-brand-color-5);
+  --settings-source-card-active-bg: var(--td-brand-color-1);
+  --settings-source-icon-bg: #3a3a3a;
+  --settings-quality-container-bg: #2a2a2a;
+  --settings-quality-container-border: #404040;
+  --settings-status-item-bg: #2a2a2a;
+  --settings-status-item-border: #404040;
+  --settings-plugin-prompt-bg: linear-gradient(135deg, #2a2a2a 0%, #333333 100%);
+  --settings-plugin-prompt-border: #555555;
+  --settings-tech-item-bg: #2a2a2a;
+  --settings-tech-item-border: #404040;
+  --settings-developer-item-bg: #2a2a2a;
+  --settings-developer-item-border: #404040;
+  --settings-tag-option-bg: #2a2a2a;
+  --settings-tag-option-border: #404040;
+  --settings-tag-status-bg: #2a2a2a;
+  --settings-tag-status-border: #404040;
+
+  /* Plugins 组件专用变量 - 暗色主题 */
+  --plugins-bg: var(--theme-bg-tertiary);
+  --plugins-container-bg: var(--theme-bg-primary);
+  --plugins-header-bg: var(--theme-bg-primary);
+  --plugins-text-primary: var(--theme-text-primary);
+  --plugins-text-secondary: var(--theme-text-secondary);
+  --plugins-text-muted: var(--theme-text-muted);
+  --plugins-border: var(--theme-border);
+  --plugins-card-bg: var(--theme-card-bg);
+  --plugins-card-shadow: var(--theme-card-shadow);
+  --plugins-card-shadow-hover: var(--theme-card-shadow-hover);
+  --plugins-card-selected-bg: #1a3a1a;
+  --plugins-card-selected-border: #28a745;
+  --plugins-loading-spinner: var(--td-brand-color);
+  --plugins-error-color: #ff6b6b;
+  --plugins-success-color: #4ade80;
+  --plugins-console-bg: #0d1117;
+  --plugins-console-header-bg: #161b22;
+  --plugins-console-border: #30363d;
+  --plugins-console-text: #f0f6fc;
+  --plugins-console-prompt: var(--td-brand-color);
+  --plugins-console-path: #7d8590;
+  --plugins-console-time: #6e7681;
+  --plugins-console-scrollbar-track: #161b22;
+  --plugins-console-scrollbar-thumb: #30363d;
+  --plugins-console-scrollbar-thumb-hover: #484f58;
+  --plugins-log-error: #ff7b72;
+  --plugins-log-warn: #f0d852;
+  --plugins-log-info: #79c0ff;
+  --plugins-log-debug: #d2a8ff;
+  --plugins-mac-close: #ff5f57;
+  --plugins-mac-minimize: #ffbd2e;
+  --plugins-mac-maximize: #28ca42;
 }
 
 :root {

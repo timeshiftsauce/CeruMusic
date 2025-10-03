@@ -225,6 +225,8 @@ const createPlaylist = async () => {
         description: '这是我创建的歌单'
       }
       await loadPlaylists()
+      // 触发歌单更新事件
+      window.dispatchEvent(new Event('playlist-updated'))
     } else {
       MessagePlugin.error(result.error || '创建歌单失败')
     }
@@ -264,6 +266,8 @@ const savePlaylistEdit = async () => {
       showEditPlaylistDialog.value = false
       currentEditingPlaylist.value = null
       await loadPlaylists()
+      // 触发歌单更新事件
+      window.dispatchEvent(new Event('playlist-updated'))
     } else {
       MessagePlugin.error(result.error || '更新歌单信息失败')
     }
@@ -297,8 +301,8 @@ const deletePlaylist = async (playlist: SongList) => {
         if (result.success) {
           MessagePlugin.success('歌单删除成功')
           await loadPlaylists()
-
-          // 歌单删除成功，无需额外处理
+          // 触发歌单更新事件
+          window.dispatchEvent(new Event('playlist-updated'))
         } else {
           MessagePlugin.error(result.error || '删除歌单失败')
         }
@@ -1428,6 +1432,8 @@ onMounted(() => {
   margin: 0 auto;
   width: 100%;
   position: relative;
+  // background: var(--local-bg);
+  color: var(--local-text-primary);
 }
 
 // 编辑歌单对话框样式
@@ -1443,7 +1449,7 @@ onMounted(() => {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 500;
-      color: #374151;
+      color: var(--local-text-primary);
       font-size: 14px;
     }
   }
@@ -1451,20 +1457,20 @@ onMounted(() => {
   .form-tips {
     margin-top: 1rem;
     padding: 0.75rem;
-    background: #f3f4f6;
+    background: var(--local-tips-bg);
     border-radius: 6px;
-    border-left: 3px solid #10b981;
+    border-left: 3px solid var(--td-success-color);
 
     .tip-note {
       margin: 0;
-      color: #6b7280;
+      color: var(--local-text-secondary);
       font-size: 13px;
       display: flex;
       align-items: center;
       gap: 0.5rem;
 
       .iconfont {
-        color: #10b981;
+        color: var(--td-success-color);
         font-size: 14px;
       }
     }
@@ -1500,17 +1506,17 @@ onMounted(() => {
     margin-bottom: 2rem;
     position: sticky;
     top: 0;
-    background: #fff;
+    background: var(--td-bg-color-container);
     z-index: 10;
     padding: 0.5rem 0;
     margin: -0.5rem 0 1.5rem 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--local-border);
 
     .form-label {
       display: block;
       margin-bottom: 1rem;
       font-weight: 600;
-      color: #374151;
+      color: var(--local-text-primary);
       font-size: 15px;
     }
 
@@ -1550,11 +1556,11 @@ onMounted(() => {
   .import-content {
     .import-description {
       margin-bottom: 1.25rem;
-      color: #64748b;
+      color: var(--local-text-secondary);
       font-size: 14px;
       line-height: 1.6;
       padding: 1rem;
-      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      background: var(--local-tips-bg);
       border-radius: 8px;
       border-left: 4px solid var(--td-brand-color-4);
     }
@@ -1564,10 +1570,10 @@ onMounted(() => {
     }
 
     .import-tips {
-      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      background: var(--local-tips-bg);
       border-radius: 12px;
       padding: 1.25rem;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--local-border);
       position: relative;
       overflow: hidden;
 
@@ -1584,7 +1590,7 @@ onMounted(() => {
       .tip-title {
         margin: 0 0 0.75rem 0;
         font-weight: 600;
-        color: #334155;
+        color: var(--local-text-primary);
         font-size: 15px;
         display: flex;
         align-items: center;
@@ -1601,17 +1607,17 @@ onMounted(() => {
         padding-left: 1.5rem;
 
         li {
-          color: #64748b;
+          color: var(--local-text-secondary);
           font-size: 13px;
           margin-bottom: 0.5rem;
           font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
           padding: 0.25rem 0.5rem;
-          background: rgba(255, 255, 255, 0.6);
+          background: var(--local-code-bg);
           border-radius: 4px;
           transition: all 0.2s ease;
 
           &:hover {
-            background: rgba(255, 255, 255, 0.9);
+            background: var(--local-code-hover-bg);
             transform: translateX(4px);
           }
         }
@@ -1619,14 +1625,14 @@ onMounted(() => {
 
       .tip-note {
         margin: 0;
-        color: #94a3b8;
+        color: var(--local-text-tertiary);
         font-size: 12px;
         font-style: italic;
         display: flex;
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem;
-        background: rgba(255, 255, 255, 0.5);
+        background: var(--local-note-bg);
         border-radius: 6px;
 
         &::before {
@@ -1668,7 +1674,7 @@ onMounted(() => {
 
   .header-left {
     h2 {
-      color: #111827;
+      color: var(--local-text-primary);
       margin-bottom: 0.5rem;
       font-size: 1.875rem;
       font-weight: 600;
@@ -1678,13 +1684,13 @@ onMounted(() => {
       display: flex;
       gap: 1rem;
       font-size: 0.875rem;
-      color: #6b7280;
+      color: var(--local-text-secondary);
 
       span {
         &:not(:last-child)::after {
           content: '•';
           margin-left: 1rem;
-          color: #d1d5db;
+          color: var(--local-border);
         }
       }
     }
@@ -1709,7 +1715,7 @@ onMounted(() => {
     h3 {
       font-size: 1.25rem;
       font-weight: 600;
-      color: #111827;
+      color: var(--local-text-primary);
     }
 
     .section-actions {
@@ -1733,17 +1739,17 @@ onMounted(() => {
 }
 
 .playlist-card {
-  background: #fff;
+  background: var(--local-card-bg);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--local-card-shadow);
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
 
   &:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--local-card-shadow-hover);
 
     .playlist-cover .cover-overlay {
       opacity: 1;
@@ -1788,7 +1794,7 @@ onMounted(() => {
 
     .playlist-name {
       font-weight: 600;
-      color: #111827;
+      color: var(--local-text-primary);
       margin-bottom: 0.5rem;
       white-space: nowrap;
       overflow: hidden;
@@ -1797,13 +1803,13 @@ onMounted(() => {
       font-size: 1rem;
 
       &:hover {
-        color: #4f46e5;
+        color: var(--td-brand-color);
       }
     }
 
     .playlist-description {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: var(--local-text-secondary);
       margin-bottom: 0.5rem;
       white-space: nowrap;
       overflow: hidden;
@@ -1815,13 +1821,13 @@ onMounted(() => {
       flex-direction: column;
       gap: 0.25rem;
       font-size: 0.75rem;
-      color: #9ca3af;
+      color: var(--local-text-tertiary);
 
       span {
         &:first-child {
           text-transform: uppercase;
           font-weight: 500;
-          color: #4f46e5;
+          color: var(--td-brand-color);
         }
       }
     }
@@ -1844,19 +1850,19 @@ onMounted(() => {
 
     .iconfont {
       font-size: 4rem;
-      color: #d1d5db;
+      color: var(--local-text-tertiary);
     }
   }
 
   h4 {
-    color: #111827;
+    color: var(--local-text-primary);
     margin-bottom: 0.5rem;
     font-size: 1.125rem;
     font-weight: 600;
   }
 
   p {
-    color: #6b7280;
+    color: var(--local-text-secondary);
     margin-bottom: 2rem;
   }
 }
@@ -1876,10 +1882,10 @@ onMounted(() => {
 
 .music-list {
   width: 100%;
-  background: #fff;
+  background: var(--local-card-bg);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--local-card-shadow);
 }
 
 .list-header {
@@ -1888,13 +1894,13 @@ onMounted(() => {
   grid-template-columns: 0.5fr 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
   gap: 1rem;
   padding: 1rem 1.5rem;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--local-header-bg);
+  border-bottom: 1px solid var(--local-border);
 
   .header-item {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #6b7280;
+    color: var(--local-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -1906,7 +1912,7 @@ onMounted(() => {
     grid-template-columns: 0.5fr 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
     gap: 1rem;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--local-border);
     cursor: pointer;
     transition: background-color 0.2s ease;
 
@@ -1915,7 +1921,7 @@ onMounted(() => {
     }
 
     &:hover {
-      background-color: #f9fafb;
+      background-color: var(--local-hover-bg);
 
       .actions {
         opacity: 1;
@@ -1929,14 +1935,14 @@ onMounted(() => {
 
       &.index {
         justify-content: center;
-        color: #6b7280;
+        color: var(--local-text-secondary);
         font-weight: 500;
       }
 
       &.title {
         .song-title {
           font-weight: 500;
-          color: #111827;
+          color: var(--local-text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1945,7 +1951,7 @@ onMounted(() => {
 
       &.artist,
       &.album {
-        color: #6b7280;
+        color: var(--local-text-secondary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1953,7 +1959,7 @@ onMounted(() => {
 
       &.duration,
       &.size {
-        color: #6b7280;
+        color: var(--local-text-secondary);
         font-variant-numeric: tabular-nums;
       }
 
@@ -1963,8 +1969,8 @@ onMounted(() => {
         gap: 0.125rem;
 
         .format-badge {
-          background: #f3f4f6;
-          color: #6b7280;
+          background: var(--local-badge-bg);
+          color: var(--local-text-secondary);
           padding: 0.125rem 0.375rem;
           border-radius: 0.25rem;
           font-size: 0.75rem;
@@ -1973,7 +1979,7 @@ onMounted(() => {
 
         .bitrate {
           font-size: 0.75rem;
-          color: #9ca3af;
+          color: var(--local-text-tertiary);
         }
       }
 
@@ -1995,19 +2001,19 @@ onMounted(() => {
 
     .iconfont {
       font-size: 4rem;
-      color: #d1d5db;
+      color: var(--local-text-tertiary);
     }
   }
 
   h3 {
-    color: #111827;
+    color: var(--local-text-primary);
     margin-bottom: 0.5rem;
     font-size: 1.25rem;
     font-weight: 600;
   }
 
   p {
-    color: #6b7280;
+    color: var(--local-text-secondary);
     margin-bottom: 2rem;
   }
 }
@@ -2028,14 +2034,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 1rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--local-border);
   border-radius: 0.5rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  background: var(--local-card-bg);
 
   &:hover {
     border-color: var(--td-brand-color-4);
-    background-color: #f8fafc;
+    background-color: var(--local-hover-bg);
   }
 
   .option-icon {
@@ -2053,20 +2060,20 @@ onMounted(() => {
     h4 {
       font-size: 1rem;
       font-weight: 600;
-      color: #111827;
+      color: var(--local-text-primary);
       margin-bottom: 0.25rem;
     }
 
     p {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: var(--local-text-secondary);
       margin: 0;
     }
 
     .coming-soon {
       display: inline-block;
-      background: #fef3c7;
-      color: #d97706;
+      background: var(--local-warning-bg);
+      color: var(--local-warning-text);
       padding: 0.125rem 0.5rem;
       border-radius: 0.25rem;
       font-size: 0.75rem;
@@ -2078,7 +2085,7 @@ onMounted(() => {
   .option-arrow {
     .iconfont {
       font-size: 1rem;
-      color: #9ca3af;
+      color: var(--local-text-tertiary);
     }
   }
 }

@@ -218,6 +218,7 @@ const handleScroll = (event: Event) => {
 <style lang="scss" scoped>
 .search-container {
   box-sizing: border-box;
+  // background: var(--search-bg);
   width: 100%;
   padding: 20px;
   height: 100%;
@@ -231,25 +232,25 @@ const handleScroll = (event: Event) => {
   .search-title {
     font-size: 24px;
     font-weight: normal;
-    color: #333;
+    color: var(--search-title-color);
     margin: 0 0 8px 0;
 
     .keyword {
-      color: #507daf;
+      color: var(--search-keyword-color);
     }
   }
 
   .result-info {
     font-size: 12px;
-    color: #999;
+    color: var(--search-info-color);
   }
 }
 
 .song-list-wrapper {
-  background: #fff;
+  background: var(--search-content-bg);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--search-content-shadow);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -273,14 +274,14 @@ const handleScroll = (event: Event) => {
 
     h3 {
       font-size: 16px;
-      color: #333;
+      color: var(--search-empty-title);
       margin: 0 0 8px 0;
       font-weight: normal;
     }
 
     p {
       font-size: 12px;
-      color: #999;
+      color: var(--search-empty-text);
       margin: 0;
     }
   }
@@ -291,8 +292,8 @@ const handleScroll = (event: Event) => {
     .loading-spinner {
       width: 40px;
       height: 40px;
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #507daf;
+      border: 4px solid var(--search-loading-border);
+      border-top: 4px solid var(--search-loading-spinner);
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin: 0 auto 16px;
@@ -300,7 +301,7 @@ const handleScroll = (event: Event) => {
 
     p {
       font-size: 14px;
-      color: #666;
+      color: var(--search-loading-text);
       margin: 0;
     }
   }

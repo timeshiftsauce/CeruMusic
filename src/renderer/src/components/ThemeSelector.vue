@@ -1,54 +1,35 @@
+<!--
+  主题选择器组件 - 支持暗色模式切换
+-->
 <template>
   <div class="theme-selector">
-    <div class="theme-selector-trigger" @click="toggleDropdown">
-      <div class="current-theme">
-        <div class="theme-color-preview" :style="{ backgroundColor: currentThemeColor }"></div>
-        <span class="theme-name">{{ currentThemeName }}</span>
-      </div>
-      <svg
-        class="dropdown-icon"
-        :class="{ rotated: isDropdownOpen }"
-        viewBox="0 0 24 24"
-        width="16"
-        height="16"
+    <div class="theme-options">
+      <div
+        v-for="theme in themes"
+        :key="theme.name"
+        class="theme-option"
+        :class="{ active: currentTheme === theme.name }"
+        @click="selectTheme(theme.name)"
       >
-        <path d="M7 10l5 5 5-5z" fill="currentColor" />
-      </svg>
+        <div class="theme-preview" :style="{ backgroundColor: theme.color }"></div>
+        <span class="theme-label">{{ theme.label }}</span>
+      </div>
     </div>
 
-    <transition name="dropdown">
-      <div v-if="isDropdownOpen" class="theme-dropdown">
-        <div
-          v-for="theme in themes"
-          :key="theme.name"
-          class="theme-option"
-          :class="{ active: currentTheme === theme.name }"
-          @click="selectTheme(theme.name)"
-        >
-          <div class="theme-color-dot" :style="{ backgroundColor: theme.color }"></div>
-          <span class="theme-label">{{ theme.label }}</span>
-          <svg
-            v-if="currentTheme === theme.name"
-            class="check-icon"
-            viewBox="0 0 24 24"
-            width="16"
-            height="16"
-          >
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor" />
-          </svg>
-        </div>
-      </div>
-    </transition>
+    <div class="dark-mode-toggle">
+      <label class="toggle-switch">
+        <input type="checkbox" :checked="isDarkMode" @change="toggleDarkMode" />
+        <span class="slider"></span>
+        <span class="toggle-label">暗色模式</span>
+      </label>
+    </div>
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
 
-const isDropdownOpen = ref(false)
-const currentTheme = ref('default')
-
-// 基于现有主题文件的配置
+// 主题配置
 const themes = [
   { name: 'default', label: '默认', color: '#2ba55b' },
   { name: 'pink', label: '粉色', color: '#fc5e7e' },
@@ -57,209 +38,203 @@ const themes = [
   { name: 'orange', label: '橙色', color: '#fb9458' }
 ]
 
-const loadSavedTheme = () => {
-  const savedTheme = localStorage.getItem('selected-theme')
-  if (savedTheme && themes.some((t) => t.name === savedTheme)) {
-    currentTheme.value = savedTheme
-    applyTheme(savedTheme)
-  }
-}
+const currentTheme = ref('default')
+const isDarkMode = ref(false)
 
-const applyTheme = (themeName) => {
+// 应用主题
+const applyTheme = (themeName: string, darkMode: boolean = false) => {
   const documentElement = document.documentElement
 
-  // 移除之前的主题
+  // 移除之前的主题属性
   documentElement.removeAttribute('theme-mode')
+  documentElement.removeAttribute('data-theme')
 
-  // 应用新主题（如果不是默认主题）
+  // 应用主题色彩
   if (themeName !== 'default') {
     documentElement.setAttribute('theme-mode', themeName)
   }
 
-  // 保存到本地存储
-  localStorage.setItem('selected-theme', themeName)
-}
-
-const currentThemeColor = computed(() => {
-  const theme = themes.find((t) => t.name === currentTheme.value)
-  return theme ? theme.color : '#2ba55b'
-})
-
-const currentThemeName = computed(() => {
-  const theme = themes.find((t) => t.name === currentTheme.value)
-  return theme ? theme.label : '默认'
-})
-
-const toggleDropdown = () => {
-  isDropdownOpen.value = !isDropdownOpen.value
-}
-
-const selectTheme = (themeName) => {
-  if (themeName === currentTheme.value) {
-    isDropdownOpen.value = false
-    return
+  // 应用明暗模式
+  if (darkMode) {
+    documentElement.setAttribute('data-theme', 'dark')
+  } else {
+    documentElement.setAttribute('data-theme', 'light')
   }
 
-  currentTheme.value = themeName
-  applyTheme(themeName)
-  isDropdownOpen.value = false
+  // 保存到本地存储
+  localStorage.setItem('selected-theme', themeName)
+  localStorage.setItem('dark-mode', darkMode.toString())
 }
 
-const handleClickOutside = (event) => {
-  const themeSelector = event.target.closest('.theme-selector')
-  if (!themeSelector) {
-    isDropdownOpen.value = false
+// 选择主题
+const selectTheme = (themeName: string) => {
+  currentTheme.value = themeName
+  applyTheme(themeName, isDarkMode.value)
+}
+
+// 切换暗色模式
+const toggleDarkMode = () => {
+  isDarkMode.value = !isDarkMode.value
+  applyTheme(currentTheme.value, isDarkMode.value)
+}
+
+// 检测系统主题偏好
+const detectSystemTheme = () => {
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return true
+  }
+  return false
+}
+
+// 加载保存的设置
+const loadSavedSettings = () => {
+  const savedTheme = localStorage.getItem('selected-theme')
+  const savedDarkMode = localStorage.getItem('dark-mode')
+
+  if (savedTheme && themes.some((t) => t.name === savedTheme)) {
+    currentTheme.value = savedTheme
+  }
+
+  if (savedDarkMode !== null) {
+    isDarkMode.value = savedDarkMode === 'true'
+  } else {
+    // 如果没有保存的设置，检测系统偏好
+    isDarkMode.value = detectSystemTheme()
+  }
+
+  applyTheme(currentTheme.value, isDarkMode.value)
+}
+
+// 监听系统主题变化
+const setupSystemThemeListener = () => {
+  if (window.matchMedia) {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    mediaQuery.addEventListener('change', (e) => {
+      const savedDarkMode = localStorage.getItem('dark-mode')
+      // 如果用户没有手动设置暗色模式，则跟随系统主题
+      if (savedDarkMode === null) {
+        isDarkMode.value = e.matches
+        applyTheme(currentTheme.value, isDarkMode.value)
+      }
+    })
   }
 }
 
 onMounted(() => {
-  loadSavedTheme()
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+  setupSystemThemeListener()
+  loadSavedSettings()
 })
 </script>
 
 <style scoped>
 .theme-selector {
-  position: relative;
-  display: inline-block;
-  width: 200px;
+  padding: 16px;
+  background: var(--td-bg-color-container);
+  border-radius: var(--td-radius-medium);
+  border: 1px solid var(--td-border-level-1-color);
 }
 
-.theme-selector-trigger {
+.theme-options {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--td-bg-color-container, #ffffff);
-  border: 1px solid var(--td-component-border, #e2e8f0);
-  border-radius: var(--td-radius-medium, 6px);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 120px;
-}
-
-.theme-selector-trigger:hover {
-  background: var(--td-bg-color-container-hover, #f8fafc);
-  border-color: var(--td-brand-color-hover, #cbd5e1);
-}
-
-.current-theme {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.theme-color-preview {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid var(--td-bg-color-container, #ffffff);
-  box-shadow: 0 0 0 1px var(--td-component-border, #e2e8f0);
-}
-
-.theme-name {
-  font-size: 14px;
-  color: var(--td-text-color-primary, #1e293b);
-  font-weight: 500;
-}
-
-.dropdown-icon {
-  color: var(--td-text-color-secondary, #64748b);
-  transition: transform 0.2s ease;
-}
-
-.dropdown-icon.rotated {
-  transform: rotate(180deg);
-}
-
-.theme-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 4px;
-  background: var(--td-bg-color-container, #ffffff);
-  border: 1px solid var(--td-component-border, #e2e8f0);
-  border-radius: var(--td-radius-medium, 6px);
-  box-shadow: var(
-    --td-shadow-2,
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -1px rgba(0, 0, 0, 0.06)
-  );
-  z-index: 1000;
-  overflow: hidden;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .theme-option {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--td-radius-medium);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
 }
 
 .theme-option:hover {
-  background: var(--td-bg-color-container-hover, #f8fafc);
+  background: var(--td-bg-color-container-hover);
 }
 
 .theme-option.active {
-  background: var(--td-brand-color-light, #eff6ff);
-  color: var(--td-text-color-primary, #1e293b);
+  border-color: var(--td-brand-color);
+  background: var(--td-brand-color-light);
 }
 
-.theme-color-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid var(--td-bg-color-container, #ffffff);
-  box-shadow: 0 0 0 1px var(--td-component-border, #e2e8f0);
+.theme-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--td-radius-circle);
+  border: 2px solid var(--td-border-level-1-color);
 }
 
 .theme-label {
-  flex: 1;
-  font-size: 14px;
-  color: var(--td-text-color-primary, #1e293b);
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-weight: 500;
 }
 
-.check-icon {
-  color: var(--td-brand-color, #3b82f6);
+.dark-mode-toggle {
+  padding-top: 16px;
+  border-top: 1px solid var(--td-border-level-1-color);
 }
 
-/* 下拉动画 */
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all 0.2s ease;
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
 }
 
-.dropdown-enter-from {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.95);
+.toggle-switch input {
+  display: none;
 }
 
-.dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.95);
+.slider {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: var(--td-bg-color-component);
+  border-radius: 12px;
+  transition: background-color 0.2s ease;
+  border: 1px solid var(--td-border-level-1-color);
 }
 
-/* 响应式设计 */
-@media (max-width: 640px) {
-  .theme-selector-trigger {
-    min-width: 100px;
-    padding: 6px 10px;
-  }
+.slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--td-bg-color-container);
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: var(--td-shadow-1);
+}
 
-  .theme-name {
-    font-size: 13px;
-  }
+.toggle-switch input:checked + .slider {
+  background: var(--td-brand-color);
+}
 
-  .theme-option {
-    padding: 10px 14px;
-  }
+.toggle-switch input:checked + .slider::before {
+  transform: translateX(20px);
+}
+
+.toggle-label {
+  font-size: var(--td-font-size-body-medium);
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
+/* 暗色模式下的特殊样式 */
+:root[theme-mode='dark'] .theme-selector {
+  background: var(--td-bg-color-container);
+  border-color: var(--td-border-level-1-color);
+}
+
+:root[theme-mode='dark'] .theme-preview {
+  border-color: var(--td-border-level-2-color);
 }
 </style>

@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, toRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, toRaw } from 'vue'
 import {
   DownloadIcon,
   PlayCircleIcon,
@@ -432,6 +432,14 @@ onMounted(() => {
 
   // 加载歌单列表
   loadPlaylists()
+
+  // 监听歌单变化事件
+  window.addEventListener('playlist-updated', loadPlaylists)
+})
+
+onUnmounted(() => {
+  // 清理事件监听器
+  window.removeEventListener('playlist-updated', loadPlaylists)
 })
 </script>
 
@@ -456,10 +464,10 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 60px 1fr 200px 60px 80px;
   padding: 8px 20px;
-  background: #fafafa;
-  border-bottom: 1px solid #e9e9e9;
+  background: var(--song-list-header-bg);
+  border-bottom: 1px solid var(--song-list-header-border);
   font-size: 12px;
-  color: #999;
+  color: var(--song-list-header-text);
   flex-shrink: 0;
   height: 40px;
   box-sizing: border-box;
@@ -501,7 +509,7 @@ onMounted(() => {
 }
 
 .virtual-scroll-container {
-  background: #fff;
+  background: var(--song-list-content-bg);
   overflow-y: auto;
   position: relative;
   flex: 1;
@@ -522,24 +530,32 @@ onMounted(() => {
     display: grid;
     grid-template-columns: 60px 1fr 200px 60px 80px;
     padding: 8px 20px;
-    border-bottom: 1px solid #f5f5f5;
+    border-bottom: 1px solid var(--song-list-item-border);
     cursor: pointer;
     transition: background-color 0.2s ease;
     height: 64px;
 
     &:hover,
     &.is-hovered {
-      background: #f5f5f5;
+      background: var(--song-list-item-hover);
+
+      .col-title .song-info .song-title {
+        color: var(--song-list-title-hover);
+      }
+
+      .col-album .album-name {
+        color: var(--song-list-album-hover);
+      }
     }
 
     &.is-current {
-      background: #f0f7ff;
-      color: #507daf;
+      background: var(--song-list-item-current);
+      color: var(--song-list-btn-hover);
     }
 
     &.is-playing {
-      background: #e6f7ff;
-      color: #507daf;
+      background: var(--song-list-item-playing);
+      color: var(--song-list-btn-hover);
     }
 
     .col-index {
@@ -550,7 +566,7 @@ onMounted(() => {
 
       .track-number {
         font-size: 14px;
-        color: #999;
+        color: var(--song-list-track-number);
         font-variant-numeric: tabular-nums;
         width: 100%;
         text-align: center;
@@ -560,7 +576,7 @@ onMounted(() => {
         background: none;
         border: none;
         cursor: pointer;
-        color: #507daf;
+        color: var(--song-list-btn-hover);
         font-size: 16px;
         padding: 8px;
         border-radius: 50%;
@@ -573,8 +589,8 @@ onMounted(() => {
         font-style: none;
 
         &:hover {
-          background: rgba(80, 125, 175, 0.1);
-          color: #3a5d8f;
+          background: var(--song-list-btn-bg-hover);
+          color: var(--song-list-btn-hover);
         }
 
         i {
@@ -616,21 +632,18 @@ onMounted(() => {
 
         .song-title {
           font-size: 14px;
-          color: #333;
+          color: var(--song-list-title-color);
           margin-bottom: 4px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           line-height: 1.2;
-
-          &:hover {
-            color: #507daf;
-          }
+          transition: color 0.2s ease;
         }
 
         .song-artist {
           font-size: 12px;
-          color: #999;
+          color: var(--song-list-artist-color);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -640,8 +653,8 @@ onMounted(() => {
           gap: 4px;
 
           .quality-tag {
-            background: #fff7e6;
-            color: #fa8c16;
+            background: var(--song-list-quality-bg);
+            color: var(--song-list-quality-color);
             padding: 1px 4px;
             border-radius: 2px;
             font-size: 10px;
@@ -659,16 +672,13 @@ onMounted(() => {
 
       .album-name {
         font-size: 12px;
-        color: #999;
+        color: var(--song-list-album-color);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         width: 100%;
-
-        &:hover {
-          color: #507daf;
-          cursor: pointer;
-        }
+        transition: color 0.2s ease;
+        cursor: pointer;
       }
     }
 
@@ -682,7 +692,7 @@ onMounted(() => {
         background: none;
         border: none;
         cursor: pointer;
-        color: #ccc;
+        color: var(--song-list-btn-color);
         padding: 8px;
         border-radius: 50%;
         transition: all 0.2s;
@@ -693,8 +703,8 @@ onMounted(() => {
         justify-content: center;
 
         &:hover {
-          color: #507daf;
-          background: rgba(80, 125, 175, 0.1);
+          color: var(--song-list-btn-hover);
+          background: var(--song-list-btn-bg-hover);
         }
 
         i {
@@ -719,7 +729,7 @@ onMounted(() => {
 
         .duration {
           font-size: 12px;
-          color: #999;
+          color: var(--song-list-duration-color);
           font-variant-numeric: tabular-nums;
           min-width: 35px;
           text-align: center;
@@ -735,7 +745,7 @@ onMounted(() => {
             background: none;
             border: none;
             cursor: pointer;
-            color: #ccc;
+            color: var(--song-list-btn-color);
             padding: 6px;
             border-radius: 50%;
             transition: all 0.2s;
@@ -746,8 +756,8 @@ onMounted(() => {
             justify-content: center;
 
             &:hover {
-              color: #507daf;
-              background: rgba(80, 125, 175, 0.1);
+              color: var(--song-list-btn-hover);
+              background: var(--song-list-btn-bg-hover);
             }
 
             i {

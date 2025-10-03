@@ -543,8 +543,7 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 .list-container {
   box-sizing: border-box;
-  // background: #fafafa;
-  box-sizing: border-box;
+  // background: var(--list-bg-primary);
   width: 100%;
   padding: 20px;
   height: 100%;
@@ -557,10 +556,10 @@ onUnmounted(() => {
   }
 
   .scrollable-content {
-    background: #fff;
+    background: var(--list-content-bg);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--list-content-shadow);
     flex: 1;
     min-height: 0;
     display: flex;
@@ -580,8 +579,8 @@ onUnmounted(() => {
     .loading-spinner {
       width: 40px;
       height: 40px;
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #507daf;
+      border: 4px solid var(--list-loading-border);
+      border-top: 4px solid var(--list-loading-spinner);
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin: 0 auto 16px;
@@ -589,7 +588,7 @@ onUnmounted(() => {
 
     p {
       font-size: 14px;
-      color: #666;
+      color: var(--list-loading-text);
       margin: 0;
     }
   }
@@ -609,9 +608,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 1.5rem;
   padding: 1.5rem;
-  background: #fff;
+  background: var(--list-header-bg);
   border-radius: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--list-header-shadow);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.compact {
@@ -660,7 +659,7 @@ onUnmounted(() => {
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
+      background: var(--list-cover-overlay);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -690,7 +689,7 @@ onUnmounted(() => {
     .playlist-title {
       font-size: 1.5rem;
       font-weight: 600;
-      color: #111827;
+      color: var(--list-title-color);
       margin: 0 0 0.5rem 0;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -702,7 +701,7 @@ onUnmounted(() => {
 
     .playlist-author {
       font-size: 1rem;
-      color: #6b7280;
+      color: var(--list-author-color);
       margin: 0 0 0.5rem 0;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       opacity: 1;
@@ -719,7 +718,7 @@ onUnmounted(() => {
 
     .playlist-stats {
       font-size: 0.875rem;
-      color: #9ca3af;
+      color: var(--list-stats-color);
       margin: 0 0 1rem 0;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       opacity: 1;

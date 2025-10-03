@@ -228,14 +228,14 @@ onUnmounted(() => {
   margin-bottom: 2rem;
 
   h2 {
-    color: #111827;
+    color: var(--td-text-color-primary);
     margin-bottom: 0.5rem;
     font-size: 1.875rem;
     font-weight: 600;
   }
 
   p {
-    color: #6b7280;
+    color: var(--find-text-secondary);
     font-size: 1rem;
   }
 }
@@ -244,7 +244,7 @@ onUnmounted(() => {
   margin-bottom: 3rem;
 
   .section-title {
-    color: #111827;
+    color: var(--td-text-color-primary);
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 1.5rem;
@@ -293,12 +293,10 @@ onUnmounted(() => {
 
 .playlist-card {
   // 卡片样式
-  background: #fff;
+  background: var(--find-card-bg);
   border-radius: 1rem;
   overflow: hidden;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.06),
-    0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--find-card-shadow);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
@@ -306,9 +304,7 @@ onUnmounted(() => {
   // 现代化悬浮效果
   &:hover {
     transform: translateY(-4px) scale(1.02);
-    box-shadow:
-      0 8px 25px rgba(0, 0, 0, 0.12),
-      0 4px 10px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--find-card-shadow-hover);
 
     .playlist-cover::after {
       opacity: 1;
@@ -317,7 +313,7 @@ onUnmounted(() => {
     .playlist-info {
       backdrop-filter: blur(8px);
       background-color: var(--hover-bg-color);
-      color: #111827;
+      color: var(--find-text-primary);
       .playlist-title {
         color: var(--hover-text-color);
       }
@@ -377,7 +373,7 @@ onUnmounted(() => {
   .playlist-info {
     padding: 1.25rem 1rem;
     position: relative;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--find-card-info-bg);
 
     backdrop-filter: blur(4px);
     transition: all 0.3s ease;
@@ -385,7 +381,7 @@ onUnmounted(() => {
     .playlist-title {
       font-size: 1rem;
       font-weight: 600;
-      color: #1f2937;
+      color: var(--find-text-primary);
       margin-bottom: 0.5rem;
       line-height: 1.4;
       display: -webkit-box;
@@ -398,7 +394,7 @@ onUnmounted(() => {
 
     .playlist-desc {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: var(--find-text-secondary);
       margin-bottom: 0.75rem;
       line-height: 1.5;
       display: -webkit-box;
@@ -416,13 +412,13 @@ onUnmounted(() => {
       gap: 0.5rem;
       margin-top: auto; // 推到底部
       padding-top: 0.5rem;
-      border-top: 1px solid rgba(229, 231, 235, 0.5);
+      border-top: 1px solid var(--find-meta-border);
       transition: color 0.3s ease;
     }
 
     .play-count {
       font-size: 0.75rem;
-      color: #9ca3af;
+      color: var(--find-text-muted);
       display: flex;
       align-items: center;
       gap: 0.25rem;
@@ -437,9 +433,9 @@ onUnmounted(() => {
 
     .song-count {
       font-size: 0.75rem;
-      color: #9ca3af;
+      color: var(--find-text-muted);
       font-weight: 500;
-      background: rgba(156, 163, 175, 0.1);
+      background: var(--find-song-count-bg);
       padding: 0.125rem 0.5rem;
       border-radius: 0.375rem;
       transition: color 0.3s ease;
@@ -447,7 +443,7 @@ onUnmounted(() => {
 
     .playlist-author {
       font-size: 0.75rem;
-      color: #6b7280;
+      color: var(--find-text-secondary);
       font-style: italic;
       margin-top: 0.25rem;
       opacity: 0.8;
@@ -457,17 +453,17 @@ onUnmounted(() => {
 }
 
 .song-list {
-  background: #fff;
+  background: var(--find-song-bg);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--td-shadow-1);
 }
 
 .song-item {
   display: flex;
   align-items: center;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--find-border-color);
   cursor: pointer;
   transition: background-color 0.2s ease;
 
@@ -476,14 +472,14 @@ onUnmounted(() => {
   }
 
   &:hover {
-    background-color: #f9fafb;
+    background-color: var(--find-song-hover-bg);
   }
 
   .song-index {
     width: 2rem;
     text-align: center;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--find-text-secondary);
     font-weight: 500;
   }
 
@@ -494,19 +490,19 @@ onUnmounted(() => {
     .song-title {
       font-size: 0.875rem;
       font-weight: 500;
-      color: #111827;
+      color: var(--find-text-primary);
       margin-bottom: 0.25rem;
     }
 
     .song-artist {
       font-size: 0.75rem;
-      color: #6b7280;
+      color: var(--find-text-secondary);
     }
   }
 
   .song-duration {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: var(--find-text-secondary);
     margin-right: 1rem;
   }
 
