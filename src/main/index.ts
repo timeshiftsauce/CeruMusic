@@ -4,7 +4,6 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
-import musicService from './services/music'
 import pluginService from './services/plugin'
 import aiEvents from './events/ai'
 import './services/musicSdk/index'
@@ -268,10 +267,6 @@ ipcMain.handle('service-plugin-uninstallPlugin', async (_, pluginId): Promise<an
     console.error('Error uninstalling plugin:', error)
     return { error: error.message }
   }
-})
-
-ipcMain.handle('service-music-request', async (_, api, args) => {
-  return await musicService.request(api, args)
 })
 
 // 获取应用版本号

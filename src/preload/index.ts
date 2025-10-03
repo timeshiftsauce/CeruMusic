@@ -29,7 +29,6 @@ const api = {
   },
   // 音乐相关方法
   music: {
-    request: (api: string, args: any) => ipcRenderer.invoke('service-music-request', api, args),
     requestSdk: (api: string, args: any) =>
       ipcRenderer.invoke('service-music-sdk-request', api, args)
   },
