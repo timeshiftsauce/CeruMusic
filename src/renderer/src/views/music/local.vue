@@ -692,32 +692,48 @@ const handleNetworkPlaylistImport = async (input: string) => {
 
     // 获取歌单详情
     const load2 = MessagePlugin.loading('正在获取歌单信息...')
-    let detailResult: any
-    try {
-      detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
-        source: importPlatformType.value,
-        id: playlistId,
-        page: 1
-      })) as any
-    } catch {
-      MessagePlugin.error(`获取${platformName}歌单详情失败：歌曲信息可能有误`)
-      load2.then((res) => res.close())
-      return
+
+    const getListDetail = async (page: number) => {
+      let detailResult: any
+      try {
+        detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
+          source: importPlatformType.value,
+          id: playlistId,
+          page: page
+        })) as any
+      } catch {
+        MessagePlugin.error(`获取${platformName}歌单详情失败：歌曲信息可能有误`)
+        load2.then((res) => res.close())
+        return
+      }
+
+      if (detailResult.error) {
+        MessagePlugin.error(`获取${platformName}歌单详情失败：` + detailResult.error)
+        load2.then((res) => res.close())
+        return
+      }
+
+      return detailResult
     }
 
-    if (detailResult.error) {
-      MessagePlugin.error(`获取${platformName}歌单详情失败：` + detailResult.error)
-      load2.then((res) => res.close())
-      return
-    }
-
+    let page: number = 1
+    const detailResult = await getListDetail(page)
     const playlistInfo = detailResult.info
-    const songs = detailResult.list || []
+    let songs: Array<any> = detailResult.list || []
 
     if (songs.length === 0) {
       MessagePlugin.warning('该歌单没有歌曲')
       load2.then((res) => res.close())
       return
+    }
+
+    while (true) {
+      page++
+      const { list: songsList } = await getListDetail(page)
+      if (!(songsList && songsList.length)) {
+        break
+      }
+      songs = songs.concat(songsList)
     }
 
     // 处理导入结果
