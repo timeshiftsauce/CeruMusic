@@ -64,6 +64,9 @@ const applyTheme = (themeName: string, darkMode: boolean = false) => {
   // 保存到本地存储
   localStorage.setItem('selected-theme', themeName)
   localStorage.setItem('dark-mode', darkMode.toString())
+
+  // 通知全局（App.vue）同步 Naive UI 主题
+  window.dispatchEvent(new CustomEvent('theme-changed'))
 }
 
 // 选择主题

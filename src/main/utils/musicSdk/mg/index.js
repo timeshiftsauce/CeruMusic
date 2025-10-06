@@ -5,10 +5,10 @@ import pic from './pic'
 import lyric from './lyric'
 import hotSearch from './hotSearch'
 import comment from './comment'
-// import tipSearch from './tipSearch'
+import tipSearch from './tipSearch'
 
 const mg = {
-  // tipSearch,
+  tipSearch,
   songList,
   musicSearch,
   leaderboard,

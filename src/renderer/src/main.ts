@@ -1,20 +1,25 @@
+// 基础样式
 import './assets/base.css'
 import 'animate.css'
-
-// 引入组件库的少量全局样式变量
-// import 'tdesign-vue-next/es/style/index.css' //tdesign 组件样式
-
 // 引入iconfont图标样式
 import './assets/icon_font/iconfont.css'
 import './assets/icon_font/iconfont.js'
-
+// vue
 import App from './App.vue'
-
 import { createApp } from 'vue'
 const app = createApp(App)
-import { createPinia } from 'pinia'
+// router
 import router from './router'
+// pinia
+import { createPinia } from 'pinia'
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
+// pinia
+const pinia = createPinia()
+pinia.use(piniaPluginPersistedstate)
+app.use(pinia)
+//router
 app.use(router)
-app.use(createPinia())
+
+//app
 app.mount('#app')

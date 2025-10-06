@@ -24,3 +24,15 @@ export function request<T extends keyof MainApi>(
   }
 }
 ipcMain.handle('service-music-sdk-request', request)
+
+// 处理搜索联想请求
+ipcMain.handle('service-music-tip-search', async (_, source, keyword) => {
+  try {
+    if (!source) throw new Error('请配置音源')
+    const Api = main(source)
+    return await Api.tipSearch({ keyword })
+  } catch (error: any) {
+    console.error('搜索联想错误:', error)
+    return { result: { songs: [], order: ['songs'] } }
+  }
+})

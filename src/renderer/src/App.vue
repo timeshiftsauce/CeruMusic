@@ -10,9 +10,10 @@
   -->
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useAutoUpdate } from './composables/useAutoUpdate'
+import { NConfigProvider, darkTheme, NGlobalStyle } from 'naive-ui'
 
 const userInfo = LocalUserDetailStore()
 const { checkForUpdates } = useAutoUpdate()
@@ -27,6 +28,8 @@ onMounted(() => {
   userInfo.init()
   setupSystemThemeListener()
   loadSavedTheme()
+  syncNaiveTheme()
+  window.addEventListener('theme-changed', () => syncNaiveTheme())
 
   // 应用启动后延迟3秒检查更新，避免影响启动速度
   setTimeout(() => {
@@ -42,6 +45,31 @@ const themes = [
   { name: 'cyan', label: '青色', color: '#3ac2b8' },
   { name: 'orange', label: '橙色', color: '#fb9458' }
 ]
+
+const naiveTheme = ref<any>(null)
+const themeOverrides = ref<any>({})
+
+function syncNaiveTheme() {
+  const docEl = document.documentElement
+  const savedDarkMode = localStorage.getItem('dark-mode')
+  const isDark = savedDarkMode === 'true'
+  naiveTheme.value = isDark ? darkTheme : null
+
+  const computed = getComputedStyle(docEl)
+  const primary = (computed.getPropertyValue('--td-brand-color') || '').trim()
+
+  const savedThemeName = localStorage.getItem('selected-theme') || 'default'
+  const fallback = themes.find((t) => t.name === savedThemeName)?.color || '#2ba55b'
+  const mainColor = primary || fallback
+
+  themeOverrides.value = {
+    common: {
+      primaryColor: mainColor,
+      primaryColorHover: mainColor,
+      primaryColorPressed: mainColor
+    }
+  }
+}
 
 const loadSavedTheme = () => {
   const savedTheme = localStorage.getItem('selected-theme')
@@ -86,6 +114,9 @@ const applyTheme = (themeName, darkMode = false) => {
   // 保存到本地存储
   localStorage.setItem('selected-theme', themeName)
   localStorage.setItem('dark-mode', darkMode.toString())
+
+  // 同步 Naive UI 主题
+  syncNaiveTheme()
 }
 
 // 检测系统主题偏好
@@ -113,20 +144,23 @@ const setupSystemThemeListener = () => {
 </script>
 
 <template>
-  <div class="page">
-    <router-view v-slot="{ Component }">
-      <Transition
-        :enter-active-class="`animate__animated animate__fadeIn  pagesApp`"
-        :leave-active-class="`animate__animated animate__fadeOut pagesApp`"
-      >
-        <component :is="Component" />
-      </Transition>
-    </router-view>
-    <GlobalAudio />
-    <FloatBall />
-    <PluginNoticeDialog />
-    <UpdateProgress />
-  </div>
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
+    <NGlobalStyle />
+    <div class="page">
+      <router-view v-slot="{ Component }">
+        <Transition
+          :enter-active-class="`animate__animated animate__fadeIn  pagesApp`"
+          :leave-active-class="`animate__animated animate__fadeOut pagesApp`"
+        >
+          <component :is="Component" />
+        </Transition>
+      </router-view>
+      <GlobalAudio />
+      <FloatBall />
+      <PluginNoticeDialog />
+      <UpdateProgress />
+    </div>
+  </NConfigProvider>
 </template>
 <style>
 .pagesApp {

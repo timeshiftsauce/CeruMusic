@@ -30,7 +30,7 @@ const api = {
   // 音乐相关方法
   music: {
     requestSdk: (api: string, args: any) =>
-      ipcRenderer.invoke('service-music-sdk-request', api, args)
+      ipcRenderer.invoke('service-music-sdk-request', api, args),
   },
   //音源插件
   plugins: {

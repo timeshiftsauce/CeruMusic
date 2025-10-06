@@ -6,6 +6,7 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
+import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
 
 export default defineConfig({
@@ -37,13 +38,20 @@ export default defineConfig({
             library: 'vue-next'
           })
         ],
+        imports: [
+          'vue',
+          {
+            'naive-ui': ['useDialog', 'useMessage', 'useNotification', 'useLoadingBar']
+          }
+        ],
         dts: true
       }),
       Components({
         resolvers: [
           TDesignResolver({
             library: 'vue-next'
-          })
+          }),
+          NaiveUiResolver()
         ],
         dts: true
       })
