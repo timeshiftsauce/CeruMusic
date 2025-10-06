@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, toRaw } from 'vue'
+import { ref, computed, watch, toRaw } from 'vue'
 import { searchValue } from '@renderer/store/search'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
+import { useRouter } from 'vue-router'
 
 interface MusicItem {
   id: number
@@ -32,14 +33,22 @@ const totalItems = ref(0)
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
 const search = searchValue()
-
-onMounted(async () => {
+const router = useRouter()
+onActivated(async () => {
   const localUserStore = LocalUserDetailStore()
+  console.log('sqjsqj', search.getValue)
 
+  if (search.getValue.trim() === '') {
+    console.log('跳转')
+    router.push({ name: 'find' })
+  }
   watch(
     search,
     async () => {
+      if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
       keyword.value = search.getValue
+      console.log('search', search)
+
       await performSearch(true)
     },
     { immediate: true }

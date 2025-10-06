@@ -4,10 +4,10 @@ import songList from './songList'
 import musicSearch from './musicSearch'
 import hotSearch from './hotSearch'
 import comment from './comment'
-// import tipSearch from './tipSearch'
+import tipSearch from './tipSearch'
 
 const tx = {
-  // tipSearch,
+  tipSearch,
   leaderboard,
   songList,
   musicSearch,

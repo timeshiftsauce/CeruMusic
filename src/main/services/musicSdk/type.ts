@@ -100,3 +100,6 @@ export interface DownloadSingleSongArgs extends GetMusicUrlArg {
   path?: string
   tagWriteOptions?: TagWriteOptions
 }
+
+// 搜索联想结果的类型定义
+export type TipSearchResult = string[]

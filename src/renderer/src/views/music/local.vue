@@ -1320,7 +1320,7 @@ onMounted(() => {
                       : importPlatformType === 'kw'
                         ? '支持链接或ID：http://www.kuwo.cn/playlist_detail/123456789 或 123456789'
                         : importPlatformType === 'kg'
-                          ? '支持链接或ID：https://www.kugou.com/yy/special/single/123456789 或 123456789'
+                          ? '手机链接或酷狗码：https://www.kugou.com/yy/special/single/123456789 或 123456789'
                           : importPlatformType === 'mg'
                             ? '支持链接或ID：https://music.migu.cn/v3/music/playlist/123456789 或 123456789'
                             : '请输入歌单链接或ID'
@@ -1369,11 +1369,11 @@ onMounted(() => {
                   <li>其他包含ID的酷我音乐链接格式</li>
                 </ul>
                 <ul v-else-if="importPlatformType === 'kg'" class="tip-list">
+                  <li>酷狗码（推荐）：123456789</li>
                   <li>完整链接：https://www.kugou.com/yy/special/single/123456789</li>
                   <li>手机版链接：https://m.kugou.com/songlist/gcid_3z9vj0yqz4bz00b</li>
                   <li>旧版手机链接：https://m.kugou.com/playlist?id=123456789</li>
                   <li>参数链接：https://www.kugou.com/playlist?specialid=123456789</li>
-                  <li>纯数字ID：123456789</li>
                 </ul>
                 <ul v-else-if="importPlatformType === 'mg'" class="tip-list">
                   <li>完整链接：https://music.migu.cn/v3/music/playlist/123456789</li>

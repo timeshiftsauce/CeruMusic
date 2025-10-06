@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
+import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { onMounted, ref, watchEffect, computed } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter } from 'vue-router'
-import { searchValue } from '@renderer/store/search'
+import { useSearchStore } from '@renderer/store'
 
 onMounted(() => {
   const LocalUserDetail = LocalUserDetailStore()
@@ -128,18 +129,17 @@ const goForward = (): void => {
 
 // 搜索相关
 const keyword = ref('')
+const SearchStore = useSearchStore()
+const inputRef = ref<any>(null)
 
 // 搜索类型：1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单
 // const searchType = ref(1)
 
 // 处理搜索事件
 const handleSearch = async () => {
-  if (!keyword.value.trim()) return
-  const useSearch = searchValue()
+  if (!SearchStore.getValue.trim()) return
   // 重新设置搜索关键字
   try {
-    // 跳转到搜索结果页面，并传递搜索结果和关键词
-    useSearch.setValue(keyword.value.trim()) // 设置搜索关键字
     router.push({
       path: '/home/search'
     })
@@ -150,6 +150,21 @@ const handleSearch = async () => {
 
 // 处理按键事件，按下回车键时触发搜索
 const handleKeyDown = () => {
+  handleSearch()
+  // 回车后取消输入框焦点
+  inputRef.value?.blur?.()
+}
+
+// 监听输入变化，更新SearchStore
+watchEffect(() => {
+  SearchStore.setValue(keyword.value)
+})
+
+// 处理搜索建议选择
+const handleSuggestionSelect = (suggestion: any, _type: any) => {
+  console.log(111)
+
+  keyword.value = suggestion
   handleSearch()
 }
 </script>
@@ -227,10 +242,13 @@ const handleKeyDown = () => {
                   </div>
                 </transition>
                 <t-input
+                  ref="inputRef"
                   v-model="keyword"
                   placeholder="搜索音乐、歌手"
                   style="width: 100%"
                   @enter="handleKeyDown"
+                  @focus="SearchStore.setFocus(true)"
+                  @blur="SearchStore.setFocus(false)"
                 >
                   <template #suffix>
                     <t-button
@@ -244,6 +262,7 @@ const handleKeyDown = () => {
                     </t-button>
                   </template>
                 </t-input>
+                <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
 
               <TitleBarControls></TitleBarControls>
