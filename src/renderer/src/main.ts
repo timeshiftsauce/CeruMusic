@@ -5,21 +5,23 @@ import 'animate.css'
 import './assets/icon_font/iconfont.css'
 import './assets/icon_font/iconfont.js'
 // vue
+
 import App from './App.vue'
 import { createApp } from 'vue'
-const app = createApp(App)
 // router
 import router from './router'
 // pinia
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
+// 挂载
+const app = createApp(App)
 // pinia
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 app.use(pinia)
-//router
+// router
 app.use(router)
 
-//app
+// app
 app.mount('#app')

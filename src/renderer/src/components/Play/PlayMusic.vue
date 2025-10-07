@@ -240,8 +240,8 @@ const playSong = async (song: SongList) => {
 }
 provide('PlaySong', playSong)
 // 歌曲信息
-// const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
-const playMode = ref(PlayMode.SEQUENCE)
+const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
+// const playMode = ref(PlayMode.SEQUENCE)
 
 // 歌曲加载状态
 const isLoadingSong = ref(false)
@@ -488,8 +488,12 @@ onMounted(async () => {
           console.error('获取上次播放歌曲URL失败:', error)
         }
       } else {
-        // 如果当前正在播放，设置状态为播放中
-        mediaSessionController.updatePlaybackState('playing')
+        // 同步实际播放状态，避免误写为 playing
+        if (Audio.value.audio) {
+          mediaSessionController.updatePlaybackState(
+            Audio.value.audio.paused ? 'paused' : 'playing'
+          )
+        }
       }
     }
   }
@@ -633,6 +637,8 @@ const handlePlay = async () => {
     if (startResult && typeof startResult.then === 'function') {
       await startResult
     }
+    // 播放已开始后，同步 SMTC 状态
+    mediaSessionController.updatePlaybackState('playing')
   } catch (error) {
     console.error('播放失败:', error)
     MessagePlugin.error('播放失败，请重试')
@@ -646,6 +652,8 @@ const handlePause = async () => {
     if (stopResult && typeof stopResult.then === 'function') {
       await stopResult
     }
+    // 暂停后，同步 SMTC 状态
+    mediaSessionController.updatePlaybackState('paused')
   }
 }
 
@@ -887,7 +895,7 @@ watch(showFullPlay, (val) => {
 
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
-            <t-badge :count="list.length" :max-count="99" color="#aaa">
+            <n-badge :value="list.length" :max="99" color="#bbb">
               <t-button
                 class="control-btn"
                 shape="circle"
@@ -896,7 +904,7 @@ watch(showFullPlay, (val) => {
               >
                 <liebiao style="width: 1.5em; height: 1.5em" />
               </t-button>
-            </t-badge>
+            </n-badge>
           </t-tooltip>
         </div>
       </div>

@@ -128,7 +128,6 @@ const goForward = (): void => {
 }
 
 // 搜索相关
-const keyword = ref('')
 const SearchStore = useSearchStore()
 const inputRef = ref<any>(null)
 
@@ -155,16 +154,9 @@ const handleKeyDown = () => {
   inputRef.value?.blur?.()
 }
 
-// 监听输入变化，更新SearchStore
-watchEffect(() => {
-  SearchStore.setValue(keyword.value)
-})
-
 // 处理搜索建议选择
 const handleSuggestionSelect = (suggestion: any, _type: any) => {
-  console.log(111)
-
-  keyword.value = suggestion
+  SearchStore.setValue(suggestion)
   handleSearch()
 }
 </script>
@@ -243,7 +235,7 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
                 </transition>
                 <t-input
                   ref="inputRef"
-                  v-model="keyword"
+                  v-model="SearchStore.value"
                   placeholder="搜索音乐、歌手"
                   style="width: 100%"
                   @enter="handleKeyDown"

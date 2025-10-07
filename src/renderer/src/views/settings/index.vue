@@ -20,6 +20,7 @@ import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettin
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
+import { playSetting as usePlaySetting } from '@renderer/store/playSetting'
 import { useSettingsStore } from '@renderer/store/Settings'
 const Store = LocalUserDetailStore()
 const { userInfo } = storeToRefs(Store)
@@ -27,6 +28,9 @@ const { userInfo } = storeToRefs(Store)
 // 设置存储
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
+
+const playSettingStore = usePlaySetting()
+const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingStore)
 
 // 当前选择的设置分类
 const activeCategory = ref<string>('appearance')
@@ -102,9 +106,9 @@ const settingsCategories = [
   },
   {
     key: 'playlist',
-    label: '播放列表',
+    label: '播放设置',
     icon: PlayCircleIcon,
-    description: '播放列表管理和相关设置'
+    description: '播放列表，歌词管理和相关设置'
   },
   {
     key: 'plugins',
@@ -485,11 +489,49 @@ const getTagOptionsStatus = () => {
               </div>
             </div>
 
-            <!-- 播放列表设置 -->
+            <!-- 播放设置 -->
             <div v-else-if="activeCategory === 'playlist'" key="playlist" class="settings-section">
               <div class="setting-group">
                 <h3>播放列表管理</h3>
                 <PlaylistSettings />
+              </div>
+
+              <!-- 播放显示 -->
+              <div class="setting-group">
+                <h3>全屏播放-性能优化</h3>
+
+                <div class="setting-item">
+                  <div class="item-info">
+                    <div class="item-title">跳动歌词</div>
+                    <div class="item-desc">使用弹簧引擎效果跳动歌词、占用更高的性能</div>
+                  </div>
+                  <t-switch
+                    v-model="isJumpLyric"
+                    @change="playSettingStore.setIsDumpLyric(isJumpLyric)"
+                  />
+                </div>
+
+                <div class="setting-item">
+                  <div class="item-info">
+                    <div class="item-title">背景动画</div>
+                    <div class="item-desc">启用布朗运动背景动画、占用更高的性能</div>
+                  </div>
+                  <t-switch
+                    v-model="bgPlaying"
+                    @change="playSettingStore.setBgPlaying(bgPlaying)"
+                  />
+                </div>
+
+                <div class="setting-item">
+                  <div class="item-info">
+                    <div class="item-title">音频可视化</div>
+                    <div class="item-desc">显示实时频谱/波形可视化、占用更高的性能</div>
+                  </div>
+                  <t-switch
+                    v-model="isAudioVisualizer"
+                    @change="playSettingStore.setIsAudioVisualizer(isAudioVisualizer)"
+                  />
+                </div>
               </div>
             </div>
 
@@ -609,6 +651,23 @@ const getTagOptionsStatus = () => {
               />
               <div style="margin-top: 20px" class="setting-group">
                 <MusicCache ref="musicCacheRef" @cache-cleared="handleCacheCleared" />
+              </div>
+
+              <!-- 缓存策略 -->
+              <div class="setting-group">
+                <h3>缓存策略</h3>
+                <div class="setting-item">
+                  <div class="item-info">
+                    <div class="item-title">自动缓存音乐</div>
+                    <div class="item-desc">播放时自动读取/写入缓存，加速后续播放</div>
+                  </div>
+                  <t-switch
+                    v-model="settings.autoCacheMusic"
+                    @change="
+                      settingsStore.updateSettings({ autoCacheMusic: settings.autoCacheMusic })
+                    "
+                  />
+                </div>
               </div>
 
               <!-- 标签写入设置 -->
@@ -1939,5 +1998,34 @@ const getTagOptionsStatus = () => {
 
   // IE/Edge
   -ms-overflow-style: none;
+}
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--settings-feature-border);
+  background: var(--settings-feature-bg);
+  border-radius: 0.5rem;
+  margin-top: 0.75rem;
+
+  .item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+
+    .item-title {
+      font-weight: 600;
+      color: var(--settings-text-primary);
+      font-size: 0.95rem;
+      line-height: 1.2;
+    }
+
+    .item-desc {
+      color: var(--settings-text-secondary);
+      font-size: 0.8rem;
+      line-height: 1.2;
+    }
+  }
 }
 </style>

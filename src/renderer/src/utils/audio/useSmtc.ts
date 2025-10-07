@@ -99,6 +99,15 @@ class MediaSessionController {
     // 只设置媒体会话动作处理器，不自动监听音频事件
     // 让应用层手动控制播放状态更新，避免循环调用
     this.setupMediaSessionActionHandlers()
+
+    // 初始同步播放状态，确保组件重挂载后 UI 与实际状态一致
+    try {
+      if (this.audioElement) {
+        navigator.mediaSession.playbackState = this.audioElement.paused ? 'paused' : 'playing'
+      }
+    } catch (error) {
+      console.warn('Failed to sync initial playback state:', error)
+    }
   }
 
   /**

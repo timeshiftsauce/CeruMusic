@@ -21,12 +21,33 @@ export default {
     })
   },
   handleResult(rawData) {
-    return rawData.map((info) => `${info.name} - ${info.singer}`)
+    let list = {
+      order: [],
+      songs: [],
+      artists: [],
+      albums: []
+    }
+    if (rawData.song.count > 0) {
+      list.order.push('songs')
+    }
+    if (rawData.singer.count > 0) {
+      list.order.push('artists')
+    }
+    if (rawData.album.count > 0) {
+      list.order.push('albums')
+    }
+    list.songs = rawData.song.itemlist.map((info) => ({
+      name: info.name,
+      artist: { name: info.singer }
+    }))
+    list.artists = rawData.singer.itemlist.map((info) => ({ name: info.name }))
+    list.albums = rawData.album.itemlist.map((info) => ({ name: info.name }))
+    return list
   },
   cancelTipSearch() {
     if (this.requestObj && this.requestObj.cancelHttp) this.requestObj.cancelHttp()
   },
   async search(str) {
-    return this.tipSearch(str).then((result) => this.handleResult(result.song.itemlist))
+    return this.tipSearch(str).then((result) => this.handleResult(result))
   }
 }

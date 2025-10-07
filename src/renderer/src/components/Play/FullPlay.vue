@@ -1,8 +1,4 @@
-<!-- eslint-disable vue/require-toggle-inside-transition -->
 <script lang="ts" setup>
-import TitleBarControls from '../TitleBarControls.vue'
-import AudioVisualizer from './AudioVisualizer.vue'
-// import ShaderBackground from './ShaderBackground.vue'
 import {
   BackgroundRender,
   LyricPlayer,
@@ -24,6 +20,11 @@ import {
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
 import _ from 'lodash'
 import { storeToRefs } from 'pinia'
+
+// 全局播放模式设置
+import { usePlaySettingStore } from '@renderer/store'
+
+const playSetting = usePlaySettingStore()
 
 interface Props {
   show?: boolean
@@ -281,6 +282,12 @@ const lightMainColor = computed(() => {
   // 如果解析失败，返回默认的偏白色
   return 'rgba(255, 255, 255, 0.9)'
 })
+const lyricHeight = computed(() => {
+  return playSetting.getisJumpLyric ? '100%' : '200%'
+})
+const lyricTranslateY = computed(() => {
+  return playSetting.getisJumpLyric ? '0' : '-25%'
+})
 </script>
 
 <template>
@@ -292,7 +299,7 @@ const lightMainColor = computed(() => {
       :album-is-video="false"
       :fps="30"
       :flow-speed="4"
-      :has-lyric="state.lyricLines.length > 10"
+      :has-lyric="state.lyricLines.length > 10 && playSetting.getBgPlaying"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
     />
     <!-- 全屏按钮 -->
@@ -356,8 +363,8 @@ const lightMainColor = computed(() => {
           :lyric-lines="props.show ? state.lyricLines : []"
           :current-time="state.currentTime"
           class="lyric-player"
-          :enable-spring="true"
-          :enable-scale="true"
+          :enable-spring="playSetting.getisJumpLyric"
+          :enable-scale="playSetting.getisJumpLyric"
           @line-click="
             (e) => {
               if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
@@ -368,7 +375,10 @@ const lightMainColor = computed(() => {
       </div>
     </div>
     <!-- 音频可视化组件 -->
-    <div v-if="props.show && coverImage" class="audio-visualizer-container">
+    <div
+      v-if="props.show && coverImage && playSetting.getIsAudioVisualizer"
+      class="audio-visualizer-container"
+    >
       <AudioVisualizer
         :show="props.show && Audio.isPlay"
         :height="70"
@@ -693,8 +703,8 @@ const lightMainColor = computed(() => {
 
         // bottom: max(2vw, 29px);
 
-        height: 100%;
-        // transform: translateY(-25%);
+        height: v-bind(lyricHeight);
+        transform: translateY(v-bind(lyricTranslateY));
 
         * [class^='lyricMainLine'] {
           font-weight: 600 !important;

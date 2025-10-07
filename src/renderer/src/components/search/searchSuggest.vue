@@ -40,9 +40,9 @@
                 v-for="(suggestItem, suggestIndex) in searchSuggestData[item]"
                 :key="suggestIndex"
                 class="suggest-item"
-                @click="emit('toSearch', suggestItem, item)"
+                @click="emit('toSearch', suggestItem.name, item)"
               >
-                <n-text class="name">{{ suggestItem }}</n-text>
+                <n-text class="name">{{ suggestItem.name }}</n-text>
                 <n-text v-if="suggestItem?.artist" class="artist" depth="3">
                   {{ suggestItem.artist.name }}
                 </n-text>
