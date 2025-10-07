@@ -224,6 +224,26 @@ async function updateTextColor() {
 // 监听封面图片变化
 watch(() => actualCoverImage.value, updateTextColor, { immediate: true })
 
+// 在全屏播放显示时阻止系统息屏
+const blockerActive = ref(false)
+watch(
+  () => props.show,
+  async (visible) => {
+    try {
+      if (visible && !blockerActive.value) {
+        await (window as any)?.api?.powerSaveBlocker?.start?.()
+        blockerActive.value = true
+      } else if (!visible && blockerActive.value) {
+        await (window as any)?.api?.powerSaveBlocker?.stop?.()
+        blockerActive.value = false
+      }
+    } catch (e) {
+      console.error('powerSaveBlocker 切换失败:', e)
+    }
+  },
+  { immediate: true }
+)
+
 // 组件挂载时初始化
 onMounted(() => {
   updateTextColor()
@@ -231,7 +251,14 @@ onMounted(() => {
 })
 
 // 组件卸载前清理订阅
-onBeforeUnmount(() => {
+onBeforeUnmount(async () => {
+  // 组件卸载时确保恢复系统息屏
+  if (blockerActive.value) {
+    try {
+      await (window as any)?.api?.powerSaveBlocker?.stop?.()
+    } catch {}
+    blockerActive.value = false
+  }
   // 取消订阅以防止内存泄漏
   if (unsubscribeTimeUpdate.value) {
     unsubscribeTimeUpdate.value()
