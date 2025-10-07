@@ -2,6 +2,7 @@ import mitt from 'mitt'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useSettingsStore } from '@renderer/store/Settings'
 
 // 事件类型定义
 type PlaylistEvents = {
@@ -37,6 +38,9 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const LocalUserDetail = LocalUserDetailStore()
     // 通过统一的request方法获取真实的播放URL
     let quality = LocalUserDetail.userSource.quality as string
+    // 读取设置：是否启用缓存
+    const settingsStore = useSettingsStore()
+    const isCache = settingsStore.settings.autoCacheMusic ?? true
 
     // 检查是否为特殊音质（高清臻音、全景环绕或超清母带）
     const isSpecialQuality = ['hires', 'atmos', 'master'].includes(quality)
@@ -49,7 +53,8 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
           pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
           source: song.source,
           songInfo: song as any,
-          quality
+          quality,
+          isCache
         })
 
         // 如果成功获取特殊音质链接，直接返回
@@ -82,7 +87,8 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
       source: song.source,
       songInfo: song as any,
-      quality
+      quality,
+      isCache
     })
 
     console.log(urlData)
@@ -118,7 +124,7 @@ export async function addToPlaylistAndPlay(
       await playResult
     }
 
-    await MessagePlugin.success('已添加到播放列表并开始播放')
+    // await MessagePlugin.success('已添加到播放列表并开始播放')
   } catch (error: any) {
     console.error('播放失败:', error)
     if (error.message) {

@@ -10,8 +10,6 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
 ![image-20251003173654569](assets/image-20251003173654569.png)
 
-
-
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=timeshiftsauce/CeruMusic&type=Date)](https://www.star-history.com/#timeshiftsauce/CeruMusic&Date)
@@ -215,10 +213,8 @@ CeruMuisc/
     ├── tsconfig.web.json
     └── yarn.lock
 ```
+
 </details>
-
-
-
 
 ## 主要功能
 

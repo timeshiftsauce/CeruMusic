@@ -16,11 +16,28 @@ export default {
       }
     )
     return this.requestObj.then((body) => {
-      return body[0].RecordDatas
+      return body
     })
   },
   handleResult(rawData) {
-    return rawData.map((info) => info.HintInfo)
+    let list = {
+      order: [],
+      songs: [],
+      albums: []
+    }
+    if (rawData[0].RecordCount > 0) {
+      list.order.push('songs')
+    }
+    if (rawData[2].RecordCount > 0) {
+      list.order.push('albums')
+    }
+    list.songs = rawData[0].RecordDatas.map((info) => ({
+      name: info.HintInfo
+    }))
+    list.albums = rawData[2].RecordDatas.map((info) => ({
+      name: info.HintInfo
+    }))
+    return list
   },
   async search(str) {
     return this.tipSearchBySong(str).then((result) => this.handleResult(result))

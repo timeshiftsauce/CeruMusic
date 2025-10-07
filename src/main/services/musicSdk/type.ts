@@ -39,6 +39,7 @@ export interface GetMusicUrlArg {
   pluginId: string
   songInfo: MusicItem
   quality: string
+  isCache?: boolean
 }
 
 export interface GetMusicPicArg {

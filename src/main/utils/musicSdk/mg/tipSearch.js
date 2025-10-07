@@ -8,7 +8,8 @@ export default {
   tipSearchBySong(str) {
     this.cancelTipSearch()
     this.requestObj = createHttpFetch(
-      `https://music.migu.cn/v3/api/search/suggest?keyword=${encodeURIComponent(str)}`,
+      //https://app.u.nf.migu.cn/pc/resource/content/tone_search_suggest/v1.0?text=%E5%90%8E
+      `https://app.u.nf.migu.cn/pc/resource/content/tone_search_suggest/v1.0?text=${encodeURIComponent(str)}`,
       {
         headers: {
           referer: 'https://music.migu.cn/v3'
@@ -16,11 +17,29 @@ export default {
       }
     )
     return this.requestObj.then((body) => {
-      return body.songs
+      return body
     })
   },
   handleResult(rawData) {
-    return rawData.map((info) => `${info.name} - ${info.singerName}`)
+    let list = {
+      order: [],
+      songs: [],
+      artists: []
+    }
+    if (rawData.songList.length > 0) {
+      list.order.push('songs')
+    }
+    if (rawData.singerList.length > 0) {
+      list.order.push('artists')
+    }
+    list.songs = rawData.songList.map((info) => ({
+      name: info.songName
+    }))
+    list.artists = rawData.singerList.map((info) => ({
+      name: info.singerName
+    }))
+    console.log(JSON.stringify(list))
+    return list
   },
   async search(str) {
     return this.tipSearchBySong(str).then((result) => this.handleResult(result))

@@ -9,6 +9,7 @@ export interface TagWriteOptions {
 
 export interface SettingsState {
   showFloatBall: boolean
+  autoCacheMusic?: boolean
   directories?: {
     cacheDir: string
     downloadDir: string
@@ -19,32 +20,56 @@ export interface SettingsState {
 export const useSettingsStore = defineStore(
   'settings',
   () => {
-    // 从本地存储加载设置，如果没有则使用默认值
+    // 默认设置
+    const defaultSettings: SettingsState = {
+      showFloatBall: true,
+      autoCacheMusic: true,
+      tagWriteOptions: {
+        basicInfo: true,
+        cover: true,
+        lyrics: true
+      }
+    }
+
+    // 从本地存储加载设置（与默认值深合并）
     const loadSettings = (): SettingsState => {
       try {
-        const savedSettings = localStorage.getItem('appSettings')
-        if (savedSettings) {
-          return JSON.parse(savedSettings)
+        const saved = localStorage.getItem('appSettings')
+        if (saved) {
+          const parsed = JSON.parse(saved) as SettingsState
+          return {
+            ...defaultSettings,
+            ...parsed,
+            tagWriteOptions: {
+              basicInfo:
+                parsed.tagWriteOptions?.basicInfo ??
+                (defaultSettings.tagWriteOptions as TagWriteOptions).basicInfo,
+              cover:
+                parsed.tagWriteOptions?.cover ??
+                (defaultSettings.tagWriteOptions as TagWriteOptions).cover,
+              lyrics:
+                parsed.tagWriteOptions?.lyrics ??
+                (defaultSettings.tagWriteOptions as TagWriteOptions).lyrics
+            }
+          }
         }
       } catch (error) {
         console.error('加载设置失败:', error)
       }
-
-      // 默认设置
-      return {
-        showFloatBall: true,
-        tagWriteOptions: {
-          basicInfo: true,
-          cover: true,
-          lyrics: true
-        }
-      }
+      return { ...defaultSettings }
     }
 
     const settings = ref<SettingsState>(loadSettings())
 
     // 保存设置到本地存储
     const saveSettings = () => {
+      // 兜底确保关键字段不会丢失
+      if (typeof settings.value.autoCacheMusic === 'undefined') {
+        settings.value.autoCacheMusic = true
+      }
+      if (!settings.value.tagWriteOptions) {
+        settings.value.tagWriteOptions = { basicInfo: true, cover: true, lyrics: true }
+      }
       localStorage.setItem('appSettings', JSON.stringify(settings.value))
     }
 

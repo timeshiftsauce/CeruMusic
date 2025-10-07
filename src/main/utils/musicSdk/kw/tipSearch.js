@@ -24,7 +24,18 @@ export default {
     })
   },
   handleResult(rawData) {
-    return rawData.map((item) => item.RELWORD)
+    let list = {
+      order: [],
+      songs: []
+    }
+    if (rawData.length > 0) {
+      list.order.push('songs')
+    }
+    list.songs = rawData.map((item) => ({
+      name: item.RELWORD,
+      artist: item.TAG_TYPE === 4 ? { name: '热搜' } : null
+    }))
+    return list
   },
   cancelTipSearch() {
     if (this.requestObj && this.requestObj.cancelHttp) this.requestObj.cancelHttp()

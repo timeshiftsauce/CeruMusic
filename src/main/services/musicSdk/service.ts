@@ -23,14 +23,14 @@ function main(source: string) {
     },
 
     async tipSearch({ keyword }: { keyword: string }) {
-      if (!Api.tipSearch?.tipSearchBySong) {
+      if (!Api.tipSearch?.search) {
         // 如果音乐源没有实现tipSearch方法，返回空结果
         return [] as TipSearchResult
       }
       return (await Api.tipSearch.search(keyword)) as Promise<TipSearchResult>
     },
 
-    async getMusicUrl({ pluginId, songInfo, quality }: GetMusicUrlArg) {
+    async getMusicUrl({ pluginId, songInfo, quality, isCache }: GetMusicUrlArg) {
       try {
         const usePlugin = pluginService.getPluginById(pluginId)
         if (!pluginId || !usePlugin) return { error: '请配置音源来播放歌曲' }
@@ -38,18 +38,22 @@ function main(source: string) {
         // 生成歌曲唯一标识
         const songId = `${songInfo.name}-${songInfo.singer}-${source}-${quality}`
 
-        // 先检查缓存
-        const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
-        if (cachedUrl) {
-          return cachedUrl
+        // 先检查缓存（isCache !== false 时）
+        if (isCache !== false) {
+          const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
+          if (cachedUrl) {
+            return cachedUrl
+          }
         }
 
         // 没有缓存时才发起网络请求
         const originalUrl = await usePlugin.getMusicUrl(source, songInfo, quality)
-        // 异步缓存，不阻塞返回
-        musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
-          console.warn('缓存歌曲失败:', error)
-        })
+        // 按需异步缓存，不阻塞返回
+        if (isCache !== false) {
+          musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
+            console.warn('缓存歌曲失败:', error)
+          })
+        }
 
         return originalUrl
       } catch (e: any) {
