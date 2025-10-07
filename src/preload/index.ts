@@ -8,6 +8,11 @@ const api = {
     console.log('preload: 发送 window-minimize 事件')
     ipcRenderer.send('window-minimize')
   },
+  // 阻止系统息屏
+  powerSaveBlocker: {
+    start: () => ipcRenderer.invoke('power-save-blocker:start'),
+    stop: () => ipcRenderer.invoke('power-save-blocker:stop')
+  },
   maximize: () => {
     console.log('preload: 发送 window-maximize 事件')
     ipcRenderer.send('window-maximize')

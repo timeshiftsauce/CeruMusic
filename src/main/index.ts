@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, screen, powerSaveBlocker } from 'electron'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -34,6 +34,7 @@ if (!gotTheLock) {
 //   console.log(res)
 // })
 let tray: Tray | null = null
+let psbId: number | null = null
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 
@@ -365,6 +366,22 @@ app.whenReady().then(() => {
       const isFullScreen = mainWindow.isFullScreen()
       mainWindow.setFullScreen(!isFullScreen)
     }
+  })
+
+  // 阻止系统息屏 IPC（开启/关闭）
+  ipcMain.handle('power-save-blocker:start', () => {
+    if (psbId == null) {
+      psbId = powerSaveBlocker.start('prevent-display-sleep')
+    }
+    return psbId
+  })
+
+  ipcMain.handle('power-save-blocker:stop', () => {
+    if (psbId != null && powerSaveBlocker.isStarted(psbId)) {
+      powerSaveBlocker.stop(psbId)
+    }
+    psbId = null
+    return true
   })
 
   createWindow()
