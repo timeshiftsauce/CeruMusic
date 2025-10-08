@@ -4,6 +4,8 @@ class AudioManager {
   private audioSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>()
   private audioContexts = new WeakMap<HTMLAudioElement, AudioContext>()
   private analysers = new Map<string, AnalyserNode>()
+  // 为每个 audioElement 复用一个分流器，避免重复断开重连主链路
+  private splitters = new WeakMap<HTMLAudioElement, GainNode>()
 
   static getInstance(): AudioManager {
     if (!AudioManager.instance) {
@@ -60,16 +62,19 @@ class AudioManager {
       analyser.fftSize = fftSize
       analyser.smoothingTimeConstant = 0.6
 
-      // 创建增益节点作为中介，避免直接断开主音频链
-      const gainNode = context.createGain()
-      gainNode.gain.value = 1.0
+      // 复用每个 audioElement 的分流器：source -> splitter -> destination
+      let splitter = this.splitters.get(audioElement)
+      if (!splitter) {
+        splitter = context.createGain()
+        splitter.gain.value = 1.0
+        // 仅第一次建立主链路，不要断开已有连接，避免累积
+        source.connect(splitter)
+        splitter.connect(context.destination)
+        this.splitters.set(audioElement, splitter)
+      }
 
-      // 连接：source -> gainNode -> analyser
-      //                     -> destination (保持音频播放)
-      source.disconnect() // 先断开所有连接
-      source.connect(gainNode)
-      gainNode.connect(context.destination) // 确保音频继续播放
-      gainNode.connect(analyser) // 连接到分析器
+      // 将分析器挂到分流器上，不影响主链路
+      splitter.connect(analyser)
 
       // 存储分析器引用
       this.analysers.set(id, analyser)
@@ -102,6 +107,15 @@ class AudioManager {
       const context = this.audioContexts.get(audioElement)
       if (context && context.state !== 'closed') {
         context.close()
+      }
+
+      // 断开并移除分流器
+      const splitter = this.splitters.get(audioElement)
+      if (splitter) {
+        try {
+          splitter.disconnect()
+        } catch {}
+        this.splitters.delete(audioElement)
       }
 
       this.audioSources.delete(audioElement)

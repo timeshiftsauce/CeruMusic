@@ -28,6 +28,8 @@ const emit = defineEmits<{
 const canvasRef = ref<HTMLCanvasElement>()
 const animationId = ref<number>()
 const analyser = ref<AnalyserNode>()
+// 节流渲染，目标 ~30fps
+const lastFrameTime = ref(0)
 const dataArray = ref<Uint8Array>()
 const resizeObserver = ref<ResizeObserver>()
 const componentId = ref<string>(`visualizer-${Date.now()}-${Math.random()}`)
@@ -75,93 +77,87 @@ const initAudioAnalyser = () => {
 }
 
 // 绘制可视化
-const draw = () => {
+const draw = (ts?: number) => {
   if (!canvasRef.value || !analyser.value || !dataArray.value) return
+
+  // 帧率节流 ~30fps
+  const now = ts ?? performance.now()
+  if (now - lastFrameTime.value < 33) {
+    animationId.value = requestAnimationFrame(draw)
+    return
+  }
+  lastFrameTime.value = now
 
   const canvas = canvasRef.value
   const ctx = canvas.getContext('2d')
-  if (!ctx) return
+  if (!ctx) {
+    animationId.value = requestAnimationFrame(draw)
+    return
+  }
 
   // 获取频域数据或生成模拟数据
   if (analyser.value && dataArray.value) {
-    // 有真实音频分析器，获取真实数据
     analyser.value.getByteFrequencyData(dataArray.value as Uint8Array<ArrayBuffer>)
   } else {
-    // 没有音频分析器，生成模拟数据
-    const time = Date.now() * 0.001
+    const time = now * 0.001
     for (let i = 0; i < dataArray.value.length; i++) {
-      // 生成基于时间的模拟频谱数据
       const frequency = i / dataArray.value.length
       const amplitude = Math.sin(time * 2 + frequency * 10) * 0.5 + 0.5
-      const bass = Math.sin(time * 4) * 0.3 + 0.7 // 低频变化
+      const bass = Math.sin(time * 4) * 0.3 + 0.7
       dataArray.value[i] = Math.floor(amplitude * bass * 255 * (1 - frequency * 0.7))
     }
   }
 
-  // 计算低频音量 (80hz-120hz 范围)
-  // 假设采样率为 44100Hz，fftSize 为 256，则每个频率 bin 约为 172Hz
-  // 80-120Hz 大约对应前 1-2 个 bin
-  const lowFreqStart = 0
-  const lowFreqEnd = Math.min(3, dataArray.value.length) // 取前几个低频 bin
+  // 计算低频音量（前 3 个 bin）
   let lowFreqSum = 0
-  for (let i = lowFreqStart; i < lowFreqEnd; i++) {
-    lowFreqSum += dataArray.value[i]
-  }
-  const lowFreqVolume = lowFreqSum / (lowFreqEnd - lowFreqStart) / 255
+  const lowBins = Math.min(3, dataArray.value.length)
+  for (let i = 0; i < lowBins; i++) lowFreqSum += dataArray.value[i]
+  emit('lowFreqUpdate', lowFreqSum / lowBins / 255)
 
-  // 发送低频音量给父组件
-  emit('lowFreqUpdate', lowFreqVolume)
-
-  // 完全清空画布
+  // 清屏
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  // 如果有背景色，再填充背景
+  // 背景
   if (props.backgroundColor !== 'transparent') {
     ctx.fillStyle = props.backgroundColor
     ctx.fillRect(0, 0, canvas.width, canvas.height)
   }
 
-  // 使用容器的实际尺寸进行计算，因为 ctx 已经缩放过了
+  // 计算尺寸
   const container = canvas.parentElement
-  if (!container) return
-
+  if (!container) {
+    animationId.value = requestAnimationFrame(draw)
+    return
+  }
   const containerRect = container.getBoundingClientRect()
   const canvasWidth = containerRect.width
   const canvasHeight = props.height
 
-  // 计算对称柱状图参数
+  // 柱状参数
   const halfBarCount = Math.floor(props.barCount / 2)
   const barWidth = canvasWidth / 2 / halfBarCount
   const maxBarHeight = canvasHeight * 0.9
   const centerX = canvasWidth / 2
 
-  // 绘制左右对称的频谱柱状图
+  // 每帧仅创建一次渐变（自底向上），减少对象分配
+  const gradient = ctx.createLinearGradient(0, canvasHeight, 0, 0)
+  gradient.addColorStop(0, props.color)
+  gradient.addColorStop(1, props.color.replace(/[\d\.]+\)$/g, '0.3)'))
+  ctx.fillStyle = gradient
+
+  // 绘制对称频谱
   for (let i = 0; i < halfBarCount; i++) {
-    // 增强低频响应，让可视化更敏感
     let barHeight = (dataArray.value[i] / 255) * maxBarHeight
-
-    // 对数据进行增强处理，让变化更明显
     barHeight = Math.pow(barHeight / maxBarHeight, 0.6) * maxBarHeight
-
     const y = canvasHeight - barHeight
 
-    // 创建渐变色
-    const gradient = ctx.createLinearGradient(0, canvasHeight, 0, y)
-    gradient.addColorStop(0, props.color)
-    gradient.addColorStop(1, props.color.replace(/[\d\.]+\)$/g, '0.3)'))
-
-    ctx.fillStyle = gradient
-
-    // 绘制左侧柱状图（从中心向左）
     const leftX = centerX - (i + 1) * barWidth
     ctx.fillRect(leftX, y, barWidth, barHeight)
 
-    // 绘制右侧柱状图（从中心向右）
     const rightX = centerX + i * barWidth
     ctx.fillRect(rightX, y, barWidth, barHeight)
   }
 
-  // 继续动画
   if (props.show && Audio.value.isPlay) {
     animationId.value = requestAnimationFrame(draw)
   }
@@ -286,6 +282,10 @@ onBeforeUnmount(() => {
       analyser.value.disconnect()
       analyser.value = undefined
     }
+    // 通知管理器移除对该分析器的引用，防止 Map 持有导致 GC 不回收
+    try {
+      audioManager.removeAnalyser(componentId.value)
+    } catch {}
   } catch (error) {
     console.warn('清理音频资源时出错:', error)
   }

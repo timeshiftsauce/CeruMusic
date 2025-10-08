@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, provide, ref, onActivated, onDeactivated } from 'vue'
+import {
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  onActivated,
+  onDeactivated,
+  watch,
+  nextTick
+} from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 
 const audioStore = ControlAudioStore()
@@ -17,6 +26,26 @@ onMounted(() => {
   // window.api.ping(handleEnded)
 })
 
+/**
+ * 监听 URL 变化，先重置旧音频再加载新音频，避免旧解码/缓冲滞留
+ */
+watch(
+  () => audioStore.Audio.url,
+  async (newUrl) => {
+    const a = audioMeta.value
+    if (!a) return
+    try {
+      a.pause()
+    } catch {}
+    a.removeAttribute('src')
+    a.load()
+    await nextTick()
+    // 模板绑定会把 src 更新为 newUrl，这里再触发一次 load
+    if (newUrl) {
+      a.load()
+    }
+  }
+)
 // 组件被激活时（从缓存中恢复）
 onActivated(() => {
   console.log('音频组件被激活')
@@ -71,22 +100,29 @@ const handlePlay = (): void => {
   audioStore.publish('play')
 }
 
+let rafId: number | null = null
 const startSetupInterval = (): void => {
+  if (rafId !== null) return
   const onFrame = () => {
     if (audioMeta.value && !audioMeta.value.paused) {
       audioStore.publish('timeupdate')
-
       audioStore.setCurrentTime((audioMeta.value && audioMeta.value.currentTime) || 0)
-
-      requestAnimationFrame(onFrame)
     }
+    rafId = requestAnimationFrame(onFrame)
   }
-  requestAnimationFrame(onFrame)
+  rafId = requestAnimationFrame(onFrame)
 }
 
 const handlePause = (): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('pause')
+  // 停止单实例 rAF
+  if (rafId !== null) {
+    try {
+      cancelAnimationFrame(rafId)
+    } catch {}
+    rafId = null
+  }
 }
 
 const handleError = (event: Event): void => {
@@ -112,8 +148,23 @@ const handleCanPlay = (): void => {
 
 onUnmounted(() => {
   // 组件卸载时清空所有订阅者
-  window.api.pingService.stop()
-
+  try {
+    window.api.pingService.stop()
+  } catch {}
+  // 停止 rAF
+  if (rafId !== null) {
+    try {
+      cancelAnimationFrame(rafId)
+    } catch {}
+    rafId = null
+  }
+  if (audioMeta.value) {
+    try {
+      audioMeta.value.pause()
+    } catch {}
+    audioMeta.value.removeAttribute('src')
+    audioMeta.value.load()
+  }
   audioStore.clearAllSubscribers()
 })
 </script>

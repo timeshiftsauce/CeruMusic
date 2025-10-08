@@ -103,7 +103,7 @@ watch(
       const isNetease =
         props.songInfo && 'source' in props.songInfo && props.songInfo.source === 'wy'
       const songinfo: any = _.cloneDeep(toRaw(props.songInfo))
-      console.log(songinfo)
+
       if (isNetease) {
         // 网易云音乐优先尝试ttml接口
         try {
@@ -112,30 +112,26 @@ watch(
           ).text()) as any
           if (!res || res.length < 100) throw new Error('ttml 无歌词')
           parsedLyrics = parseTTML(res).lines
-          console.log('搜索到ttml歌词', parsedLyrics)
         } catch {
           // ttml失败后使用新的歌词API
           const lyricData = await window.api.music.requestSdk('getLyric', {
             source: 'wy',
             songInfo: songinfo
           })
-          console.log('网易云歌词数据:', lyricData)
 
           if (lyricData.crlyric) {
             // 使用逐字歌词
             lyricText = lyricData.crlyric
-            console.log('网易云逐字歌词', lyricText)
+
             parsedLyrics = parseYrc(lyricText)
-            console.log('使用网易云逐字歌词', parsedLyrics)
           } else if (lyricData.lyric) {
             lyricText = lyricData.lyric
             parsedLyrics = parseLrc(lyricText)
-            console.log('使用网易云普通歌词', parsedLyrics)
           }
 
           if (lyricData.tlyric) {
             const translatedline = parseLrc(lyricData.tlyric)
-            console.log('网易云翻译歌词:', translatedline)
+
             for (let i = 0; i < parsedLyrics.length; i++) {
               if (translatedline[i] && translatedline[i].words[0]) {
                 parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
@@ -152,7 +148,6 @@ watch(
           source: source,
           songInfo: cleanSongInfo
         })
-        console.log(`${source}歌词数据:`, lyricData)
 
         if (lyricData.crlyric) {
           // 使用逐字歌词
@@ -162,16 +157,14 @@ watch(
           } else {
             parsedLyrics = parseYrc(lyricText)
           }
-          console.log(`使用${source}逐字歌词`, parsedLyrics)
         } else if (lyricData.lyric) {
           lyricText = lyricData.lyric
           parsedLyrics = parseLrc(lyricText)
-          console.log(`使用${source}普通歌词`, parsedLyrics)
         }
 
         if (lyricData.tlyric) {
           const translatedline = parseLrc(lyricData.tlyric)
-          console.log(`${source}翻译歌词:`, translatedline)
+
           for (let i = 0; i < parsedLyrics.length; i++) {
             if (translatedline[i] && translatedline[i].words[0]) {
               parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
@@ -182,10 +175,8 @@ watch(
 
       if (parsedLyrics.length > 0) {
         state.lyricLines = parsedLyrics
-        console.log('歌词加载成功', parsedLyrics.length)
       } else {
         state.lyricLines = []
-        console.log('未找到歌词或解析失败')
       }
     } catch (error) {
       console.error('获取歌词失败:', error)
@@ -197,6 +188,7 @@ watch(
 
 const bgRef = ref<BackgroundRenderRef | undefined>(undefined)
 const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
+
 // 订阅音频事件，保持数据同步
 const unsubscribeTimeUpdate = ref<(() => void) | undefined>(undefined)
 const unsubscribePlay = ref<(() => void) | undefined>(undefined)
@@ -214,7 +206,6 @@ const useBlackText = ref(false)
 async function updateTextColor() {
   try {
     useBlackText.value = await shouldUseBlackText(actualCoverImage.value)
-    console.log('使用黑色文本:', useBlackText.value)
   } catch (error) {
     console.error('获取对比色失败:', error)
     useBlackText.value = false // 默认使用白色文本
@@ -247,7 +238,6 @@ watch(
 // 组件挂载时初始化
 onMounted(() => {
   updateTextColor()
-  console.log('组件挂载完成', bgRef.value, lyricPlayerRef.value)
 })
 
 // 组件卸载前清理订阅
