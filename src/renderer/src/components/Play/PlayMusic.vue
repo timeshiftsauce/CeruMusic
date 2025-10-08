@@ -132,41 +132,54 @@ let isFull = false
 
 // 播放指定歌曲
 const playSong = async (song: SongList) => {
+  // 保存当前播放状态,用于失败时恢复
+  const previousSong = { ...songInfo.value }
+  const previousSongId = userInfo.value.lastPlaySongId
+  const previousTime = Audio.value.currentTime
+  const wasPlaying = Audio.value.isPlay
+
   try {
     // 设置加载状态
     isLoadingSong.value = true
 
-    // 检查是否需要恢复播放位置（历史播放）
+    // 检查是否需要恢复播放位置(历史播放)
     const isHistoryPlay =
       song.songmid === userInfo.value.lastPlaySongId &&
       userInfo.value.currentTime !== undefined &&
       userInfo.value.currentTime > 0
+
     if (isHistoryPlay && userInfo.value.currentTime !== undefined) {
       pendingRestorePosition = userInfo.value.currentTime
       pendingRestoreSongId = song.songmid
       console.log(`准备恢复播放位置: ${pendingRestorePosition}秒`)
-      // 清除历史位置，避免重复恢复
+      // 清除历史位置,避免重复恢复
       userInfo.value.currentTime = 0
     } else {
       pendingRestorePosition = 0
       pendingRestoreSongId = null
     }
 
-    // 更新当前播放歌曲ID
+    // 立刻暂停当前播放 - 不等待渐变
+    if (Audio.value.isPlay && Audio.value.audio) {
+      Audio.value.isPlay = false
+      Audio.value.audio.pause()
+      // 恢复音量，避免下次播放音量为0
+      Audio.value.audio.volume = Audio.value.volume / 100
+    }
+
+    // 立刻更新 UI 到新歌曲
+    songInfo.value.name = song.name
+    songInfo.value.singer = song.singer
+    songInfo.value.albumName = song.albumName
+    songInfo.value.img = song.img
     userInfo.value.lastPlaySongId = song.songmid
 
-    // 如果播放列表是打开的，滚动到当前播放歌曲
+    // 如果播放列表是打开的,滚动到当前播放歌曲
     if (showPlaylist.value) {
       nextTick(() => {
         playlistDrawerRef.value?.scrollToCurrentSong()
       })
     }
-
-    // 更新歌曲信息并触发主题色更新
-    songInfo.value.name = song.name
-    songInfo.value.singer = song.singer
-    songInfo.value.albumName = song.albumName
-    songInfo.value.img = song.img
 
     // 更新媒体会话元数据
     mediaSessionController.updateMetadata({
@@ -176,68 +189,109 @@ const playSong = async (song: SongList) => {
       artworkUrl: song.img || defaultCoverImg
     })
 
-    // 确保主题色更新
-
+    // 尝试获取 URL
     let urlToPlay = ''
-
-    // 获取URL
-    // eslint-disable-next-line no-useless-catch
     try {
       urlToPlay = await getSongRealUrl(toRaw(song))
-    } catch (error) {
-      throw error
-    }
+    } catch (error: any) {
+      console.error('获取歌曲 URL 失败,恢复原歌曲:', error)
+      isLoadingSong.value = false
+      MessagePlugin.error('播放失败，原因：' + error.message)
 
-    // 先停止当前播放
-    if (Audio.value.isPlay) {
-      const stopResult = stop()
-      if (stopResult && typeof stopResult.then === 'function') {
-        await stopResult
+      // 恢复歌曲信息
+      songInfo.value = { ...previousSong }
+      userInfo.value.lastPlaySongId = previousSongId
+      mediaSessionController.updateMetadata({
+        title: previousSong.name,
+        artist: previousSong.singer,
+        album: previousSong.albumName || '未知专辑',
+        artworkUrl: previousSong.img || defaultCoverImg
+      })
+
+      // 如果原来在播放,恢复播放
+      if (wasPlaying && previousSong.songmid && Audio.value.audio) {
+        try {
+          if (previousTime > 0) {
+            Audio.value.audio.currentTime = previousTime
+          }
+          await start()
+        } catch (resumeError) {
+          console.error('恢复播放失败:', resumeError)
+        }
       }
+
+      return
     }
 
-    // 设置URL（这会触发音频重新加载）
+    // 设置 URL(这会触发音频重新加载)
     setUrl(urlToPlay)
 
     // 等待音频准备就绪
     await waitForAudioReady()
     await setColor()
-    songInfo.value = {
-      ...song
-    }
-    // // 短暂延迟确保音频状态稳定
-    // await new Promise((resolve) => setTimeout(resolve, 100))
 
-    // 开始播放
-    try {
-      start()
-    } catch (error) {
+    // 更新完整歌曲信息
+    songInfo.value = { ...song }
+
+    /**
+     * 提前关闭加载状态
+     * 这样UI不会卡在“加载中”，用户能立刻看到播放键切换
+     */
+    isLoadingSong.value = false
+
+    /**
+     * 异步开始播放（不await，以免阻塞UI）
+     */
+    start().catch(async (error: any) => {
       console.error('启动播放失败:', error)
-      // 如果是 AbortError，尝试重新播放
-      if ((error as { name: string }).name === 'AbortError') {
-        console.log('检测到 AbortError，尝试重新播放...')
-        await new Promise((resolve) => setTimeout(resolve, 200))
+      MessagePlugin.error('播放失败，原因：' + error.message)
+
+      // 恢复旧歌曲状态
+      songInfo.value = { ...previousSong }
+      userInfo.value.lastPlaySongId = previousSongId
+      mediaSessionController.updateMetadata({
+        title: previousSong.name,
+        artist: previousSong.singer,
+        album: previousSong.albumName || '未知专辑',
+        artworkUrl: previousSong.img || defaultCoverImg
+      })
+
+      // 如果原来在播放，恢复旧播放
+      if (wasPlaying && previousSong.songmid && Audio.value.audio) {
         try {
-          const retryResult = start()
-          if (retryResult && typeof retryResult.then === 'function') {
-            await retryResult
+          if (previousTime > 0) {
+            Audio.value.audio.currentTime = previousTime
           }
-        } catch (retryError) {
-          console.error('重试播放也失败:', retryError)
-          throw retryError
+          await start()
+        } catch (resumeError) {
+          console.error('恢复播放失败:', resumeError)
         }
-      } else {
-        throw error
       }
+    })
+
+    /**
+     * 注册事件监听，确保浏览器播放事件触发时同步关闭loading
+     * （多一道保险）
+     */
+    if (Audio.value.audio) {
+      Audio.value.audio.addEventListener('playing', () => {
+        isLoadingSong.value = false
+      })
+      Audio.value.audio.addEventListener('error', () => {
+        isLoadingSong.value = false
+      })
     }
+
   } catch (error: any) {
-    console.error('播放歌曲失败:', error)
+    console.error('播放歌曲失败(外层捕获):', error)
     MessagePlugin.error('播放失败，原因：' + error.message)
+    isLoadingSong.value = false
   } finally {
-    // 无论成功还是失败，都清除加载状态
+    // 最后的保险,确保加载状态一定会被关闭
     isLoadingSong.value = false
   }
 }
+
 provide('PlaySong', playSong)
 // 歌曲信息
 const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
