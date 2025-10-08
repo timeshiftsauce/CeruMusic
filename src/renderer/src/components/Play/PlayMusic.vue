@@ -132,12 +132,6 @@ let isFull = false
 
 // 播放指定歌曲
 const playSong = async (song: SongList) => {
-  // 保存当前播放状态,用于失败时恢复
-  const previousSong = { ...songInfo.value }
-  const previousSongId = userInfo.value.lastPlaySongId
-  const previousTime = Audio.value.currentTime
-  const wasPlaying = Audio.value.isPlay
-
   try {
     // 设置加载状态
     isLoadingSong.value = true
@@ -194,35 +188,21 @@ const playSong = async (song: SongList) => {
     try {
       urlToPlay = await getSongRealUrl(toRaw(song))
     } catch (error: any) {
-      console.error('获取歌曲 URL 失败,恢复原歌曲:', error)
+      console.error('获取歌曲 URL 失败,播放下一首原歌曲:', error)
       isLoadingSong.value = false
-      MessagePlugin.error('播放失败，原因：' + error.message)
-
-      // 恢复歌曲信息
-      songInfo.value = { ...previousSong }
-      userInfo.value.lastPlaySongId = previousSongId
-      mediaSessionController.updateMetadata({
-        title: previousSong.name,
-        artist: previousSong.singer,
-        album: previousSong.albumName || '未知专辑',
-        artworkUrl: previousSong.img || defaultCoverImg
-      })
-
-      // 如果原来在播放,恢复播放
-      if (wasPlaying && previousSong.songmid && Audio.value.audio) {
-        try {
-          if (previousTime > 0) {
-            Audio.value.audio.currentTime = previousTime
-          }
-          await start()
-        } catch (resumeError) {
-          console.error('恢复播放失败:', resumeError)
-        }
-      }
-
+      tryAutoNext('获取歌曲 URL 失败')
       return
     }
 
+    // 在切换前彻底重置旧音频，释放缓冲与解码器
+    if (Audio.value.audio) {
+      const a = Audio.value.audio
+      try {
+        a.pause()
+      } catch {}
+      a.removeAttribute('src')
+      a.load()
+    }
     // 设置 URL(这会触发音频重新加载)
     setUrl(urlToPlay)
 
@@ -242,49 +222,39 @@ const playSong = async (song: SongList) => {
     /**
      * 异步开始播放（不await，以免阻塞UI）
      */
-    start().catch(async (error: any) => {
-      console.error('启动播放失败:', error)
-      MessagePlugin.error('播放失败，原因：' + error.message)
-
-      // 恢复旧歌曲状态
-      songInfo.value = { ...previousSong }
-      userInfo.value.lastPlaySongId = previousSongId
-      mediaSessionController.updateMetadata({
-        title: previousSong.name,
-        artist: previousSong.singer,
-        album: previousSong.albumName || '未知专辑',
-        artworkUrl: previousSong.img || defaultCoverImg
+    start()
+      .catch(async (error: any) => {
+        console.error('启动播放失败:', error)
+        tryAutoNext('启动播放失败')
       })
-
-      // 如果原来在播放，恢复旧播放
-      if (wasPlaying && previousSong.songmid && Audio.value.audio) {
-        try {
-          if (previousTime > 0) {
-            Audio.value.audio.currentTime = previousTime
-          }
-          await start()
-        } catch (resumeError) {
-          console.error('恢复播放失败:', resumeError)
-        }
-      }
-    })
+      .then(() => {
+        autoNextCount.value = 0
+      })
 
     /**
      * 注册事件监听，确保浏览器播放事件触发时同步关闭loading
      * （多一道保险）
      */
     if (Audio.value.audio) {
-      Audio.value.audio.addEventListener('playing', () => {
-        isLoadingSong.value = false
-      })
-      Audio.value.audio.addEventListener('error', () => {
-        isLoadingSong.value = false
-      })
+      Audio.value.audio.addEventListener(
+        'playing',
+        () => {
+          isLoadingSong.value = false
+        },
+        { once: true }
+      )
+      Audio.value.audio.addEventListener(
+        'error',
+        () => {
+          isLoadingSong.value = false
+        },
+        { once: true }
+      )
     }
-
   } catch (error: any) {
     console.error('播放歌曲失败(外层捕获):', error)
-    MessagePlugin.error('播放失败，原因：' + error.message)
+    tryAutoNext('播放歌曲失败')
+    // MessagePlugin.error('播放失败，原因：' + error.message)
     isLoadingSong.value = false
   } finally {
     // 最后的保险,确保加载状态一定会被关闭
@@ -299,6 +269,23 @@ const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
 
 // 歌曲加载状态
 const isLoadingSong = ref(false)
+
+// 自动下一首次数限制：不超过当前列表的30%
+const autoNextCount = ref(0)
+const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
+const tryAutoNext = (reason: string) => {
+  const limit = getAutoNextLimit()
+  MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
+
+  if (autoNextCount.value >= limit && autoNextCount.value > 2) {
+    MessagePlugin.error(
+      `自动下一首失败：超过当前列表30%限制（${autoNextCount.value}/${limit}）。原因：${reason}`
+    )
+    return
+  }
+  autoNextCount.value++
+  playNext()
+}
 
 // 更新播放模式
 const updatePlayMode = () => {
