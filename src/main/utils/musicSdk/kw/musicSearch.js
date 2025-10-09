@@ -1,13 +1,13 @@
 // import '../../polyfill/array.find'
 
 import { httpFetch } from '../../request'
-import { formatPlayTime, decodeName } from '../index'
+import { formatPlayTime, decodeName } from '../../index'
 // import { debug } from '../../utils/env'
 import { formatSinger } from './util'
 
 export default {
   regExps: {
-    mInfo: /level:(\w+),bitrate:(\d+),format:(\w+),size:([\w.]+)/
+    mInfo: /level:(\w+),bitrate:(\d+),format:(\w+),size:([\w.]+)/,
   },
   limit: 30,
   total: 0,
@@ -32,7 +32,7 @@ export default {
     // console.log(rawData)
     for (let i = 0; i < rawData.length; i++) {
       const info = rawData[i]
-      const songId = info.MUSICRID.replace('MUSIC_', '')
+      let songId = info.MUSICRID.replace('MUSIC_', '')
       // const format = (info.FORMATS || info.formats).split('|')
 
       if (!info.N_MINFO) {
@@ -43,33 +43,39 @@ export default {
       const types = []
       const _types = {}
 
-      const infoArr = info.N_MINFO.split(';')
+      let infoArr = info.N_MINFO.split(';')
       for (let info of infoArr) {
         info = info.match(this.regExps.mInfo)
         if (info) {
           switch (info[2]) {
+            case '20900':
+              types.push({ type: 'master', size: info[4] })
+              _types.master = {
+                size: info[4].toLocaleUpperCase(),
+              }
+              break
             case '4000':
-              types.push({ type: 'flac24bit', size: info[4] })
-              _types.flac24bit = {
-                size: info[4].toLocaleUpperCase()
+              types.push({ type: 'hires', size: info[4] })
+              _types.hires = {
+                size: info[4].toLocaleUpperCase(),
               }
               break
             case '2000':
               types.push({ type: 'flac', size: info[4] })
               _types.flac = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
             case '320':
               types.push({ type: '320k', size: info[4] })
               _types['320k'] = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
             case '128':
               types.push({ type: '128k', size: info[4] })
               _types['128k'] = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
           }
@@ -77,7 +83,7 @@ export default {
       }
       types.reverse()
 
-      const interval = parseInt(info.DURATION)
+      let interval = parseInt(info.DURATION)
 
       result.push({
         name: decodeName(info.SONGNAME),
@@ -95,7 +101,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       })
     }
     // console.log(result)
@@ -109,7 +115,7 @@ export default {
       // console.log(result)
       if (!result || (result.TOTAL !== '0' && result.SHOW === '0'))
         return this.search(str, page, limit, ++retryNum)
-      const list = this.handleResult(result.abslist)
+      let list = this.handleResult(result.abslist)
 
       if (list == null) return this.search(str, page, limit, ++retryNum)
 
@@ -122,8 +128,8 @@ export default {
         allPage: this.allPage,
         total: this.total,
         limit,
-        source: 'kw'
+        source: 'kw',
       })
     })
-  }
+  },
 }

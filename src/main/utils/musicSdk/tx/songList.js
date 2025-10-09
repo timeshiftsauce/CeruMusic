@@ -1,6 +1,7 @@
 import { httpFetch } from '../../request'
-import { decodeName, formatPlayTime, sizeFormate, dateFormat, formatPlayCount } from '../index'
+import { decodeName, formatPlayTime, dateFormat, formatPlayCount } from '../../index'
 import { formatSingerName } from '../utils'
+import { getBatchMusicQualityInfo } from './quality_detail'
 
 export default {
   _requestObj_tags: null,
@@ -12,12 +13,12 @@ export default {
   sortList: [
     {
       name: '最热',
-      id: 5
+      id: 5,
     },
     {
       name: '最新',
-      id: 2
-    }
+      id: 2,
+    },
   ],
   regExps: {
     hotTagHtml: /class="c_bg_link js_tag_item" data-id="\w+">.+?<\/a>/g,
@@ -26,7 +27,7 @@ export default {
     // https://y.qq.com/n/yqq/playlist/7217720898.html
     // https://i.y.qq.com/n2/m/share/details/taoge.html?platform=11&appshare=android_qq&appversion=9050006&id=7217720898&ADTAG=qfshare
     listDetailLink: /\/playlist\/(\d+)/,
-    listDetailLink2: /id=(\d+)/
+    listDetailLink2: /id=(\d+)/,
   },
   tagsUrl:
     'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json&needNewCode=0&data=%7B%22tags%22%3A%7B%22method%22%3A%22get_all_categories%22%2C%22param%22%3A%7B%22qq%22%3A%22%22%7D%2C%22module%22%3A%22playlist.PlaylistAllCategoriesServer%22%7D%7D',
@@ -45,10 +46,10 @@ export default {
               category_id: id,
               size: this.limit_list,
               page: page - 1,
-              use_page: 1
+              use_page: 1,
             },
-            module: 'playlist.PlayListCategoryServer'
-          }
+            module: 'playlist.PlayListCategoryServer',
+          },
         })
       )}`
     }
@@ -62,10 +63,10 @@ export default {
             sin: this.limit_list * (page - 1),
             size: this.limit_list,
             order: sortId,
-            cur_page: page
+            cur_page: page,
           },
-          module: 'playlist.PlayListPlazaServer'
-        }
+          module: 'playlist.PlayListPlazaServer',
+        },
       })
     )}`
   },
@@ -95,17 +96,17 @@ export default {
     })
   },
   filterInfoHotTag(html) {
-    const hotTag = html.match(this.regExps.hotTagHtml)
+    let hotTag = html.match(this.regExps.hotTagHtml)
     const hotTags = []
     if (!hotTag) return hotTags
 
     hotTag.forEach((tagHtml) => {
-      const result = tagHtml.match(this.regExps.hotTag)
+      let result = tagHtml.match(this.regExps.hotTag)
       if (!result) return
       hotTags.push({
         id: parseInt(result[1]),
         name: result[2],
-        source: 'tx'
+        source: 'tx',
       })
     })
     return hotTags
@@ -118,8 +119,8 @@ export default {
         parent_name: type.group_name,
         id: item.id,
         name: item.name,
-        source: 'tx'
-      }))
+        source: 'tx',
+      })),
     }))
   },
 
@@ -130,7 +131,9 @@ export default {
     this._requestObj_list = httpFetch(this.getListUrl(sortId, tagId, page))
     // console.log(this.getListUrl(sortId, tagId, page))
     return this._requestObj_list.promise.then(({ body }) => {
-      if (body.code !== this.successCode) return this.getList(sortId, tagId, page, ++tryNum)
+      if (body.code !== this.successCode) {
+        return this.getList(sortId, tagId, page, ++tryNum)
+      }
       return tagId
         ? this.filterList2(body.playlist.data, page)
         : this.filterList(body.playlist.data, page)
@@ -149,12 +152,12 @@ export default {
         // grade: item.favorcnt / 10,
         total: item.song_ids?.length,
         desc: decodeName(item.desc).replace(/<br>/g, '\n'),
-        source: 'tx'
+        source: 'tx',
       })),
       total: data.total,
       page,
       limit: this.limit_list,
-      source: 'tx'
+      source: 'tx',
     }
   },
   filterList2({ content }, page) {
@@ -169,12 +172,12 @@ export default {
         img: basic.cover.medium_url || basic.cover.default_url,
         // grade: basic.favorcnt / 10,
         desc: decodeName(basic.desc).replace(/<br>/g, '\n'),
-        source: 'tx'
+        source: 'tx',
       })),
       total: content.total_cnt,
       page,
       limit: this.limit_list,
-      source: 'tx'
+      source: 'tx',
     }
   },
 
@@ -184,7 +187,7 @@ export default {
     const requestObj_listDetailLink = httpFetch(link)
     const {
       headers: { location },
-      statusCode
+      statusCode,
     } = await requestObj_listDetailLink.promise
     // console.log(headers)
     if (statusCode > 400) return this.handleParseId(link, ++retryNum)
@@ -215,15 +218,15 @@ export default {
     const requestObj_listDetail = httpFetch(this.getListDetailUrl(id), {
       headers: {
         Origin: 'https://y.qq.com',
-        Referer: `https://y.qq.com/n/yqq/playsquare/${id}.html`
-      }
+        Referer: `https://y.qq.com/n/yqq/playsquare/${id}.html`,
+      },
     })
     const { body } = await requestObj_listDetail.promise
 
     if (body.code !== this.successCode) return this.getListDetail(id, ++tryNum)
     const cdlist = body.cdlist[0]
     return {
-      list: this.filterListDetail(cdlist.songlist),
+      list: await this.filterListDetail(cdlist.songlist),
       page: 1,
       limit: cdlist.songlist.length + 1,
       total: cdlist.songlist.length,
@@ -233,44 +236,23 @@ export default {
         img: cdlist.logo,
         desc: decodeName(cdlist.desc).replace(/<br>/g, '\n'),
         author: cdlist.nickname,
-        play_count: formatPlayCount(cdlist.visitnum)
-      }
+        play_count: formatPlayCount(cdlist.visitnum),
+      },
     }
   },
-  filterListDetail(rawList) {
-    // console.log(rawList)
+  async filterListDetail(rawList) {
+    const qualityInfoRequest = getBatchMusicQualityInfo(rawList)
+    let qualityInfoMap = {}
+
+    try {
+      qualityInfoMap = await qualityInfoRequest.promise
+    } catch (error) {
+      console.error('Failed to fetch quality info:', error)
+    }
+
     return rawList.map((item) => {
-      const types = []
-      const _types = {}
-      if (item.file.size_128mp3 !== 0) {
-        const size = sizeFormate(item.file.size_128mp3)
-        types.push({ type: '128k', size })
-        _types['128k'] = {
-          size
-        }
-      }
-      if (item.file.size_320mp3 !== 0) {
-        const size = sizeFormate(item.file.size_320mp3)
-        types.push({ type: '320k', size })
-        _types['320k'] = {
-          size
-        }
-      }
-      if (item.file.size_flac !== 0) {
-        const size = sizeFormate(item.file.size_flac)
-        types.push({ type: 'flac', size })
-        _types.flac = {
-          size
-        }
-      }
-      if (item.file.size_hires !== 0) {
-        const size = sizeFormate(item.file.size_hires)
-        types.push({ type: 'flac24bit', size })
-        _types.flac24bit = {
-          size
-        }
-      }
-      // types.reverse()
+      const { types = [], _types = {} } = qualityInfoMap[item.id] || {}
+
       return {
         singer: formatSingerName(item.singer, 'name'),
         name: item.title,
@@ -292,7 +274,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       }
     })
   },
@@ -300,7 +282,7 @@ export default {
     return Promise.all([this.getTag(), this.getHotTag()]).then(([tags, hotTag]) => ({
       tags,
       hotTag,
-      source: 'tx'
+      source: 'tx',
     }))
   },
 
@@ -313,12 +295,16 @@ export default {
   search(text, page, limit = 20, retryNum = 0) {
     if (retryNum > 5) throw new Error('max retry')
     return httpFetch(
-      `http://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist?page_no=${page - 1}&num_per_page=${limit}&format=json&query=${encodeURIComponent(text)}&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8`,
+      `http://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist?page_no=${
+        page - 1
+      }&num_per_page=${limit}&format=json&query=${encodeURIComponent(
+        text
+      )}&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8`,
       {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
-          Referer: 'http://y.qq.com/portal/search.html'
-        }
+          Referer: 'http://y.qq.com/portal/search.html',
+        },
       }
     ).promise.then(({ body }) => {
       if (body.code != 0) return this.search(text, page, limit, ++retryNum)
@@ -335,15 +321,15 @@ export default {
             // grade: item.favorcnt / 10,
             total: item.song_count,
             desc: decodeName(decodeName(item.introduction)).replace(/<br>/g, '\n'),
-            source: 'tx'
+            source: 'tx',
           }
         }),
         limit,
         total: body.data.sum,
-        source: 'tx'
+        source: 'tx',
       }
     })
-  }
+  },
 }
 
 // getList

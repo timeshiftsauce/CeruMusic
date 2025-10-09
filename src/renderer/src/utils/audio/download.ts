@@ -33,22 +33,11 @@ const qualityKey = Object.keys(qualityMap)
 // 创建音质选择弹窗
 function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<string | null> {
   return new Promise((resolve) => {
-    const LocalUserDetail = LocalUserDetailStore()
-
     // 获取歌曲支持的音质列表
     const availableQualities = songInfo.types || []
-
-    // 检查用户设置的音质是否为特殊音质
-    const isSpecialQuality = ['hires', 'atmos', 'master'].includes(userQuality)
-
-    // 如果是特殊音质且用户支持，添加到选项中（不管歌曲是否有这个音质）
+    // 展示全部音质，但对超出用户最高音质的项做禁用呈现
+    const userMaxIndex = qualityKey.indexOf(userQuality)
     const qualityOptions = [...availableQualities]
-    if (isSpecialQuality && LocalUserDetail.userSource.quality === userQuality) {
-      const hasSpecialQuality = availableQualities.some((q) => q.type === userQuality)
-      if (!hasSpecialQuality) {
-        qualityOptions.push({ type: userQuality, size: '源站无法得知此音质的文件大小' })
-      }
-    }
 
     // 按音质优先级排序
     qualityOptions.sort((a, b) => {
@@ -80,35 +69,48 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                   msOverflowStyle: 'none'
                 }
               },
-              qualityOptions.map((quality) =>
-                h(
+              qualityOptions.map((quality) => {
+                const idx = qualityKey.indexOf(quality.type)
+                const disabled = idx !== -1 && idx > userMaxIndex
+                return h(
                   'div',
                   {
                     key: quality.type,
                     class: 'quality-item',
+                    title: disabled ? '超出你的最高音质设置，已禁用' : undefined,
                     style: {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       padding: '12px 16px',
                       margin: '8px 0',
-                      border: '1px solid #e7e7e7',
+                      border: '1px solid ' + (disabled ? '#f0f0f0' : '#e7e7e7'),
                       borderRadius: '6px',
-                      cursor: 'pointer',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
                       transition: 'all 0.2s ease',
-                      backgroundColor: quality.type === userQuality ? '#e6f7ff' : '#fff'
+                      backgroundColor:
+                        quality.type === userQuality ? (disabled ? '#f5faff' : '#e6f7ff') : '#fff',
+                      opacity: disabled ? 0.55 : 1
                     },
                     onClick: () => {
+                      if (disabled) return
                       dialog.destroy()
                       resolve(quality.type)
                     },
                     onMouseenter: (e: MouseEvent) => {
+                      if (disabled) return
                       const target = e.target as HTMLElement
                       target.style.backgroundColor = '#f0f9ff'
                       target.style.borderColor = '#1890ff'
                     },
                     onMouseleave: (e: MouseEvent) => {
                       const target = e.target as HTMLElement
+                      if (disabled) {
+                        target.style.backgroundColor =
+                          quality.type === userQuality ? '#f5faff' : '#fff'
+                        target.style.borderColor = '#f0f0f0'
+                        return
+                      }
                       target.style.backgroundColor =
                         quality.type === userQuality ? '#e6f7ff' : '#fff'
                       target.style.borderColor = '#e7e7e7'
@@ -122,7 +124,12 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                           style: {
                             fontWeight: '500',
                             fontSize: '14px',
-                            color: quality.type === userQuality ? '#1890ff' : '#333'
+                            color:
+                              quality.type === userQuality
+                                ? disabled
+                                  ? '#8fbfff'
+                                  : '#1890ff'
+                                : '#333'
                           }
                         },
                         qualityMap[quality.type] || quality.type
@@ -132,7 +139,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                         {
                           style: {
                             fontSize: '12px',
-                            color: '#999',
+                            color: disabled ? '#bbb' : '#999',
                             marginTop: '2px'
                           }
                         },
@@ -145,7 +152,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                         class: 'quality-size',
                         style: {
                           fontSize: '12px',
-                          color: '#666',
+                          color: disabled ? '#999' : '#666',
                           fontWeight: '500'
                         }
                       },
@@ -153,7 +160,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                     )
                   ]
                 )
-              )
+              })
             )
           ]
         ),
@@ -187,58 +194,6 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     }
 
     let quality = selectedQuality
-    const isSpecialQuality = ['hires', 'atmos', 'master'].includes(quality)
-
-    // 如果选择的是特殊音质，先尝试下载
-    if (isSpecialQuality) {
-      try {
-        console.log(`尝试下载特殊音质: ${quality} - ${qualityMap[quality]}`)
-        const tip = MessagePlugin.success('开始下载歌曲：' + songInfo.name)
-
-        const specialResult = await window.api.music.requestSdk('downloadSingleSong', {
-          pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
-          source: songInfo.source,
-          quality,
-          songInfo: toRaw(songInfo) as any,
-          tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions)
-        })
-
-        ;(await tip).close()
-
-        // 如果成功获取特殊音质链接，处理结果并返回
-        if (specialResult) {
-          if (!Object.hasOwn(specialResult, 'path')) {
-            MessagePlugin.info(specialResult.message)
-          } else {
-            await NotifyPlugin.success({
-              title: '下载成功',
-              content: `${specialResult.message} 保存位置: ${specialResult.path}`
-            })
-          }
-          return
-        }
-
-        console.log(`下载${qualityMap[quality]}音质失败，重新选择音质`)
-        MessagePlugin.error('该音质下载失败，请重新选择音质')
-
-        // 特殊音质下载失败，重新弹出选择框
-        const retryQuality = await createQualityDialog(songInfo, userQuality)
-        if (!retryQuality) {
-          return
-        }
-        quality = retryQuality
-      } catch (specialError) {
-        console.log(`下载${qualityMap[quality]}音质出错:`, specialError)
-        MessagePlugin.error('该音质下载失败，请重新选择音质')
-
-        // 特殊音质下载出错，重新弹出选择框
-        const retryQuality = await createQualityDialog(songInfo, userQuality)
-        if (!retryQuality) {
-          return
-        }
-        quality = retryQuality
-      }
-    }
 
     // 检查选择的音质是否超出歌曲支持的最高音质
     const songMaxQuality = songInfo.types[songInfo.types.length - 1]?.type
@@ -255,7 +210,8 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       source: songInfo.source,
       quality,
       songInfo: toRaw(songInfo) as any,
-      tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions)
+      tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
+      isCache: true
     })
 
     ;(await tip).close()
