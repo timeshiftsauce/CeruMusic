@@ -42,38 +42,6 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
 
-    // 检查是否为特殊音质（高清臻音、全景环绕或超清母带）
-    const isSpecialQuality = ['hires', 'atmos', 'master'].includes(quality)
-
-    // 如果是特殊音质，先尝试获取对应链接
-    if (isSpecialQuality) {
-      try {
-        console.log(`尝试获取特殊音质: ${quality} - ${qualityMap[quality]}`)
-        const specialUrlData = await window.api.music.requestSdk('getMusicUrl', {
-          pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
-          source: song.source,
-          songInfo: song as any,
-          quality,
-          isCache
-        })
-
-        // 如果成功获取特殊音质链接，直接返回
-        if (
-          typeof specialUrlData === 'string' ||
-          (typeof specialUrlData === 'object' && !specialUrlData.error)
-        ) {
-          console.log(`成功获取${qualityMap[quality]}链接`)
-          return specialUrlData as string
-        }
-
-        console.log(`获取${qualityMap[quality]}链接失败，回退到标准逻辑`)
-        // 如果获取特殊音质失败，继续执行原有逻辑
-      } catch (specialError) {
-        console.log(`获取${qualityMap[quality]}链接出错，回退到标准逻辑:`, specialError)
-        // 特殊音质获取失败，继续执行原有逻辑
-      }
-    }
-
     // 原有逻辑：检查歌曲支持的最高音质
     if (
       qualityKey.indexOf(quality) >

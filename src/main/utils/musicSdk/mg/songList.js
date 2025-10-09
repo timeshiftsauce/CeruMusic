@@ -1,5 +1,5 @@
 import { httpFetch } from '../../request'
-import { dateFormat, formatPlayCount } from '../index'
+import { dateFormat, formatPlayCount } from '../../index'
 import { filterMusicInfoList } from './musicInfo'
 import { createSignature } from './musicSearch'
 import { createHttpFetch } from './utils/index'
@@ -17,14 +17,14 @@ export default {
   sortList: [
     {
       name: '推荐',
-      id: '15127315'
+      id: '15127315',
       // id: '1',
     },
     {
       name: '最新',
-      id: '15127272'
+      id: '15127272',
       // id: '2',
-    }
+    },
   ],
   regExps: {
     list: /<li><div class="thumb">.+?<\/li>/g,
@@ -32,7 +32,7 @@ export default {
       /.+data-original="(.+?)".*data-id="(\d+)".*<div class="song-list-name"><a\s.*?>(.+?)<\/a>.+<i class="iconfont cf-bofangliang"><\/i>(.+?)<\/div>/,
 
     // https://music.migu.cn/v3/music/playlist/161044573?page=1
-    listDetailLink: /^.+\/playlist\/(\d+)(?:\?.*|&.*$|#.*$|$)/
+    listDetailLink: /^.+\/playlist\/(\d+)(?:\?.*|&.*$|#.*$|$)/,
   },
   tagsUrl: 'https://app.c.nf.migu.cn/MIGUM3.0/v1.0/template/musiclistplaza-taglist/release',
   // tagsUrl: 'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/indexTagPage.do?needAll=0',
@@ -58,7 +58,7 @@ export default {
   defaultHeaders: {
     'User-Agent':
       'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
-    Referer: 'https://m.music.migu.cn/'
+    Referer: 'https://m.music.migu.cn/',
     // language: 'Chinese',
     // ua: 'Android_migu',
     // mode: 'android',
@@ -74,7 +74,7 @@ export default {
     } else if (/[?&:/]/.test(id)) id = id.replace(this.regExps.listDetailLink, '$1')
 
     const requestObj_listDetail = httpFetch(this.getSongListDetailUrl(id, page), {
-      headers: this.defaultHeaders
+      headers: this.defaultHeaders,
     })
     return requestObj_listDetail.promise.then(({ body }) => {
       if (body.code !== this.successCode) return this.getListDetail(id, page, ++tryNum)
@@ -85,7 +85,7 @@ export default {
         page,
         limit: this.limit_song,
         total: body.totalCount,
-        source: 'mg'
+        source: 'mg',
       }
     })
   },
@@ -97,7 +97,7 @@ export default {
     const requestObj_listDetailInfo = httpFetch(
       `https://c.musicapp.migu.cn/MIGUM3.0/resource/playlist/v2.0?playlistId=${id}`,
       {
-        headers: this.defaultHeaders
+        headers: this.defaultHeaders,
       }
     )
     return requestObj_listDetailInfo.promise.then(({ body }) => {
@@ -109,7 +109,7 @@ export default {
         img: body.data.imgItem.img,
         desc: body.data.summary,
         author: body.data.ownerName,
-        play_count: formatPlayCount(body.data.opNumItem.playNum)
+        play_count: formatPlayCount(body.data.opNumItem.playNum),
       })
       return cachedDetailInfo
     })
@@ -122,12 +122,12 @@ export default {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
-        Referer: link
-      }
+        Referer: link,
+      },
     })
     const {
       headers: { location },
-      statusCode
+      statusCode,
     } = await requestObj_listDetailLink.promise
     // console.log(body, location)
     if (statusCode > 400) return this.getDetailUrl(link, page, ++retryNum)
@@ -153,7 +153,7 @@ export default {
 
     return Promise.all([
       this.getListDetailList(id, page, retryNum),
-      this.getListDetailInfo(id, retryNum)
+      this.getListDetailInfo(id, retryNum),
     ]).then(([listData, info]) => {
       listData.info = info
       return listData
@@ -165,7 +165,7 @@ export default {
     if (this._requestObj_list) this._requestObj_list.cancelHttp()
     if (tryNum > 2) return Promise.reject(new Error('try max num'))
     this._requestObj_list = httpFetch(this.getSongListUrl(sortId, tagId, page), {
-      headers: this.defaultHeaders
+      headers: this.defaultHeaders,
       // headers: {
       //   sign: 'c3b7ae985e2206e97f1b2de8f88691e2',
       //   timestamp: 1578225871982,
@@ -205,7 +205,7 @@ export default {
         total: parseInt(body.retMsg.countSize),
         page,
         limit: this.limit_list,
-        source: 'mg'
+        source: 'mg',
       }
     })
     // return this._requestObj_list.promise.then(({ body }) => {
@@ -233,7 +233,7 @@ export default {
       grade: item.grade,
       total: item.contentCount,
       desc: item.summary,
-      source: 'mg'
+      source: 'mg',
     }))
   },
 
@@ -254,7 +254,7 @@ export default {
       hotTag: rawList[0].content.map(({ texts: [name, id] }) => ({
         id,
         name,
-        source: 'mg'
+        source: 'mg',
       })),
       tags: rawList.slice(1).map(({ header, content }) => ({
         name: header.title,
@@ -263,10 +263,10 @@ export default {
           // parent_name: objectInfo.columnTitle,
           id,
           name,
-          source: 'mg'
-        }))
+          source: 'mg',
+        })),
       })),
-      source: 'mg'
+      source: 'mg',
     }
     // return {
     //   hotTag: rawList[0].objectInfo.contents.map(item => ({
@@ -313,7 +313,7 @@ export default {
         name: item.name,
         img: item.musicListPicUrl,
         total: item.musicNum,
-        source: 'mg'
+        source: 'mg',
       })
     })
     return list
@@ -331,8 +331,8 @@ export default {
           sign: signResult.sign,
           channel: '0146921',
           'User-Agent':
-            'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
-        }
+            'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
+        },
       }
     ).then((body) => {
       if (!body.songListResultData) throw new Error('get song list faild.')
@@ -342,10 +342,10 @@ export default {
         list,
         limit,
         total: parseInt(body.songListResultData.totalCount),
-        source: 'mg'
+        source: 'mg',
       }
     })
-  }
+  },
 }
 
 // getList

@@ -10,16 +10,13 @@ export const getHostIp = (hostname) => {
   if (typeof result === 'object') return result
   if (result === true) return
   ipMap.set(hostname, true)
-  // console.log(hostname)
   dns.lookup(
     hostname,
     {
-      // family: 4,
-      all: false
+      all: false,
     },
     (err, address, family) => {
       if (err) return console.log(err)
-      // console.log(address, family)
       ipMap.set(hostname, { address, family })
     }
   )
@@ -42,7 +39,7 @@ export const formatSingerName = (singers, nameKey = 'name', join = '、') => {
   if (Array.isArray(singers)) {
     const singer = []
     singers.forEach((item) => {
-      const name = item[nameKey]
+      let name = item[nameKey]
       if (!name) return
       singer.push(name)
     })

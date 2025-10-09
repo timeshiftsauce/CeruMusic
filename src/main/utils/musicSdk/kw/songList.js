@@ -1,5 +1,5 @@
 import { httpFetch } from '../../request'
-import { formatPlayTime, decodeName } from '../index'
+import { formatPlayTime, decodeName } from '../../index'
 import { formatSinger, objStr2JSON } from './util'
 import album from './album'
 
@@ -13,18 +13,18 @@ export default {
   sortList: [
     {
       name: '最新',
-      id: 'new'
+      id: 'new',
     },
     {
       name: '最热',
-      id: 'hot'
-    }
+      id: 'hot',
+    },
   ],
   regExps: {
     mInfo: /level:(\w+),bitrate:(\d+),format:(\w+),size:([\w.]+)/,
     // http://www.kuwo.cn/playlist_detail/2886046289
     // https://m.kuwo.cn/h5app/playlist/2736267853?t=qqfriend
-    listDetailLink: /^.+\/playlist(?:_detail)?\/(\d+)(?:\?.*|&.*$|#.*$|$)/
+    listDetailLink: /^.+\/playlist(?:_detail)?\/(\d+)(?:\?.*|&.*$|#.*$|$)/,
   },
   tagsUrl:
     'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagList?cmd=rcm_keyword_playlist&user=0&prod=kwplayer_pc_9.0.5.0&vipver=9.0.5.0&source=kwplayer_pc_9.0.5.0&loginUid=0&loginSid=0&appUid=76039576',
@@ -43,7 +43,9 @@ export default {
   },
   getListDetailUrl(id, page) {
     // http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=2858093057&pn=0&rn=100&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1
-    return `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}&rn=${this.limit_song}&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1`
+    return `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}&rn=${
+      this.limit_song
+    }&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1`
     // http://mobileinterfaces.kuwo.cn/er.s?type=get_pc_qz_data&f=web&id=140&prod=pc
   },
 
@@ -72,7 +74,7 @@ export default {
     return rawList.map((item) => ({
       id: `${item.id}-${item.digest}`,
       name: item.name,
-      source: 'kw'
+      source: 'kw',
     }))
   },
   filterTagInfo(rawList) {
@@ -83,8 +85,8 @@ export default {
         parent_name: type.name,
         id: `${item.id}-${item.digest}`,
         name: item.name,
-        source: 'kw'
-      }))
+        source: 'kw',
+      })),
     }))
   },
 
@@ -95,7 +97,7 @@ export default {
     let id
     let type
     if (tagId) {
-      const arr = tagId.split('-')
+      let arr = tagId.split('-')
       id = arr[0]
       type = arr[1]
     } else {
@@ -110,7 +112,7 @@ export default {
           total: body.data.total,
           page: body.data.pn,
           limit: body.data.rn,
-          source: 'kw'
+          source: 'kw',
         }
       } else if (!body.length) {
         return this.getList(sortId, tagId, page, ++tryNum)
@@ -120,7 +122,7 @@ export default {
         total: 1000,
         page,
         limit: 1000,
-        source: 'kw'
+        source: 'kw',
       }
     })
   },
@@ -145,7 +147,7 @@ export default {
       img: item.img,
       grade: item.favorcnt / 10,
       desc: item.desc,
-      source: 'kw'
+      source: 'kw',
     }))
   },
   filterList2(rawData) {
@@ -164,7 +166,7 @@ export default {
           img: item.img,
           grade: item.favorcnt && item.favorcnt / 10,
           desc: item.desc,
-          source: 'kw'
+          source: 'kw',
         }))
       )
     })
@@ -188,8 +190,8 @@ export default {
           img: body.pic,
           desc: body.info,
           author: body.uname,
-          play_count: this.formatPlayCount(body.playnum)
-        }
+          play_count: this.formatPlayCount(body.playnum),
+        },
       }
     })
   },
@@ -207,7 +209,9 @@ export default {
   getListDetailDigest5Music(id, page, tryNum = 0) {
     if (tryNum > 2) return Promise.reject(new Error('try max num'))
     const requestObj = httpFetch(
-      `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}}&rn=${this.limit_song}&encode=utf-8&keyset=pl2012&identity=kuwo&pcmp4=1`
+      `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}}&rn=${
+        this.limit_song
+      }&encode=utf-8&keyset=pl2012&identity=kuwo&pcmp4=1`
     )
     return requestObj.promise.then(({ body }) => {
       // console.log(body)
@@ -223,8 +227,8 @@ export default {
           img: body.pic,
           desc: body.info,
           author: body.uname,
-          play_count: this.formatPlayCount(body.playnum)
-        }
+          play_count: this.formatPlayCount(body.playnum),
+        },
       }
     })
   },
@@ -235,33 +239,33 @@ export default {
 
   filterBDListDetail(rawList) {
     return rawList.map((item) => {
-      const types = []
-      const _types = {}
-      for (const info of item.audios) {
+      let types = []
+      let _types = {}
+      for (let info of item.audios) {
         info.size = info.size?.toLocaleUpperCase()
         switch (info.bitrate) {
           case '4000':
             types.push({ type: 'flac24bit', size: info.size })
             _types.flac24bit = {
-              size: info.size
+              size: info.size,
             }
             break
           case '2000':
             types.push({ type: 'flac', size: info.size })
             _types.flac = {
-              size: info.size
+              size: info.size,
             }
             break
           case '320':
             types.push({ type: '320k', size: info.size })
             _types['320k'] = {
-              size: info.size
+              size: info.size,
             }
             break
           case '128':
             types.push({ type: '128k', size: info.size })
             _types['128k'] = {
-              size: info.size
+              size: info.size,
             }
             break
         }
@@ -282,7 +286,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       }
     })
   },
@@ -299,8 +303,8 @@ export default {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
-          plat: 'h5'
-        }
+          plat: 'h5',
+        },
       }
     ).promise.catch(() => ({ code: 0 }))
 
@@ -311,7 +315,7 @@ export default {
       img: infoData.data.pic,
       desc: infoData.data.description,
       author: infoData.data.creatorName,
-      play_count: infoData.data.playNum
+      play_count: infoData.data.playNum,
     }
   },
   async getListDetailMusicListByBDUserPub(id) {
@@ -321,8 +325,8 @@ export default {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
-          plat: 'h5'
-        }
+          plat: 'h5',
+        },
       }
     ).promise.catch(() => ({ code: 0 }))
 
@@ -334,18 +338,20 @@ export default {
       img: infoData.data.userInfo.headImg,
       desc: '',
       author: infoData.data.userInfo.nickname,
-      play_count: ''
+      play_count: '',
     }
   },
   async getListDetailMusicListByBDList(id, source, page, tryNum = 0) {
     const { body: listData } = await httpFetch(
-      `https://bd-api.kuwo.cn/api/service/playlist/${id}/musicList?reqId=${this.getReqId()}&source=${source}&pn=${page}&rn=${this.limit_song}`,
+      `https://bd-api.kuwo.cn/api/service/playlist/${id}/musicList?reqId=${this.getReqId()}&source=${source}&pn=${page}&rn=${
+        this.limit_song
+      }`,
       {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
-          plat: 'h5'
-        }
+          plat: 'h5',
+        },
       }
     ).promise.catch(() => {
       if (tryNum > 2) return Promise.reject(new Error('try max num'))
@@ -359,7 +365,7 @@ export default {
       page,
       limit: listData.data.pageSize,
       total: listData.data.total,
-      source: 'kw'
+      source: 'kw',
     }
   },
   async getListDetailMusicListByBD(id, page) {
@@ -383,7 +389,7 @@ export default {
       img: '',
       desc: '',
       author: '',
-      play_count: ''
+      play_count: '',
     }
     // console.log(listData)
     return listData
@@ -415,35 +421,53 @@ export default {
   filterListDetail(rawData) {
     // console.log(rawData)
     return rawData.map((item) => {
-      const infoArr = item.N_MINFO.split(';')
-      const types = []
-      const _types = {}
+      let infoArr = item.N_MINFO.split(';')
+      let types = []
+      let _types = {}
       for (let info of infoArr) {
         info = info.match(this.regExps.mInfo)
         if (info) {
           switch (info[2]) {
+            case '20900':
+              types.push({ type: 'master', size: info[4] })
+              _types.master = {
+                size: info[4].toLocaleUpperCase(),
+              }
+              break
+            case '20501':
+              types.push({ type: 'atmos_plus', size: info[4] })
+              _types.atmos_plus = {
+                size: info[4].toLocaleUpperCase(),
+              }
+              break
+            case '20201':
+              types.push({ type: 'atmos', size: info[4] })
+              _types.atmos = {
+                size: info[4].toLocaleUpperCase(),
+              }
+              break
             case '4000':
-              types.push({ type: 'flac24bit', size: info[4] })
+              types.push({ type: 'hires', size: info[4] })
               _types.flac24bit = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
             case '2000':
               types.push({ type: 'flac', size: info[4] })
               _types.flac = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
             case '320':
               types.push({ type: '320k', size: info[4] })
               _types['320k'] = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
             case '128':
               types.push({ type: '128k', size: info[4] })
               _types['128k'] = {
-                size: info[4].toLocaleUpperCase()
+                size: info[4].toLocaleUpperCase(),
               }
               break
           }
@@ -464,7 +488,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       }
     })
   },
@@ -472,13 +496,13 @@ export default {
     return Promise.all([this.getTag(), this.getHotTag()]).then(([tags, hotTag]) => ({
       tags,
       hotTag,
-      source: 'kw'
+      source: 'kw',
     }))
   },
   getDetailPageUrl(id) {
     if (/[?&:/]/.test(id)) id = id.replace(this.regExps.listDetailLink, '$1')
     else if (/^digest-/.test(id)) {
-      const result = id.split('__')
+      let result = id.split('__')
       id = result[1]
     }
     return `http://www.kuwo.cn/playlist_detail/${id}`
@@ -486,7 +510,9 @@ export default {
 
   search(text, page, limit = 20) {
     return httpFetch(
-      `http://search.kuwo.cn/r.s?all=${encodeURIComponent(text)}&pn=${page - 1}&rn=${limit}&rformat=json&encoding=utf8&ver=mbox&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist&pay=0&needliveshow=0`
+      `http://search.kuwo.cn/r.s?all=${encodeURIComponent(text)}&pn=${
+        page - 1
+      }&rn=${limit}&rformat=json&encoding=utf8&ver=mbox&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist&pay=0&needliveshow=0`
     ).promise.then(({ body }) => {
       body = objStr2JSON(body)
       // console.log(body)
@@ -501,15 +527,15 @@ export default {
             // time: item.publish_time,
             img: item.pic,
             desc: decodeName(item.intro),
-            source: 'kw'
+            source: 'kw',
           }
         }),
         limit,
         total: parseInt(body.TOTAL),
-        source: 'kw'
+        source: 'kw',
       }
     })
-  }
+  },
 }
 
 // getList
