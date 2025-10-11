@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, toRaw, computed } from 'vue'
+import { ref, onMounted, toRaw, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -27,6 +27,10 @@ const LocalUserDetail = LocalUserDetailStore()
 // 响应式状态
 const songs = ref<MusicItem[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const hasMore = ref(true)
+const currentPage = ref(1)
+const pageSize = 50
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
 const playlistInfo = ref({
@@ -60,8 +64,8 @@ const fetchPlaylistSongs = async () => {
       // 处理本地歌单
       await fetchLocalPlaylistSongs()
     } else {
-      // 处理网络歌单
-      await fetchNetworkPlaylistSongs()
+      // 处理网络歌单（重置并加载第一页）
+      await fetchNetworkPlaylistSongs(true)
     }
   } catch (error) {
     console.error('获取歌单歌曲失败:', error)
@@ -116,22 +120,43 @@ const fetchLocalPlaylistSongs = async () => {
   }
 }
 
-// 获取网络歌单歌曲
-const fetchNetworkPlaylistSongs = async () => {
+/**
+ * 获取网络歌单歌曲，支持重置与分页追加
+ * @param reset 是否重置为第一页
+ */
+const fetchNetworkPlaylistSongs = async (reset = false) => {
   try {
-    // 调用API获取歌单详情和歌曲列表
+    // 并发保护：首次加载使用 loading，分页加载使用 loadingMore
+    if ((reset && !loading.value) || (!reset && loadingMore.value)) return
+
+    if (reset) {
+      currentPage.value = 1
+      hasMore.value = true
+      songs.value = []
+      loading.value = true
+    } else {
+      if (!hasMore.value) return
+      loadingMore.value = true
+    }
+
     const result = (await window.api.music.requestSdk('getPlaylistDetail', {
       source: playlistInfo.value.source,
       id: playlistInfo.value.id,
-      page: 1
+      page: currentPage.value
     })) as any
+    const limit = Number(result?.limit ?? pageSize)
 
-    console.log(result)
-    if (result && result.list) {
-      songs.value = result.list
+    if (result && Array.isArray(result.list)) {
+      const newList = result.list
 
-      // 获取歌曲封面
-      setPic(0, playlistInfo.value.source)
+      if (reset) {
+        songs.value = newList
+      } else {
+        songs.value = [...songs.value, ...newList]
+      }
+
+      // 获取新增歌曲封面
+      setPic((currentPage.value - 1) * limit, playlistInfo.value.source)
 
       // 如果API返回了歌单详细信息，更新歌单信息
       if (result.info) {
@@ -143,10 +168,28 @@ const fetchNetworkPlaylistSongs = async () => {
           total: result.info.total || playlistInfo.value.total
         }
       }
+
+      // 更新分页状态
+      currentPage.value += 1
+      const total = result.info?.total ?? playlistInfo.value.total ?? 0
+      if (total) {
+        hasMore.value = songs.value.length < total
+      } else {
+        hasMore.value = newList.length >= limit
+      }
+    } else {
+      hasMore.value = false
     }
   } catch (error) {
     console.error('获取网络歌单失败:', error)
-    songs.value = []
+    if (reset) songs.value = []
+    hasMore.value = false
+  } finally {
+    if (reset) {
+      loading.value = false
+    } else {
+      loadingMore.value = false
+    }
   }
 }
 
@@ -389,45 +432,44 @@ const handleShufflePlaylist = () => {
     }
   })
 }
-// 滚动事件处理
+/**
+ * 滚动事件处理：更新头部紧凑状态，并在接近底部时触发分页加载
+ */
 const handleScroll = (event?: Event) => {
   let scrollTop = 0
+  let scrollHeight = 0
+  let clientHeight = 0
 
   if (event && event.target) {
-    scrollTop = (event.target as HTMLElement).scrollTop
+    const target = event.target as HTMLElement
+    scrollTop = target.scrollTop
+    scrollHeight = target.scrollHeight
+    clientHeight = target.clientHeight
   } else if (scrollContainer.value) {
     scrollTop = scrollContainer.value.scrollTop
+    scrollHeight = scrollContainer.value.scrollHeight
+    clientHeight = scrollContainer.value.clientHeight
   }
 
   scrollY.value = scrollTop
   // 当滚动超过100px时，启用紧凑模式
   isHeaderCompact.value = scrollY.value > 100
+
+  // 触底加载（参考 search.vue）
+  if (
+    scrollHeight > 0 &&
+    scrollHeight - scrollTop - clientHeight < 100 &&
+    !loadingMore.value &&
+    hasMore.value &&
+    !isLocalPlaylist.value
+  ) {
+    fetchNetworkPlaylistSongs(false)
+  }
 }
 
 // 组件挂载时获取数据
 onMounted(() => {
   fetchPlaylistSongs()
-
-  // 延迟添加滚动事件监听，等待 SongVirtualList 组件渲染完成
-  setTimeout(() => {
-    // 查找 SongVirtualList 内部的虚拟滚动容器
-    const virtualListContainer = document.querySelector('.virtual-scroll-container')
-
-    if (virtualListContainer) {
-      scrollContainer.value = virtualListContainer as HTMLElement
-      virtualListContainer.addEventListener('scroll', handleScroll, { passive: true })
-      console.log('滚动监听器已添加到:', virtualListContainer)
-    } else {
-      console.warn('未找到虚拟滚动容器')
-    }
-  }, 200)
-})
-
-// 组件卸载时清理事件监听
-onUnmounted(() => {
-  if (scrollContainer.value) {
-    scrollContainer.value.removeEventListener('scroll', handleScroll)
-  }
 })
 </script>
 

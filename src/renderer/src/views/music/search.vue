@@ -233,6 +233,7 @@ const handleScroll = (event: Event) => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden auto;
 }
 
 .search-header {

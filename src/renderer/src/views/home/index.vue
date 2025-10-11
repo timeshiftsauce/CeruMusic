@@ -23,10 +23,3 @@
     <PlayMusic />
   </div>
 </template>
-
-<style lang="scss" scoped>
-.animate__animated {
-  position: absolute;
-  width: 100%;
-}
-</style>

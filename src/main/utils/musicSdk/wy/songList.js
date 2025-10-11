@@ -83,7 +83,7 @@ export default {
     const { statusCode, body } = await requestObj_listDetail.promise
     if (statusCode !== 200 || body.code !== this.successCode)
       return this.getListDetail(id, page, ++tryNum)
-    let limit = 1000
+    let limit = 50
     let rangeStart = (page - 1) * limit
     let list
     try {

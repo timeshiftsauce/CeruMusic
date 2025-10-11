@@ -94,90 +94,106 @@ watch(
   () => props.songId,
   async (newId) => {
     if (!newId || !props.songInfo) return
-    let lyricText = ''
-    let parsedLyrics: LyricLine[] = []
-    // 创建一个符合 MusicItem 接口的对象，只包含必要的基本属性
+
+    // 工具函数：清洗响应式对象，避免序列化问题
+    const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(props.songInfo)))
+
+    // 工具函数：按来源解析逐字歌词
+    const parseCrLyricBySource = (source: string, text: string): LyricLine[] => {
+      return source === 'tx' ? parseQrc(text) : parseYrc(text)
+    }
+
+    // 工具函数：合并翻译到主歌词
+    const mergeTranslation = (base: LyricLine[], tlyric?: string): LyricLine[] => {
+      if (!tlyric || base.length === 0) return base
+
+      const translated = parseLrc(tlyric)
+      if (!translated || translated.length === 0) return base
+
+      // 将译文按 startTime-endTime 建立索引，便于精确匹配
+      const keyOf = (s: number, e: number) => `${s}-${e}`
+      const joinWords = (line: LyricLine) => (line.words || []).map(w => w.word).join('')
+
+      const tMap = new Map<string, LyricLine>()
+      for (const tl of translated) {
+        tMap.set(keyOf(tl.startTime, tl.endTime), tl)
+      }
+
+      // 容差时间（毫秒），用于无法精确匹配时的最近行匹配
+      const TOLERANCE_MS = 1000
+
+      for (const bl of base) {
+        // 1) 先尝试精确匹配
+        let tLine = tMap.get(keyOf(bl.startTime, bl.endTime))
+
+        // 2) 若无精确匹配，按 startTime 进行容差范围内最近匹配
+        if (!tLine) {
+          let best: { line: LyricLine; diff: number } | null = null
+          for (const tl of translated) {
+            const diff = Math.abs(tl.startTime - bl.startTime)
+            // 要求结束时间也尽量接近，避免跨行误配
+            const endDiff = Math.abs(tl.endTime - bl.endTime)
+            const score = diff + endDiff
+            if (diff <= TOLERANCE_MS && endDiff <= TOLERANCE_MS) {
+              if (!best || score < best.diff) best = { line: tl, diff: score }
+            }
+          }
+          tLine = best?.line
+        }
+
+        if (tLine) {
+          const text = joinWords(tLine)
+          if (text) bl.translatedLyric = text
+        }
+      }
+
+      return base
+    }
 
     try {
-      // 检查是否为网易云音乐，只有网易云才使用ttml接口
-      const isNetease =
-        props.songInfo && 'source' in props.songInfo && props.songInfo.source === 'wy'
-      const songinfo: any = _.cloneDeep(toRaw(props.songInfo))
+      const source =
+        props.songInfo && 'source' in props.songInfo ? (props.songInfo as any).source : 'kg'
+      let parsedLyrics: LyricLine[] = []
 
-      if (isNetease) {
-        // 网易云音乐优先尝试ttml接口
+      if (source === 'wy') {
+        // 网易云：优先尝试 TTML
         try {
-          const res = (await (
+          const res = await (
             await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)
-          ).text()) as any
+          ).text()
           if (!res || res.length < 100) throw new Error('ttml 无歌词')
           parsedLyrics = parseTTML(res).lines
         } catch {
-          // ttml失败后使用新的歌词API
+          // 回退到统一歌词 API
           const lyricData = await window.api.music.requestSdk('getLyric', {
             source: 'wy',
-            songInfo: songinfo
+            songInfo: _.cloneDeep(toRaw(props.songInfo)) as any
           })
 
-          if (lyricData.crlyric) {
-            // 使用逐字歌词
-            lyricText = lyricData.crlyric
-
-            parsedLyrics = parseYrc(lyricText)
-          } else if (lyricData.lyric) {
-            lyricText = lyricData.lyric
-            parsedLyrics = parseLrc(lyricText)
+          if (lyricData?.crlyric) {
+            parsedLyrics = parseYrc(lyricData.crlyric)
+          } else if (lyricData?.lyric) {
+            parsedLyrics = parseLrc(lyricData.lyric)
           }
 
-          if (lyricData.tlyric) {
-            const translatedline = parseLrc(lyricData.tlyric)
-
-            for (let i = 0; i < parsedLyrics.length; i++) {
-              if (translatedline[i] && translatedline[i].words[0]) {
-                parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
-              }
-            }
-          }
+          parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
         }
       } else {
-        // 其他音乐平台直接使用新的歌词API
-        const source = props.songInfo && 'source' in props.songInfo ? props.songInfo.source : 'kg'
-        // 创建一个纯净的对象，避免Vue响应式对象序列化问题
-        const cleanSongInfo = JSON.parse(JSON.stringify(toRaw(props.songInfo)))
+        // 其他来源：直接统一歌词 API
         const lyricData = await window.api.music.requestSdk('getLyric', {
-          source: source,
-          songInfo: cleanSongInfo
+          source,
+          songInfo: getCleanSongInfo()
         })
 
-        if (lyricData.crlyric) {
-          // 使用逐字歌词
-          lyricText = lyricData.crlyric
-          if (source === 'tx') {
-            parsedLyrics = parseQrc(lyricText)
-          } else {
-            parsedLyrics = parseYrc(lyricText)
-          }
-        } else if (lyricData.lyric) {
-          lyricText = lyricData.lyric
-          parsedLyrics = parseLrc(lyricText)
+        if (lyricData?.crlyric) {
+          parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
+        } else if (lyricData?.lyric) {
+          parsedLyrics = parseLrc(lyricData.lyric)
         }
 
-        if (lyricData.tlyric) {
-          const translatedline = parseLrc(lyricData.tlyric)
-
-          for (let i = 0; i < parsedLyrics.length; i++) {
-            if (translatedline[i] && translatedline[i].words[0]) {
-              parsedLyrics[i].translatedLyric = translatedline[i].words[0].word
-            }
-          }
-        }
+        parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
       }
-
-      if (parsedLyrics.length > 0) {
-        state.lyricLines = parsedLyrics
-      } else {
-        state.lyricLines = []
-      }
+      state.lyricLines = parsedLyrics.length > 0 ? parsedLyrics : []
     } catch (error) {
       console.error('获取歌词失败:', error)
       state.lyricLines = []

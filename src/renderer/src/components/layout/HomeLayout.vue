@@ -606,8 +606,8 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
 
   .mainContent {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    // overflow-y: auto;
+    overflow: hidden;
     position: relative;
     height: 0;
     /* 确保flex子元素能够正确计算高度 */

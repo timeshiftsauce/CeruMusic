@@ -2,6 +2,14 @@ import { NotifyPlugin, MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { toRaw, h } from 'vue'
+import {
+  QUALITY_ORDER,
+  getQualityDisplayName,
+  buildQualityFormats,
+  getHighestQualityType,
+  compareQuality,
+  type KnownQuality
+} from '@common/utils/quality'
 
 interface MusicItem {
   singer: string
@@ -18,33 +26,17 @@ interface MusicItem {
   typeUrl: Record<string, any>
 }
 
-const qualityMap: Record<string, string> = {
-  '128k': '标准音质',
-  '192k': '高品音质',
-  '320k': '超高品质',
-  flac: '无损音质',
-  flac24bit: '超高解析',
-  hires: '高清臻音',
-  atmos: '全景环绕',
-  master: '超清母带'
-}
-const qualityKey = Object.keys(qualityMap)
-
 // 创建音质选择弹窗
 function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<string | null> {
   return new Promise((resolve) => {
     // 获取歌曲支持的音质列表
-    const availableQualities = songInfo.types || []
+    const availableQualities = buildQualityFormats(songInfo.types || [])
     // 展示全部音质，但对超出用户最高音质的项做禁用呈现
-    const userMaxIndex = qualityKey.indexOf(userQuality)
+    const userMaxIndex = QUALITY_ORDER.indexOf(userQuality as KnownQuality)
     const qualityOptions = [...availableQualities]
 
-    // 按音质优先级排序
-    qualityOptions.sort((a, b) => {
-      const aIndex = qualityKey.indexOf(a.type)
-      const bIndex = qualityKey.indexOf(b.type)
-      return bIndex - aIndex // 降序排列，高音质在前
-    })
+    // 按音质优先级排序（高→低）
+    qualityOptions.sort((a, b) => compareQuality(a.type, b.type))
 
     const dialog = DialogPlugin.confirm({
       header: '选择下载音质(可滚动)',
@@ -70,8 +62,8 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                 }
               },
               qualityOptions.map((quality) => {
-                const idx = qualityKey.indexOf(quality.type)
-                const disabled = idx !== -1 && idx > userMaxIndex
+                const idx = QUALITY_ORDER.indexOf(quality.type as KnownQuality)
+                const disabled = userMaxIndex !== -1 && idx !== -1 && idx < userMaxIndex
                 return h(
                   'div',
                   {
@@ -132,7 +124,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                                 : '#333'
                           }
                         },
-                        qualityMap[quality.type] || quality.type
+                        getQualityDisplayName(quality.type)
                       ),
                       h(
                         'div',
@@ -193,16 +185,16 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       return
     }
 
-    let quality = selectedQuality
+    let quality = selectedQuality as string
 
     // 检查选择的音质是否超出歌曲支持的最高音质
-    const songMaxQuality = songInfo.types[songInfo.types.length - 1]?.type
-    if (songMaxQuality && qualityKey.indexOf(quality) > qualityKey.indexOf(songMaxQuality)) {
+    const songMaxQuality = getHighestQualityType(songInfo.types)
+    if (songMaxQuality && QUALITY_ORDER.indexOf(quality as KnownQuality) < QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)) {
       quality = songMaxQuality
-      MessagePlugin.warning(`所选音质不可用，已自动调整为: ${qualityMap[quality]}`)
+      MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)
     }
 
-    console.log(`使用音质下载: ${quality} - ${qualityMap[quality]}`)
+    console.log(`使用音质下载: ${quality} - ${getQualityDisplayName(quality)}`)
     const tip = MessagePlugin.success('开始下载歌曲：' + songInfo.name)
 
     const result = await window.api.music.requestSdk('downloadSingleSong', {

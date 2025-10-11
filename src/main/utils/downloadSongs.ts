@@ -1,6 +1,4 @@
-import NodeID3 from 'node-id3'
-import ffmpegStatic from 'ffmpeg-static'
-import ffmpeg from 'fluent-ffmpeg'
+import { File, Picture, Id3v2Settings } from 'node-taglib-sharp'
 import path from 'node:path'
 import axios from 'axios'
 import fs from 'fs'
@@ -73,6 +71,32 @@ function formatTimestamp(timeMs: number): string {
   const milliseconds = timeMs % 1000
 
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
+}
+
+// 根据图片 URL 和 Content-Type 解析扩展名，默认返回 .jpg
+function resolveCoverExt(imgUrl: string, contentType?: string): string {
+  const validExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])
+  let urlExt: string | undefined
+  try {
+    const pathname = new URL(imgUrl).pathname
+    const i = pathname.lastIndexOf('.')
+    if (i !== -1) {
+      urlExt = pathname.substring(i).toLowerCase()
+    }
+  } catch {}
+
+  if (urlExt && validExts.has(urlExt)) {
+    return urlExt === '.jpeg' ? '.jpg' : urlExt
+  }
+
+  if (contentType) {
+    if (contentType.includes('image/png')) return '.png'
+    if (contentType.includes('image/webp')) return '.webp'
+    if (contentType.includes('image/jpeg') || contentType.includes('image/jpg')) return '.jpg'
+    if (contentType.includes('image/bmp')) return '.bmp'
+  }
+
+  return '.jpg'
 }
 
 /**
@@ -156,265 +180,6 @@ function convertOldFormat(timestamp: string, content: string): string {
   return `[${timestamp}]${convertedContent}`
 }
 
-// 写入音频标签的辅助函数
-async function writeAudioTags(filePath: string, songInfo: any, tagWriteOptions: any) {
-  try {
-    console.log('开始写入音频标签:', filePath, tagWriteOptions, songInfo)
-
-    // 获取文件扩展名来判断格式
-    const fileExtension = path.extname(filePath).toLowerCase().substring(1)
-    console.log('文件格式:', fileExtension)
-
-    // 根据文件格式选择不同的标签写入方法
-    if (fileExtension === 'mp3') {
-      await writeMP3Tags(filePath, songInfo, tagWriteOptions)
-    } else if (['flac', 'ogg', 'opus'].includes(fileExtension)) {
-      await writeVorbisCommentTags(filePath, songInfo, tagWriteOptions)
-    } else if (['m4a', 'mp4', 'aac'].includes(fileExtension)) {
-      await writeMP4Tags(filePath, songInfo, tagWriteOptions)
-    } else {
-      console.warn('不支持的音频格式:', fileExtension)
-      // 尝试使用 NodeID3 作为后备方案
-      await writeMP3Tags(filePath, songInfo, tagWriteOptions)
-    }
-  } catch (error) {
-    console.error('写入音频标签时发生错误:', error)
-    throw error
-  }
-}
-
-// MP3 格式标签写入
-async function writeMP3Tags(filePath: string, songInfo: any, tagWriteOptions: any) {
-  const tags: any = {}
-
-  // 写入基础信息
-  if (tagWriteOptions.basicInfo) {
-    tags.title = songInfo.name || ''
-    tags.artist = songInfo.singer || ''
-    tags.album = songInfo.albumName || ''
-    tags.year = songInfo.year || ''
-    tags.genre = songInfo.genre || ''
-  }
-
-  // 写入歌词
-  if (tagWriteOptions.lyrics && songInfo.lrc) {
-    const convertedLrc = convertLrcFormat(songInfo.lrc)
-    tags.unsynchronisedLyrics = {
-      language: 'chi',
-      shortText: 'Lyrics',
-      text: convertedLrc
-    }
-  }
-
-  // 写入封面
-  if (tagWriteOptions.cover && songInfo.img) {
-    try {
-      const coverResponse = await axios({
-        method: 'GET',
-        url: songInfo.img,
-        responseType: 'arraybuffer',
-        timeout: 10000
-      })
-
-      if (coverResponse.data) {
-        tags.image = {
-          mime: 'image/jpeg',
-          type: {
-            id: 3,
-            name: 'front cover'
-          },
-          description: 'Cover',
-          imageBuffer: Buffer.from(coverResponse.data)
-        }
-      }
-    } catch (coverError) {
-      console.warn('获取封面失败:', coverError)
-    }
-  }
-
-  // 写入标签到文件
-  if (Object.keys(tags).length > 0) {
-    const success = NodeID3.write(tags, filePath)
-    if (success) {
-      console.log('MP3音频标签写入成功:', filePath)
-    } else {
-      console.warn('MP3音频标签写入失败:', filePath)
-    }
-  }
-}
-
-// FLAC/OGG 格式标签写入 (使用 Vorbis Comment)
-async function writeVorbisCommentTags(filePath: string, songInfo: any, tagWriteOptions: any) {
-  try {
-    console.log('开始写入 FLAC 标签:', filePath)
-
-    // 准备新的标签数据
-    const newTags: any = {}
-
-    // 写入基础信息
-    if (tagWriteOptions.basicInfo) {
-      if (songInfo.name) newTags.TITLE = songInfo.name
-      if (songInfo.singer) newTags.ARTIST = songInfo.singer
-      if (songInfo.albumName) newTags.ALBUM = songInfo.albumName
-      if (songInfo.year) newTags.DATE = songInfo.year.toString()
-      if (songInfo.genre) newTags.GENRE = songInfo.genre
-    }
-
-    // 写入歌词
-    if (tagWriteOptions.lyrics && songInfo.lrc) {
-      const convertedLrc = convertLrcFormat(songInfo.lrc)
-      newTags.LYRICS = convertedLrc
-    }
-
-    console.log('准备写入的标签:', newTags)
-
-    // 使用 ffmpeg-static 写入 FLAC 标签
-    if (path.extname(filePath).toLowerCase() === '.flac') {
-      await writeFLACTagsWithFFmpeg(filePath, newTags, songInfo, tagWriteOptions)
-    } else {
-      console.warn('暂不支持该格式的标签写入:', path.extname(filePath))
-    }
-  } catch (error) {
-    console.error('写入 Vorbis Comment 标签失败:', error)
-    throw error
-  }
-}
-
-// 使用 fluent-ffmpeg 写入 FLAC 标签
-async function writeFLACTagsWithFFmpeg(
-  filePath: string,
-  tags: any,
-  songInfo: any,
-  tagWriteOptions: any
-) {
-  let tempOutputPath: string | null = null
-  let tempCoverPath: string | null = null
-
-  try {
-    if (!ffmpegStatic) {
-      throw new Error('ffmpeg-static 不可用')
-    }
-    ffmpeg.setFfmpegPath(ffmpegStatic.replace('app.asar', 'app.asar.unpacked'))
-
-    // 创建临时输出文件
-    tempOutputPath = filePath + '.temp.flac'
-
-    // 创建 fluent-ffmpeg 实例
-    let command = ffmpeg(filePath)
-      .audioCodec('copy') // 复制音频编解码器，不重新编码
-      .output(tempOutputPath)
-
-    // 添加元数据标签
-    for (const [key, value] of Object.entries(tags)) {
-      if (value) {
-        // fluent-ffmpeg 会自动处理特殊字符转义
-        command = command.outputOptions(['-metadata', `${key}=${value}`])
-      }
-    }
-
-    // 处理封面
-    if (tagWriteOptions.cover && songInfo.img) {
-      try {
-        console.log('开始下载封面:', songInfo.img)
-        const coverResponse = await axios({
-          method: 'GET',
-          url: songInfo.img,
-          responseType: 'arraybuffer',
-          timeout: 10000
-        })
-
-        if (coverResponse.data) {
-          // 保存临时封面文件
-          tempCoverPath = path.join(path.dirname(filePath), 'temp_cover.jpg')
-          await fsPromise.writeFile(tempCoverPath, Buffer.from(coverResponse.data))
-
-          // 添加封面作为输入
-          command = command.input(tempCoverPath).outputOptions([
-            '-map',
-            '0:a', // 映射原始文件的音频流
-            '-map',
-            '1:v', // 映射封面的视频流
-            '-c:v',
-            'copy', // 复制视频编解码器
-            '-disposition:v:0',
-            'attached_pic' // 设置为附加图片
-          ])
-
-          console.log('封面已添加到命令中')
-        }
-      } catch (coverError) {
-        console.warn(
-          '下载封面失败，跳过封面写入:',
-          coverError instanceof Error ? coverError.message : coverError
-        )
-      }
-    }
-
-    // 执行 ffmpeg 命令
-    await new Promise<void>((resolve, reject) => {
-      command
-        .on('start', () => {
-          console.log('执行 ffmpeg 命令')
-        })
-        .on('progress', (progress) => {
-          if (progress.percent) {
-            console.log('处理进度:', Math.round(progress.percent) + '%')
-          }
-        })
-        .on('end', () => {
-          console.log('ffmpeg 处理完成')
-          resolve()
-        })
-        .on('error', (err, _, stderr) => {
-          console.error('ffmpeg 错误:', err.message)
-          if (stderr) {
-            console.error('ffmpeg stderr:', stderr)
-          }
-          reject(new Error(`ffmpeg 处理失败: ${err.message}`))
-        })
-        .run()
-    })
-
-    // 检查临时文件是否创建成功
-    if (!fs.existsSync(tempOutputPath)) {
-      throw new Error('ffmpeg 未能创建输出文件')
-    }
-
-    // 替换原文件
-    await fsPromise.rename(tempOutputPath, filePath)
-    tempOutputPath = null // 标记已处理，避免重复清理
-
-    console.log('使用 fluent-ffmpeg 写入 FLAC 标签成功:', filePath)
-  } catch (error) {
-    console.error('使用 fluent-ffmpeg 写入 FLAC 标签失败:', error)
-    throw error
-  } finally {
-    // 清理所有临时文件
-    const filesToClean = [tempOutputPath, tempCoverPath].filter(Boolean) as string[]
-
-    for (const tempFile of filesToClean) {
-      try {
-        if (fs.existsSync(tempFile)) {
-          await fsPromise.unlink(tempFile)
-          console.log('已清理临时文件:', tempFile)
-        }
-      } catch (cleanupError) {
-        console.warn(
-          '清理临时文件失败:',
-          tempFile,
-          cleanupError instanceof Error ? cleanupError.message : cleanupError
-        )
-      }
-    }
-  }
-}
-
-// MP4/M4A 格式标签写入
-async function writeMP4Tags(filePath: string, _songInfo: any, _tagWriteOptions: any) {
-  console.log('MP4/M4A 格式标签写入暂未实现:', filePath)
-  // 可以使用 ffmpeg 或其他工具实现
-}
-
 // 获取自定义下载目录
 const getDownloadDirectory = (): string => {
   // 使用配置管理服务获取下载目录
@@ -492,13 +257,71 @@ export default async function download(
     delete fileLock[songPath]
   }
 
-  // 写入标签信息
+  // 写入标签信息（使用 node-taglib-sharp）
   if (tagWriteOptions && fs.existsSync(songPath)) {
     try {
-      await writeAudioTags(songPath, songInfo, tagWriteOptions)
+      const baseName = path.basename(songPath, path.extname(songPath))
+      const dirName = path.dirname(songPath)
+      let coverExt = '.jpg'
+      let coverPath = path.join(dirName, `${baseName}${coverExt}`)
+      let coverDownloaded = false
+
+      // 下载封面（仅当启用且有URL）
+      if (tagWriteOptions.cover && songInfo?.img) {
+        try {
+          const coverRes = await axios.get(songInfo.img, {
+            responseType: 'arraybuffer',
+            timeout: 10000
+          })
+
+          const ct =
+            (coverRes.headers && (coverRes.headers['content-type'] as string | undefined)) ||
+            undefined
+          coverExt = resolveCoverExt(songInfo.img, ct)
+          coverPath = path.join(dirName, `${baseName}${coverExt}`)
+          await fsPromise.writeFile(coverPath, Buffer.from(coverRes.data))
+          coverDownloaded = true
+        } catch (e) {
+          console.warn('下载封面失败:', e instanceof Error ? e.message : e)
+        }
+      }
+
+      // 读取歌曲文件并设置标签
+      const songFile = File.createFromPath(songPath)
+
+      // 使用默认 ID3v2.3
+      Id3v2Settings.forceDefaultVersion = true
+      Id3v2Settings.defaultVersion = 3
+
+      songFile.tag.title = songInfo?.name || '未知曲目'
+      songFile.tag.album = songInfo?.albumName || '未知专辑'
+      const artists = songInfo?.singer ? [songInfo.singer] : ['未知艺术家']
+      songFile.tag.performers = artists
+      songFile.tag.albumArtists = artists
+      // 写入歌词（转换为标准 LRC）
+      if (tagWriteOptions.lyrics && songInfo?.lrc) {
+        const convertedLrc = convertLrcFormat(songInfo.lrc)
+        songFile.tag.lyrics = convertedLrc
+      }
+
+      // 写入封面
+      if (tagWriteOptions.cover && coverDownloaded) {
+        const songCover = Picture.fromPath(coverPath)
+        songFile.tag.pictures = [songCover]
+      }
+
+      // 保存并释放
+      songFile.save()
+      songFile.dispose()
+
+      // 删除临时封面
+      if (coverDownloaded) {
+        try {
+          await fsPromise.unlink(coverPath)
+        } catch {}
+      }
     } catch (error) {
-      console.warn('写入音频标签失败:', error)
-      throw ffmpegStatic
+      console.warn('写入音乐元信息失败:', error)
     }
   }
   return {

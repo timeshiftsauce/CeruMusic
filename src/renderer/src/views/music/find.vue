@@ -221,6 +221,8 @@ onUnmounted(() => {
 .find-container {
   padding: 2rem;
   width: 100%;
+  height: 100%;
+  overflow-y: auto;
   margin: 0 auto;
 }
 

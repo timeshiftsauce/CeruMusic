@@ -517,7 +517,7 @@ const setPicForPlaylist = async (songs: any[], source: string) => {
 // 处理网络歌单导入
 const handleNetworkPlaylistImport = async (input: string) => {
   try {
-    const load1 = MessagePlugin.loading('正在解析歌单链接...')
+    const load1 = MessagePlugin.loading('正在解析歌单链接...', 0)
 
     let playlistId: string = ''
     let platformName: string = ''
@@ -691,7 +691,7 @@ const handleNetworkPlaylistImport = async (input: string) => {
     load1.then((res) => res.close())
 
     // 获取歌单详情
-    const load2 = MessagePlugin.loading('正在获取歌单信息...')
+    const load2 = MessagePlugin.loading('正在获取歌单信息,请不要离开页面...', 0)
 
     const getListDetail = async (page: number) => {
       let detailResult: any
@@ -1441,7 +1441,8 @@ onMounted(() => {
 <style lang="scss" scoped>
 .page {
   width: 100%;
-  // height: 100%;
+  height: 100%;
+  overflow-y: auto;
 }
 .local-container {
   padding: 2rem;
