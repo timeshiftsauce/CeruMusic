@@ -67,18 +67,11 @@ function setAnimate(routerObj: RouteRecordRaw[]) {
   }
 }
 setAnimate(routes)
+
 const option: RouterOptions = {
   history: createWebHashHistory(),
-  routes,
-  scrollBehavior(_to_, _from_, savedPosition) {
-    if (savedPosition) {
-      return savedPosition
-    } else {
-      return { top: 0 }
-    }
-  }
+  routes
 }
 
 const router = createRouter(option)
-
 export default router
