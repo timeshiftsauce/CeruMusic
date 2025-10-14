@@ -92,8 +92,15 @@ const state = reactive({
 // 监听歌曲ID变化，获取歌词
 watch(
   () => props.songId,
-  async (newId) => {
+  async (newId, _oldId, onCleanup) => {
     if (!newId || !props.songInfo) return
+    // 竞态与取消控制，防止内存泄漏与过期结果覆盖
+    let active = true
+    const abort = new AbortController()
+    onCleanup(() => {
+      active = false
+      abort.abort()
+    })
 
     // 工具函数：清洗响应式对象，避免序列化问题
     const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(props.songInfo)))
@@ -112,41 +119,51 @@ watch(
 
       // 将译文按 startTime-endTime 建立索引，便于精确匹配
       const keyOf = (s: number, e: number) => `${s}-${e}`
-      const joinWords = (line: LyricLine) => (line.words || []).map(w => w.word).join('')
+      const joinWords = (line: LyricLine) => (line.words || []).map((w) => w.word).join('')
 
       const tMap = new Map<string, LyricLine>()
       for (const tl of translated) {
         tMap.set(keyOf(tl.startTime, tl.endTime), tl)
       }
 
-      // 容差时间（毫秒），用于无法精确匹配时的最近行匹配
-      const TOLERANCE_MS = 1000
+      // 动态容差：与行时长相关，避免长/短行同一阈值导致误配
+      const baseTolerance = 300 // 上限
+      const ratioTolerance = 0.4 // 与行时长的比例
 
-      for (const bl of base) {
-        // 1) 先尝试精确匹配
-        let tLine = tMap.get(keyOf(bl.startTime, bl.endTime))
+      // 锚点对齐 + 顺序映射：以第一行为锚点，后续按索引顺序插入译文
+      const translatedSorted = translated.slice().sort((a, b) => a.startTime - b.startTime)
 
-        // 2) 若无精确匹配，按 startTime 进行容差范围内最近匹配
-        if (!tLine) {
-          let best: { line: LyricLine; diff: number } | null = null
-          for (const tl of translated) {
-            const diff = Math.abs(tl.startTime - bl.startTime)
-            // 要求结束时间也尽量接近，避免跨行误配
-            const endDiff = Math.abs(tl.endTime - bl.endTime)
-            const score = diff + endDiff
-            if (diff <= TOLERANCE_MS && endDiff <= TOLERANCE_MS) {
-              if (!best || score < best.diff) best = { line: tl, diff: score }
-            }
+      if (base.length > 0) {
+        const firstBase = base[0]
+        const firstDuration = Math.max(1, firstBase.endTime - firstBase.startTime)
+        const firstTol = Math.min(baseTolerance, firstDuration * ratioTolerance)
+
+        // 在容差内寻找与第一行起始时间最接近的译文行作为锚点
+        let anchorIndex: number | null = null
+        let bestDiff = Number.POSITIVE_INFINITY
+        for (let i = 0; i < translatedSorted.length; i++) {
+          const diff = Math.abs(translatedSorted[i].startTime - firstBase.startTime)
+          if (diff <= firstTol && diff < bestDiff) {
+            bestDiff = diff
+            anchorIndex = i
           }
-          tLine = best?.line
         }
 
-        if (tLine) {
-          const text = joinWords(tLine)
-          if (text) bl.translatedLyric = text
+        if (anchorIndex !== null) {
+          // 从锚点开始顺序映射
+          let j = anchorIndex
+          for (let i = 0; i < base.length && j < translatedSorted.length; i++, j++) {
+            const bl = base[i]
+            const tl = translatedSorted[j]
+            if (tl.words[0].word === '//' || !bl.words[0].word) continue
+            const text = joinWords(tl)
+            if (text) bl.translatedLyric = text
+          }
+          return base
         }
       }
 
+      // 未找到锚点：保持原样
       return base
     }
 
@@ -159,8 +176,11 @@ watch(
         // 网易云：优先尝试 TTML
         try {
           const res = await (
-            await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`)
+            await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`, {
+              signal: abort.signal
+            })
           ).text()
+          if (!active) return
           if (!res || res.length < 100) throw new Error('ttml 无歌词')
           parsedLyrics = parseTTML(res).lines
         } catch {
@@ -169,6 +189,7 @@ watch(
             source: 'wy',
             songInfo: _.cloneDeep(toRaw(props.songInfo)) as any
           })
+          if (!active) return
 
           if (lyricData?.crlyric) {
             parsedLyrics = parseYrc(lyricData.crlyric)
@@ -184,6 +205,7 @@ watch(
           source,
           songInfo: getCleanSongInfo()
         })
+        if (!active) return
 
         if (lyricData?.crlyric) {
           parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
@@ -193,9 +215,12 @@ watch(
 
         parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
       }
+      if (!active) return
       state.lyricLines = parsedLyrics.length > 0 ? parsedLyrics : []
     } catch (error) {
       console.error('获取歌词失败:', error)
+      // 若已无效或已清理，避免写入与持有引用
+      if (!active) return
       state.lyricLines = []
     }
   },
@@ -227,7 +252,9 @@ async function updateTextColor() {
     useBlackText.value = false // 默认使用白色文本
   }
 }
-
+const jumpTime = (e) => {
+  if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
+}
 // 监听封面图片变化
 watch(() => actualCoverImage.value, updateTextColor, { immediate: true })
 
@@ -272,6 +299,8 @@ onBeforeUnmount(async () => {
   if (unsubscribePlay.value) {
     unsubscribePlay.value()
   }
+  bgRef.value?.bgRender?.dispose()
+  lyricPlayerRef.value?.lyricPlayer?.dispose()
 })
 
 // 监听音频URL变化
@@ -332,7 +361,7 @@ const lyricTranslateY = computed(() => {
       :album-is-video="false"
       :fps="30"
       :flow-speed="4"
-      :has-lyric="state.lyricLines.length > 10 && playSetting.getBgPlaying"
+      :has-lyric="state.lyricLines.length > 10"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
     />
     <!-- 全屏按钮 -->
@@ -398,11 +427,7 @@ const lyricTranslateY = computed(() => {
           class="lyric-player"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
-          @line-click="
-            (e) => {
-              if (Audio.audio) Audio.audio.currentTime = e.line.getLine().startTime / 1000
-            }
-          "
+          @line-click="jumpTime"
         >
         </LyricPlayer>
       </div>

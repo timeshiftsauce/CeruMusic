@@ -18,7 +18,6 @@ declare module 'vue' {
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
     HomeLayout: typeof import('./src/components/layout/HomeLayout.vue')['default']
     MusicCache: typeof import('./src/components/Settings/MusicCache.vue')['default']
-    NBackTop: typeof import('naive-ui')['NBackTop']
     NBadge: typeof import('naive-ui')['NBadge']
     NCard: typeof import('naive-ui')['NCard']
     NIcon: typeof import('naive-ui')['NIcon']
