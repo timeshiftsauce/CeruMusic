@@ -205,7 +205,6 @@ export default {
         if (!result) throw new Error('failed')
       }
       id = result[1]
-      // console.log(id)
     }
     return id
   },
@@ -222,7 +221,8 @@ export default {
       },
     })
     const { body } = await requestObj_listDetail.promise
-
+    console.log(body);
+    
     if (body.code !== this.successCode) return this.getListDetail(id, ++tryNum)
     const cdlist = body.cdlist[0]
     return {

@@ -541,38 +541,51 @@ const handleNetworkPlaylistImport = async (input: string) => {
       }
       platformName = '网易云音乐'
     } else if (importPlatformType.value === 'tx') {
-      // QQ音乐歌单ID解析 - 支持多种链接格式
-      const qqPlaylistRegexes = [
-        // 标准歌单链接
-        /(?:y\.qq\.com\/n\/ryqq\/playlist\/|music\.qq\.com\/.*[?&]id=|playlist[?&]id=)(\d+)/i,
-        // 分享链接格式
-        /(?:i\.y\.qq\.com\/n2\/m\/share\/details\/taoge\.html.*[?&]id=)(\d+)/i,
-        // 其他可能的分享格式
-        /(?:c\.y\.qq\.com\/base\/fcgi-bin\/u\?.*__=)(\d+)/i,
-        // 手机版链接
-        /(?:i\.y\.qq\.com\/v8\/playsquare\/playlist\.html.*[?&]id=)(\d+)/i,
-        // 通用ID提取 - 匹配 id= 或 &id= 参数
-        /[?&]id=(\d+)/i
-      ]
+      // QQ音乐歌单ID解析：优先通过 SDK 解析，失败再回退到正则
+      let parsedId = ''
+      try {
+        const parsed: any = await window.api.music.requestSdk('parsePlaylistId', {
+          source: 'tx',
+          url: input
+        })
+        console.log('QQ音乐歌单解析结果', parsed)
+        if (parsed) parsedId = parsed
+      } catch (e) {}
 
-      let match: RegExpMatchArray | null = null
-      for (const regex of qqPlaylistRegexes) {
-        match = input.match(regex)
-        if (match && match[1]) {
-          playlistId = match[1]
-          break
+      if (parsedId) {
+        playlistId = parsedId
+      } else {
+        const qqPlaylistRegexes = [
+          // 标准歌单链接(强烈推荐)
+          /(?:y\.qq\.com\/n\/ryqq\/playlist\/|music\.qq\.com\/.*[?&]id=|playlist[?&]id=)(\d+)/i,
+          // 分享链接格式
+          /(?:i\.y\.qq\.com\/n2\/m\/share\/details\/taoge\.html.*[?&]id=)(\d+)/i,
+          // 其他可能的分享格式 https:\/\/c\d+\.y\.qq\.com\/base\/fcgi-bin\/u\?.*__=([A-Za-z0-9]+)/i,
+          // 手机版链接
+          /(?:i\.y\.qq\.com\/v8\/playsquare\/playlist\.html.*[?&]id=)(\d+)/i,
+          // 通用ID提取 - 匹配 id= 或 &id= 参数
+          /[?&]id=(\d+)/i
+        ]
+
+        let match: RegExpMatchArray | null = null
+        for (const regex of qqPlaylistRegexes) {
+          match = input.match(regex)
+          if (match && match[1]) {
+            playlistId = match[1]
+            break
+          }
         }
-      }
 
-      if (!match || !match[1]) {
-        // 检查是否直接输入的是纯数字ID
-        const numericMatch = input.match(/^\d+$/)
-        if (numericMatch) {
-          playlistId = input
-        } else {
-          MessagePlugin.error('无法识别的QQ音乐歌单链接或ID格式，请检查链接是否正确')
-          load1.then((res) => res.close())
-          return
+        if (!match || !match[1]) {
+          // 检查是否直接输入的是纯数字ID
+          const numericMatch = input.match(/^\d+$/)
+          if (numericMatch) {
+            playlistId = input
+          } else {
+            MessagePlugin.error('无法识别的QQ音乐歌单链接或ID格式，请检查链接是否正确')
+            load1.then((res) => res.close())
+            return
+          }
         }
       }
       platformName = 'QQ音乐'
@@ -680,13 +693,6 @@ const handleNetworkPlaylistImport = async (input: string) => {
       return
     }
 
-    // 验证歌单ID是否有效
-    if (!playlistId || playlistId.length < 6) {
-      MessagePlugin.error('歌单ID格式不正确')
-      load1.then((res) => res.close())
-      return
-    }
-
     // 关闭加载提示
     load1.then((res) => res.close())
 
@@ -701,6 +707,7 @@ const handleNetworkPlaylistImport = async (input: string) => {
           id: playlistId,
           page: page
         })) as any
+        console.log('list', detailResult)
       } catch {
         MessagePlugin.error(`获取${platformName}歌单详情失败：歌曲信息可能有误`)
         load2.then((res) => res.close())
@@ -728,6 +735,7 @@ const handleNetworkPlaylistImport = async (input: string) => {
     }
 
     while (true) {
+      if (detailResult.total < songs.length) break
       page++
       const { list: songsList } = await getListDetail(page)
       if (!(songsList && songsList.length)) {
