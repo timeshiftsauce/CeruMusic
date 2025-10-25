@@ -46,7 +46,7 @@ features:
 
 Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，**仅提供插件运行框架与播放功能**，不直接存储、提供任何音乐源文件。用户需通过自行选择、安装合规插件获取音乐相关数据，项目旨在为开发者提供桌面应用技术实践与学习案例，为用户提供合规的音乐播放工具框架。
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem">
   <img src="./assets/image-20251003173109619.png" alt="image-20251003173109619"/>
   <img src= "./assets/image-20251003173654569.png">
 </div>
