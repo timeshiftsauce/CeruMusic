@@ -116,7 +116,11 @@ const api = {
     validateIntegrity: (hashId: string) =>
       ipcRenderer.invoke('songlist:validate-integrity', hashId),
     repairData: (hashId: string) => ipcRenderer.invoke('songlist:repair-data', hashId),
-    forceSave: (hashId: string) => ipcRenderer.invoke('songlist:force-save', hashId)
+    forceSave: (hashId: string) => ipcRenderer.invoke('songlist:force-save', hashId),
+
+    // 喜欢歌单ID持久化
+    getFavoritesId: () => ipcRenderer.invoke('songlist:get-favorites-id'),
+    setFavoritesId: (id: string) => ipcRenderer.invoke('songlist:set-favorites-id', id)
   },
 
   getUserConfig: () => ipcRenderer.invoke('get-user-config'),

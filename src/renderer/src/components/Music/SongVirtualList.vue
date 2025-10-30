@@ -15,7 +15,7 @@
         <div class="virtual-scroll-content" :style="{ transform: `translateY(${offsetY}px)` }">
           <div
             v-for="(song, index) in visibleItems"
-            :key="song.id || song.songmid"
+            :key="`${song.source || ''}-${song.songmid}-${song.albumId || ''}-${index}`"
             class="song-item"
             @mouseenter="hoveredSong = song.id || song.songmid"
             @mouseleave="hoveredSong = null"
@@ -58,8 +58,17 @@
 
             <!-- 喜欢按钮 -->
             <div class="col-like">
-              <button class="action-btn like-btn" @click.stop>
-                <i class="icon-heart"></i>
+              <button
+                class="action-btn like-btn"
+                title="喜欢/取消喜欢"
+                @click.stop="onToggleLike(song)"
+              >
+                <HeartIcon
+                  :fill-color="isLiked(song) ? ['#e5484d', '#e5484d'] : ''"
+                  :stroke-color="isLiked(song) ? [] : [contrastTextColor, contrastTextColor]"
+                  :stroke-width="isLiked(song) ? 0 : 2"
+                  size="18"
+                />
               </button>
             </div>
 
@@ -110,7 +119,8 @@ import {
   PlayCircleIcon,
   AddIcon,
   FolderIcon,
-  DeleteIcon
+  DeleteIcon,
+  HeartIcon
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '../ContextMenu/ContextMenu.vue'
 import { createMenuItem, createSeparator, calculateMenuPosition } from '../ContextMenu/utils'
@@ -290,8 +300,9 @@ const getQualityDisplayName = (quality: any) => {
 
 // 处理滚动事件
 const onScroll = (event: Event) => {
-  const target = event.target as HTMLElement
-  scrollTop.value = target.scrollTop
+  const target = event.target as HTMLElement | null
+  // 兼容程序触发的假事件，target 可能为 null
+  scrollTop.value = target?.scrollTop ?? scrollContainer.value?.scrollTop ?? 0
   emit('scroll', event)
 }
 
@@ -405,6 +416,89 @@ const loadPlaylists = async () => {
   }
 }
 
+// === 喜欢功能（列表内心形） ===
+const favoritesId = ref<string | null>(null)
+const likedSet = ref<Set<string | number>>(new Set())
+const contrastTextColor = 'var(--song-list-btn-color)'
+
+const loadFavorites = async () => {
+  try {
+    const favIdRes = await (window as any).api?.songList?.getFavoritesId?.()
+    const id: string | null = (favIdRes && favIdRes.data) || null
+    favoritesId.value = id
+    if (!id) {
+      likedSet.value = new Set()
+      return
+    }
+    const existsRes = await songListAPI.exists(id)
+    if (!existsRes.success || !existsRes.data) {
+      favoritesId.value = null
+      likedSet.value = new Set()
+      return
+    }
+    const songsRes = await songListAPI.getSongs(id)
+    if (songsRes.success && Array.isArray(songsRes.data)) {
+      likedSet.value = new Set(songsRes.data.map((s: any) => s.songmid))
+    }
+  } catch (e) {
+    console.error('加载“我的喜欢”失败:', e)
+  }
+}
+
+const isLiked = (song: Song) => likedSet.value.has(song.songmid)
+
+const ensureFavoritesId = async (): Promise<string | null> => {
+  if (favoritesId.value) {
+    const existsRes = await songListAPI.exists(favoritesId.value)
+    if (existsRes.success && existsRes.data) return favoritesId.value
+    favoritesId.value = null
+  }
+  const searchRes = await songListAPI.search('我的喜欢', 'local')
+  if (searchRes.success && Array.isArray(searchRes.data)) {
+    const exact = searchRes.data.find((pl) => pl.name === '我的喜欢' && pl.source === 'local')
+    if (exact?.id) {
+      favoritesId.value = exact.id
+      await (window as any).api?.songList?.setFavoritesId?.(favoritesId.value)
+      return favoritesId.value
+    }
+  }
+  const createRes = await songListAPI.create('我的喜欢', '', 'local')
+  if (!createRes.success || !createRes.data?.id) {
+    MessagePlugin.error(createRes.error || '创建“我的喜欢”失败')
+    return null
+  }
+  favoritesId.value = createRes.data.id
+  await (window as any).api?.songList?.setFavoritesId?.(favoritesId.value)
+  return favoritesId.value
+}
+
+const onToggleLike = async (song: Song) => {
+  try {
+    const id = await ensureFavoritesId()
+    if (!id) return
+    if (isLiked(song)) {
+      const removeRes = await songListAPI.removeSong(id, song.songmid)
+      if (removeRes.success && removeRes.data) {
+        likedSet.value.delete(song.songmid)
+        // MessagePlugin.success('已取消喜欢')
+      } else {
+        MessagePlugin.error(removeRes.error || '取消喜欢失败')
+      }
+    } else {
+      const addRes = await songListAPI.addSongs(id, [toRaw(song) as any])
+      if (addRes.success) {
+        likedSet.value.add(song.songmid)
+        // MessagePlugin.success('已添加到“我的喜欢”')
+      } else {
+        MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
+      }
+    }
+  } catch (e: any) {
+    console.error('切换喜欢失败:', e)
+    MessagePlugin.error(e?.message || '操作失败，请稍后重试')
+  }
+}
+
 // 添加歌曲到歌单
 const handleAddToSongList = async (song: Song, playlist: SongList) => {
   try {
@@ -420,7 +514,7 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 组件挂载后触发一次重新计算
   nextTick(() => {
     if (scrollContainer.value) {
@@ -431,10 +525,15 @@ onMounted(() => {
   })
 
   // 加载歌单列表
-  loadPlaylists()
+  await loadPlaylists()
+  // 预加载“我的喜欢”集合（确保方法存在于当前文件作用域）
+  await loadFavorites()
 
   // 监听歌单变化事件
-  window.addEventListener('playlist-updated', loadPlaylists)
+  window.addEventListener('playlist-updated', async () => {
+    await loadPlaylists()
+    await loadFavorites()
+  })
 })
 
 onUnmounted(() => {

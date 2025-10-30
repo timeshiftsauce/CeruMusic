@@ -1,8 +1,6 @@
 import { ipcMain } from 'electron'
 import pluginService from '../services/plugin'
 function PluginEvent() {
-
-
   ipcMain.handle('service-plugin-selectAndAddPlugin', async (_, type): Promise<any> => {
     try {
       return await pluginService.selectAndAddPlugin(type)

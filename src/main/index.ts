@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, screen, Rectangle, Display } from 'electron'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -28,16 +28,35 @@ if (!gotTheLock) {
     }
   })
 }
+
 let mainWindow: BrowserWindow | null = null
+
+/**
+ * 根据窗口当前所在的显示器，动态更新窗口的最大尺寸限制。
+ * 这样可以确保窗口在任何显示器上都能正常最大化或全屏。
+ * @param {BrowserWindow} win - 要更新的窗口实例
+ */
+function updateWindowMaxLimits(win: BrowserWindow | null): void {
+  if (!win) return
+
+  // 1. 获取窗口的当前边界 (bounds)
+  const currentBounds: Rectangle = win.getBounds()
+
+  // 2. 查找包含该边界的显示器
+  const currentDisplay: Display = screen.getDisplayMatching(currentBounds)
+
+  // 3. 获取该显示器的完整尺寸 (full screen size)
+  const { width: currentScreenWidth, height: currentScreenHeight } = currentDisplay.size
+
+  // 4. 应用新的最大尺寸限制
+  // 移除 maxWidth/maxHeight 上的硬限制，使其能够最大化到当前屏幕的尺寸。
+  // 注意：设置为 0, 0 意味着没有最小限制，我们只关注最大限制。
+  win.setMaximumSize(currentScreenWidth, currentScreenHeight)
+}
 
 function createWindow(): void {
   // 获取保存的窗口位置和大小
   const savedBounds = configManager.getWindowBounds()
-
-  // 获取屏幕尺寸
-  const primaryDisplay = screen.getPrimaryDisplay()
-  // 使用完整屏幕尺寸而不是工作区域，以支持真正的全屏模式
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.size
 
   // 默认窗口配置
   const defaultOptions = {
@@ -45,8 +64,9 @@ function createWindow(): void {
     height: 750,
     minWidth: 1100,
     minHeight: 670,
-    maxWidth: screenWidth,
-    maxHeight: screenHeight,
+    // ⚠️ 关键修改 1: 移除 maxWidth 和 maxHeight 的硬编码限制
+    // maxWidth: screenWidth,
+    // maxHeight: screenHeight,
     show: false,
     center: !savedBounds, // 如果有保存的位置，则不居中
     autoHideMenuBar: true,
@@ -72,24 +92,30 @@ function createWindow(): void {
   mainWindow = new BrowserWindow(defaultOptions)
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
-  // 监听窗口移动和调整大小事件，保存窗口位置和大小
+  // ⚠️ 关键修改 2: 监听 'moved' 事件，动态更新最大尺寸
   mainWindow.on('moved', () => {
+    // 当窗口移动时，确保最大尺寸限制随屏幕变化
+    updateWindowMaxLimits(mainWindow)
+
     if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
       const bounds = mainWindow.getBounds()
       configManager.saveWindowBounds(bounds)
     }
   })
 
+  // ⚠️ 关键修改 3: 窗口创建后立即应用一次最大尺寸限制
+  updateWindowMaxLimits(mainWindow)
+
   mainWindow.on('resized', () => {
     if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
       const bounds = mainWindow.getBounds()
 
-      // 获取当前屏幕尺寸
-      const { screen } = require('electron')
+      // 获取当前屏幕尺寸 (已在文件顶部导入 screen，无需 require)
       const currentDisplay = screen.getDisplayMatching(bounds)
+      // 使用 workAreaSize 避免窗口超出任务栏/Dock
       const { width: screenWidth, height: screenHeight } = currentDisplay.workAreaSize
 
-      // 确保窗口不超过屏幕尺寸
+      // 确保窗口不超过屏幕工作区域尺寸
       let needResize = false
       const newBounds = { ...bounds }
 
