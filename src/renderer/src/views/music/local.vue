@@ -120,6 +120,8 @@ const localSongs = ref<LocalSong[]>([
 // 歌单列表
 const playlists = ref<SongList[]>([])
 const loading = ref(false)
+// 喜欢歌单ID（用于排序与标记）
+const favoritesId = ref<string | null>(null)
 
 // 对话框状态
 const showCreatePlaylistDialog = ref(false)
@@ -192,6 +194,18 @@ const loadPlaylists = async () => {
     const result = await songListAPI.getAll()
     if (result.success) {
       playlists.value = result.data || []
+      // 读取“我的喜欢”ID并置顶与标记
+      try {
+        const favRes = await (window as any).api?.songList?.getFavoritesId?.()
+        favoritesId.value = (favRes && favRes.data) || null
+        if (favoritesId.value) {
+          const idx = playlists.value.findIndex((p) => p.id === favoritesId.value)
+          if (idx > 0) {
+            const fav = playlists.value.splice(idx, 1)[0]
+            playlists.value.unshift(fav)
+          }
+        }
+      } catch {}
     } else {
       MessagePlugin.error(result.error || '加载歌单失败')
     }
@@ -1030,6 +1044,14 @@ onMounted(() => {
             <div class="playlist-info">
               <div class="playlist-name" :title="playlist.name" @click="viewPlaylist(playlist)">
                 {{ playlist.name }}
+                <t-tag
+                  v-if="playlist.id === favoritesId"
+                  theme="danger"
+                  variant="light-outline"
+                  size="small"
+                  style="margin-left: 6px"
+                  >我的喜欢</t-tag
+                >
               </div>
               <div
                 v-if="playlist.description"
@@ -1783,7 +1805,7 @@ onMounted(() => {
 
   .playlist-cover {
     height: 180px;
-    background: linear-gradient(135deg, var(--td-brand-color-4) 0%, var(--td-brand-color-6) 100%);
+    background: #e4e4e4;
     position: relative;
     cursor: pointer;
     overflow: hidden;

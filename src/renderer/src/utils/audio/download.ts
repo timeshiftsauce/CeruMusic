@@ -165,6 +165,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
 
 async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
   try {
+    console.log('开始下载', toRaw(songInfo))
     const LocalUserDetail = LocalUserDetailStore()
     const userQuality = LocalUserDetail.userSource.quality as string
     const settingsStore = useSettingsStore()
@@ -189,7 +190,11 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
 
     // 检查选择的音质是否超出歌曲支持的最高音质
     const songMaxQuality = getHighestQualityType(songInfo.types)
-    if (songMaxQuality && QUALITY_ORDER.indexOf(quality as KnownQuality) < QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)) {
+    if (
+      songMaxQuality &&
+      QUALITY_ORDER.indexOf(quality as KnownQuality) <
+        QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)
+    ) {
       quality = songMaxQuality
       MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)
     }

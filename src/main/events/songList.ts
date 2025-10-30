@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import ManageSongList, { SongListError } from '../services/songList/ManageSongList'
 import type { SongList, Songs } from '@common/types/songList'
+import { configManager } from '../services/ConfigManager'
 
 // 创建新歌单
 ipcMain.handle(
@@ -20,6 +21,31 @@ ipcMain.handle(
     }
   }
 )
+
+// 喜欢歌单ID持久化
+ipcMain.handle('songlist:get-favorites-id', async () => {
+  try {
+    const id = configManager.get<string>('favoritesHashId', '')
+    return { success: true, data: id || null }
+  } catch (error) {
+    console.error('获取喜欢歌单ID失败:', error)
+    return { success: false, error: '获取喜欢歌单ID失败' }
+  }
+})
+
+ipcMain.handle('songlist:set-favorites-id', async (_, id: string) => {
+  try {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      return { success: false, error: '无效的歌单ID' }
+    }
+    configManager.set('favoritesHashId', id.trim())
+    const ok = configManager.saveConfig()
+    return { success: ok, message: ok ? '已保存喜欢歌单ID' : '保存失败' }
+  } catch (error) {
+    console.error('设置喜欢歌单ID失败:', error)
+    return { success: false, error: '设置喜欢歌单ID失败' }
+  }
+})
 
 // 获取所有歌单
 ipcMain.handle('songlist:get-all', async () => {

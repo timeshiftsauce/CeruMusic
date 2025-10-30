@@ -53,6 +53,8 @@ interface CustomAPI {
     validateIntegrity: (hashId: string) => Promise<any>
     repairData: (hashId: string) => Promise<any>
     forceSave: (hashId: string) => Promise<any>
+    getFavoritesId: () => Promise<any>
+    setFavoritesId: (favoritesId: string) => Promise<any>
   }
 
   ai: {

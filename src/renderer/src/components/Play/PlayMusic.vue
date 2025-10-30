@@ -29,12 +29,45 @@ import {
 } from '@renderer/utils/playlist/playlistManager'
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
 import defaultCoverImg from '/default-cover.png'
+import { downloadSingleSong } from '@renderer/utils/audio/download'
+import { HeartIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import _ from 'lodash'
+import { songListAPI } from '@renderer/api/songList'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { setCurrentTime, start, stop, setVolume, setUrl } = controlAudio
+
+// 当前歌曲是否已在“我的喜欢”
+const likeState = ref(false)
+const isLiked = computed(() => likeState.value)
+
+const refreshLikeState = async () => {
+  try {
+    if (!userInfo.value.lastPlaySongId) {
+      likeState.value = false
+      return
+    }
+    const favIdRes = await window.api.songList.getFavoritesId()
+    const favoritesId: string | null = (favIdRes && favIdRes.data) || null
+    if (!favoritesId) {
+      likeState.value = false
+      return
+    }
+    const hasRes = await songListAPI.hasSong(favoritesId, userInfo.value.lastPlaySongId)
+    likeState.value = !!(hasRes.success && hasRes.data)
+  } catch {
+    likeState.value = false
+  }
+}
+
+watch(
+  () => userInfo.value.lastPlaySongId,
+  () => refreshLikeState()
+)
+onMounted(() => refreshLikeState())
 const showFullPlay = ref(false)
 document.addEventListener('keydown', KeyEvent)
 // 处理最小化右键的事件
@@ -362,6 +395,19 @@ const handleVolumeDragEnd = () => {
   window.removeEventListener('mouseup', handleVolumeDragEnd)
 }
 
+const handleVolumeWheel = (event: WheelEvent) => {
+  event.preventDefault()
+
+  const volumeStep = event.deltaY > 0 ? -5 : 5
+  const updatedVolume = Math.max(0, Math.min(100, volumeValue.value + volumeStep))
+
+  if (updatedVolume === volumeValue.value) {
+    return
+  }
+
+  volumeValue.value = updatedVolume
+}
+
 // 播放列表相关
 const showPlaylist = ref(false)
 const playlistDrawerRef = ref<InstanceType<typeof PlaylistDrawer> | null>(null)
@@ -620,6 +666,86 @@ const toggleFullPlay = () => {
   showFullPlay.value = !showFullPlay.value
 }
 
+// 左侧操作：喜欢/取消喜欢（支持切换）
+const onToggleLike = async () => {
+  try {
+    // 获取当前播放歌曲对象
+    const currentSong = list.value.find((s) => s.songmid === userInfo.value.lastPlaySongId)
+    if (!currentSong) {
+      MessagePlugin.warning('当前没有正在播放的歌曲')
+      return
+    }
+
+    // 读取持久化的“我的喜欢”歌单ID
+    const favIdRes = await window.api.songList.getFavoritesId()
+    let favoritesId: string | null = (favIdRes && favIdRes.data) || null
+
+    // 如果已有ID但歌单不存在，则置空
+    if (favoritesId) {
+      const existsRes = await songListAPI.exists(favoritesId)
+      if (!existsRes.success || !existsRes.data) {
+        favoritesId = null
+      }
+    }
+
+    // 如果没有ID，尝试查找同名歌单；找不到则创建
+    if (!favoritesId) {
+      const searchRes = await songListAPI.search('我的喜欢', 'local')
+      if (searchRes.success && Array.isArray(searchRes.data)) {
+        const exact = searchRes.data.find((pl) => pl.name === '我的喜欢' && pl.source === 'local')
+        favoritesId = exact?.id || null
+      }
+      if (!favoritesId) {
+        const createRes = await songListAPI.create('我的喜欢', '', 'local')
+        if (!createRes.success || !createRes.data?.id) {
+          MessagePlugin.error(createRes.error || '创建“我的喜欢”失败')
+          return
+        }
+        favoritesId = createRes.data.id
+      }
+      // 持久化ID到主进程配置
+      await window.api.songList.setFavoritesId(favoritesId)
+    }
+
+    // 根据当前状态决定添加或移除
+    if (likeState.value) {
+      const removeRes = await songListAPI.removeSong(
+        favoritesId!,
+        userInfo.value.lastPlaySongId as any
+      )
+      if (removeRes.success && removeRes.data) {
+        likeState.value = false
+        // MessagePlugin.success('已取消喜欢')
+      } else {
+        MessagePlugin.error(removeRes.error || '取消喜欢失败')
+      }
+    } else {
+      const addRes = await songListAPI.addSongs(favoritesId!, [
+        _.cloneDeep(toRaw(currentSong)) as any
+      ])
+      if (addRes.success) {
+        likeState.value = true
+        // MessagePlugin.success('已添加到“我的喜欢”')
+      } else {
+        MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
+      }
+    }
+  } catch (error: any) {
+    console.error('切换喜欢状态失败:', error)
+    MessagePlugin.error('操作失败，请稍后重试')
+  }
+}
+
+const onDownload = async () => {
+  try {
+    await downloadSingleSong(_.cloneDeep(toRaw(songInfo.value)) as any)
+    MessagePlugin.success('开始下载当前歌曲')
+  } catch (e: any) {
+    console.error('下载失败:', e)
+    MessagePlugin.error('下载失败，请稍后重试')
+  }
+}
+
 // 进度条相关
 const progressRef = ref<HTMLDivElement | null>(null)
 const isDraggingProgress = ref(false)
@@ -864,6 +990,36 @@ watch(showFullPlay, (val) => {
           <div class="song-name">{{ songInfo.name }}</div>
           <div class="artist-name">{{ songInfo.singer }}</div>
         </div>
+
+        <div class="left-actions">
+          <t-tooltip :content="isLiked ? '已喜欢' : '喜欢'">
+            <t-button
+              class="control-btn"
+              variant="text"
+              shape="circle"
+              :disabled="!songInfo.songmid"
+              @click.stop="onToggleLike"
+            >
+              <heart-icon
+                :fill-color="isLiked ? ['#FF7878', '#FF7878'] : ''"
+                :stroke-color="isLiked ? [] : [contrastTextColor, contrastTextColor]"
+                :stroke-width="isLiked ? 0 : 2"
+                size="18"
+              />
+            </t-button>
+          </t-tooltip>
+          <t-tooltip content="下载">
+            <t-button
+              class="control-btn"
+              variant="text"
+              shape="circle"
+              :disabled="!songInfo.songmid"
+              @click.stop="onDownload"
+            >
+              <DownloadIcon size="18" />
+            </t-button>
+          </t-tooltip>
+        </div>
       </div>
 
       <!-- 中间：播放控制 -->
@@ -909,6 +1065,7 @@ watch(showFullPlay, (val) => {
             class="volume-control"
             @mouseenter="showVolumeSlider = true"
             @mouseleave="showVolumeSlider = false"
+            @wheel.prevent="handleVolumeWheel"
           >
             <button class="control-btn">
               <shengyin style="width: 1.5em; height: 1.5em" />
@@ -1172,6 +1329,38 @@ watch(showFullPlay, (val) => {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+  }
+}
+
+/* 左侧操作按钮 */
+.left-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+
+  .control-btn {
+    background: transparent;
+    border: none;
+    color: v-bind(contrastTextColor);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .iconfont {
+      font-size: 18px;
+    }
+
+    &:hover {
+      color: v-bind(hoverColor);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
     }
   }
 }

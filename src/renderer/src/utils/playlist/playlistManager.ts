@@ -83,16 +83,34 @@ export async function addToPlaylistAndPlay(
   playSongCallback: (song: SongList) => Promise<void>
 ) {
   try {
-    // 使用store的方法添加歌曲到第一位
-    localUserStore.addSongToFirst(song)
+    // 获取当前正在播放的歌曲索引
+    const currentId = localUserStore.userInfo?.lastPlaySongId
+    const currentIndex =
+      currentId !== undefined && currentId !== null
+        ? localUserStore.list.findIndex((item: SongList) => item.songmid === currentId)
+        : -1
 
-    // 播放歌曲 - 确保正确处理Promise
+    // 如果目标歌曲已在列表中，先移除以避免重复
+    const existingIndex = localUserStore.list.findIndex(
+      (item: SongList) => item.songmid === song.songmid
+    )
+    if (existingIndex !== -1) {
+      localUserStore.list.splice(existingIndex, 1)
+    }
+
+    if (currentIndex !== -1) {
+      // 正在播放：插入到当前歌曲的下一首
+      localUserStore.list.splice(currentIndex + 1, 0, song)
+    } else {
+      // 未在播放：添加到第一位
+      localUserStore.addSongToFirst(song)
+    }
+
+    // 播放插入的歌曲
     const playResult = playSongCallback(song)
     if (playResult && typeof playResult.then === 'function') {
       await playResult
     }
-
-    // await MessagePlugin.success('已添加到播放列表并开始播放')
   } catch (error: any) {
     console.error('播放失败:', error)
     if (error.message) {
