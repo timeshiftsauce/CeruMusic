@@ -43,20 +43,6 @@ const parseColorToRgb = (input: string) => {
   }
   return { r: 255, g: 255, b: 255 }
 }
-const hexToRgb = (hex: string) => {
-  const m = hex?.match(/^#([0-9a-f]{6})$/i)
-  if (!m) return { r: 255, g: 255, b: 255 }
-  const h = m[1]
-  return {
-    r: parseInt(h.slice(0, 2), 16),
-    g: parseInt(h.slice(2, 4), 16),
-    b: parseInt(h.slice(4, 6), 16)
-  }
-}
-const rgbToHex = (r: number, g: number, b: number) =>
-  `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
-const buildShadowRgba = () =>
-  `rgba(${shadowRgb.value.r}, ${shadowRgb.value.g}, ${shadowRgb.value.b}, 0.5)`
 
 const onMainColorChange = (val: string) => {
   mainHex.value = val
