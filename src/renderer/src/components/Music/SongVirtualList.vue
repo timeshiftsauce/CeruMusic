@@ -44,6 +44,9 @@
                   <span v-if="song.types && song.types.length > 0" class="quality-tag">
                     {{ getQualityDisplayName(song.types[song.types.length - 1]) }}
                   </span>
+                  <span v-if="song.source" class="source-tag">
+                    {{ song.source }}
+                  </span>
                   {{ song.singer }}
                 </div>
               </div>
@@ -754,6 +757,14 @@ onUnmounted(() => {
           .quality-tag {
             background: var(--song-list-quality-bg);
             color: var(--song-list-quality-color);
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 10px;
+            line-height: 1;
+          }
+          .source-tag {
+            background: var(--song-list-source-bg);
+            color: var(--song-list-source-color);
             padding: 1px 4px;
             border-radius: 2px;
             font-size: 10px;

@@ -30,7 +30,7 @@ import {
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
 import defaultCoverImg from '/default-cover.png'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
-import { HeartIcon, DownloadIcon } from 'tdesign-icons-vue-next'
+import { HeartIcon, DownloadIcon, CheckIcon, LockOnIcon } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
 
@@ -69,6 +69,70 @@ watch(
 )
 onMounted(() => refreshLikeState())
 const showFullPlay = ref(false)
+// 桌面歌词开关与锁定状态
+const desktopLyricOpen = ref(false)
+const desktopLyricLocked = ref(false)
+
+// 桌面歌词按钮逻辑：
+// - 若未打开：打开桌面歌词
+// - 若已打开且锁定：先解锁，不关闭
+// - 若已打开且未锁定：关闭桌面歌词
+const toggleDesktopLyric = async () => {
+  try {
+    if (!desktopLyricOpen.value) {
+      window.electron?.ipcRenderer?.send?.('change-desktop-lyric', true)
+      desktopLyricOpen.value = true
+      // 恢复最新锁定状态
+      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+      desktopLyricLocked.value = !!lock
+      return
+    }
+    // 已打开
+    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+    desktopLyricLocked.value = !!lock
+    if (desktopLyricLocked.value) {
+      // 先解锁，本次不关闭
+      window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', false)
+      desktopLyricLocked.value = false
+      return
+    }
+    // 未锁定则关闭
+    window.electron?.ipcRenderer?.send?.('change-desktop-lyric', false)
+    desktopLyricOpen.value = false
+  } catch (e) {
+    console.error('切换桌面歌词失败:', e)
+  }
+}
+
+// 监听来自主进程的锁定状态广播
+window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
+  desktopLyricLocked.value = !!lock
+})
+// 监听主进程通知关闭桌面歌词
+window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
+  desktopLyricOpen.value = false
+  desktopLyricLocked.value = false
+})
+
+window.addEventListener('global-music-control', (e: any) => {
+  const name = e?.detail?.name
+  console.log(name);
+  switch (name) {
+    case 'play':
+      handlePlay()
+      break
+    case 'pause':
+      handlePause()
+      break
+    case 'playPrev':
+      playPrevious()
+      break
+    case 'playNext':
+      playNext()
+      break
+  }
+})
+
 document.addEventListener('keydown', KeyEvent)
 // 处理最小化右键的事件
 const removeMusicCtrlListener = window.api.onMusicCtrl(() => {
@@ -1091,6 +1155,29 @@ watch(showFullPlay, (val) => {
             </transition>
           </div>
 
+          <!-- 桌面歌词开关按钮 -->
+          <t-tooltip
+            :content="
+              desktopLyricOpen ? (desktopLyricLocked ? '解锁歌词' : '关闭桌面歌词') : '打开桌面歌词'
+            "
+          >
+            <t-button
+              class="control-btn lyric-btn"
+              shape="circle"
+              variant="text"
+              :disabled="!songInfo.songmid"
+              @click.stop="toggleDesktopLyric"
+            >
+              <SvgIcon name="lyricOpen" size="18"></SvgIcon>
+              <transition name="fade" mode="out-in">
+                <template v-if="desktopLyricOpen">
+                  <LockOnIcon v-if="desktopLyricLocked" key="lock" class="lyric-lock" size="8" />
+                  <CheckIcon v-else key="check" class="lyric-check" size="8" />
+                </template>
+              </transition>
+            </t-button>
+          </t-tooltip>
+
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
             <n-badge :value="list.length" :max="99" color="#bbb">
@@ -1444,6 +1531,7 @@ watch(showFullPlay, (val) => {
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
 
       .iconfont {
         font-size: 18px;
@@ -1451,6 +1539,17 @@ watch(showFullPlay, (val) => {
 
       &:hover {
         color: v-bind(hoverColor);
+      }
+
+      &.lyric-btn .lyric-check,
+      &.lyric-btn .lyric-lock {
+        position: absolute;
+        right: -1px;
+        bottom: -1px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 0 0 2px #fff;
+        color: v-bind(maincolor);
       }
     }
   }

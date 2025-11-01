@@ -97,7 +97,7 @@ function getDefaultMessage(type: string, data: any, pluginName: string): string 
  */
 export function sendPluginNotice(noticeData: PluginNoticeData, pluginName?: string): void {
   try {
-    console.log(`[CeruMusic] 插件通知: ${noticeData.type}`, noticeData.data)
+    // console.log(`[CeruMusic] 插件通知: ${noticeData.type}`, noticeData.data)
 
     // 获取主窗口实例
     const mainWindow = BrowserWindow.getAllWindows().find((win) => !win.isDestroyed())

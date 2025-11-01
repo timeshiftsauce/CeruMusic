@@ -18,6 +18,7 @@ import DirectorySettings from '@renderer/components/Settings/DirectorySettings.v
 import MusicCache from '@renderer/components/Settings/MusicCache.vue'
 import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
+import DesktopLyricStyle from '@renderer/components/Settings/DesktopLyricStyle.vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { playSetting as usePlaySetting } from '@renderer/store/playSetting'
@@ -418,6 +419,10 @@ const getTagOptionsStatus = () => {
               <div class="setting-group">
                 <h3>应用主题色</h3>
                 <ThemeSelector />
+              </div>
+
+              <div class="setting-group">
+                <DesktopLyricStyle />
               </div>
             </div>
 

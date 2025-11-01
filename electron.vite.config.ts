@@ -8,13 +8,20 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
-
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         '@common': resolve('src/common')
+      }
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          lyric: resolve(__dirname, 'src/web/lyric.html')
+        }
       }
     }
   },

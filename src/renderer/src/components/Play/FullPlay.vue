@@ -172,12 +172,14 @@ watch(
         props.songInfo && 'source' in props.songInfo ? (props.songInfo as any).source : 'kg'
       let parsedLyrics: LyricLine[] = []
 
-      if (source === 'wy') {
-        // 网易云：优先尝试 TTML
+      if (source === 'wy' || source === 'tx') {
+        // 网易云 / QQ 音乐：优先尝试 TTML
         try {
           const res = await (
-            await fetch(`https://amll.bikonoo.com/ncm-lyrics/${newId}.ttml`, {
-              signal: abort.signal
+            await fetch(
+              `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
+              {
+                signal: abort.signal
             })
           ).text()
           if (!active) return
@@ -186,13 +188,13 @@ watch(
         } catch {
           // 回退到统一歌词 API
           const lyricData = await window.api.music.requestSdk('getLyric', {
-            source: 'wy',
+            source,
             songInfo: _.cloneDeep(toRaw(props.songInfo)) as any
           })
           if (!active) return
 
           if (lyricData?.crlyric) {
-            parsedLyrics = parseYrc(lyricData.crlyric)
+            parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
           } else if (lyricData?.lyric) {
             parsedLyrics = parseLrc(lyricData.lyric)
           }
@@ -225,6 +227,71 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// 桌面歌词联动：构建歌词负载、计算当前行并通过 IPC 推送
+const buildLyricPayload = (lines: LyricLine[]) =>
+  (lines || []).map((l) => ({
+    content: (l.words || []).map((w) => w.word).join(''),
+    tran: l.translatedLyric || ''
+  }))
+
+const lastLyricIndex = ref(-1)
+const computeLyricIndex = (timeMs: number, lines: LyricLine[]) => {
+  if (!lines || lines.length === 0) return -1
+  const t = timeMs
+  const i = lines.findIndex((l) => t >= l.startTime && t < l.endTime)
+  if (i !== -1) return i
+  for (let j = lines.length - 1; j >= 0; j--) {
+    if (t >= lines[j].startTime) return j
+  }
+  return -1
+}
+
+// 歌词集合变化时，先推一次集合，index 为 -1（由窗口自行处理占位）
+watch(
+  () => state.lyricLines,
+  (lines) => {
+    const payload = { index: -1, lyric: buildLyricPayload(lines) }
+    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', payload)
+  },
+  { deep: true, immediate: true }
+)
+
+// 当前时间变化时，计算当前行并推送
+watch(
+  () => state.currentTime,
+  (ms) => {
+    const idx = computeLyricIndex(ms, state.lyricLines)
+    if (idx !== lastLyricIndex.value) {
+      lastLyricIndex.value = idx
+      const payload = { index: idx, lyric: buildLyricPayload(state.lyricLines) }
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', payload)
+    }
+  }
+)
+
+// 播放状态推送（用于窗口播放/暂停按钮联动）
+watch(
+  () => Audio.value.isPlay,
+  (playing) => {
+    ;(window as any)?.electron?.ipcRenderer?.send?.('play-status-change', playing)
+  },
+  { immediate: true }
+)
+
+// 歌曲标题推送
+watch(
+  () => props.songInfo,
+  (info) => {
+    try {
+      const name = (info as any)?.name || ''
+      const artist = (info as any)?.singer || ''
+      const title = [name, artist].filter(Boolean).join(' - ')
+      if (title) (window as any)?.electron?.ipcRenderer?.send?.('play-song-change', title)
+    } catch {}
+  },
+  { immediate: true, deep: true }
 )
 
 const bgRef = ref<BackgroundRenderRef | undefined>(undefined)

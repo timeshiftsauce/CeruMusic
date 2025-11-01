@@ -1,9 +1,9 @@
 import InitPluginService from './plugins'
 import '../services/musicSdk/index'
 import aiEvents from '../events/ai'
-import { app, powerSaveBlocker, Menu } from 'electron'
+import { app, powerSaveBlocker } from 'electron'
 import path from 'node:path'
-import { type BrowserWindow, Tray, ipcMain } from 'electron'
+import { type BrowserWindow, ipcMain } from 'electron'
 export default function InitEventServices(mainWindow: BrowserWindow) {
   InitPluginService()
   aiEvents(mainWindow)
@@ -12,58 +12,12 @@ export default function InitEventServices(mainWindow: BrowserWindow) {
 
 function basisEvent(mainWindow: BrowserWindow) {
   let psbId: number | null = null
-  let tray: Tray | null = null
+  // 复用主进程创建的托盘
+  let tray: any = (global as any).__ceru_tray__ || null
   let isQuitting = false
-  function createTray(): void {
-    // 创建系统托盘
-    const trayIconPath = path.join(__dirname, '../../resources/logo.png')
-    tray = new Tray(trayIconPath)
+  // 托盘菜单与图标由主进程统一创建，这里不再重复创建
+  // 播放/暂停由主进程托盘菜单触发 'music-control' 事件
 
-    // 创建托盘菜单
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: '显示窗口',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.show()
-            mainWindow.focus()
-          }
-        }
-      },
-      {
-        label: '播放/暂停',
-        click: () => {
-          // 这里可以添加播放控制逻辑
-          console.log('music-control')
-          mainWindow?.webContents.send('music-control')
-        }
-      },
-      { type: 'separator' },
-      {
-        label: '退出',
-        click: () => {
-          isQuitting = true
-          app.quit()
-        }
-      }
-    ])
-
-    tray.setContextMenu(contextMenu)
-    tray.setToolTip('Ceru Music')
-
-    // 单击托盘图标显示窗口
-    tray.on('click', () => {
-      if (mainWindow) {
-        if (mainWindow.isVisible()) {
-          mainWindow.hide()
-        } else {
-          mainWindow.show()
-          mainWindow.focus()
-        }
-      }
-    })
-  }
-  createTray()
   // 应用退出前的清理
   app.on('before-quit', () => {
     isQuitting = true
@@ -93,7 +47,8 @@ function basisEvent(mainWindow: BrowserWindow) {
         // 进入 Mini 模式：隐藏窗口到系统托盘
         mainWindow.hide()
         // 显示托盘通知（可选）
-        if (tray) {
+        tray = (global as any).__ceru_tray__ || tray
+        if (tray && tray.displayBalloon) {
           tray.displayBalloon({
             title: '澜音 Music',
             content: '已最小化到系统托盘啦，点击托盘图标可重新打开~'
@@ -119,7 +74,8 @@ function basisEvent(mainWindow: BrowserWindow) {
       mainWindow?.hide()
 
       // 显示托盘通知
-      if (tray) {
+      tray = (global as any).__ceru_tray__ || tray
+      if (tray && tray.displayBalloon) {
         tray.displayBalloon({
           title: 'Ceru Music',
           content: '已最小化到系统托盘啦，点击托盘图标可重新打开~'

@@ -31,6 +31,15 @@ onMounted(() => {
   syncNaiveTheme()
   window.addEventListener('theme-changed', () => syncNaiveTheme())
 
+  // 全局监听来自主进程的播放控制事件，确保路由切换也可响应
+  const forward = (name: string, val?: any) => {
+    window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
+  }
+  window.electron?.ipcRenderer?.on?.('play', () => forward('play'))
+  window.electron?.ipcRenderer?.on?.('pause', () => forward('pause'))
+  window.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
+  window.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
+
   // 应用启动后延迟3秒检查更新，避免影响启动速度
   setTimeout(() => {
     checkForUpdates()
