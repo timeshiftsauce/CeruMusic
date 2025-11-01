@@ -70,7 +70,7 @@
     "node-fetch": "2",
     "node-taglib-sharp": "^6.0.1",
     "pinia": "^3.0.3",
-    "pinia-plugin-persistedstate": "^4.5.0",
+    "pinia-plugin-persistedstate": "4.5.0",
     "tdesign-icons-vue-next": "^0.4.1",
     "tdesign-vue-next": "^1.15.2",
     "vue-router": "^4.5.1",
