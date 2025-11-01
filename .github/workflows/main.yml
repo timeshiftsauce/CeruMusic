@@ -29,8 +29,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          npm i -g yarn pnpm
-          yarn install  # 安装项目依赖
+          npm i -g yarn
+          yarn  # 安装项目依赖
 
       - name: Build Electron App for windows
         if: matrix.os == 'windows-latest' # 只在Windows上运行
