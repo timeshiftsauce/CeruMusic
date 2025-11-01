@@ -60,6 +60,7 @@ export class ConfigManager {
   // 设置配置项
   public set<T>(key: string, value: T): void {
     this.config[key] = value
+    this.saveConfig()
   }
 
   // 删除配置项

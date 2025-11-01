@@ -1,4 +1,14 @@
-import { app, shell, BrowserWindow, ipcMain, screen, Rectangle, Display } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  screen,
+  Rectangle,
+  Display,
+  Tray,
+  Menu
+} from 'electron'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -6,10 +16,13 @@ import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
 import InitEventServices from './events'
 
+import lyricWindow from './windows/lyric-window'
+
 import './events/musicCache'
 import './events/songList'
 import './events/directorySettings'
 import './events/pluginNotice'
+import initLyricIpc from './events/lyric'
 
 // 获取单实例锁
 const gotTheLock = app.requestSingleInstanceLock()
@@ -30,6 +43,112 @@ if (!gotTheLock) {
 }
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let trayLyricLocked = false
+
+function updateTrayMenu() {
+  const lyricWin = lyricWindow.getWin()
+  const isVisible = !!lyricWin && lyricWin.isVisible()
+  const toggleLyricLabel = isVisible ? '隐藏桌面歌词' : '显示桌面歌词'
+  const toggleLockLabel = trayLyricLocked ? '解锁桌面歌词' : '锁定桌面歌词'
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: toggleLyricLabel,
+      click: () => {
+        const target = !isVisible
+        ipcMain.emit('change-desktop-lyric', null, target)
+      }
+    },
+    {
+      label: toggleLockLabel,
+      click: () => {
+        const next = !trayLyricLocked
+        ipcMain.emit('toogleDesktopLyricLock', null, next)
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '显示主窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      }
+    },
+    {
+      label: '播放/暂停',
+      click: () => {
+        mainWindow?.webContents.send('music-control')
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.quit()
+      }
+    }
+  ])
+  tray?.setContextMenu(contextMenu)
+}
+
+function setupTray() {
+  // 全局单例防重复（热重载/多次执行保护）
+  const g: any = global as any
+  if (g.__ceru_tray__) {
+    try {
+      g.__ceru_tray__.destroy()
+    } catch {}
+    g.__ceru_tray__ = null
+  }
+  if (tray) {
+    try {
+      tray.destroy()
+    } catch {}
+    tray = null
+  }
+
+  const iconPath = path.join(__dirname, '../../resources/logo.ico')
+  tray = new Tray(iconPath)
+  tray.setToolTip('Ceru Music')
+  updateTrayMenu()
+
+  // 左键单击切换主窗口显示
+  tray.on('click', () => {
+    if (!mainWindow) return
+    if (mainWindow.isVisible()) {
+      mainWindow.hide()
+    } else {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+
+  // 防重复注册 IPC 监听（仅注册一次）
+  if (!g.__ceru_tray_ipc_bound__) {
+    ipcMain.on('toogleDesktopLyricLock', (_e, isLock: boolean) => {
+      trayLyricLocked = !!isLock
+      updateTrayMenu()
+    })
+    ipcMain.on('change-desktop-lyric', () => {
+      updateTrayMenu()
+    })
+    g.__ceru_tray_ipc_bound__ = true
+  }
+
+  // 记录全局托盘句柄
+  g.__ceru_tray__ = tray
+
+  app.once('before-quit', () => {
+    try {
+      tray?.destroy()
+    } catch {}
+    tray = null
+    g.__ceru_tray__ = null
+  })
+}
 
 /**
  * 根据窗口当前所在的显示器，动态更新窗口的最大尺寸限制。
@@ -64,9 +183,6 @@ function createWindow(): void {
     height: 750,
     minWidth: 1100,
     minHeight: 670,
-    // ⚠️ 关键修改 1: 移除 maxWidth 和 maxHeight 的硬编码限制
-    // maxWidth: screenWidth,
-    // maxHeight: screenHeight,
     show: false,
     center: !savedBounds, // 如果有保存的位置，则不居中
     autoHideMenuBar: true,
@@ -146,6 +262,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
   InitEventServices(mainWindow)
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -179,6 +296,10 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+  lyricWindow.create()
+  initLyricIpc(mainWindow)
+  // 仅在主进程初始化一次托盘
+  setupTray()
 
   // 注册自动更新事件
   registerAutoUpdateEvents()
@@ -204,8 +325,7 @@ app.whenReady().then(() => {
 
 // 当所有窗口关闭时不退出应用，因为我们有系统托盘
 app.on('window-all-closed', () => {
-  // 在 macOS 上，应用通常会保持活跃状态
-  // 在其他平台上，我们也保持应用运行，因为有系统托盘
+  // 保持应用常驻，通过系统托盘管理
 })
 
 // In this file you can include the rest of your app's specific main process

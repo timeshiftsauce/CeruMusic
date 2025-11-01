@@ -493,7 +493,7 @@ class CeruMusicPluginHost {
     }, timeout)
 
     try {
-      console.log(`${CONSTANTS.LOG_PREFIX} 发起请求: ${options.method || 'GET'} ${url}`)
+      // console.log(`${CONSTANTS.LOG_PREFIX} 发起请求: ${options.method || 'GET'} ${url}`)
 
       const fetchOptions = {
         method: 'GET',
@@ -504,7 +504,7 @@ class CeruMusicPluginHost {
       const response = await fetch(url, fetchOptions)
       clearTimeout(timeoutId)
 
-      console.log(`${CONSTANTS.LOG_PREFIX} 请求响应: ${response.status} ${response.statusText}`)
+      // console.log(`${CONSTANTS.LOG_PREFIX} 请求响应: ${response.status} ${response.statusText}`)
 
       const body = await this._parseResponseBody(response)
       const headers = this._extractHeaders(response)
@@ -515,11 +515,11 @@ class CeruMusicPluginHost {
         headers
       }
 
-      console.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
-        url,
-        status: response.status,
-        bodyType: typeof body
-      })
+      // console.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
+      //   url,
+      //   status: response.status,
+      //   bodyType: typeof body
+      // })
 
       return result
     } catch (error: any) {
