@@ -190,6 +190,31 @@ const api = {
       ipcRenderer.invoke('directory-settings:get-directory-size', dirPath)
   },
 
+  // 本地音乐管理
+  localMusic: {
+    selectDirs: () => ipcRenderer.invoke('local-music:select-dirs'),
+    scan: async (dirs: string[]) => {
+      const res = await ipcRenderer.invoke('local-music:scan', dirs)
+      if (typeof res === 'string') {
+        try {
+          return JSON.parse(res)
+        } catch {
+          return []
+        }
+      }
+      return Array.isArray(res) ? res : []
+    },
+    writeTags: (filePath: string, songInfo: any, tagWriteOptions: any) =>
+      ipcRenderer.invoke('local-music:write-tags', { filePath, songInfo, tagWriteOptions })
+    ,
+    getDirs: () => ipcRenderer.invoke('local-music:get-dirs'),
+    setDirs: (dirs: string[]) => ipcRenderer.invoke('local-music:set-dirs', dirs),
+    getList: () => ipcRenderer.invoke('local-music:get-list'),
+    getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id)
+    ,
+    clearIndex: () => ipcRenderer.invoke('local-music:clear-index')
+  },
+
   // 插件通知相关
   pluginNotice: {
     onPluginNotice(callback: (data: string) => any) {

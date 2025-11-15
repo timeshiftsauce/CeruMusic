@@ -11,6 +11,12 @@
 
 import { BrowserWindow } from 'electron'
 
+let mainWindow: BrowserWindow | null = null
+
+export function initPluginNotice(mainWindowInstance: BrowserWindow): void {
+  mainWindow = mainWindowInstance
+}
+
 export interface PluginNoticeData {
   type: 'error' | 'info' | 'success' | 'warn' | 'update'
   data: {
@@ -100,7 +106,6 @@ export function sendPluginNotice(noticeData: PluginNoticeData, pluginName?: stri
     // console.log(`[CeruMusic] 插件通知: ${noticeData.type}`, noticeData.data)
 
     // 获取主窗口实例
-    const mainWindow = BrowserWindow.getAllWindows().find((win) => !win.isDestroyed())
     if (!mainWindow) {
       console.warn('[CeruMusic] 未找到主窗口，无法发送通知')
       return
@@ -152,7 +157,6 @@ export function sendPluginNotice(noticeData: PluginNoticeData, pluginName?: stri
           getDefaultMessage(noticeData.type, noticeData.data, baseNoticeData.pluginName),
         actions: [{ text: '我知道了', type: 'confirm', primary: true }]
       }
-
       mainWindow.webContents.send('plugin-notice', infoNotice)
     }
   } catch (error: any) {

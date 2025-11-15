@@ -103,77 +103,6 @@ const toggleDesktopLyric = async () => {
     console.error('切换桌面歌词失败:', e)
   }
 }
-
-// 监听来自主进程的锁定状态广播
-window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
-  desktopLyricLocked.value = !!lock
-})
-// 监听主进程通知关闭桌面歌词
-window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
-  desktopLyricOpen.value = false
-  desktopLyricLocked.value = false
-})
-
-window.addEventListener('global-music-control', (e: any) => {
-  const name = e?.detail?.name
-  console.log(name);
-  switch (name) {
-    case 'play':
-      handlePlay()
-      break
-    case 'pause':
-      handlePause()
-      break
-    case 'playPrev':
-      playPrevious()
-      break
-    case 'playNext':
-      playNext()
-      break
-  }
-})
-
-document.addEventListener('keydown', KeyEvent)
-// 处理最小化右键的事件
-const removeMusicCtrlListener = window.api.onMusicCtrl(() => {
-  togglePlayPause()
-})
-let timer: any = null
-
-function throttle(callback: Function, delay: number) {
-  if (timer) return
-  timer = setTimeout(() => {
-    callback()
-    timer = null
-  }, delay)
-}
-
-function KeyEvent(e: KeyboardEvent) {
-  throttle(() => {
-    if (e.code == 'Space' && showFullPlay.value) {
-      e.preventDefault()
-      togglePlayPause()
-    } else if (e.code == 'ArrowUp') {
-      e.preventDefault()
-      console.log('up')
-      controlAudio.setVolume(Audio.value.volume + 5)
-    } else if (e.code == 'ArrowDown') {
-      e.preventDefault()
-      console.log('down')
-      controlAudio.setVolume(Audio.value.volume - 5)
-    } else if (e.code == 'ArrowLeft' && Audio.value.audio && Audio.value.audio.currentTime >= 0) {
-      Audio.value.audio.currentTime -= 5
-    } else if (
-      e.code == 'ArrowRight' &&
-      Audio.value.audio &&
-      Audio.value.audio.currentTime <= Audio.value.audio.duration
-    ) {
-      console.log('right')
-      Audio.value.audio.currentTime += 5
-    }
-  }, 100)
-}
-
 // 等待音频准备就绪
 const waitForAudioReady = (): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -222,7 +151,7 @@ let pendingRestorePosition = 0
 let pendingRestoreSongId: number | string | null = null
 
 // 记录组件被停用前的播放状态
-let wasPlaying = false
+// let wasPlaying = false
 
 // let playbackPosition = 0
 let isFull = false
@@ -567,40 +496,32 @@ const playNext = async () => {
 
 // 定期保存当前播放位置
 let savePositionInterval: number | null = null
-let unEnded: () => any = () => {}
+const PlayerEvent = (e: any) => {
+  const name = e?.detail?.name
+  console.log(name)
+  switch (name) {
+    case 'play':
+      handlePlay()
+      break
+    case 'pause':
+      handlePause()
+      break
+    case 'toggle':
+      togglePlayPause()
+      break
+    case 'playPrev':
+      playPrevious()
+      break
+    case 'playNext':
+      playNext()
+      break
+  }
+}
 // 初始化播放器
 onMounted(async () => {
   console.log('加载')
   // 初始化播放列表事件监听器
   initPlaylistEventListeners(localUserStore, playSong)
-
-  // 初始化媒体会话控制器
-  if (Audio.value.audio) {
-    mediaSessionController.init(Audio.value.audio, {
-      play: async () => {
-        // 专门的播放函数，只处理播放逻辑
-        if (!Audio.value.isPlay) {
-          await handlePlay()
-        }
-      },
-      pause: async () => {
-        // 专门的暂停函数，只处理暂停逻辑
-        if (Audio.value.isPlay) {
-          await handlePause()
-        }
-      },
-      playPrevious: () => playPrevious(),
-      playNext: () => playNext()
-    })
-  }
-
-  // 监听音频结束事件，根据播放模式播放下一首
-  unEnded = controlAudio.subscribe('ended', () => {
-    window.requestAnimationFrame(() => {
-      console.log('播放结束')
-      playNext()
-    })
-  })
 
   // 检查是否有上次播放的歌曲
   // 检查是否有上次播放的歌曲
@@ -655,21 +576,34 @@ onMounted(async () => {
       userInfo.value.currentTime = Audio.value.currentTime
     }
   }, 1000) // 每1秒保存一次
+
+  // 监听播放器事件
+
+  // TODO: 这边监听没有取消
+
+  // 监听来自主进程的锁定状态广播
+  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
+    desktopLyricLocked.value = !!lock
+  })
+  // 监听主进程通知关闭桌面歌词
+  window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
+    desktopLyricOpen.value = false
+    desktopLyricLocked.value = false
+  })
+
+  window.addEventListener('global-music-control', PlayerEvent)
 })
 
 // 组件卸载时清理
 onUnmounted(() => {
   destroyPlaylistEventListeners()
-  document.removeEventListener('keydown', KeyEvent)
+  // document.removeEventListener('keydown', KeyEvent)
+  window.removeEventListener('global-music-control', PlayerEvent)
+  window.electron?.ipcRenderer?.removeAllListeners?.('toogleDesktopLyricLock')
+  window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)
   }
-  if (removeMusicCtrlListener) {
-    removeMusicCtrlListener()
-  }
-  // 清理媒体会话控制器
-  mediaSessionController.cleanup()
-  unEnded()
 })
 
 // 组件被激活时（从缓存中恢复）
@@ -702,15 +636,9 @@ onActivated(async () => {
 // 组件被停用时（缓存但不销毁）
 onDeactivated(() => {
   console.log('PlayMusic组件被停用')
-  // 保存当前播放状态
-  wasPlaying = Audio.value.isPlay
-  // playbackPosition = Audio.value.currentTime
+  // 仅记录状态，不主动暂停，避免页面切换导致音乐暂停
+  // wasPlaying = Audio.value.isPlay
   isFull = showFullPlay.value
-  // 如果正在播放，暂停播放但不改变状态标志
-  if (wasPlaying && Audio.value.audio) {
-    Audio.value.audio.pause()
-    console.log('暂时暂停播放，状态已保存')
-  }
 })
 
 // 监听用户信息变化，更新音量
@@ -878,19 +806,24 @@ const handlePlay = async () => {
 
 // 专门的暂停函数
 const handlePause = async () => {
-  if (Audio.value.url && Audio.value.isPlay) {
+  const a = Audio.value.audio
+  if (Audio.value.url && a && !a.paused) {
     const stopResult = stop()
     if (stopResult && typeof stopResult.then === 'function') {
       await stopResult
     }
-    // 暂停后，同步 SMTC 状态
+    mediaSessionController.updatePlaybackState('paused')
+  } else if (Audio.value.url) {
+    // 已处于暂停或未知状态，也同步一次 SMTC，确保外部显示一致
     mediaSessionController.updatePlaybackState('paused')
   }
 }
 
 // 播放/暂停切换
 const togglePlayPause = async () => {
-  if (Audio.value.isPlay) {
+  const a = Audio.value.audio
+  const isActuallyPlaying = a ? !a.paused : Audio.value.isPlay
+  if (isActuallyPlaying) {
     await handlePause()
   } else {
     await handlePlay()
@@ -1304,38 +1237,37 @@ watch(showFullPlay, (val) => {
 /* 进度条样式 */
 .progress-bar-container {
   width: 100%;
-  height: 4px;
+  --touch-range-height: 20px;
+  --play-line-height: 4px;
+  height: calc(var(--touch-range-height) + var(--play-line-height)); // 放大可点击区域，但保持视觉细
   position: absolute;
-  // padding-top: 2px;
+  top: calc(var(--touch-range-height) / 2 * -1);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
-
-  &:has(.progress-handle.dragging, *:hover) {
-    // margin-bottom: 0;
-    height: 6px;
-  }
 
   .progress-bar {
     width: 100%;
     height: 100%;
     position: relative;
 
-    .progress-background {
+    // 视觉上的细轨道，垂直居中
+    .progress-background,
+    .progress-filled {
       position: absolute;
-      top: 0;
       left: 0;
       right: 0;
-      height: 100%;
+      height: var(--play-line-height);
+      top: 50%;
+      transform: translateY(-50%);
+      border-radius: 999px;
+    }
+
+    .progress-background {
       background: transparent;
     }
 
     .progress-filled {
-      position: absolute;
-      top: 0;
-      left: 0;
-      height: 100%;
       background: linear-gradient(to right, v-bind(startmaincolor), v-bind(maincolor) 80%);
-      border-radius: 999px;
     }
 
     .progress-handle {
@@ -1347,12 +1279,25 @@ watch(showFullPlay, (val) => {
       border-radius: 50%;
       transform: translate(-50%, -50%);
       opacity: 0;
-      // transition: opacity 0.2s ease;
 
       &:hover,
       &:active,
       &.dragging {
         opacity: 1;
+      }
+    }
+
+    // 悬停或拖拽时，轻微加粗提升可见性
+    &:hover {
+      .progress-background,
+      .progress-filled {
+        height: 6px;
+      }
+    }
+    &:has(.progress-handle.dragging) {
+      .progress-background,
+      .progress-filled {
+        height: 6px;
       }
     }
 

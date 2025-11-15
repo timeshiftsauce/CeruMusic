@@ -175,7 +175,6 @@ export default class PlayListSongs {
     if (!Array.isArray(songs) || songs.length === 0) {
       return
     }
-
     // 验证和过滤有效歌曲
     const validSongs = songs.filter(PlayListUtils.isValidSong)
     if (validSongs.length === 0) {

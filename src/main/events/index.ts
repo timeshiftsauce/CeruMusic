@@ -1,11 +1,13 @@
 import InitPluginService from './plugins'
 import '../services/musicSdk/index'
 import aiEvents from '../events/ai'
+// import initLocalMusicEvents from './localMusic'
 import { app, powerSaveBlocker } from 'electron'
 import { type BrowserWindow, ipcMain } from 'electron'
 export default function InitEventServices(mainWindow: BrowserWindow) {
   InitPluginService()
   aiEvents(mainWindow)
+  // initLocalMusicEvents()
   basisEvent(mainWindow)
 }
 

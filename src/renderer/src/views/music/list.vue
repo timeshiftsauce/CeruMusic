@@ -81,20 +81,7 @@ const fetchLocalPlaylistSongs = async () => {
     const result = await window.api.songList.getSongs(playlistInfo.value.id)
 
     if (result.success && result.data) {
-      songs.value = result.data.map((song: any) => ({
-        singer: song.singer || '未知歌手',
-        name: song.name || '未知歌曲',
-        albumName: song.albumName || '未知专辑',
-        albumId: song.albumId || 0,
-        source: song.source || 'local',
-        interval: song.interval || '0:00',
-        songmid: song.songmid,
-        img: song.img || '',
-        lrc: song.lrc || null,
-        types: song.types || [],
-        _types: song._types || {},
-        typeUrl: song.typeUrl || {}
-      }))
+      songs.value = result.data
 
       // 更新歌单信息中的歌曲总数
       playlistInfo.value.total = songs.value.length

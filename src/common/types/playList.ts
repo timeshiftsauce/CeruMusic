@@ -11,5 +11,6 @@ export default interface PlayList {
   lrc: null | string
   types: string[]
   _types: Record<string, any>
-  typeUrl: Record<string, any>
+  typeUrl?: Record<string, any>
+  url?: string
 }

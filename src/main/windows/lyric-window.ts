@@ -32,7 +32,7 @@ class LyricWindow {
       const bounds = this.win?.getBounds()
       if (bounds) {
         const { width, height } = bounds
-        console.log('歌词窗口缩放:', width, height);
+        console.log('歌词窗口缩放:', width, height)
 
         lyricStore.set({
           ...lyricStore.get(),
@@ -40,6 +40,9 @@ class LyricWindow {
           height
         })
       }
+    })
+    this.win?.on('closed', () => {
+      this.win = null
     })
   }
   /**

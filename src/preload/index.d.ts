@@ -126,6 +126,16 @@ interface CustomAPI {
   pluginNotice: {
     onPluginNotice: (listener: (...args: any[]) => void) => () => void
   }
+
+  localMusic: {
+    selectDirs: () => Promise<string[]>
+    scan: (dirs: string[]) => Promise<any[]>
+    writeTags: (
+      filePath: string,
+      songInfo: any,
+      tagWriteOptions: any
+    ) => Promise<{ success: boolean; message?: string }>
+  }
 }
 
 declare global {

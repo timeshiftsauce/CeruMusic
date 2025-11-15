@@ -28,8 +28,15 @@ class AudioManager {
         context = new (window.AudioContext || (window as any).webkitAudioContext)()
         source = context.createMediaElementSource(audioElement)
 
-        // 连接到输出，确保音频能正常播放
-        source.connect(context.destination)
+        // 确保仅通过分流器连接，避免重复直连导致音量叠加
+        let splitter = this.splitters.get(audioElement)
+        if (!splitter) {
+          splitter = context.createGain()
+          splitter.gain.value = 1.0
+          source.connect(splitter)
+          splitter.connect(context.destination)
+          this.splitters.set(audioElement, splitter)
+        }
 
         // 存储引用
         this.audioSources.set(audioElement, source)

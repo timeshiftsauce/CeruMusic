@@ -17,6 +17,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@renderer/views/music/find.vue')
       },
       {
+        path: 'songlist',
+        name: 'songlist',
+        component: () => import('@renderer/views/music/songlist.vue')
+      },
+      {
         path: 'local',
         name: 'local',
         component: () => import('@renderer/views/music/local.vue')

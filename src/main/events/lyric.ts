@@ -28,6 +28,8 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 切换桌面歌词
   ipcMain.on('change-desktop-lyric', (_event, val: boolean) => {
+    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+
     if (val) {
       lyricWin?.show()
       lyricWin?.setAlwaysOnTop(true, 'screen-saver')
@@ -39,17 +41,37 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 音乐名称更改
   ipcMain.on('play-song-change', (_, title) => {
     if (!title) return
+    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+
     lyricWin?.webContents.send('play-song-change', title)
   })
 
   // 音乐歌词更改
   ipcMain.on('play-lyric-change', (_, lyricData) => {
     if (!lyricData) return
+    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+
     lyricWin?.webContents.send('play-lyric-change', lyricData)
+  })
+
+  // 当前行索引变化（用于立即高亮切换）
+  ipcMain.on('play-lyric-index', (_, index: number) => {
+    if (index === undefined || index === null) return
+    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+
+    lyricWin?.webContents.send('play-lyric-index', index)
+  })
+
+  // 当前行进度（用于控制 30% 时机的延迟替换）
+  ipcMain.on('play-lyric-progress', (_, payload: { index: number; progress: number }) => {
+    if (!payload || !lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed())
+      return
+    lyricWin?.webContents.send('play-lyric-progress', payload)
   })
 
   // 播放状态更改（播放/暂停）
   ipcMain.on('play-status-change', (_, status: boolean) => {
+    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
     lyricWin?.webContents.send('play-status-change', status)
   })
 
