@@ -34,8 +34,13 @@ const menuList: MenuItem[] = [
     path: '/home/find'
   },
   {
+    name: '歌单',
+    icon: 'icon-yanchu',
+    path: '/home/songlist'
+  },
+  {
     name: '本地',
-    icon: 'icon-music',
+    icon: 'icon-shouye',
     path: '/home/local'
   },
   {

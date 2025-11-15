@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>歌单格式转换器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        font-weight: 300;
+      }
+
+      .header p {
+        font-size: 1.1em;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px;
+      }
+
+      .upload-section {
+        background: #f8f9ff;
+        border: 3px dashed #4facfe;
+        border-radius: 15px;
+        padding: 40px;
+        text-align: center;
+        margin-bottom: 30px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .upload-section:hover {
+        border-color: #00f2fe;
+        background: #f0f8ff;
+        transform: translateY(-2px);
+      }
+
+      .upload-section.dragover {
+        border-color: #00f2fe;
+        background: #e8f4ff;
+        transform: scale(1.02);
+      }
+
+      .upload-icon {
+        font-size: 4em;
+        color: #4facfe;
+        margin-bottom: 20px;
+      }
+
+      .upload-text {
+        font-size: 1.3em;
+        color: #333;
+        margin-bottom: 10px;
+      }
+
+      .upload-subtext {
+        color: #666;
+        font-size: 0.9em;
+      }
+
+      .file-input {
+        display: none;
+      }
+
+      .preview-section {
+        display: none;
+        margin-bottom: 30px;
+      }
+
+      .preview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
+      .preview-title {
+        font-size: 1.5em;
+        color: #333;
+        font-weight: 500;
+      }
+
+      .song-count {
+        background: #4facfe;
+        color: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.9em;
+      }
+
+      .preview-content {
+        background: #f8f9ff;
+        border-radius: 15px;
+        padding: 20px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      .song-item {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        display: flex;
+        align-items: center;
+        transition: all 0.3s ease;
+      }
+
+      .song-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      }
+
+      .song-number {
+        background: #4facfe;
+        color: white;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        margin-right: 15px;
+        font-size: 0.9em;
+      }
+
+      .song-info {
+        flex: 1;
+      }
+
+      .song-name {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 5px;
+      }
+
+      .song-artist {
+        color: #666;
+        font-size: 0.9em;
+      }
+
+      .controls {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 25px;
+        font-size: 1em;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+      }
+
+      .btn-secondary {
+        background: #f1f3f4;
+        color: #333;
+      }
+
+      .btn-success {
+        background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+        color: white;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .result-section {
+        display: none;
+        background: #f8f9ff;
+        border-radius: 15px;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .result-icon {
+        font-size: 4em;
+        margin-bottom: 20px;
+      }
+
+      .result-success {
+        color: #28a745;
+      }
+
+      .result-error {
+        color: #dc3545;
+      }
+
+      .result-message {
+        font-size: 1.2em;
+        margin-bottom: 20px;
+        color: #333;
+      }
+
+      .download-link {
+        display: inline-block;
+        background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+        color: white;
+        padding: 12px 30px;
+        border-radius: 25px;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+      }
+
+      .download-link:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 40px;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #4facfe;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error-details {
+        background: #fff5f5;
+        border: 1px solid #fed7d7;
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 15px;
+        text-align: left;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9em;
+        color: #c53030;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          margin: 10px;
+          border-radius: 15px;
+        }
+
+        .content {
+          padding: 20px;
+        }
+
+        .controls {
+          flex-direction: column;
+        }
+
+        .btn {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🎵 澜音歌单格式转换器</h1>
+        <p>将洛雪音乐平台的歌单转换为澜音音乐的加密格式</p>
+      </div>
+
+      <div class="content">
+        <div class="upload-section" id="uploadSection">
+          <div class="upload-icon">📁</div>
+          <div class="upload-text">点击或拖拽洛雪歌单文件到此处</div>
+          <div class="upload-subtext">支持 *.json 和 *.lxmc 格式的歌单文件</div>
+          <input type="file" id="fileInput" class="file-input" accept=".json,.lxmc" />
+        </div>
+
+        <div class="preview-section" id="previewSection">
+          <div class="preview-header">
+            <div class="preview-title">歌单预览</div>
+            <div class="song-count" id="songCount">0 首歌曲</div>
+          </div>
+          <div class="preview-content" id="previewContent">
+            <!-- 歌曲列表将在这里显示 -->
+          </div>
+        </div>
+
+        <div class="controls" id="controls" style="display: none">
+          <button class="btn btn-primary" id="convertBtn">
+            <span>🔐</span>
+            转换并加密
+          </button>
+          <button class="btn btn-secondary" id="resetBtn">
+            <span>🔄</span>
+            重新选择
+          </button>
+        </div>
+
+        <div class="loading" id="loadingSection">
+          <div class="spinner"></div>
+          <div>正在转换中...</div>
+        </div>
+
+        <div class="result-section" id="resultSection">
+          <div class="result-icon" id="resultIcon"></div>
+          <div class="result-message" id="resultMessage"></div>
+          <a href="#" class="download-link" id="downloadLink" style="display: none">
+            <span>📥</span>
+            下载澜音歌单
+          </a>
+          <div class="error-details" id="errorDetails" style="display: none"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 全局变量
+      let currentPlaylist = null
+      let convertedPlaylist = null
+      const SECRET_KEY = 'CeruMusic-PlaylistSecretKey'
+
+      // Gzip解压函数
+      async function decompressGzip(arrayBuffer) {
+        try {
+          // 使用浏览器的 DecompressionStream API
+          const stream = new Response(arrayBuffer).body.pipeThrough(new DecompressionStream('gzip'))
+          const decompressed = await new Response(stream).arrayBuffer()
+          return new TextDecoder().decode(decompressed)
+        } catch (error) {
+          throw new Error('Gzip解压失败: ' + error.message)
+        }
+      }
+
+      // DOM元素
+      const uploadSection = document.getElementById('uploadSection')
+      const fileInput = document.getElementById('fileInput')
+      const previewSection = document.getElementById('previewSection')
+      const previewContent = document.getElementById('previewContent')
+      const songCount = document.getElementById('songCount')
+      const controls = document.getElementById('controls')
+      const convertBtn = document.getElementById('convertBtn')
+      const resetBtn = document.getElementById('resetBtn')
+      const loadingSection = document.getElementById('loadingSection')
+      const resultSection = document.getElementById('resultSection')
+      const resultIcon = document.getElementById('resultIcon')
+      const resultMessage = document.getElementById('resultMessage')
+      const downloadLink = document.getElementById('downloadLink')
+      const errorDetails = document.getElementById('errorDetails')
+
+      // 文件上传处理
+      uploadSection.addEventListener('click', () => fileInput.click())
+
+      uploadSection.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        uploadSection.classList.add('dragover')
+      })
+
+      uploadSection.addEventListener('dragleave', () => {
+        uploadSection.classList.remove('dragover')
+      })
+
+      uploadSection.addEventListener('drop', (e) => {
+        e.preventDefault()
+        uploadSection.classList.remove('dragover')
+        const files = e.dataTransfer.files
+        if (files.length > 0) {
+          handleFile(files[0])
+        }
+      })
+
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0]
+        if (file) {
+          handleFile(file)
+        }
+      })
+
+      // 按钮事件
+      convertBtn.addEventListener('click', convertPlaylist)
+      resetBtn.addEventListener('click', resetConverter)
+
+      // 处理文件
+      function handleFile(file) {
+        const fileName = file.name.toLowerCase()
+
+        if (fileName.endsWith('.json')) {
+          // 处理JSON文件
+          const reader = new FileReader()
+          reader.onload = (e) => {
+            try {
+              const content = JSON.parse(e.target.result)
+              currentPlaylist = content
+              displayPreview(content)
+            } catch (error) {
+              showError('JSON文件解析失败: ' + error.message)
+            }
+          }
+          reader.readAsText(file)
+        } else if (fileName.endsWith('.lxmc')) {
+          // 处理LXMC文件（gzip压缩）
+          const reader = new FileReader()
+          reader.onload = async (e) => {
+            try {
+              const arrayBuffer = e.target.result
+              const decompressed = await decompressGzip(arrayBuffer)
+              const content = JSON.parse(decompressed)
+              currentPlaylist = content
+              displayPreview(content)
+            } catch (error) {
+              showError('LXMC文件处理失败: ' + error.message)
+            }
+          }
+          reader.readAsArrayBuffer(file)
+        } else {
+          showError('请选择JSON或LXMC格式的文件')
+          return
+        }
+      }
+
+      // 显示预览
+      function displayPreview(playlist) {
+        previewContent.innerHTML = ''
+
+        const playlistData =
+          playlist.type === 'playListPart_v2' && playlist.data ? playlist.data : playlist
+        const songList = playlistData.list
+
+        if (!songList || !Array.isArray(songList)) {
+          showError('无效的歌单格式：缺少歌曲列表')
+          return
+        }
+
+        // 显示歌曲列表
+        songList.forEach((song, index) => {
+          const songItem = document.createElement('div')
+          songItem.className = 'song-item'
+          songItem.innerHTML = `
+                  <div class="song-number">${index + 1}</div>
+                  <div class="song-info">
+                      <div class="song-name">${song.name || '未知歌曲'}</div>
+                      <div class="song-artist">${song.singer || '未知艺术家'} • ${song.interval || '0:00'}</div>
+                  </div>
+              `
+          previewContent.appendChild(songItem)
+        })
+
+        songCount.textContent = `${songList.length} 首歌曲`
+        previewSection.style.display = 'block'
+        controls.style.display = 'flex'
+        uploadSection.style.display = 'none'
+      }
+
+      // 转换歌单
+      function convertPlaylist() {
+        if (!currentPlaylist) return
+
+        showLoading()
+
+        try {
+          // 转换格式
+          const convertedSongs = convertToTargetFormat(currentPlaylist)
+
+          // 加密
+          const encryptedData = encryptPlaylist(convertedSongs)
+
+          convertedPlaylist = {
+            original: currentPlaylist,
+            converted: convertedSongs,
+            encrypted: encryptedData
+          }
+
+          showSuccess(convertedPlaylist)
+        } catch (error) {
+          showError('转换失败: ' + error.message, error.stack)
+        }
+      }
+
+      // 转换为目标格式
+      function convertToTargetFormat(originalPlaylist) {
+        if (originalPlaylist.type === 'playListPart_v2' && originalPlaylist.data) {
+          originalPlaylist = originalPlaylist.data
+        }
+        if (!originalPlaylist.list || !Array.isArray(originalPlaylist.list)) {
+          throw new Error('原始歌单格式无效')
+        }
+
+        return originalPlaylist.list.map((song) => {
+          // 从meta中提取额外信息
+          const meta = song.meta || {}
+
+          return {
+            songmid: meta.hash || meta.songId,
+            singer: song.singer || '未知艺术家',
+            name: song.name || '未知歌曲',
+            albumName: meta.albumName || '未知专辑',
+            albumId: meta.albumId,
+            source: song.source || 'unknown',
+            interval: song.interval || '0:00',
+            img: meta.picUrl || '',
+            lrc: null,
+            types: meta.qualitys,
+            _types: meta._qualitys,
+            typeUrl: {},
+            url: ''
+          }
+        })
+      }
+
+      // 转换音质类型
+      function convertQualityTypes(qualities) {
+        const types = {}
+        if (!qualities || !Array.isArray(qualities)) {
+          types['128k'] = { size: '未知' }
+          return types
+        }
+
+        qualities.forEach((quality) => {
+          if (typeof quality.type !== 'string') return
+          const q = quality.type.toLowerCase()
+          if (q.includes('flac')) {
+            if (q.includes('24')) {
+              types['flac24bit'] = { size: '未知' }
+            } else {
+              types['flac'] = { size: '未知' }
+            }
+          } else if (q.includes('320')) {
+            types['320k'] = { size: '未知' }
+          } else if (q.includes('128')) {
+            types['128k'] = { size: '未知' }
+          } else {
+            types[q] = { size: '未知' }
+          }
+        })
+
+        return Object.keys(types).length > 0 ? types : { '128k': { size: '未知' } }
+      }
+
+      // 生成随机ID
+      function generateRandomId() {
+        return Math.random().toString(36).substr(2, 9)
+      }
+
+      // 加密歌单
+      function encryptPlaylist(songs) {
+        const dataToEncrypt = JSON.stringify(songs)
+        return CryptoJS.AES.encrypt(dataToEncrypt, SECRET_KEY).toString()
+      }
+
+      // 显示加载状态
+      function showLoading() {
+        loadingSection.style.display = 'block'
+        controls.style.display = 'none'
+        resultSection.style.display = 'none'
+      }
+
+      // 显示成功结果
+      function showSuccess(result) {
+        loadingSection.style.display = 'none'
+        resultSection.style.display = 'block'
+
+        resultIcon.className = 'result-icon result-success'
+        resultIcon.textContent = '✅'
+        resultMessage.textContent = '歌单转换成功！'
+
+        // 创建下载链接
+        const encryptedData = result.encrypted
+        const blob = new Blob([encryptedData], {
+          type: 'application/octet-stream'
+        })
+        const url = URL.createObjectURL(blob)
+
+        downloadLink.href = url
+        downloadLink.download = `cerumusic-playlist-${new Date().toISOString().slice(0, 10)}.cpl`
+        downloadLink.style.display = 'inline-block'
+
+        // 清理之前的URL
+        if (downloadLink.dataset.url) {
+          URL.revokeObjectURL(downloadLink.dataset.url)
+        }
+        downloadLink.dataset.url = url
+      }
+
+      // 显示错误信息
+      function showError(message, details = null) {
+        loadingSection.style.display = 'none'
+        resultSection.style.display = 'block'
+
+        resultIcon.className = 'result-icon result-error'
+        resultIcon.textContent = '❌'
+        resultMessage.textContent = message
+
+        if (details) {
+          errorDetails.textContent = details
+          errorDetails.style.display = 'block'
+        }
+
+        downloadLink.style.display = 'none'
+      }
+
+      // 重置转换器
+      function resetConverter() {
+        currentPlaylist = null
+        convertedPlaylist = null
+
+        uploadSection.style.display = 'block'
+        previewSection.style.display = 'none'
+        controls.style.display = 'none'
+        loadingSection.style.display = 'none'
+        resultSection.style.display = 'none'
+
+        fileInput.value = ''
+        previewContent.innerHTML = ''
+        errorDetails.style.display = 'none'
+
+        // 清理下载链接
+        if (downloadLink.dataset.url) {
+          URL.revokeObjectURL(downloadLink.dataset.url)
+          delete downloadLink.dataset.url
+        }
+      }
+
+      // 页面卸载时清理资源
+      window.addEventListener('beforeunload', () => {
+        if (downloadLink.dataset.url) {
+          URL.revokeObjectURL(downloadLink.dataset.url)
+        }
+      })
+    </script>
+  </body>
+</html>

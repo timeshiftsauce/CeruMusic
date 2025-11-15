@@ -34,6 +34,13 @@ const qualityKey = Object.keys(qualityMap)
  */
 export async function getSongRealUrl(song: SongList): Promise<string> {
   try {
+    if ((song as any).source === 'local') {
+      const id = (song as any).songmid
+      const url = await (window as any).api.localMusic.getUrlById(id)
+      if (typeof url === 'object' && url?.error) throw new Error(url.error)
+      if (typeof url === 'string') return url
+      throw new Error('本地歌曲URL获取失败')
+    }
     // 获取当前用户的信息
     const LocalUserDetail = LocalUserDetailStore()
     // 通过统一的request方法获取真实的播放URL

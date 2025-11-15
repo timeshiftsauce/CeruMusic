@@ -31,6 +31,14 @@ onMounted(() => {
   syncNaiveTheme()
   window.addEventListener('theme-changed', () => syncNaiveTheme())
 
+  // 全局键盘/托盘播放控制安装（解耦出组件）
+  import('@renderer/utils/audio/globalControls')
+    .then((m) => m.installGlobalMusicControls())
+    .catch(() => {})
+  import('@renderer/utils/lyrics/desktopLyricBridge')
+    .then((m) => m.installDesktopLyricBridge())
+    .catch(() => {})
+
   // 全局监听来自主进程的播放控制事件，确保路由切换也可响应
   const forward = (name: string, val?: any) => {
     window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))

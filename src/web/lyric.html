@@ -16,8 +16,9 @@
 
       :root {
         --font-size: 30;
-        --main-color: #73BCFC;
+        --main-color: #73bcfc;
         --shadow-color: rgba(255, 255, 255, 0.5);
+        --next-color: rgba(255, 255, 255, 0.68);
       }
 
       body {
@@ -166,6 +167,7 @@
         z-index: 1;
         max-width: 100%;
         pointer-events: auto;
+        width: 100%;
 
         #lyric-text {
           font-size: calc(var(--font-size) * 1px);
@@ -198,6 +200,75 @@
         100% {
           transform: translateX(-100%);
         }
+      }
+
+      /* 双行交错歌词布局 */
+      .lines-root {
+        position: relative;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+      }
+      .line {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        transition: transform 0.35s ease, opacity 0.35s ease;
+        will-change: transform, opacity;
+      }
+      .line *{
+                transition:
+          transform 0.35s ease,
+          opacity 0.35s ease;
+        will-change: transform, opacity;
+        text-shadow: 0 0 4px var(--shadow-color);
+
+      }
+      .line .text {
+        font-size: calc(var(--font-size) * 1px);
+        font-weight: 700;
+      }
+      .line .tran {
+        font-size: calc(var(--font-size) * 1px - 5px);
+        opacity: 0.6;
+        margin-top: 6px;
+      }
+      .line.left {
+        align-items: flex-start;
+        text-align: left;
+      }
+      .line.right {
+        align-items: flex-end;
+        text-align: right;
+      }
+
+      /* 当前句 vs 下一句 颜色区分 */
+      .line.current .text {
+        color: var(--main-color);
+        opacity: 1;
+      }
+      .line.current .tran {
+        opacity: 0.8;
+      }
+      .line.upnext .text {
+        color: var(--next-color);
+        opacity: 0.65;
+      }
+      .line.upnext .tran {
+        opacity: 0.45;
+      }
+
+      /* 进入动画：使用关键帧，避免过渡时序问题 */
+      @keyframes lyricEnter {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      /* 备用：如果需要离场可再启用 */
+      @keyframes lyricLeave {
+        from { opacity: 1; transform: translateY(0); }
+        to   { opacity: 0; transform: translateY(-8px); }
       }
     </style>
   </head>
@@ -309,8 +380,18 @@
       </div>
     </header>
     <main id="lyric-content">
-      <span id="lyric-text">该歌曲暂无歌词</span>
-      <span id="lyric-tran"></span>
+      <span id="lyric-text" style="display: none">该歌曲暂无歌词</span>
+      <span id="lyric-tran" style="display: none"></span>
+      <div id="lines-root" class="lines-root">
+        <div class="line line-a left">
+          <div class="text"></div>
+          <div class="tran"></div>
+        </div>
+        <div class="line line-b right">
+          <div class="text"></div>
+          <div class="tran"></div>
+        </div>
+      </div>
     </main>
     <script>
       class LyricsWindow {
@@ -333,6 +414,12 @@
           this.winHeight = 0
           // 临时变量
           // this.lyricIndex = -1;
+          // 每首歌起始基准索引，用于保证第一句总在左侧
+          this._baseIndex = null
+          // 上一索引与延迟更新队列（仅延迟“上一行->下一行”的替换）
+          this._lastIndex = -1
+          this._pendingUpnext = null // { wrapEl, textEl, tranEl, data }
+          this._lastLyricPayload = { lyric: [] }
           // 初始化
           this.restoreOptions()
           this.menuClick()
@@ -340,14 +427,123 @@
           this.setupWindowDragListeners()
           this.setupMutationObserver()
         }
-        // 歌词切换动画
-        updateLyrics(content = '纯音乐，请欣赏', translation = '') {
-          // document.startViewTransition(() => {
-          //   this.lyricTextDom.innerHTML = content;
-          //   this.lyricTranDom.innerHTML = translation;
-          // });
-          this.lyricTextDom.innerHTML = content
-          this.lyricTranDom.innerHTML = translation
+        // 准备态渲染：展示第 1、2 句左右铺开，不标记 current/upnext
+        renderPrepare() {
+          const payload = this._lastLyricPayload || { lyric: [] }
+          const lines = payload.lyric || []
+          if (!Array.isArray(lines) || lines.length === 0) return
+          const first = lines[0] || { content: '', tran: '' }
+          const second = lines[1] || { content: '', tran: '' }
+          const root = document.getElementById('lines-root')
+          const lineA = root.querySelector('.line-a')
+          const lineB = root.querySelector('.line-b')
+          const aText = lineA.querySelector('.text')
+          const aTran = lineA.querySelector('.tran')
+          const bText = lineB.querySelector('.text')
+          const bTran = lineB.querySelector('.tran')
+          lineA.classList.remove('current', 'upnext')
+          lineB.classList.remove('current', 'upnext')
+          const updateSide = (wrapEl, textEl, tranEl, data) => {
+            const newText = data?.content || ''
+            const newTran = data?.tran || ''
+            if (textEl.textContent !== newText || tranEl.textContent !== newTran) {
+              textEl.textContent = newText
+              tranEl.textContent = newTran
+              wrapEl.style.animation = 'none'
+              void wrapEl.offsetWidth
+              wrapEl.style.animation = 'lyricEnter 0.35s ease'
+            }
+          }
+          updateSide(lineA, aText, aTran, first)
+          updateSide(lineB, bText, bTran, second)
+        }
+
+        // 基于当前行索引的“AB 交错 + 预显下一句”规则：
+        // 当前 index 偶数 -> 左=当前句(index)，右=下一句(index+1)
+        // 当前 index 奇数 -> 左=下一句(index+1)，右=当前句(index)
+        renderByIndex(index) {
+          const payload = this._lastLyricPayload || { lyric: [] }
+          const lines = payload.lyric || []
+          if (!Array.isArray(lines) || lines.length === 0) return
+          if (typeof index !== 'number' || index < 0 || index >= lines.length) return
+
+          // 锁定基准：确保每首歌的第一句渲染在左侧
+          if (this._baseIndex === null) this._baseIndex = index
+
+          const cur = lines[index] || { content: '纯音乐，请欣赏', tran: '' }
+          const next = lines[index + 1] || { content: '', tran: '' }
+
+          const root = document.getElementById('lines-root')
+          const lineA = root.querySelector('.line-a')
+          const lineB = root.querySelector('.line-b')
+          const aText = lineA.querySelector('.text')
+          const aTran = lineA.querySelector('.tran')
+          const bText = lineB.querySelector('.text')
+          const bTran = lineB.querySelector('.tran')
+
+          const even = (index - this._baseIndex) % 2 === 0
+
+          // 标记当前句与下一句以应用不同颜色样式（立即切换高亮，不等 30%）
+          lineA.classList.remove('current', 'upnext')
+          lineB.classList.remove('current', 'upnext')
+          let currentWrap, currentText, currentTran, upnextWrap, upnextText, upnextTran
+          if (even) {
+            // 左：当前；右：下一
+            lineA.classList.add('current')
+            lineB.classList.add('upnext')
+            currentWrap = lineA
+            currentText = aText
+            currentTran = aTran
+            upnextWrap = lineB
+            upnextText = bText
+            upnextTran = bTran
+          } else {
+            // 左：下一；右：当前
+            lineA.classList.add('upnext')
+            lineB.classList.add('current')
+            currentWrap = lineB
+            currentText = bText
+            currentTran = bTran
+            upnextWrap = lineA
+            upnextText = aText
+            upnextTran = aTran
+          }
+
+          const updateSide = (wrapEl, textEl, tranEl, data) => {
+            const newText = data?.content || ''
+            const newTran = data?.tran || ''
+            const oldText = textEl.textContent || ''
+            const oldTran = tranEl.textContent || ''
+            if (newText === oldText && newTran === oldTran) return
+            textEl.textContent = newText
+            tranEl.textContent = newTran
+            wrapEl.style.animation = 'none'
+            void wrapEl.offsetWidth
+            wrapEl.style.animation = 'lyricEnter 0.35s ease'
+          }
+
+          // 1) 立即更新“当前句”内容，保证开始朗读就高亮且正确
+          updateSide(currentWrap, currentText, currentTran, cur)
+
+          // 2) 对“上一行 -> 下一行”的替换延迟到 30% 进度
+          const desiredUpText = next?.content || ''
+          const desiredUpTran = next?.tran || ''
+          const upOldText = upnextText.textContent || ''
+          const upOldTran = upnextTran.textContent || ''
+
+          // 若 upnext 目前已是下一句，则无需延迟
+          if (desiredUpText === upOldText && desiredUpTran === upOldTran) {
+            this._pendingUpnext = null
+          } else {
+            // 仅记录待更新，不立刻替换
+            this._pendingUpnext = {
+              index,
+              wrapEl: upnextWrap,
+              textEl: upnextText,
+              tranEl: upnextTran,
+              data: next
+            }
+          }
         }
         // 获取配置
         async restoreOptions() {
@@ -365,9 +561,18 @@
         changeOptions(options, callback = true) {
           if (!options) return
           const { fontSize, mainColor, shadowColor } = options
-          document.documentElement.style.setProperty('--font-size', fontSize)
-          document.documentElement.style.setProperty('--main-color', mainColor)
-          document.documentElement.style.setProperty('--shadow-color', shadowColor)
+          const root = document.documentElement
+          root.style.setProperty('--font-size', fontSize)
+          root.style.setProperty('--main-color', mainColor)
+          root.style.setProperty('--shadow-color', shadowColor)
+          // 基于主色生成灰度化的 next 颜色（使用 color-mix 提升兼容/观感）
+          try {
+            const next = `color-mix(in srgb, ${mainColor} 35%, white 65%)`
+            root.style.setProperty('--next-color', next)
+          } catch (e) {
+            // 退化：若不支持 color-mix，则使用固定透明度的主色
+            root.style.setProperty('--next-color', mainColor)
+          }
           if (callback) window.electron.ipcRenderer.send('set-desktop-lyric-option', options)
         }
         // 菜单点击事件
@@ -442,6 +647,8 @@
             const [songName, songArtist] = title.split(' - ')
             this.songNameDom.innerHTML = songName
             this.songArtistDom.innerHTML = songArtist
+            // 每首歌切换时重置基准索引，确保首句在左侧
+            this._baseIndex = null
             this.updateLyrics(title)
           })
 
@@ -450,9 +657,53 @@
             this.parsedLyricsData(lyricData)
           })
 
+          // 接收当前行索引（若主进程/渲染端已推送 index）并按奇偶切换 A/B 行，避免“右侧唱完才换左侧”的滞后问题
+          window.electron.ipcRenderer.on('play-lyric-index', (_, index) => {
+            this._lastIndex = this._lastIndex ?? -1
+            if (typeof index !== 'number' || index === this._lastIndex) return
+
+            // 准备态：index === -1，先展示第 1、2 句左右铺开（不打标 current/upnext）
+            if (index === -1) {
+              this._baseIndex = null
+              this._lastIndex = index
+              this.renderPrepare()
+              return
+            }
+
+            // 第一次收到该首歌的有效 index，锁定基准，保证奇偶性从 index 开始算起时首句落在左侧
+            if (this._baseIndex === null) this._baseIndex = index
+            this._lastIndex = index
+            this.renderByIndex(index)
+          })
+
           window.electron.ipcRenderer.on('play-status-change', (_, status) => {
             this.playDom.classList.toggle('hidden', status)
             this.pauseDom.classList.toggle('hidden', !status)
+          })
+
+          // 进度事件：用于 30% 后再替换上一侧为“下一句”
+          window.electron.ipcRenderer.on('play-lyric-progress', (_, payload) => {
+            try {
+              const { index, progress } = payload || {}
+              if (!this._pendingUpnext) return
+              // 仅当仍在同一行朗读时触发
+              if (typeof index !== 'number' || index !== this._pendingUpnext.index) return
+              if (typeof progress !== 'number' || progress < 0.3) return
+              const { wrapEl, textEl, tranEl, data } = this._pendingUpnext
+              const newText = data?.content || ''
+              const newTran = data?.tran || ''
+              if (textEl.textContent === newText && tranEl.textContent === newTran) {
+                this._pendingUpnext = null
+                return
+              }
+              // 执行替换与入场动画
+              textEl.textContent = newText
+              tranEl.textContent = newTran
+              wrapEl.style.animation = 'none'
+              void wrapEl.offsetWidth
+              wrapEl.style.animation = 'lyricEnter 0.35s ease'
+              this._pendingUpnext = null
+            } catch {}
           })
 
           // 配置变化
@@ -469,12 +720,17 @@
         parsedLyricsData(lyricData) {
           if (!this.lyricContentDom || !this.lyricTextDom) return
           const { index, lyric } = lyricData
-          // 更换文字
-          if (!lyric || index < 0) {
-            if (lyric.length === 0) this.updateLyrics()
-          } else {
-            const { content, tran } = lyric[index]
-            this.updateLyrics(content, tran || '')
+          // 缓存全集合，等待 index 推送来决定显示侧（奇偶）
+          this._lastLyricPayload = { lyric }
+
+          if (!lyric || lyric.length === 0) {
+            this.updateLyrics()
+            return
+          }
+
+          // 如果带 index，则立即按规则渲染；否则等待 play-lyric-index（桥接侧也会周期推 index）
+          if (typeof index === 'number' && index >= 0 && index < lyric.length) {
+            this.renderByIndex(index)
           }
         }
         // 拖拽窗口

@@ -49,7 +49,6 @@
     "@pixi/sprite": "^7.4.3",
     "@types/howler": "^2.2.12",
     "@types/needle": "^3.3.0",
-    "NeteaseCloudMusicApi": "^4.27.0",
     "animate.css": "^4.1.1",
     "axios": "^1.11.0",
     "color-extraction": "^1.0.8",

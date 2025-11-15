@@ -30,7 +30,7 @@ interface Props {
   show?: boolean
   coverImage?: string
   songId?: string | null
-  songInfo: SongList | { songmid: number | null | string }
+  songInfo: SongList | { songmid: number | null | string; lrc: string | null }
   mainColor: string
 }
 
@@ -101,7 +101,6 @@ watch(
       active = false
       abort.abort()
     })
-
     // 工具函数：清洗响应式对象，避免序列化问题
     const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(props.songInfo)))
 
@@ -173,35 +172,100 @@ watch(
       let parsedLyrics: LyricLine[] = []
 
       if (source === 'wy' || source === 'tx') {
-        // 网易云 / QQ 音乐：优先尝试 TTML
+        // 网易云 / QQ 音乐：优先尝试 TTML，同时准备备用方案
+        // 1. 立即启动 SDK (回退) 请求，但不 await
+        // 将其 Promise 存储在 sdkPromise 变量中
+        const sdkPromise = (async () => {
+          try {
+            const lyricData = await window.api.music.requestSdk('getLyric', {
+              source,
+              songInfo: _.cloneDeep(toRaw(props.songInfo)) as any
+              // 注意：这里的 abort.signal 是用于 TTML 的
+              // 如果 requestSdk 也支持 signal，你可以考虑也传入
+            })
+            console.log('sdkPromise', lyricData)
+            // 依赖外部的 active 检查
+            if (!active) return null
+
+            let lyrics: null | LyricLine[] = null
+            if (lyricData?.crlyric) {
+              lyrics = parseCrLyricBySource(source, lyricData.crlyric)
+            } else if (lyricData?.lyric) {
+              lyrics = parseLrc(lyricData.lyric)
+            }
+            lyrics = mergeTranslation(lyrics as any, lyricData?.tlyric)
+
+            // 如果 SDK 也拿不到歌词，返回 null
+            if (!lyrics || lyrics.length === 0) {
+              return null
+            }
+            return lyrics
+          } catch (err: any) {
+            // 如果 SDK 请求失败，抛出错误
+            // 这样当 TTML 也失败时，可以捕获到这个 SDK 错误
+            throw new Error(`SDK request failed: ${err.message}`)
+          }
+        })()
+
+        // 2. 尝试 TTML (主要) 请求
         try {
           const res = await (
             await fetch(
               `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
               {
-                signal: abort.signal
-            })
+                signal: abort.signal // TTML 请求使用 abort signal
+              }
+            )
           ).text()
-          if (!active) return
-          if (!res || res.length < 100) throw new Error('ttml 无歌词')
-          parsedLyrics = parseTTML(res).lines
-        } catch {
-          // 回退到统一歌词 API
-          const lyricData = await window.api.music.requestSdk('getLyric', {
-            source,
-            songInfo: _.cloneDeep(toRaw(props.songInfo)) as any
-          })
+
           if (!active) return
 
-          if (lyricData?.crlyric) {
-            parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
-          } else if (lyricData?.lyric) {
-            parsedLyrics = parseLrc(lyricData.lyric)
+          if (!res || res.length < 100) {
+            throw new Error('ttml 无歌词') // 抛出错误以触发 catch
           }
 
-          parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
+          const ttmlLyrics = parseTTML(res).lines
+
+          if (!ttmlLyrics || ttmlLyrics.length === 0) {
+            throw new Error('TTML 解析为空') // 抛出错误以触发 catch
+          }
+
+          // --- TTML 成功 ---
+          parsedLyrics = ttmlLyrics
+
+          // 此时我们不再关心 SDK 的结果
+          // 为防止 sdkPromise 失败时出现 "unhandled rejection"，
+          // 我们给它加一个空的 catch 来“静音”它的潜在错误。
+          sdkPromise.catch(() => {
+            /* TTML 优先，忽略 SDK 的错误 */
+          })
+        } catch (ttmlError: any) {
+          // --- TTML 失败，回退到 SDK ---
+          // 检查是否是因为中止操作
+          if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
+            return
+          }
+
+          // console.log('TTML failed, falling back to SDK:', ttmlError.message);
+
+          try {
+            // 现在等待已经启动的 SDK 请求
+            const sdkLyrics = await sdkPromise
+
+            if (sdkLyrics) {
+              parsedLyrics = sdkLyrics
+            } else {
+              // SDK 也失败了或没有返回歌词
+              // console.log('SDK fallback also provided no lyrics.');
+              parsedLyrics = [] // 或者保持原样
+            }
+          } catch (sdkError) {
+            // TTML 和 SDK 都失败了
+            // console.error('Both TTML and SDK failed:', { ttmlError, sdkError });
+            parsedLyrics = [] // 最终回退
+          }
         }
-      } else {
+      } else if (source !== 'local') {
         // 其他来源：直接统一歌词 API
         const lyricData = await window.api.music.requestSdk('getLyric', {
           source,
@@ -216,6 +280,13 @@ watch(
         }
 
         parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
+      } else {
+        const text = (props.songInfo as any).lrc as string | null
+        if (text && (/^\[(\d+),\d+\]/.test(text) || /\(\d+,\d+,\d+\)/.test(text))) {
+          parsedLyrics = text ? (parseYrc(text) as any) : []
+        } else {
+          parsedLyrics = text ? (parseLrc(text) as any) : []
+        }
       }
       if (!active) return
       state.lyricLines = parsedLyrics.length > 0 ? parsedLyrics : []
@@ -227,71 +298,6 @@ watch(
     }
   },
   { immediate: true }
-)
-
-// 桌面歌词联动：构建歌词负载、计算当前行并通过 IPC 推送
-const buildLyricPayload = (lines: LyricLine[]) =>
-  (lines || []).map((l) => ({
-    content: (l.words || []).map((w) => w.word).join(''),
-    tran: l.translatedLyric || ''
-  }))
-
-const lastLyricIndex = ref(-1)
-const computeLyricIndex = (timeMs: number, lines: LyricLine[]) => {
-  if (!lines || lines.length === 0) return -1
-  const t = timeMs
-  const i = lines.findIndex((l) => t >= l.startTime && t < l.endTime)
-  if (i !== -1) return i
-  for (let j = lines.length - 1; j >= 0; j--) {
-    if (t >= lines[j].startTime) return j
-  }
-  return -1
-}
-
-// 歌词集合变化时，先推一次集合，index 为 -1（由窗口自行处理占位）
-watch(
-  () => state.lyricLines,
-  (lines) => {
-    const payload = { index: -1, lyric: buildLyricPayload(lines) }
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', payload)
-  },
-  { deep: true, immediate: true }
-)
-
-// 当前时间变化时，计算当前行并推送
-watch(
-  () => state.currentTime,
-  (ms) => {
-    const idx = computeLyricIndex(ms, state.lyricLines)
-    if (idx !== lastLyricIndex.value) {
-      lastLyricIndex.value = idx
-      const payload = { index: idx, lyric: buildLyricPayload(state.lyricLines) }
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', payload)
-    }
-  }
-)
-
-// 播放状态推送（用于窗口播放/暂停按钮联动）
-watch(
-  () => Audio.value.isPlay,
-  (playing) => {
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-status-change', playing)
-  },
-  { immediate: true }
-)
-
-// 歌曲标题推送
-watch(
-  () => props.songInfo,
-  (info) => {
-    try {
-      const name = (info as any)?.name || ''
-      const artist = (info as any)?.singer || ''
-      const title = [name, artist].filter(Boolean).join(' - ')
-      if (title) (window as any)?.electron?.ipcRenderer?.send?.('play-song-change', title)
-    } catch {}
-  },
-  { immediate: true, deep: true }
 )
 
 const bgRef = ref<BackgroundRenderRef | undefined>(undefined)
@@ -489,7 +495,7 @@ const lyricTranslateY = computed(() => {
       <div v-show="state.lyricLines.length > 0" class="right">
         <LyricPlayer
           ref="lyricPlayerRef"
-          :lyric-lines="props.show ? state.lyricLines : []"
+          :lyric-lines="props.show ? toRaw(state.lyricLines) : []"
           :current-time="state.currentTime"
           class="lyric-player"
           :enable-spring="playSetting.getisJumpLyric"
