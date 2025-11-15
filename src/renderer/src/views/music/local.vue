@@ -40,6 +40,7 @@ const selectDirs = async () => {
 
 const saveDirs = async () => {
   await (window as any).api.localMusic.setDirs(toRaw(scanDirs.value))
+  showDirModal.value = false
   MessagePlugin.success('目录已保存')
 }
 
@@ -269,34 +270,12 @@ onMounted(async () => {
     <n-card title="本地音乐库" size="medium">
       <div class="controls">
         <n-button type="primary" size="small" @click="showDirModal = true">目录管理</n-button>
-        <n-button size="small" :disabled="!hasDirs || loading" @click="scanLibrary"
-          >重新扫描</n-button
-        >
-        <n-tag v-for="d in scanDirs" :key="d" type="default" class="dir-tag">{{ d }}</n-tag>
-        <n-input
-          v-model:value="newDirInput"
-          size="small"
-          placeholder="输入路径或点击选择..."
-          style="max-width: 280px"
-        />
-        <n-button size="small" @click="selectDirs">选择</n-button>
-        <n-button
-          size="small"
-          @click="
-            () => {
-              if (newDirInput) {
-                scanDirs.value = Array.from(new Set([...(scanDirs.value || []), newDirInput]))
-                newDirInput = ''
-              }
-            }
-          "
-          >添加</n-button
-        >
         <n-button size="small" @click="saveDirs">保存目录</n-button>
+        <n-button size="small" @click="scanLibrary">重新扫描</n-button>
+        <n-button size="small" @click="clearScan">清空所有</n-button>
         <n-button size="small" :disabled="songs.length === 0" @click="matchBatch"
           >批量匹配缺失标签</n-button
         >
-        <n-button size="small" @click="clearScan">清空扫描</n-button>
         <n-select
           v-model:value="selectedPlaylistId"
           :options="playlistOptions"
@@ -306,21 +285,6 @@ onMounted(async () => {
       </div>
 
       <n-modal v-model:show="showDirModal" preset="dialog" title="音乐目录管理">
-        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px">
-          <n-input v-model:value="newDirInput" placeholder="输入路径或点击选择..." />
-          <n-button @click="selectDirs">选择</n-button>
-          <n-button
-            @click="
-              () => {
-                if (newDirInput) {
-                  scanDirs.value = Array.from(new Set([...(scanDirs.value || []), newDirInput]))
-                  newDirInput = ''
-                }
-              }
-            "
-            >添加</n-button
-          >
-        </div>
         <div>
           <div
             v-for="d in scanDirs"
@@ -329,21 +293,40 @@ onMounted(async () => {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              margin: 6px 0;
+              margin: 15px 0;
             "
           >
             <span>{{ d }}</span>
             <n-button size="tiny" @click="removeDir(d)">删除</n-button>
           </div>
-          <div style="margin-top: 10px; display: flex; gap: 8px">
-            <n-button type="primary" @click="saveDirs">保存</n-button>
-            <n-button @click="scanLibrary">重新扫描</n-button>
-            <n-button @click="clearScan">清空扫描</n-button>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin-top: 20px;
+              gap: 8px;
+            "
+          >
+            <n-button class="flex" style="width: 46%" round @click="selectDirs"
+              >添加文件夹</n-button
+            >
+            <div class="flex" style="width: 8%"></div>
+            <n-button
+              class="flex"
+              style="width: 46%"
+              round
+              type="primary"
+              @click="
+                saveDirs
+              "
+              >保存</n-button
+            >
           </div>
         </div>
       </n-modal>
 
-      <div class="list" v-if="songs.length > 0">
+      <div v-if="songs.length > 0" class="list">
         <div class="row header">
           <div class="col cover">封面</div>
           <div class="col title">标题</div>
@@ -352,7 +335,7 @@ onMounted(async () => {
           <div class="col dura">时长</div>
           <div class="col ops">操作</div>
         </div>
-        <div class="row" v-for="s in songs" :key="s.songmid">
+        <div v-for="s in songs" :key="s.songmid" class="row">
           <div class="col cover">
             <img :src="s.img || '/default-cover.png'" alt="cover" />
           </div>
@@ -361,12 +344,14 @@ onMounted(async () => {
           <div class="col album">{{ s.albumName }}</div>
           <div class="col dura">{{ s.interval || '' }}</div>
           <div class="col ops">
-            <n-button size="tiny" @click="addToPlaylistAndPlay(s)">播放</n-button>
-            <n-button size="tiny" @click="addToPlaylistEnd(s)">加入播放列表</n-button>
-            <n-button size="tiny" :loading="matching[s.songmid]" @click="matchTags(s)"
-              >匹配标签</n-button
-            >
-            <n-button size="tiny" @click="addToLocalPlaylist(s)">添加到本地歌单</n-button>
+            <n-button-group ghost>
+              <n-button size="tiny" round @click="addToPlaylistAndPlay(s)">播放</n-button>
+              <n-button size="tiny" round @click="addToPlaylistEnd(s)">加入播放列表</n-button>
+              <n-button size="tiny" :loading="matching[s.songmid]" round @click="matchTags(s)">
+                匹配标签
+              </n-button>
+              <n-button size="tiny" round @click="addToLocalPlaylist(s)">添加到本地歌单</n-button>
+            </n-button-group>
           </div>
         </div>
       </div>
