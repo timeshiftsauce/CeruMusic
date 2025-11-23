@@ -1,12 +1,14 @@
 <template>
   <div class="song-virtual-list">
     <!-- 表头 -->
-    <div class="list-header">
-      <div v-if="showIndex" class="col-index">#</div>
-      <div class="col-title">标题</div>
-      <div v-if="showAlbum" class="col-album">专辑</div>
-      <div class="col-like">喜欢</div>
-      <div v-if="showDuration" class="col-duration">时长</div>
+    <div class="list-header-container" style="background-color: var(--song-list-header-bg)">
+      <div class="list-header" :style="{ marginRight: hasScroll ? '10px' : '0' }">
+        <div v-if="showIndex" class="col-index">#</div>
+        <div class="col-title">标题</div>
+        <div v-if="showAlbum" class="col-album">专辑</div>
+        <div class="col-like">喜欢</div>
+        <div v-if="showDuration" class="col-duration">时长</div>
+      </div>
     </div>
 
     <!-- 虚拟滚动容器 -->
@@ -200,6 +202,13 @@ const contextMenuSong = ref<Song | null>(null)
 
 // 歌单列表
 const playlists = ref<SongList[]>([])
+
+const hasScroll = computed(() => {
+  // 判断是否有滚动条
+  return !!(
+    scrollContainer.value && scrollContainer.value.scrollHeight > scrollContainer.value.clientHeight
+  )
+})
 
 // 计算总高度
 const totalHeight = computed(() => props.songs.length * itemHeight)
@@ -564,8 +573,8 @@ onUnmounted(() => {
 
 .list-header {
   display: grid;
-  grid-template-columns: 60px 1fr 200px 60px 80px;
-  padding: 8px 20px;
+  grid-template-columns: 50px 1fr 200px 60px 80px;
+  padding: 8px 10px;
   background: var(--song-list-header-bg);
   border-bottom: 1px solid var(--song-list-header-border);
   font-size: 12px;
@@ -583,7 +592,7 @@ onUnmounted(() => {
   }
 
   .col-title {
-    padding-left: 20px;
+    padding-left: 10px;
     display: flex;
     align-items: center;
   }
@@ -630,8 +639,8 @@ onUnmounted(() => {
 
   .song-item {
     display: grid;
-    grid-template-columns: 60px 1fr 200px 60px 80px;
-    padding: 8px 20px;
+    grid-template-columns: 50px 1fr 200px 60px 80px;
+    padding: 8px 10px;
     border-bottom: 1px solid var(--song-list-item-border);
     cursor: pointer;
     transition: background-color 0.2s ease;
@@ -664,7 +673,7 @@ onUnmounted(() => {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 60px;
+      width: 100%;
 
       .track-number {
         font-size: 14px;

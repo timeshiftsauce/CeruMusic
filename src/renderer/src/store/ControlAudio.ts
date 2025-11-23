@@ -30,7 +30,8 @@ export const ControlAudioStore = defineStore(
       currentTime: 0,
       duration: 0,
       volume: 80,
-      url: ''
+      url: '',
+      eventInit: false
     })
 
     // -------------------------------------------发布订阅逻辑------------------------------------------

@@ -43,6 +43,7 @@ export default {
     //     : `https://music.migu.cn/v3/music/playlist?sort=${sortId}&page=${page}&from=migu`
     // }
     // return `https://music.migu.cn/v3/music/playlist?tagId=${tagId}&page=${page}&from=migu`
+    // https://app.c.nf.migu.cn/pc/v1.0/template/musiclistplaza-listbytag/release?pageNumber=1&templateVersion=2&tagId=1003449727
     if (tagId == null) {
       // return `https://app.c.nf.migu.cn/MIGUM2.0/v2.0/content/getMusicData.do?count=${this.limit_list}&start=${page}&templateVersion=5&type=1`
       // return `https://c.musicapp.migu.cn/MIGUM2.0/v2.0/content/getMusicData.do?count=${this.limit_list}&start=${page}&templateVersion=5&type=${sortId}`

@@ -1,4 +1,5 @@
 // 全局音频管理器，用于管理音频源和分析器
+
 class AudioManager {
   private static instance: AudioManager
   private audioSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>()
