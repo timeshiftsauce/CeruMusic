@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, toRaw } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { ChevronRightIcon, RefreshIcon } from 'tdesign-icons-vue-next'
 
 type MusicItem = {
   hash?: string
@@ -24,10 +25,17 @@ const scanDirs = ref<string[]>([])
 const songs = ref<MusicItem[]>([])
 const loading = ref(false)
 const matching = ref<Record<string | number, boolean>>({})
+const batchState = ref({ total: 0, done: 0, running: false })
+const showMatchModal = ref(false)
+const matchResults = ref<any[]>([])
+const matchTargetSong = ref<MusicItem | null>(null)
+const sourcesOrder = ['wy', 'tx', 'kg', 'kw', 'mg']
+// 保留占位，后续可扩展更多菜单
+// const showMoreDropdown = ref(false)
 const playlistOptions = ref<{ label: string; value: string }[]>([])
 const selectedPlaylistId = ref<string>('')
 const showDirModal = ref(false)
-const newDirInput = ref('')
+// const newDirInput = ref('')
 
 const hasDirs = computed(() => scanDirs.value.length > 0)
 
@@ -36,6 +44,7 @@ const selectDirs = async () => {
   if (Array.isArray(dirs)) {
     scanDirs.value = Array.from(new Set([...(scanDirs.value || []), ...dirs]))
   }
+  showDirModal.value = true
 }
 
 const saveDirs = async () => {
@@ -82,6 +91,136 @@ const ensureDuration = async (song: MusicItem) => {
     audio.addEventListener('error', () => resolve())
   })
   await p
+}
+
+const parseIntervalToSec = (interval?: string) => {
+  if (!interval) return 0
+  const mm = parseInt(interval.split(':')[0])
+  const ss = parseInt(interval.split(':')[1])
+  return mm * 60 + ss
+}
+
+const rankCandidate = (song: MusicItem, it: any) => {
+  const nameScore = strSim(it.name || '', (song.name || '').trim())
+  const artistScore = strSim((it.singer || '').trim(), (song.singer || '').trim())
+  const targetSec = parseIntervalToSec(song.interval)
+  const its = Number(it.interval || 0)
+  let durationScore = 0
+  if (targetSec > 0 && its > 0) {
+    const diff = Math.abs(its - targetSec)
+    durationScore = diff <= 2 ? 1 : diff <= 5 ? 0.6 : diff <= 10 ? 0.3 : 0
+  }
+  return nameScore * 0.6 + durationScore * 0.3 + artistScore * 0.1
+}
+
+const searchAcrossSources = async (keyword: string) => {
+  const api = (window as any).api
+  const resAll: any[] = []
+  for (const src of sourcesOrder) {
+    try {
+      const res = await api.music.requestSdk('search', {
+        source: src,
+        keyword,
+        page: 1,
+        limit: 20
+      })
+      if (Array.isArray(res?.list)) {
+        for (const it of res.list) resAll.push({ ...it, source: src })
+      }
+    } catch {}
+  }
+  return resAll
+}
+
+const pickBestMatch = async (song: MusicItem) => {
+  await ensureDuration(song)
+  const keyword =
+    song.name ||
+    song.path
+      ?.split(/[\\/]/)
+      .pop()
+      ?.replace(/\.[^.]+$/, '') ||
+    ''
+  const all = await searchAcrossSources(keyword)
+  let best: any = null
+  let bestScore = 0
+  for (const it of all) {
+    const score = rankCandidate(song, it)
+    if (score > bestScore) {
+      bestScore = score
+      best = it
+    }
+    if (bestScore >= 0.9) break
+  }
+  return { best, bestScore, all }
+}
+
+const openAccurateMatch = async (song: MusicItem) => {
+  matching.value[song.songmid] = true
+  try {
+    const { all } = await pickBestMatch(song)
+    matchResults.value = all
+    matchTargetSong.value = song
+    showMatchModal.value = true
+  } finally {
+    matching.value[song.songmid] = false
+  }
+}
+
+const applyMatch = async (candidate: any) => {
+  const song = matchTargetSong.value
+  if (!song) return
+  try {
+    let pic = candidate.img
+    if (!pic) {
+      const p = await (window as any).api.music.requestSdk('getPic', {
+        source: candidate.source,
+        songInfo: candidate
+      })
+      if (typeof p !== 'object') pic = p
+    }
+    const writeRes = await (window as any).api.localMusic.writeTags(
+      song.path,
+      {
+        name: candidate.name,
+        singer: candidate.singer,
+        albumName: candidate.albumName,
+        lrc: null,
+        img: pic,
+        source: candidate.source
+      },
+      { cover: true, lyrics: false }
+    )
+    if (writeRes?.success) {
+      song.name = candidate.name
+      song.singer = candidate.singer
+      song.albumName = candidate.albumName
+      song.img = pic || song.img
+      MessagePlugin.success('已应用匹配结果')
+      showMatchModal.value = false
+    } else {
+      MessagePlugin.error(writeRes?.message || '写入失败')
+    }
+  } catch (e: any) {
+    MessagePlugin.error(e?.message || '匹配失败')
+  }
+}
+
+const playAll = () => {
+  if (songs.value.length === 0) return
+  if ((window as any).musicEmitter) {
+    ;(window as any).musicEmitter.emit('replacePlaylist', toRaw(songs.value) as any)
+  }
+}
+
+const addAllToPlaylist = () => {
+  if (songs.value.length === 0) return
+  if ((window as any).musicEmitter) {
+    for (const s of songs.value) {
+      ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(s) as any)
+    }
+    MessagePlugin.success('已将全部加入播放列表')
+  }
 }
 
 const scanLibrary = async () => {
@@ -168,77 +307,12 @@ const matchTags = async (song: MusicItem) => {
   if (!song || !song.path) return
   matching.value[song.songmid] = true
   try {
-    await ensureDuration(song)
-    const keyword =
-      song.name ||
-      song.path
-        ?.split(/[\\/]/)
-        .pop()
-        ?.replace(/\.[^.]+$/, '')
-    const sources = ['wy', 'tx', 'kg']
-    let best: any = null
-    let bestScore = 0
-    for (const src of sources) {
-      const res = await (window as any).api.music.requestSdk('search', {
-        source: src,
-        keyword,
-        page: 1,
-        limit: 20
-      })
-      if (Array.isArray(res?.list)) {
-        for (const it of res.list) {
-          const nameScore = strSim(it.name || '', keyword || '')
-          let durationScore = 0
-          if (song.interval) {
-            const mm = parseInt(song.interval.split(':')[0])
-            const ss = parseInt(song.interval.split(':')[1])
-            const sec = mm * 60 + ss
-            const its = Number(it.interval || 0)
-            const diff = Math.abs(its - sec)
-            durationScore = diff <= 2 ? 1 : diff <= 5 ? 0.6 : 0
-          }
-          const score = nameScore * 0.7 + durationScore * 0.3
-          if (score > bestScore) {
-            bestScore = score
-            best = { ...it, source: src }
-          }
-        }
-      }
-      if (bestScore >= 0.85) break
-    }
+    const { best } = await pickBestMatch(song)
     if (!best) {
       MessagePlugin.warning('未匹配到合适标签')
       return
     }
-    let pic = best.img
-    if (!pic) {
-      const p = await (window as any).api.music.requestSdk('getPic', {
-        source: best.source,
-        songInfo: best
-      })
-      if (typeof p !== 'object') pic = p
-    }
-    const writeRes = await (window as any).api.localMusic.writeTags(
-      song.path,
-      {
-        name: best.name,
-        singer: best.singer,
-        albumName: best.albumName,
-        lrc: null,
-        img: pic,
-        source: best.source
-      },
-      { cover: true, lyrics: false }
-    )
-    if (writeRes?.success) {
-      song.name = best.name
-      song.singer = best.singer
-      song.albumName = best.albumName
-      song.img = pic || song.img
-      MessagePlugin.success('标签已写入')
-    } else {
-      MessagePlugin.error(writeRes?.message || '写入失败')
-    }
+    await applyMatch(best)
   } finally {
     matching.value[song.songmid] = false
   }
@@ -246,9 +320,16 @@ const matchTags = async (song: MusicItem) => {
 
 const matchBatch = async () => {
   const need = songs.value.filter((s) => !s.img || !s.singer || !s.albumName)
+  if (need.length === 0) {
+    MessagePlugin.warning('没有需要匹配的歌曲')
+    return
+  }
+  batchState.value = { total: need.length, done: 0, running: true }
   for (const it of need) {
     await matchTags(it)
+    batchState.value.done++
   }
+  batchState.value.running = false
   MessagePlugin.success('批量匹配完成')
 }
 
@@ -267,102 +348,184 @@ onMounted(async () => {
 
 <template>
   <div class="local-container">
-    <n-card title="本地音乐库" size="medium">
-      <div class="controls">
-        <n-button type="primary" size="small" @click="showDirModal = true">目录管理</n-button>
-        <n-button size="small" @click="saveDirs">保存目录</n-button>
-        <n-button size="small" @click="scanLibrary">重新扫描</n-button>
-        <n-button size="small" @click="clearScan">清空所有</n-button>
-        <n-button size="small" :disabled="songs.length === 0" @click="matchBatch"
-          >批量匹配缺失标签</n-button
+    <div class="local-header">
+      <div class="left-container">
+        <h2 class="title">
+          本地音乐库<span style="font-size: 12px; color: #999">共 {{ songs.length }} 首</span>
+        </h2>
+      </div>
+      <div class="right-container">
+        <t-button shape="round" theme="primary" variant="text" @click="showDirModal = true">
+          <span style="display: flex; align-items: center"
+            ><span style="font-weight: bold">选择目录</span>
+            <chevron-right-icon
+              :fill-color="'transparent'"
+              :stroke-color="'currentColor'"
+              :stroke-width="2.5"
+          /></span>
+        </t-button>
+      </div>
+    </div>
+    <div class="controls">
+      <t-button
+        theme="primary"
+        style="padding: 6px 9px; border-radius: 8px; height: 36px"
+        @click="playAll"
+      >
+        <span style="margin-left: 3px">播放全部</span>
+        <template #icon>
+          <span class="iconfont icon-bofang"></span>
+        </template>
+      </t-button>
+      <t-button
+        theme="default"
+        style="padding: 6px 9px; border-radius: 8px; height: 36px; width: 36px"
+        @click="scanLibrary"
+      >
+        <template #icon
+          ><refresh-icon
+            :fill-color="'transparent'"
+            :stroke-color="'currentColor'"
+            :stroke-width="1.5"
+        /></template>
+      </t-button>
+      <t-button size="small" @click="addAllToPlaylist">添加全部到播放列表</t-button>
+      <n-button size="small" @click="clearScan">清空所有</n-button>
+      <n-button size="small" :disabled="songs.length === 0" @click="matchBatch">批量匹配</n-button>
+      <!-- <n-select
+        v-model:value="selectedPlaylistId"
+        :options="playlistOptions"
+        size="small"
+        placeholder="选择本地歌单"
+      /> -->
+      <div v-if="batchState.running" style="margin-left: 8px; font-size: 12px; color: #999">
+        {{ batchState.done }}/{{ batchState.total }}
+      </div>
+    </div>
+
+    <n-modal v-model:show="showDirModal" preset="dialog" title="选择本地文件夹">
+      <div>
+        <div style="margin-bottom: 10px; color: #666; font-size: 12px">
+          你可以添加常用目录，文件将即时索引。
+        </div>
+        <div
+          v-for="d in scanDirs"
+          :key="d"
+          style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0"
         >
-        <n-select
-          v-model:value="selectedPlaylistId"
-          :options="playlistOptions"
-          size="small"
-          placeholder="选择本地歌单"
-        />
-      </div>
-
-      <n-modal v-model:show="showDirModal" preset="dialog" title="音乐目录管理">
-        <div>
-          <div
-            v-for="d in scanDirs"
-            :key="d"
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin: 15px 0;
-            "
-          >
-            <span>{{ d }}</span>
-            <n-button size="tiny" @click="removeDir(d)">删除</n-button>
-          </div>
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              margin-top: 20px;
-              gap: 8px;
-            "
-          >
-            <n-button class="flex" style="width: 46%" round @click="selectDirs"
-              >添加文件夹</n-button
-            >
-            <div class="flex" style="width: 8%"></div>
-            <n-button
-              class="flex"
-              style="width: 46%"
-              round
-              type="primary"
-              @click="
-                saveDirs
-              "
-              >保存</n-button
-            >
-          </div>
+          <span>{{ d }}</span>
+          <n-button size="tiny" @click="removeDir(d)">删除</n-button>
         </div>
-      </n-modal>
-
-      <div v-if="songs.length > 0" class="list">
-        <div class="row header">
-          <div class="col cover">封面</div>
-          <div class="col title">标题</div>
-          <div class="col artist">歌手</div>
-          <div class="col album">专辑</div>
-          <div class="col dura">时长</div>
-          <div class="col ops">操作</div>
-        </div>
-        <div v-for="s in songs" :key="s.songmid" class="row">
-          <div class="col cover">
-            <img :src="s.img || '/default-cover.png'" alt="cover" />
-          </div>
-          <div class="col title">{{ s.name }}</div>
-          <div class="col artist">{{ s.singer }}</div>
-          <div class="col album">{{ s.albumName }}</div>
-          <div class="col dura">{{ s.interval || '' }}</div>
-          <div class="col ops">
-            <n-button-group ghost>
-              <n-button size="tiny" round @click="addToPlaylistAndPlay(s)">播放</n-button>
-              <n-button size="tiny" round @click="addToPlaylistEnd(s)">加入播放列表</n-button>
-              <n-button size="tiny" :loading="matching[s.songmid]" round @click="matchTags(s)">
-                匹配标签
-              </n-button>
-              <n-button size="tiny" round @click="addToLocalPlaylist(s)">添加到本地歌单</n-button>
-            </n-button-group>
-          </div>
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 8px;
+          "
+        >
+          <n-button class="flex" style="width: 46%" round @click="selectDirs">添加文件夹</n-button>
+          <div class="flex" style="width: 8%"></div>
+          <n-button class="flex" style="width: 46%" round type="primary" @click="saveDirs"
+            >确认</n-button
+          >
         </div>
       </div>
-      <div v-else class="empty">暂无数据，点击选择目录后扫描</div>
-    </n-card>
+    </n-modal>
+
+    <div v-if="songs.length > 0" class="list">
+      <div class="row header">
+        <div class="col cover">封面</div>
+        <div class="col title">标题</div>
+        <div class="col artist">歌手</div>
+        <div class="col album">专辑</div>
+        <div class="col dura">时长</div>
+        <div class="col ops">操作</div>
+      </div>
+      <div v-for="s in songs" :key="s.songmid" class="row">
+        <div class="col cover">
+          <img :src="s.img || '/default-cover.png'" alt="cover" />
+        </div>
+        <div class="col title">{{ s.name }}</div>
+        <div class="col artist">{{ s.singer }}</div>
+        <div class="col album">{{ s.albumName }}</div>
+        <div class="col dura">{{ s.interval || '' }}</div>
+        <div class="col ops">
+          <n-button-group ghost>
+            <n-button size="tiny" round @click="addToPlaylistAndPlay(s)">播放</n-button>
+            <n-button size="tiny" round @click="addToPlaylistEnd(s)">加入播放列表</n-button>
+            <n-button size="tiny" :loading="matching[s.songmid]" round @click="openAccurateMatch(s)"
+              >精准匹配</n-button
+            >
+            <n-button size="tiny" round @click="addToLocalPlaylist(s)">添加到本地歌单</n-button>
+          </n-button-group>
+        </div>
+      </div>
+    </div>
+    <div v-else class="empty">暂无数据，点击选择目录后扫描</div>
+
+    <n-modal v-model:show="showMatchModal" preset="dialog" title="选择匹配结果">
+      <div style="max-height: 60vh; overflow: auto">
+        <div
+          v-for="it in matchResults"
+          :key="(it.id || it.songId) + '_' + it.source"
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            margin: 6px 0;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 10px">
+            <img
+              :src="it.img || '/default-cover.png'"
+              style="width: 40px; height: 40px; border-radius: 4px"
+            />
+            <div>
+              <div style="font-weight: 500">
+                {{ it.name
+                }}<span style="margin-left: 8px; color: #999; font-size: 12px">{{
+                  it.source.toUpperCase()
+                }}</span>
+              </div>
+              <div style="font-size: 12px; color: #666">{{ it.singer }} · {{ it.albumName }}</div>
+            </div>
+          </div>
+          <n-button size="tiny" type="primary" @click="applyMatch(it)">使用该结果</n-button>
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 .local-container {
-  padding: 16px;
+  padding: 0 32px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  .local-header {
+    height: 70px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    .left-container {
+      gap: 8px;
+      .title {
+        font-size: 28px;
+        font-weight: 900;
+        span {
+          padding-left: 8px;
+          font-size: 18px;
+        }
+      }
+    }
+  }
 }
 .controls {
   display: flex;
@@ -374,9 +537,11 @@ onMounted(async () => {
   max-width: 360px;
 }
 .list {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: auto;
 }
 .row {
   display: grid;

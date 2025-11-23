@@ -205,13 +205,11 @@ const api = {
       return Array.isArray(res) ? res : []
     },
     writeTags: (filePath: string, songInfo: any, tagWriteOptions: any) =>
-      ipcRenderer.invoke('local-music:write-tags', { filePath, songInfo, tagWriteOptions })
-    ,
+      ipcRenderer.invoke('local-music:write-tags', { filePath, songInfo, tagWriteOptions }),
     getDirs: () => ipcRenderer.invoke('local-music:get-dirs'),
     setDirs: (dirs: string[]) => ipcRenderer.invoke('local-music:set-dirs', dirs),
     getList: () => ipcRenderer.invoke('local-music:get-list'),
-    getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id)
-    ,
+    getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id),
     clearIndex: () => ipcRenderer.invoke('local-music:clear-index')
   },
 

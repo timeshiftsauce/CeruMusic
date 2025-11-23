@@ -76,35 +76,27 @@ export function installGlobalMusicControls() {
         dispatch('toggle')
       } else if (e.code === 'ArrowUp') {
         e.preventDefault()
-        controlAudio.setVolume(controlAudio.Audio.volume + 5)
+        dispatch('volumeDelta', 5)
       } else if (e.code === 'ArrowDown') {
         e.preventDefault()
-        controlAudio.setVolume(controlAudio.Audio.volume - 5)
-      } else if (
-        e.code === 'ArrowLeft' &&
-        controlAudio.Audio.audio &&
-        controlAudio.Audio.audio.currentTime >= 0
-      ) {
-        controlAudio.Audio.audio.currentTime -= 5
-      } else if (
-        e.code === 'ArrowRight' &&
-        controlAudio.Audio.audio &&
-        controlAudio.Audio.audio.currentTime <= controlAudio.Audio.audio.duration
-      ) {
-        controlAudio.Audio.audio.currentTime += 5
+        dispatch('volumeDelta', -5)
+      } else if (e.code === 'ArrowLeft') {
+        dispatch('seekDelta', -5)
+      } else if (e.code === 'ArrowRight') {
+        dispatch('seekDelta', 5)
       }
     }, 100)
   }
 
   document.addEventListener('keydown', onKeyDown)
 
-  // 监听音频结束事件，根据播放模式播放下一首
-  controlAudio.subscribe('ended', () => {
-    window.requestAnimationFrame(() => {
-      console.log('播放结束')
-      dispatch('playNext')
-    })
-  })
+  // // 监听音频结束事件，根据播放模式播放下一首
+  // controlAudio.subscribe('ended', () => {
+  //   window.requestAnimationFrame(() => {
+  //     console.log('播放结束')
+  //     dispatch('playNext')
+  //   })
+  // })
   // 托盘或系统快捷键回调（若存在）
   try {
     const removeMusicCtrlListener = (window as any).api?.onMusicCtrl?.(() => {

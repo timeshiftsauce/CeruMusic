@@ -35,6 +35,7 @@ onMounted(() => {
   import('@renderer/utils/audio/globalControls')
     .then((m) => m.installGlobalMusicControls())
     .catch(() => {})
+  import('@renderer/utils/audio/globaPlayList').then((m) => m.initPlayback?.()).catch(() => {})
   import('@renderer/utils/lyrics/desktopLyricBridge')
     .then((m) => m.installDesktopLyricBridge())
     .catch(() => {})
@@ -45,6 +46,7 @@ onMounted(() => {
   }
   window.electron?.ipcRenderer?.on?.('play', () => forward('play'))
   window.electron?.ipcRenderer?.on?.('pause', () => forward('pause'))
+  window.electron?.ipcRenderer?.on?.('toggle', () => forward('toggle'))
   window.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
   window.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
 

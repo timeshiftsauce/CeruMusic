@@ -44,6 +44,7 @@ export type ControlAudioState = {
   duration: number
   volume: number
   url: string
+  eventInit: boolean
 }
 
 export type SongList = playList

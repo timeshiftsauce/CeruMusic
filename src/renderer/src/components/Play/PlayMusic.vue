@@ -8,8 +8,7 @@ import {
   nextTick,
   onActivated,
   onDeactivated,
-  toRaw,
-  provide
+  toRaw
 } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -23,11 +22,17 @@ import { getBestContrastTextColorWithOpacity } from '@renderer/utils/color/contr
 import { PlayMode, type SongList } from '@renderer/types/audio'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
-  initPlaylistEventListeners,
-  destroyPlaylistEventListeners,
-  getSongRealUrl
-} from '@renderer/utils/playlist/playlistManager'
-import mediaSessionController from '@renderer/utils/audio/useSmtc'
+  songInfo,
+  playNext,
+  playPrevious,
+  updatePlayMode,
+  togglePlayPause,
+  isLoadingSong,
+  setVolume,
+  seekTo,
+  playSong,
+  playMode
+} from '@renderer/utils/audio/globaPlayList'
 import defaultCoverImg from '/default-cover.png'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
 import { HeartIcon, DownloadIcon, CheckIcon, LockOnIcon } from 'tdesign-icons-vue-next'
@@ -38,7 +43,7 @@ const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
-const { setCurrentTime, start, stop, setVolume, setUrl } = controlAudio
+const {} = controlAudio
 
 // 当前歌曲是否已在“我的喜欢”
 const likeState = ref(false)
@@ -104,225 +109,13 @@ const toggleDesktopLyric = async () => {
   }
 }
 // 等待音频准备就绪
-const waitForAudioReady = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const audio = Audio.value.audio
-    if (!audio) {
-      reject(new Error('音频元素未初始化'))
-      return
-    }
-
-    // 如果音频已经准备就绪
-    if (audio.readyState >= 3) {
-      // HAVE_FUTURE_DATA
-      resolve()
-      return
-    }
-
-    // 设置超时
-    const timeout = setTimeout(() => {
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      reject(new Error('音频加载超时'))
-    }, 10000) // 10秒超时
-
-    const onCanPlay = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      resolve()
-    }
-
-    const onError = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      reject(new Error('音频加载失败'))
-    }
-
-    // 监听事件
-    audio.addEventListener('canplay', onCanPlay, { once: true })
-    audio.addEventListener('error', onError, { once: true })
-  })
-}
-
-// 存储待恢复的播放位置
-let pendingRestorePosition = 0
-let pendingRestoreSongId: number | string | null = null
+// 播放位置恢复逻辑由全局播放管理器处理
 
 // 记录组件被停用前的播放状态
 // let wasPlaying = false
 
 // let playbackPosition = 0
 let isFull = false
-
-// 播放指定歌曲
-const playSong = async (song: SongList) => {
-  try {
-    // 设置加载状态
-    isLoadingSong.value = true
-
-    // 检查是否需要恢复播放位置(历史播放)
-    const isHistoryPlay =
-      song.songmid === userInfo.value.lastPlaySongId &&
-      userInfo.value.currentTime !== undefined &&
-      userInfo.value.currentTime > 0
-
-    if (isHistoryPlay && userInfo.value.currentTime !== undefined) {
-      pendingRestorePosition = userInfo.value.currentTime
-      pendingRestoreSongId = song.songmid
-      console.log(`准备恢复播放位置: ${pendingRestorePosition}秒`)
-      // 清除历史位置,避免重复恢复
-      userInfo.value.currentTime = 0
-    } else {
-      pendingRestorePosition = 0
-      pendingRestoreSongId = null
-    }
-
-    // 立刻暂停当前播放 - 不等待渐变
-    if (Audio.value.isPlay && Audio.value.audio) {
-      Audio.value.isPlay = false
-      Audio.value.audio.pause()
-      // 恢复音量，避免下次播放音量为0
-      Audio.value.audio.volume = Audio.value.volume / 100
-    }
-
-    // 立刻更新 UI 到新歌曲
-    songInfo.value.name = song.name
-    songInfo.value.singer = song.singer
-    songInfo.value.albumName = song.albumName
-    songInfo.value.img = song.img
-    userInfo.value.lastPlaySongId = song.songmid
-
-    // 如果播放列表是打开的,滚动到当前播放歌曲
-    if (showPlaylist.value) {
-      nextTick(() => {
-        playlistDrawerRef.value?.scrollToCurrentSong()
-      })
-    }
-
-    // 更新媒体会话元数据
-    mediaSessionController.updateMetadata({
-      title: song.name,
-      artist: song.singer,
-      album: song.albumName || '未知专辑',
-      artworkUrl: song.img || defaultCoverImg
-    })
-
-    // 尝试获取 URL
-    let urlToPlay = ''
-    try {
-      urlToPlay = await getSongRealUrl(toRaw(song))
-    } catch (error: any) {
-      console.error('获取歌曲 URL 失败,播放下一首原歌曲:', error)
-      isLoadingSong.value = false
-      tryAutoNext('获取歌曲 URL 失败')
-      return
-    }
-
-    // 在切换前彻底重置旧音频，释放缓冲与解码器
-    if (Audio.value.audio) {
-      const a = Audio.value.audio
-      try {
-        a.pause()
-      } catch {}
-      a.removeAttribute('src')
-      a.load()
-    }
-    // 设置 URL(这会触发音频重新加载)
-    setUrl(urlToPlay)
-
-    // 等待音频准备就绪
-    await waitForAudioReady()
-    await setColor()
-
-    // 更新完整歌曲信息
-    songInfo.value = { ...song }
-
-    /**
-     * 提前关闭加载状态
-     * 这样UI不会卡在“加载中”，用户能立刻看到播放键切换
-     */
-    isLoadingSong.value = false
-
-    /**
-     * 异步开始播放（不await，以免阻塞UI）
-     */
-    start()
-      .catch(async (error: any) => {
-        console.error('启动播放失败:', error)
-        tryAutoNext('启动播放失败')
-      })
-      .then(() => {
-        autoNextCount.value = 0
-      })
-
-    /**
-     * 注册事件监听，确保浏览器播放事件触发时同步关闭loading
-     * （多一道保险）
-     */
-    if (Audio.value.audio) {
-      Audio.value.audio.addEventListener(
-        'playing',
-        () => {
-          isLoadingSong.value = false
-        },
-        { once: true }
-      )
-      Audio.value.audio.addEventListener(
-        'error',
-        () => {
-          isLoadingSong.value = false
-        },
-        { once: true }
-      )
-    }
-  } catch (error: any) {
-    console.error('播放歌曲失败(外层捕获):', error)
-    tryAutoNext('播放歌曲失败')
-    // MessagePlugin.error('播放失败，原因：' + error.message)
-    isLoadingSong.value = false
-  } finally {
-    // 最后的保险,确保加载状态一定会被关闭
-    isLoadingSong.value = false
-  }
-}
-
-provide('PlaySong', playSong)
-// 歌曲信息
-const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
-// const playMode = ref(PlayMode.SEQUENCE)
-
-// 歌曲加载状态
-const isLoadingSong = ref(false)
-
-// 自动下一首次数限制：不超过当前列表的30%
-const autoNextCount = ref(0)
-const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
-const tryAutoNext = (reason: string) => {
-  const limit = getAutoNextLimit()
-  MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
-
-  if (autoNextCount.value >= limit && autoNextCount.value > 2) {
-    MessagePlugin.error(
-      `自动下一首失败：超过当前列表30%限制（${autoNextCount.value}/${limit}）。原因：${reason}`
-    )
-    return
-  }
-  autoNextCount.value++
-  playNext()
-}
-
-// 更新播放模式
-const updatePlayMode = () => {
-  const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
-  const currentIndex = modes.indexOf(playMode.value)
-  const nextIndex = (currentIndex + 1) % modes.length
-  playMode.value = modes[nextIndex]
-
-  // 更新用户信息
-  userInfo.value.playMode = playMode.value
-}
 
 // 获取播放模式图标类名
 let playModeTip = ''
@@ -426,161 +219,12 @@ const closePlaylist = () => {
 }
 
 // 播放上一首
-const playPrevious = async () => {
-  if (list.value.length === 0) return
-
-  try {
-    const currentIndex = list.value.findIndex((song) => song.songmid === currentSongId.value)
-    let prevIndex
-
-    if (playMode.value === PlayMode.RANDOM) {
-      // 随机模式
-      prevIndex = Math.floor(Math.random() * list.value.length)
-    } else {
-      // 顺序模式或单曲循环模式
-      prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
-    }
-
-    // 确保索引有效
-    if (prevIndex >= 0 && prevIndex < list.value.length) {
-      await playSong(list.value[prevIndex])
-    }
-  } catch (error) {
-    console.error('播放上一首失败:', error)
-    MessagePlugin.error('播放上一首失败')
-  }
-}
-
-// 播放下一首
-const playNext = async () => {
-  if (list.value.length === 0) return
-
-  try {
-    // 单曲循环模式下，重新播放当前歌曲
-    if (playMode.value === PlayMode.SINGLE && currentSongId.value) {
-      const currentSong = list.value.find((song) => song.songmid === currentSongId.value)
-      if (currentSong) {
-        // 重新设置播放位置到开头
-        if (Audio.value.audio) {
-          Audio.value.audio.currentTime = 0
-        }
-        // 如果当前正在播放，继续播放；如果暂停，保持暂停
-        const startResult = start()
-        if (startResult && typeof startResult.then === 'function') {
-          await startResult
-        }
-        return
-      }
-    }
-
-    const currentIndex = list.value.findIndex((song) => song.songmid === currentSongId.value)
-    let nextIndex
-
-    if (playMode.value === PlayMode.RANDOM) {
-      // 随机模式
-      nextIndex = Math.floor(Math.random() * list.value.length)
-    } else {
-      // 顺序模式
-      nextIndex = (currentIndex + 1) % list.value.length
-    }
-
-    // 确保索引有效
-    if (nextIndex >= 0 && nextIndex < list.value.length) {
-      await playSong(list.value[nextIndex])
-    }
-  } catch (error) {
-    console.error('播放下一首失败:', error)
-    MessagePlugin.error('播放下一首失败')
-  }
-}
+// 上一首/下一首由全局播放管理器提供
 
 // 定期保存当前播放位置
-let savePositionInterval: number | null = null
-const PlayerEvent = (e: any) => {
-  const name = e?.detail?.name
-  console.log(name)
-  switch (name) {
-    case 'play':
-      handlePlay()
-      break
-    case 'pause':
-      handlePause()
-      break
-    case 'toggle':
-      togglePlayPause()
-      break
-    case 'playPrev':
-      playPrevious()
-      break
-    case 'playNext':
-      playNext()
-      break
-  }
-}
+// 全局快捷控制事件由全局播放管理器处理
 // 初始化播放器
 onMounted(async () => {
-  console.log('加载')
-  // 初始化播放列表事件监听器
-  initPlaylistEventListeners(localUserStore, playSong)
-
-  // 检查是否有上次播放的歌曲
-  // 检查是否有上次播放的歌曲
-  if (userInfo.value.lastPlaySongId && list.value.length > 0) {
-    const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
-    if (lastPlayedSong) {
-      songInfo.value = {
-        ...lastPlayedSong
-      }
-
-      // 立即更新媒体会话元数据，让系统显示当前歌曲信息
-      mediaSessionController.updateMetadata({
-        title: lastPlayedSong.name,
-        artist: lastPlayedSong.singer,
-        album: lastPlayedSong.albumName || '未知专辑',
-        artworkUrl: lastPlayedSong.img || defaultCoverImg
-      })
-
-      // 如果有历史播放位置，设置为待恢复状态
-      if (!Audio.value.isPlay) {
-        if (userInfo.value.currentTime && userInfo.value.currentTime > 0) {
-          pendingRestorePosition = userInfo.value.currentTime
-          pendingRestoreSongId = lastPlayedSong.songmid
-          console.log(`初始化时设置待恢复位置: ${pendingRestorePosition}秒`)
-
-          // 设置当前播放时间以显示进度条位置，但不清除历史记录
-          if (Audio.value.audio) {
-            Audio.value.audio.currentTime = userInfo.value.currentTime
-          }
-        }
-        // 通过工具函数获取歌曲URL
-        try {
-          const url = await getSongRealUrl(toRaw(lastPlayedSong))
-          setUrl(url)
-        } catch (error) {
-          console.error('获取上次播放歌曲URL失败:', error)
-        }
-      } else {
-        // 同步实际播放状态，避免误写为 playing
-        if (Audio.value.audio) {
-          mediaSessionController.updatePlaybackState(
-            Audio.value.audio.paused ? 'paused' : 'playing'
-          )
-        }
-      }
-    }
-  }
-
-  // 定期保存当前播放位置
-  savePositionInterval = window.setInterval(() => {
-    if (Audio.value.isPlay) {
-      userInfo.value.currentTime = Audio.value.currentTime
-    }
-  }, 1000) // 每1秒保存一次
-
-  // 监听播放器事件
-
-  // TODO: 这边监听没有取消
-
   // 监听来自主进程的锁定状态广播
   window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
     desktopLyricLocked.value = !!lock
@@ -590,20 +234,12 @@ onMounted(async () => {
     desktopLyricOpen.value = false
     desktopLyricLocked.value = false
   })
-
-  window.addEventListener('global-music-control', PlayerEvent)
 })
 
 // 组件卸载时清理
 onUnmounted(() => {
-  destroyPlaylistEventListeners()
-  // document.removeEventListener('keydown', KeyEvent)
-  window.removeEventListener('global-music-control', PlayerEvent)
   window.electron?.ipcRenderer?.removeAllListeners?.('toogleDesktopLyricLock')
   window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
-  if (savePositionInterval !== null) {
-    clearInterval(savePositionInterval)
-  }
 })
 
 // 组件被激活时（从缓存中恢复）
@@ -612,25 +248,6 @@ onActivated(async () => {
   if (isFull) {
     showFullPlay.value = true
   }
-  // 如果之前正在播放，恢复播放
-  // if (wasPlaying && Audio.value.url) {
-  //   // 恢复播放位置
-  //   if (Audio.value.audio && playbackPosition > 0) {
-  //     setCurrentTime(playbackPosition)
-  //     Audio.value.audio.currentTime = playbackPosition
-  //   }
-
-  //   // 恢复播放
-  //   try {
-  //     const startResult = start()
-  //     if (startResult && typeof startResult.then === 'function') {
-  //       await startResult
-  //     }
-  //     console.log('恢复播放成功')
-  //   } catch (error) {
-  //     console.error('恢复播放失败:', error)
-  //   }
-  // }
 })
 
 // 组件被停用时（缓存但不销毁）
@@ -761,75 +378,6 @@ const formatTime = (seconds: number) => {
 const currentTimeFormatted = computed(() => formatTime(Audio.value.currentTime))
 const durationFormatted = computed(() => formatTime(Audio.value.duration))
 
-// 专门的播放函数
-const handlePlay = async () => {
-  if (!Audio.value.url) {
-    // 如果没有URL但有播放列表，尝试播放第一首歌
-    if (list.value.length > 0) {
-      await playSong(list.value[0])
-    } else {
-      MessagePlugin.warning('播放列表为空，请先添加歌曲')
-    }
-    return
-  }
-
-  try {
-    // 检查是否需要恢复历史播放位置
-    if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
-      console.log(`恢复播放位置: ${pendingRestorePosition}秒`)
-
-      // 等待音频准备就绪
-      await waitForAudioReady()
-
-      // 设置播放位置
-      setCurrentTime(pendingRestorePosition)
-      if (Audio.value.audio) {
-        Audio.value.audio.currentTime = pendingRestorePosition
-      }
-
-      // 清除待恢复的位置
-      pendingRestorePosition = 0
-      pendingRestoreSongId = null
-    }
-
-    const startResult = start()
-    if (startResult && typeof startResult.then === 'function') {
-      await startResult
-    }
-    // 播放已开始后，同步 SMTC 状态
-    mediaSessionController.updatePlaybackState('playing')
-  } catch (error) {
-    console.error('播放失败:', error)
-    MessagePlugin.error('播放失败，请重试')
-  }
-}
-
-// 专门的暂停函数
-const handlePause = async () => {
-  const a = Audio.value.audio
-  if (Audio.value.url && a && !a.paused) {
-    const stopResult = stop()
-    if (stopResult && typeof stopResult.then === 'function') {
-      await stopResult
-    }
-    mediaSessionController.updatePlaybackState('paused')
-  } else if (Audio.value.url) {
-    // 已处于暂停或未知状态，也同步一次 SMTC，确保外部显示一致
-    mediaSessionController.updatePlaybackState('paused')
-  }
-}
-
-// 播放/暂停切换
-const togglePlayPause = async () => {
-  const a = Audio.value.audio
-  const isActuallyPlaying = a ? !a.paused : Audio.value.isPlay
-  if (isActuallyPlaying) {
-    await handlePause()
-  } else {
-    await handlePlay()
-  }
-}
-
 // 进度条拖动处理
 const handleProgressClick = (event: MouseEvent) => {
   if (!progressRef.value) return
@@ -842,11 +390,7 @@ const handleProgressClick = (event: MouseEvent) => {
   tempProgressPercentage.value = percentage
 
   const newTime = (percentage / 100) * Audio.value.duration
-
-  setCurrentTime(newTime)
-  if (Audio.value.audio) {
-    Audio.value.audio.currentTime = newTime
-  }
+  seekTo(newTime)
 }
 
 const handleProgressDragMove = (event: MouseEvent) => {
@@ -873,11 +417,7 @@ const handleProgressDragEnd = (event: MouseEvent) => {
   const offsetX = Math.max(0, Math.min(event.clientX - rect.left, rect.width))
   const percentage = (offsetX / rect.width) * 100
   const newTime = (percentage / 100) * Audio.value.duration
-
-  setCurrentTime(newTime)
-  if (Audio.value.audio) {
-    Audio.value.audio.currentTime = newTime
-  }
+  seekTo(newTime)
 
   isDraggingProgress.value = false
   window.removeEventListener('mousemove', handleProgressDragMove)
@@ -893,22 +433,7 @@ const handleProgressDragStart = (event: MouseEvent) => {
   window.addEventListener('mouseup', handleProgressDragEnd)
 }
 
-// 歌曲信息
-const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number | string }>({
-  songmid: null,
-  hash: '',
-  name: '欢迎使用CeruMusic 🎉',
-  singer: '可以配置音源插件来播放你的歌曲',
-  albumName: '',
-  albumId: '0',
-  source: '',
-  interval: '00:00',
-  img: '',
-  lrc: null,
-  types: [],
-  _types: {},
-  typeUrl: {}
-})
+// 歌曲信息由全局播放管理器提供
 const maincolor = ref('var(--td-brand-color-5)')
 const startmaincolor = ref('rgba(0, 0, 0, 1)')
 const contrastTextColor = ref('rgba(0, 0, 0, .8)')

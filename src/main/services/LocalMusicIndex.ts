@@ -2,7 +2,7 @@ import path from 'node:path'
 import fs from 'fs'
 import fsp from 'fs/promises'
 import crypto from 'crypto'
-import { configManager } from './ConfigManager'
+// import { configManager } from './ConfigManager'
 
 export interface MusicItem {
   hash?: string
