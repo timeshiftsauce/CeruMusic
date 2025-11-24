@@ -42,12 +42,12 @@ const menuList: MenuItem[] = [
     name: '本地',
     icon: 'icon-shouye',
     path: '/home/local'
-  },
-  {
-    name: '最近',
-    icon: 'icon-shijian',
-    path: '/home/recent'
   }
+  // {
+  //   name: '最近',
+  //   icon: 'icon-shijian',
+  //   path: '/home/recent'
+  // }
 ]
 const menuActive = ref(0)
 const router = useRouter()
