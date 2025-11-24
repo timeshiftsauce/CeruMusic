@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, toRaw } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ChevronRightIcon, RefreshIcon } from 'tdesign-icons-vue-next'
+import {
+  ChevronRightIcon,
+  RefreshIcon,
+  EllipsisIcon,
+  PlayCircleIcon,
+  AddIcon,
+  SearchIcon,
+  FolderIcon
+} from 'tdesign-icons-vue-next'
+import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
+import { createMenuItem, calculateMenuPosition } from '@renderer/components/ContextMenu/utils'
 
 type MusicItem = {
   hash?: string
@@ -38,6 +48,33 @@ const showDirModal = ref(false)
 // const newDirInput = ref('')
 
 const hasDirs = computed(() => scanDirs.value.length > 0)
+const moreActions = ref([
+  {
+    label: '添加全部到播放列表',
+    key: 'add-to-playlist'
+  },
+  {
+    label: '清空所有',
+    key: 'clear'
+  },
+  {
+    label: '批量匹配标签',
+    key: 'batch-batch'
+  }
+])
+const moreActionSelect = (e: 'add-to-playlist' | 'clear' | 'batch-batch') => {
+  switch (e) {
+    case 'add-to-playlist':
+      addAllToPlaylist()
+      break
+    case 'clear':
+      clearScan()
+      break
+    case 'batch-batch':
+      matchBatch()
+      break
+  }
+}
 
 const selectDirs = async () => {
   const dirs = await (window as any).api.localMusic.selectDirs()
@@ -259,6 +296,81 @@ const addToPlaylistEnd = (song: MusicItem) => {
   }
 }
 
+// 单击/双击交互（单击加入播放列表，双击播放）
+let clickTimer: NodeJS.Timeout | null = null
+let lastClickTime = 0
+const doubleClickDelay = 300
+
+const handlePlay = (song: MusicItem) => {
+  addToPlaylistAndPlay(song)
+}
+
+const handleSongClick = (song: MusicItem) => {
+  const currentTime = Date.now()
+  const timeDiff = currentTime - lastClickTime
+  if (clickTimer) {
+    clearTimeout(clickTimer)
+    clickTimer = null
+  }
+  if (timeDiff < doubleClickDelay && timeDiff > 0) {
+    handlePlay(song)
+    lastClickTime = 0
+  } else {
+    lastClickTime = currentTime
+    clickTimer = setTimeout(() => {
+      addToPlaylistEnd(song)
+      clickTimer = null
+    }, doubleClickDelay)
+  }
+}
+
+// 右键菜单
+const contextMenuVisible = ref(false)
+const contextMenuPosition = ref({ x: 0, y: 0 })
+const contextMenuSong = ref<MusicItem | null>(null)
+const contextMenuItems = computed(() => {
+  const items = [
+    createMenuItem('play', '播放', {
+      icon: PlayCircleIcon,
+      onClick: () => {
+        if (contextMenuSong.value) handlePlay(contextMenuSong.value)
+      }
+    }),
+    createMenuItem('addToPlaylist', '加入播放列表', {
+      icon: AddIcon,
+      onClick: () => {
+        if (contextMenuSong.value) addToPlaylistEnd(contextMenuSong.value)
+      }
+    }),
+    createMenuItem('accurateMatch', '精准匹配', {
+      icon: SearchIcon,
+      onClick: () => {
+        if (contextMenuSong.value) openAccurateMatch(contextMenuSong.value)
+      }
+    }),
+    createMenuItem('addToLocalPlaylist', '添加到本地歌单', {
+      icon: FolderIcon,
+      onClick: () => {
+        if (contextMenuSong.value) addToLocalPlaylist(contextMenuSong.value)
+      }
+    })
+  ]
+  return items
+})
+
+const handleContextMenu = (event: MouseEvent, song: MusicItem) => {
+  event.preventDefault()
+  event.stopPropagation()
+  contextMenuSong.value = song
+  contextMenuPosition.value = calculateMenuPosition(event, 240, 300)
+  contextMenuVisible.value = true
+}
+
+const closeContextMenu = () => {
+  contextMenuVisible.value = false
+  contextMenuSong.value = null
+}
+
 const fetchPlaylists = async () => {
   const res = await (window as any).api.songList.getAll()
   const list = Array.isArray(res?.data) ? res.data : []
@@ -367,21 +479,13 @@ onMounted(async () => {
       </div>
     </div>
     <div class="controls">
-      <t-button
-        theme="primary"
-        style="padding: 6px 9px; border-radius: 8px; height: 36px"
-        @click="playAll"
-      >
+      <t-button theme="primary" class="local-btn play-all" @click="playAll">
         <span style="margin-left: 3px">播放全部</span>
         <template #icon>
           <span class="iconfont icon-bofang"></span>
         </template>
       </t-button>
-      <t-button
-        theme="default"
-        style="padding: 6px 9px; border-radius: 8px; height: 36px; width: 36px"
-        @click="scanLibrary"
-      >
+      <t-button theme="default" class="local-btn scan" @click="scanLibrary">
         <template #icon
           ><refresh-icon
             :fill-color="'transparent'"
@@ -389,9 +493,21 @@ onMounted(async () => {
             :stroke-width="1.5"
         /></template>
       </t-button>
-      <t-button size="small" @click="addAllToPlaylist">添加全部到播放列表</t-button>
+      <n-dropdown
+        trigger="hover"
+        :options="moreActions"
+        placement="right-start"
+        @select="moreActionSelect"
+      >
+        <t-button theme="default" class="local-btn more">
+          <template #icon>
+            <ellipsis-icon :stroke-width="1.5" />
+          </template>
+        </t-button>
+      </n-dropdown>
+      <!-- <t-button size="small" @click="addAllToPlaylist">添加全部到播放列表</t-button>
       <n-button size="small" @click="clearScan">清空所有</n-button>
-      <n-button size="small" :disabled="songs.length === 0" @click="matchBatch">批量匹配</n-button>
+      <n-button size="small" :disabled="songs.length === 0" @click="matchBatch">批量匹配</n-button> -->
       <!-- <n-select
         v-model:value="selectedPlaylistId"
         :options="playlistOptions"
@@ -403,7 +519,12 @@ onMounted(async () => {
       </div>
     </div>
 
-    <n-modal v-model:show="showDirModal" preset="dialog" title="选择本地文件夹">
+    <n-modal
+      v-model:show="showDirModal"
+      preset="dialog"
+      title="选择本地文件夹"
+      style="--n-border-radius: 10px; padding: 20px 30px"
+    >
       <div>
         <div style="margin-bottom: 10px; color: #666; font-size: 12px">
           你可以添加常用目录，文件将即时索引。
@@ -436,31 +557,29 @@ onMounted(async () => {
 
     <div v-if="songs.length > 0" class="list">
       <div class="row header">
-        <div class="col cover">封面</div>
+        <div class="col cover" style="text-align: center">封面</div>
         <div class="col title">标题</div>
         <div class="col artist">歌手</div>
         <div class="col album">专辑</div>
         <div class="col dura">时长</div>
-        <div class="col ops">操作</div>
       </div>
-      <div v-for="s in songs" :key="s.songmid" class="row">
+      <div
+        v-for="s in songs"
+        :key="s.songmid"
+        class="row"
+        @click="handleSongClick(s)"
+        @contextmenu="handleContextMenu($event, s)"
+      >
+        <div v-if="matching[s.songmid]" class="row-loading">
+          <n-spin size="small" />
+        </div>
         <div class="col cover">
           <img :src="s.img || '/default-cover.png'" alt="cover" />
         </div>
-        <div class="col title">{{ s.name }}</div>
+        <div class="col title">{{ matching[s.songmid] ? '匹配中...' : s.name }}</div>
         <div class="col artist">{{ s.singer }}</div>
         <div class="col album">{{ s.albumName }}</div>
         <div class="col dura">{{ s.interval || '' }}</div>
-        <div class="col ops">
-          <n-button-group ghost>
-            <n-button size="tiny" round @click="addToPlaylistAndPlay(s)">播放</n-button>
-            <n-button size="tiny" round @click="addToPlaylistEnd(s)">加入播放列表</n-button>
-            <n-button size="tiny" :loading="matching[s.songmid]" round @click="openAccurateMatch(s)"
-              >精准匹配</n-button
-            >
-            <n-button size="tiny" round @click="addToLocalPlaylist(s)">添加到本地歌单</n-button>
-          </n-button-group>
-        </div>
       </div>
     </div>
     <div v-else class="empty">暂无数据，点击选择目录后扫描</div>
@@ -499,6 +618,13 @@ onMounted(async () => {
         </div>
       </div>
     </n-modal>
+
+    <ContextMenu
+      v-model:visible="contextMenuVisible"
+      :position="contextMenuPosition"
+      :items="contextMenuItems"
+      @close="closeContextMenu"
+    />
   </div>
 </template>
 
@@ -530,13 +656,19 @@ onMounted(async () => {
 .controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 12px;
+  .local-btn {
+    padding: 6px 9px;
+    border-radius: 8px;
+    height: 36px;
+  }
 }
 .dir-tag {
   max-width: 360px;
 }
 .list {
+  margin-top: 20px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -545,20 +677,46 @@ onMounted(async () => {
 }
 .row {
   display: grid;
-  grid-template-columns: 70px 1fr 1fr 1fr 90px 360px;
+  grid-template-columns: 70px 1fr 1fr 1fr 90px;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 12px;
+  padding: 10px 12px;
   border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  position: relative;
 }
 .row.header {
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--song-list-header-bg, #fff);
+  border-bottom: 1px solid var(--song-list-header-border, #eee);
+}
+.row:not(.header):hover {
+  background: var(--song-list-item-hover, rgba(0, 0, 0, 0.04));
+}
+
+.row:not(.header) .col.cover {
+  // width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  // height: 40px;
 }
 .col.cover img {
-  width: 60px;
-  height: 60px;
+  width: 40px;
+  height: 40px;
   object-fit: cover;
   border-radius: 4px;
+}
+.row-loading {
+  position: absolute;
+  right: 20px;
+  top: 17px;
+  // transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 .empty {
   padding: 24px;

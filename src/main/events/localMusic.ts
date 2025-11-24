@@ -59,7 +59,7 @@ function readTags(filePath: string) {
 
 // 将两种逐字/行内时间歌词统一转换为标准LRC（仅保留行时间标签）
 function normalizeLyricsToLrc(input: string): string {
-  const lines = String(input).replace(/\r/g, '').split('\n')
+  const lines = String(input).split('\n')
   const msFormat = (timeMs: number) => {
     if (!Number.isFinite(timeMs)) return ''
     const m = Math.floor(timeMs / 60000)
