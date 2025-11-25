@@ -381,30 +381,6 @@ const playPlaylist = async (playlist: SongList) => {
   }
 }
 
-// 添加歌曲到歌单
-const addToPlaylist = async (song: Songs, playlist: SongList) => {
-  try {
-    const result = await songListAPI.addSongs(playlist.id, [song])
-    if (result.success) {
-      MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
-    } else {
-      MessagePlugin.error(result.error || '添加歌曲失败')
-    }
-  } catch (error) {
-    console.error('添加歌曲失败:', error)
-    MessagePlugin.error('添加歌曲失败')
-  }
-}
-
-// 播放歌曲
-const playSong = (song: Songs): void => {
-  console.log('播放歌曲:', song.name)
-  // 调用播放器的方法添加到播放列表并播放
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
-  }
-}
-
 // 导入功能
 const handleImport = () => {
   showImportDialog.value = true
@@ -850,40 +826,6 @@ const handleNetworkPlaylistImport = async (input: string) => {
   }
 }
 
-// 打开音乐文件夹
-// const openMusicFolder = (): void => {
-//   console.log('打开音乐文件夹')
-//   // TODO: 调用 Electron 的文件夹打开功能
-//   MessagePlugin.info('打开音乐文件夹功能开发中...')
-// }
-
-// 导入音乐文件
-const importMusic = (): void => {
-  console.log('导入音乐文件')
-  // TODO: 调用 Electron 的文件选择对话框
-  MessagePlugin.info('导入音乐文件功能开发中...')
-}
-
-// 删除本地歌曲
-const deleteSong = (song: Songs): void => {
-  const confirmDialog = DialogPlugin.confirm({
-    header: '确认删除',
-    body: `确定要删除歌曲"${song.name}"吗？`,
-    confirmBtn: '删除',
-    cancelBtn: '取消',
-    theme: 'danger',
-    onConfirm: () => {
-      // TODO: 实现删除本地歌曲的功能
-      console.log('删除歌曲:', song.name)
-      MessagePlugin.success(`已删除歌曲"${song.name}"`)
-      confirmDialog.destroy()
-    },
-    onCancel: () => {
-      confirmDialog.destroy()
-    }
-  })
-}
-
 // 右键菜单项配置
 const contextMenuItems = computed((): ContextMenuItem[] => {
   if (!contextMenuPlaylist.value) return []
@@ -1053,12 +995,8 @@ onMounted(() => {
                   >我的喜欢</t-tag
                 >
               </div>
-              <div
-                v-if="playlist.description"
-                class="playlist-description"
-                :title="playlist.description"
-              >
-                {{ playlist.description }}
+              <div class="playlist-description" :title="playlist.description">
+                {{ playlist.description || '这个人很懒并没有留下任何描述...' }}
               </div>
               <div class="playlist-meta">
                 <span>{{ playlist.source }}</span>
@@ -1129,100 +1067,6 @@ onMounted(() => {
           <t-button theme="primary" @click="showCreatePlaylistDialog = true">
             <i class="iconfont icon-zengjia"></i>
             创建歌单
-          </t-button>
-        </div>
-      </div>
-
-      <!-- 本地音乐列表 -->
-      <div class="music-section">
-        <div class="section-header">
-          <h3>本地音乐库</h3>
-        </div>
-
-        <div v-if="localSongs.length > 0" class="music-list">
-          <div class="list-header">
-            <div class="header-item index">#</div>
-            <div class="header-item title">标题</div>
-            <div class="header-item artist">艺术家</div>
-            <div class="header-item album">专辑</div>
-            <div class="header-item duration">时长</div>
-            <div class="header-item size">大小</div>
-            <div class="header-item format">格式</div>
-            <div class="header-item actions">操作</div>
-          </div>
-
-          <div class="list-body">
-            <div
-              v-for="(song, index) in localSongs"
-              :key="song.songmid"
-              class="song-row"
-              @dblclick="playSong(song)"
-            >
-              <div class="row-item index">{{ index + 1 }}</div>
-              <div class="row-item title">
-                <div class="song-title">{{ song.name }}</div>
-              </div>
-              <div class="row-item artist">{{ song.singer }}</div>
-              <div class="row-item album">{{ song.albumName }}</div>
-              <div class="row-item duration">{{ song.interval || '0:00' }}</div>
-              <div class="row-item size">{{ (song as any).size || '-' }}</div>
-              <div class="row-item format">
-                <span class="format-badge">{{ (song as any).format || 'MP3' }}</span>
-                <span class="bitrate">{{ (song as any).bitrate || '320kbps' }}</span>
-              </div>
-              <div class="row-item actions">
-                <t-button
-                  shape="circle"
-                  theme="primary"
-                  variant="text"
-                  size="small"
-                  title="播放"
-                  @click="playSong(song)"
-                >
-                  <i class="iconfont icon-bofang"></i>
-                </t-button>
-                <t-dropdown
-                  v-if="playlists.length > 0"
-                  :options="playlists.map((p) => ({ content: p.name, value: p.id }))"
-                  @click="
-                    (option) => addToPlaylist(song, playlists.find((p) => p.id === option.value)!)
-                  "
-                >
-                  <t-button
-                    shape="circle"
-                    theme="default"
-                    variant="text"
-                    size="small"
-                    title="添加到歌单"
-                  >
-                    <i class="iconfont icon-zengjia"></i>
-                  </t-button>
-                </t-dropdown>
-                <t-button
-                  shape="circle"
-                  theme="danger"
-                  variant="text"
-                  size="small"
-                  title="删除"
-                  @click="deleteSong(song)"
-                >
-                  <i class="iconfont icon-shanchu"></i>
-                </t-button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 本地音乐空状态 -->
-        <div v-else class="empty-state">
-          <div class="empty-icon">
-            <i class="iconfont icon-music"></i>
-          </div>
-          <h3>暂无本地音乐</h3>
-          <p>点击"导入音乐"按钮添加您的音乐文件</p>
-          <t-button theme="primary" @click="importMusic">
-            <i class="iconfont icon-zengjia"></i>
-            导入音乐
           </t-button>
         </div>
       </div>
@@ -1786,6 +1630,8 @@ onMounted(() => {
 }
 
 .playlist-card {
+  display: flex;
+  flex-direction: column;
   background: var(--local-card-bg);
   border-radius: 0.75rem;
   overflow: hidden;
@@ -1838,7 +1684,9 @@ onMounted(() => {
 
   .playlist-info {
     padding: 1rem;
-
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     .playlist-name {
       font-weight: 600;
       color: var(--local-text-primary);
@@ -1855,11 +1703,17 @@ onMounted(() => {
     }
 
     .playlist-description {
-      font-size: 0.875rem;
+      flex: 1;
+      font-size: 0.78rem;
       color: var(--local-text-secondary);
       margin-bottom: 0.5rem;
-      white-space: nowrap;
+      display: -webkit-box;
+
+      -webkit-line-clamp: 2;
+      // white-space: nowrap;
       overflow: hidden;
+      -webkit-box-orient: vertical;
+
       text-overflow: ellipsis;
     }
 

@@ -1,5 +1,5 @@
 import {
-  SearchSongArg,
+  SearchArg,
   SearchResult,
   GetMusicUrlArg,
   GetMusicPicArg,
@@ -18,7 +18,7 @@ import download from '../../utils/downloadSongs'
 function main(source: string) {
   const Api = musicSdk[source]
   return {
-    async search({ keyword, page = 1, limit = 30 }: SearchSongArg) {
+    async search({ keyword, page = 1, limit = 30 }: SearchArg) {
       return (await Api.musicSearch.search(keyword, page, limit)) as Promise<SearchResult>
     },
 
@@ -125,6 +125,9 @@ function main(source: string) {
           error: '获取歌单详情失败 ' + (e.error || e.message || e)
         }
       }
+    },
+    async searchPlaylist({ keyword, page = 1, limit = 30 }: SearchArg) {
+      return (await Api.songList.search(keyword, page, limit)) as PlaylistResult
     }
   }
 }
