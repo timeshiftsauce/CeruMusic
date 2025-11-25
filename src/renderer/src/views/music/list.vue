@@ -440,7 +440,7 @@ const handleScroll = (event?: Event) => {
 
   scrollY.value = scrollTop
   // 当滚动超过100px时，启用紧凑模式
-  isHeaderCompact.value = scrollY.value > 100
+  isHeaderCompact.value = scrollY.value > 100 && scrollY.value < scrollHeight - clientHeight - 100
 
   // 触底加载（参考 search.vue）
   if (

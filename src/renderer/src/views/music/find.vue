@@ -191,7 +191,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 热门歌曲 -->
-    <div class="section">
+    <div class="section" v-if="hotSongs.length > 0">
       <h3 class="section-title">热门歌曲</h3>
       <div class="song-list">
         <div

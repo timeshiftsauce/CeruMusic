@@ -32,6 +32,15 @@ const pageSize = 50
 const totalItems = ref(0)
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
+const activeTab = ref<'songs' | 'playlists'>('songs')
+
+// 歌单搜索状态
+const playlistResults = ref<any[]>([])
+const playlistLoading = ref(false)
+const playlistPage = ref(1)
+const playlistLimit = 30
+const skeletonCount = playlistLimit
+const playlistTotal = ref(0)
 const search = searchValue()
 const router = useRouter()
 onActivated(async () => {
@@ -47,9 +56,15 @@ onActivated(async () => {
     async () => {
       if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
       keyword.value = search.getValue
-      console.log('search', search)
-
-      await performSearch(true)
+      searchResults.value = []
+      playlistResults.value = []
+      currentPage.value = 1
+      playlistPage.value = 1
+      if (activeTab.value === 'songs') {
+        await performSearch(true)
+      } else {
+        await fetchPlaylists(true)
+      }
     },
     { immediate: true }
   )
@@ -59,11 +74,29 @@ onActivated(async () => {
     () => localUserStore.userSource,
     async () => {
       if (keyword.value.trim()) {
-        await performSearch(true)
+        searchResults.value = []
+        playlistResults.value = []
+        currentPage.value = 1
+        playlistPage.value = 1
+        if (activeTab.value === 'songs') {
+          await performSearch(true)
+        } else {
+          await fetchPlaylists(true)
+        }
       }
     },
     { deep: true }
   )
+
+  // 标签切换按需加载
+  watch(activeTab, async (val) => {
+    if (!keyword.value.trim()) return
+    if (val === 'songs' && searchResults.value.length === 0) {
+      await performSearch(true)
+    } else if (val === 'playlists' && playlistResults.value.length === 0) {
+      await fetchPlaylists(true)
+    }
+  })
 })
 
 // 执行搜索
@@ -136,7 +169,8 @@ async function setPic(offset: number, source: string) {
   }
 }
 // 计算是否有搜索结果
-const hasResults = computed(() => searchResults.value && searchResults.value.length > 0)
+const hasSongResults = computed(() => searchResults.value && searchResults.value.length > 0)
+const hasPlaylistResults = computed(() => playlistResults.value && playlistResults.value.length > 0)
 
 // 组件事件处理函数
 const handlePlay = (song: MusicItem) => {
@@ -175,50 +209,187 @@ const handleScroll = (event: Event) => {
     performSearch(false)
   }
 }
+
+// 执行歌单搜索（分页）
+const fetchPlaylists = async (reset = false) => {
+  if (playlistLoading.value || !keyword.value.trim()) return
+
+  if (reset) {
+    playlistPage.value = 1
+    playlistResults.value = []
+  }
+
+  playlistLoading.value = true
+  try {
+    const localUserStore = LocalUserDetailStore()
+    if (!localUserStore.userSource.source) {
+      MessagePlugin.error('请配置音源')
+      return
+    }
+    const source = localUserStore.userSource.source as unknown as string
+    const res = await window.api.music.requestSdk('searchPlaylist', {
+      source,
+      keyword: keyword.value,
+      page: playlistPage.value,
+      limit: playlistLimit
+    })
+
+    playlistTotal.value = res?.total || 0
+    const list = Array.isArray(res?.list) ? res.list : []
+    const mapped = list.map((item: any) => ({
+      id: item.id,
+      title: item.name,
+      description: item.desc || '',
+      cover: item.img,
+      playCount: item.play_count,
+      author: item.author,
+      total: item.total,
+      time: item.time,
+      source: item.source
+    }))
+    if (reset) {
+      playlistResults.value = mapped
+    } else {
+      playlistResults.value = [...playlistResults.value, ...mapped]
+    }
+    if (!reset) playlistPage.value += 1
+  } catch (e) {
+    console.error('歌单搜索失败:', e)
+  } finally {
+    playlistLoading.value = false
+  }
+}
+
+// 跳转到歌单详情
+const routerToPlaylist = (playlist: any) => {
+  router.push({
+    name: 'list',
+    params: { id: playlist.id },
+    query: {
+      title: playlist.title,
+      source: playlist.source,
+      author: playlist.author,
+      cover: playlist.cover,
+      total: playlist.total
+    }
+  })
+}
+
+const onPlaylistScroll = (event: Event) => {
+  const target = event.target as HTMLElement
+  const { scrollTop, scrollHeight, clientHeight } = target
+  const nearBottom = scrollHeight - scrollTop - clientHeight < 100
+  const hasMore = playlistResults.value.length < playlistTotal.value
+  if (nearBottom && hasMore && !playlistLoading.value) {
+    fetchPlaylists(false)
+  }
+}
 </script>
 
 <template>
   <div class="search-container">
-    <!-- 搜索结果标题 -->
+    <!-- 顶部：搜索标题与标签 -->
     <div class="search-header">
-      <h2 class="search-title">
-        搜索"<span class="keyword">{{ keyword }}</span
-        >"
-      </h2>
-      <div v-if="hasResults" class="result-info">找到 {{ totalItems }} 首单曲</div>
-    </div>
-
-    <!-- 歌曲列表 -->
-    <div v-if="hasResults" class="song-list-wrapper">
-      <SongVirtualList
-        :songs="searchResults"
-        :current-song="currentSong"
-        :is-playing="isPlaying"
-        :show-index="true"
-        :show-album="true"
-        :show-duration="true"
-        @play="handlePlay"
-        @pause="handlePause"
-        @download="handleDownload"
-        @add-to-playlist="handleAddToPlaylist"
-        @scroll="handleScroll"
-      />
-    </div>
-
-    <!-- 空状态 -->
-    <div v-else-if="!loading" class="empty-state">
-      <div class="empty-content">
-        <div class="empty-icon">🔍</div>
-        <h3>未找到相关歌曲</h3>
-        <p>请尝试其他关键词</p>
+      <div class="header-row">
+        <h2 class="search-title">
+          搜索"<span class="keyword">{{ keyword }}</span
+          >"
+        </h2>
+        <div class="result-info">
+          <span v-if="activeTab === 'songs'">找到 {{ totalItems }} 首单曲</span>
+          <span v-else>找到 {{ playlistTotal }} 个歌单</span>
+        </div>
       </div>
+      <n-tabs v-model:value="activeTab" type="line" size="small">
+        <n-tab-pane name="songs" tab="单曲" />
+        <n-tab-pane name="playlists" tab="歌单" />
+      </n-tabs>
     </div>
 
-    <!-- 加载状态 -->
-    <div v-else class="loading-state">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <p>搜索中...</p>
+    <!-- 结果内容区 -->
+    <div class="result-content">
+      <!-- 单曲列表 -->
+      <div v-show="activeTab === 'songs'" class="song-tab">
+        <div v-if="hasSongResults" class="song-list-wrapper">
+          <SongVirtualList
+            :songs="searchResults"
+            :current-song="currentSong"
+            :is-playing="isPlaying"
+            :show-index="true"
+            :show-album="true"
+            :show-duration="true"
+            @play="handlePlay"
+            @pause="handlePause"
+            @download="handleDownload"
+            @add-to-playlist="handleAddToPlaylist"
+            @scroll="handleScroll"
+          />
+        </div>
+        <div v-else-if="!loading" class="empty-state">
+          <div class="empty-content">
+            <div class="empty-icon">🔍</div>
+            <h3>未找到相关歌曲</h3>
+            <p>请尝试其他关键词</p>
+          </div>
+        </div>
+        <div v-else class="loading-state">
+          <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p>搜索中...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 歌单列表 -->
+      <div v-show="activeTab === 'playlists'" class="playlist-tab">
+        <div class="grid-scroll-container" @scroll="onPlaylistScroll">
+          <TransitionGroup
+            v-if="hasPlaylistResults"
+            name="grid-fade"
+            tag="div"
+            class="playlist-grid"
+          >
+            <div
+              v-for="playlist in playlistResults"
+              :key="playlist.id"
+              class="playlist-card"
+              @click="routerToPlaylist(playlist)"
+            >
+              <div class="playlist-cover">
+                <img :src="playlist.cover" :alt="playlist.title" />
+              </div>
+              <div class="playlist-info">
+                <h4 class="playlist-title">{{ playlist.title }}</h4>
+                <p class="playlist-desc">{{ playlist.description || '精选歌单' }}</p>
+                <div class="playlist-meta">
+                  <span class="play-count">
+                    <i class="iconfont icon-bofang"></i>
+                    {{ playlist.playCount }}
+                  </span>
+                  <span v-if="playlist.total" class="song-count">{{ playlist.total }}首</span>
+                </div>
+              </div>
+            </div>
+          </TransitionGroup>
+          <div v-else-if="!playlistLoading" class="empty-state">
+            <div class="empty-content">
+              <div class="empty-icon">📚</div>
+              <h3>未找到相关歌单</h3>
+              <p>请尝试其他关键词</p>
+            </div>
+          </div>
+          <div v-else class="loader-grid">
+            <div v-for="n in skeletonCount" :key="'sk-' + n" class="playlist-card">
+              <div class="playlist-cover">
+                <div class="skeleton-block"></div>
+              </div>
+              <div class="playlist-info">
+                <n-skeleton text :repeat="2" />
+                <n-skeleton text style="width: 40%" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -233,18 +404,27 @@ const handleScroll = (event: Event) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden auto;
+  overflow: hidden;
 }
 
 .search-header {
-  margin-bottom: 20px;
+  // margin-bottom: 10px;
+  flex-shrink: 0;
+  .header-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
 
   .search-title {
     font-size: 24px;
     font-weight: normal;
     color: var(--search-title-color);
     margin: 0 0 8px 0;
-
+    border-left: 4px solid var(--search-keyword-color);
+    padding-left: 8px;
     .keyword {
       color: var(--search-keyword-color);
     }
@@ -256,6 +436,17 @@ const handleScroll = (event: Event) => {
   }
 }
 
+.result-content {
+  background: var(--search-content-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--search-content-shadow);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .song-list-wrapper {
   background: var(--search-content-bg);
   border-radius: 8px;
@@ -265,6 +456,28 @@ const handleScroll = (event: Event) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.playlist-tab,
+.song-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.grid-scroll-container {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.pagination-wrapper {
+  flex-shrink: 0;
+  padding: 8px 0;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .empty-state,
@@ -323,6 +536,111 @@ const handleScroll = (event: Event) => {
   }
   100% {
     transform: rotate(360deg);
+  }
+}
+
+/* 歌单卡片样式（简洁展示信息） */
+.playlist-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.loader-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  padding: 8px;
+}
+.grid-fade-enter-active,
+.grid-fade-leave-active {
+  transition: all 0.25s ease;
+}
+.grid-fade-enter-from,
+.grid-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+.grid-fade-enter-to,
+.grid-fade-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.playlist-card {
+  background: var(--find-card-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--find-card-shadow);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  .playlist-cover {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+    .skeleton-block {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        rgba(0, 0, 0, 0.06) 25%,
+        rgba(0, 0, 0, 0.12) 37%,
+        rgba(0, 0, 0, 0.06) 63%
+      );
+      background-size: 400% 100%;
+      animation: shimmer 1.4s ease infinite;
+      border-radius: 4px;
+    }
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+  .playlist-info {
+    padding: 12px;
+    .playlist-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--find-text-primary);
+      margin-bottom: 6px;
+      line-height: 1.4;
+      display: -webkit-box;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .playlist-desc {
+      font-size: 12px;
+      color: var(--find-text-secondary);
+      margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .playlist-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      .play-count,
+      .song-count {
+        font-size: 12px;
+        color: var(--find-text-muted);
+      }
+    }
+  }
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--find-card-shadow-hover);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
   }
 }
 

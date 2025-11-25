@@ -3,7 +3,7 @@ export interface sdkArg {
   [key: string]: any
 }
 
-export interface SearchSongArg {
+export interface SearchArg {
   keyword: string
   page: number
   limit: number

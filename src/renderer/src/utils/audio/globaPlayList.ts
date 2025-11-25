@@ -169,7 +169,7 @@ const playSong = async (song: SongList) => {
       const a = Audio.value.audio
       try {
         a.pause()
-      } catch {}
+      } catch { }
       a.removeAttribute('src')
       a.load()
     }
@@ -211,9 +211,9 @@ const playSong = async (song: SongList) => {
 const tryAutoNext = (reason: string) => {
   const limit = getAutoNextLimit()
   MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
-  if (autoNextCount.value >= limit && autoNextCount.value > 2) {
+  if ((autoNextCount.value >= limit || autoNextCount.value >= 10) && autoNextCount.value > 2) {
     MessagePlugin.error(
-      `自动下一首失败：超过当前列表30%限制（${autoNextCount.value}/${limit}）。原因：${reason}`
+      `自动下一首失败：${autoNextCount.value}/${limit > 10 ? 10 : limit}次。原因：${reason}`
     )
     return
   }
@@ -357,7 +357,7 @@ const initPlayback = async () => {
         try {
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
-        } catch {}
+        } catch { }
       } else {
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(
