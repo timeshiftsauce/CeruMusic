@@ -13,7 +13,7 @@ function scrollToFeatures() {
 
 // GitHub repository configuration
 const GITHUB_REPO = 'timeshiftsauce/CeruMusic'
-const GITHUB_PROXY = 'https://gh-proxy.com/'
+const GITHUB_PROXY = 'https://gh-proxy.top/'
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
 const GITHUB_RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases`
 
@@ -288,31 +288,31 @@ function showNotification(message, type = 'info') {
                 min-width: 300px;
                 animation: slideInRight 0.3s ease-out;
             }
-            
+
             .notification-info {
                 border-left: 4px solid var(--primary-color);
             }
-            
+
             .notification-success {
                 border-left: 4px solid #10b981;
             }
-            
+
             .notification-error {
                 border-left: 4px solid #ef4444;
             }
-            
+
             .notification-content {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 padding: 1rem;
             }
-            
+
             .notification-message {
                 color: var(--text-primary);
                 font-weight: 500;
             }
-            
+
             .notification-close {
                 background: none;
                 border: none;
@@ -322,17 +322,17 @@ function showNotification(message, type = 'info') {
                 border-radius: 4px;
                 transition: var(--transition);
             }
-            
+
             .notification-close:hover {
                 background: var(--surface);
                 color: var(--text-primary);
             }
-            
+
             .notification-close svg {
                 width: 16px;
                 height: 16px;
             }
-            
+
             @keyframes slideInRight {
                 from {
                     transform: translateX(100%);
@@ -343,7 +343,7 @@ function showNotification(message, type = 'info') {
                     opacity: 1;
                 }
             }
-            
+
             @media (max-width: 480px) {
                 .notification {
                     right: 10px;
@@ -580,7 +580,7 @@ spinningStyles.textContent = `
     .spinning {
         animation: spin 1s linear infinite;
     }
-    
+
     @keyframes spin {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
