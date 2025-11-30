@@ -781,8 +781,8 @@ const getTagOptionsStatus = () => {
                     style="cursor: pointer"
                     @click="openLink('https://houlang.cloud/zh-CN/')"
                   >
-                    <span class="tech-name">厚浪云</span>
-                    <span class="tech-desc">提供的云服务支持</span>
+                    <span class="tech-name">雨云</span>
+                    <span class="tech-desc">提供的性价比云服务支持 点这</span>
                   </div>
                 </div>
               </div>
