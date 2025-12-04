@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "sqj,wldss,star",
