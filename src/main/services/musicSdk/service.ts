@@ -88,6 +88,31 @@ function main(source: string) {
       return (await Api.songList.getList(Api.songList.sortList[0].id, '', 1)) as PlaylistResult
     },
 
+    async getPlaylistTags() {
+      return await Api.songList.getTags()
+    },
+
+    async getCategoryPlaylists({
+      sortId = Api.songList.sortList[0].id,
+      tagId = '',
+      page = 1,
+      limit = Api.songList.limit_list
+    }: {
+      sortId?: string
+      tagId?: string
+      page?: number
+      limit?: number
+    }) {
+      const res =
+        source === 'wy'
+          ? await Api.songList.getList(sortId, tagId, page, limit)
+          : await Api.songList.getList(sortId, tagId, page)
+      return {
+        category: { id: tagId || 'hot', name: tagId || '热门' },
+        ...res
+      }
+    },
+
     async getPlaylistDetail({ id, page }: GetSongListDetailsArg) {
       // 酷狗音乐特殊处理：直接调用getUserListDetail
       if (source === 'kg' && /https?:\/\//.test(id)) {

@@ -159,7 +159,7 @@ export default {
   //   return list
   // },
 
-  getList(sortId, tagId, page, tryNum = 0) {
+  getList(sortId, tagId, page, limit = this.limit_list, tryNum = 0) {
     if (tryNum > 2) return Promise.reject(new Error('try max num'))
     if (this._requestObj_list) this._requestObj_list.cancelHttp()
     this._requestObj_list = httpFetch('https://music.163.com/weapi/playlist/list', {
@@ -167,8 +167,8 @@ export default {
       form: weapi({
         cat: tagId || '全部',
         order: sortId,
-        limit: this.limit_list,
-        offset: this.limit_list * (page - 1),
+        limit,
+        offset: limit * (page - 1),
         total: true,
       }),
     })
@@ -178,7 +178,7 @@ export default {
         list: this.filterList(body.playlists),
         total: parseInt(body.total),
         page,
-        limit: this.limit_list,
+        limit,
         source: 'wy',
       }
     })

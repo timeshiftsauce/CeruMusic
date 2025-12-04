@@ -169,7 +169,7 @@ const playSong = async (song: SongList) => {
       const a = Audio.value.audio
       try {
         a.pause()
-      } catch { }
+      } catch {}
       a.removeAttribute('src')
       a.load()
     }
@@ -357,7 +357,7 @@ const initPlayback = async () => {
         try {
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
-        } catch { }
+        } catch {}
       } else {
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(
