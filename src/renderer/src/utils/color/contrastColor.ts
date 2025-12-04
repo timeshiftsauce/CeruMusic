@@ -100,8 +100,8 @@ export async function shouldUseBlackText(imageSrc: string): Promise<boolean> {
 
     console.log(
       `图片: ${imageSrc.slice(-20)}, ` +
-      `平均亮度: ${averageLuminance.toFixed(3)} ` +
-      `(考虑半透明黑色背景覆盖效果)`
+        `平均亮度: ${averageLuminance.toFixed(3)} ` +
+        `(考虑半透明黑色背景覆盖效果)`
     )
 
     // 考虑到图片会受到rgba(0, 0, 0, 0.256)背景覆盖，实际显示会更暗

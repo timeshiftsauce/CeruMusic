@@ -779,10 +779,12 @@ const getTagOptionsStatus = () => {
                   <div
                     class="tech-item link"
                     style="cursor: pointer"
-                    @click="openLink('https://houlang.cloud/zh-CN/')"
+                    @click="openLink('https://www.rainyun.com/sqj_')"
                   >
                     <span class="tech-name">雨云</span>
-                    <span class="tech-desc">提供的性价比云服务支持 点这</span>
+                    <span class="tech-desc"
+                      >🔗 提供的性价比云服务支持，新人半价起，服务器低至7.5元</span
+                    >
                   </div>
                 </div>
               </div>
@@ -1764,7 +1766,7 @@ const getTagOptionsStatus = () => {
 
 .tech-stack {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 0.75rem;
 
   .tech-item {
@@ -1776,9 +1778,11 @@ const getTagOptionsStatus = () => {
     border-radius: 0.5rem;
     border: 1px solid var(--settings-tech-item-border);
     transition: 0.3s;
+    gap: 1rem;
 
     .tech-name {
       font-weight: 600;
+      flex-shrink: 0;
       color: var(--settings-text-primary);
     }
 

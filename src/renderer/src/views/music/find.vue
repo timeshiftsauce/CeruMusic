@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, WatchHandle, onUnmounted } from 'vue'
+import { ref, onMounted, watch, WatchHandle, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
@@ -8,7 +8,7 @@ import { extractDominantColor } from '../../utils/color/colorExtractor'
 // 路由实例
 const router = useRouter()
 
-// 推荐歌单数据
+// 推荐/分类歌单数据
 const recommendPlaylists: any = ref([])
 const loading = ref(true)
 const error = ref('')
@@ -20,32 +20,64 @@ const hotSongs: any = ref([])
 
 let watchSource: WatchHandle | null = null
 
-// 获取热门歌单数据
-const fetchHotSonglist = async () => {
-  try {
-    loading.value = true
-    error.value = ''
+// 分类导航与分页状态
+const tags = ref<any[]>([])
+const hotTag = ref<any[]>([])
+const activeCategoryName = ref<string>('热门')
+const activeTagId = ref<string>('')
+const page = ref<number>(1)
+const limit = ref<number>(30)
+const total = ref<number>(0)
+const loadingMore = ref<boolean>(false)
+const noMore = ref<boolean>(false)
+const scrollLock = ref<boolean>(false)
+const categoryCache: Record<string, { list: any[]; page: number; total: number }> = {}
+const showMore = ref<boolean>(false)
+const activeGroupIndex = ref<number>(0)
+const activeGroupName = ref<string>('')
+const categoryBarRef = ref<HTMLElement | null>(null)
+const moreBtnRef = ref<HTMLElement | null>(null)
+const morePanelStyle = ref<{ top: string; left: string; minWidth: string }>({
+  top: '42px',
+  left: '0px',
+  minWidth: '520px'
+})
 
-    // 调用真实 API 获取热门歌单
-    const result = await window.api.music.requestSdk('getHotSonglist', {
+// 获取分类标签
+const fetchTags = async () => {
+  try {
+    const res = await window.api.music.requestSdk('getPlaylistTags', {
       source: userSource.value.source
     })
-    if (result && result.list) {
-      recommendPlaylists.value = result.list.map((item: any) => ({
-        id: item.id,
-        title: item.name,
-        description: item.desc || '精选歌单',
-        cover: item.img,
-        playCount: item.play_count, // 直接使用返回的格式化字符串
-        author: item.author,
-        total: item.total,
-        time: item.time,
-        source: item.source
-      }))
-    }
-    // 初始化主题色和文字颜色数组
-    mainColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#55C277')
-    textColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#fff')
+    tags.value = res?.tags || []
+    hotTag.value = res?.hotTag || []
+    activeGroupIndex.value = 0
+    activeGroupName.value = tags.value[0]?.name || ''
+  } catch (e) {
+    console.error('获取歌单标签失败:', e)
+    loading.value = false
+    error.value = '获取分类歌单失败，请稍后重试'
+  }
+}
+
+// 根据分类获取歌单
+const fetchCategoryPlaylists = async (reset = false) => {
+  if (scrollLock.value || loadingMore.value) return
+  if (reset) {
+    page.value = 1
+    noMore.value = false
+    loading.value = true
+    recommendPlaylists.value = []
+  }
+  // 缓存命中
+  const cacheKey = activeTagId.value || 'hot' + ':' + userSource.value.source
+  if (reset && categoryCache[cacheKey]) {
+    const cache = categoryCache[cacheKey]
+    recommendPlaylists.value = cache.list
+    page.value = cache.page
+    total.value = cache.total
+    mainColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#FFF')
+    textColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#000')
 
     // 异步获取每个封面的主题色和对应的文字颜色
 
@@ -75,15 +107,125 @@ const fetchHotSonglist = async () => {
         // textColors.value[index] = textColor
       }
     })
-  } catch (err) {
-    console.error('获取热门歌单失败:', err)
-    error.value = '获取数据失败，请稍后重试'
-    // 使用备用数据
-    recommendPlaylists.value = []
+    return
+  }
+  loadingMore.value = true
+  try {
+    const res = await window.api.music.requestSdk('getCategoryPlaylists', {
+      source: userSource.value.source,
+      sortId: 'hot',
+      tagId: activeTagId.value,
+      page: page.value,
+      limit: limit.value
+    })
+    const list = Array.isArray(res?.list) ? res.list : []
+    total.value = res?.total || 0
+    const mapped = list.map((item: any) => ({
+      id: item.id,
+      title: item.name,
+      description: item.desc || '精选歌单',
+      cover: item.img,
+      playCount: item.play_count,
+      author: item.author,
+      total: item.total,
+      time: item.time,
+      source: item.source
+    }))
+    recommendPlaylists.value = reset ? mapped : [...recommendPlaylists.value, ...mapped]
+    // 更新颜色占位
+    mainColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#FFF')
+    textColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#000')
+
+    const colorPromises = recommendPlaylists.value.map(async (item: any, index: number) => {
+      try {
+        const color = await extractDominantColor(item.cover)
+        // const textColor = await getBestContrastTextColor(item.cover)
+        return { index, color }
+      } catch (error) {
+        console.warn(`获取封面主题色失败 (索引 ${index}):`, error)
+        textColors.value[index] = '#000'
+        return { index, color: '#fff' }
+      }
+    })
+
+    // 等待所有颜色提取完成
+    const results = await Promise.all(colorPromises)
+
+    // 更新主题色和文字颜色数组
+    results.forEach(({ index, color }) => {
+      if (index < mainColors.value.length) {
+        // 深化颜色值，让颜色更深邃
+        const deepR = Math.floor(color.r * 0.7)
+        const deepG = Math.floor(color.g * 0.7)
+        const deepB = Math.floor(color.b * 0.7)
+        mainColors.value[index] = `rgba(${deepR}, ${deepG}, ${deepB}, 0.85)`
+        textColors.value[index] = '#fff'
+      }
+    })
+    // 更新分页与状态
+    const loadedCount = recommendPlaylists.value.length
+    noMore.value = loadedCount >= total.value
+    if (!reset) page.value += 1
+    // 写入缓存
+    categoryCache[cacheKey] = {
+      list: recommendPlaylists.value.slice(),
+      page: page.value,
+      total: total.value
+    }
+    error.value = ''
+  } catch (e) {
+    console.error('获取分类歌单失败:', e)
+    loading.value = false
+    error.value = '获取分类歌单失败，请稍后重试'
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
+
+// 切换分类标签
+const onSelectTag = async (tagId: string, name: string) => {
+  activeTagId.value = tagId
+  activeCategoryName.value = name
+  showMore.value = false
+  await fetchCategoryPlaylists(true)
+}
+
+const onScroll = (e: Event) => {
+  const el = e.target as HTMLElement
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+  if (nearBottom && !noMore.value && !loadingMore.value) {
+    fetchCategoryPlaylists(false)
+  }
+}
+
+const updateMorePanelPosition = () => {
+  const barComp = categoryBarRef.value as any
+  const btnComp = moreBtnRef.value as any
+  const barEl: HTMLElement | null = barComp?.$el ?? (barComp as HTMLElement) ?? null
+  const btnEl: HTMLElement | null = btnComp?.$el ?? (btnComp as HTMLElement) ?? null
+  if (!barEl || !btnEl) return
+  const barRect = barEl.getBoundingClientRect()
+  const btnRect = btnEl.getBoundingClientRect()
+  const top = btnRect.bottom - barRect.top + 8
+  const left = btnRect.left - barRect.left - 20
+  morePanelStyle.value = {
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    minWidth: '520px'
+  }
+}
+const toggleMore = () => {
+  showMore.value = !showMore.value
+  if (showMore.value) nextTick(() => updateMorePanelPosition())
+}
+watch(showMore, (v) => {
+  if (v) nextTick(() => updateMorePanelPosition())
+})
+watch(activeGroupName, (name) => {
+  const idx = tags.value.findIndex((g: any) => g.name === name)
+  activeGroupIndex.value = idx >= 0 ? idx : 0
+})
 
 const playPlaylist = (playlist: any): void => {
   // 跳转到歌曲列表页面，传递歌单ID和其他必要信息
@@ -115,11 +257,34 @@ onMounted(() => {
     userSource,
     (newSource) => {
       if (newSource.source) {
-        fetchHotSonglist()
+        loading.value = true
+        error.value = ''
+        // 初始化分类
+        fetchTags().then(() => {
+          // 默认热门分类
+          activeTagId.value = ''
+          activeCategoryName.value = '热门'
+          fetchCategoryPlaylists(true)
+        })
       }
     },
     { deep: true, immediate: true }
   )
+  const onDocClick = (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (!target.closest('.category-bar') && showMore.value) showMore.value = false
+  }
+  document.addEventListener('click', onDocClick)
+  const onResize = () => {
+    if (showMore.value) updateMorePanelPosition()
+  }
+  window.addEventListener('resize', onResize)
+  window.addEventListener('orientationchange', onResize)
+  onUnmounted(() => {
+    document.removeEventListener('click', onDocClick)
+    window.removeEventListener('resize', onResize)
+    window.removeEventListener('orientationchange', onResize)
+  })
 })
 onUnmounted(() => {
   if (watchSource) {
@@ -130,25 +295,78 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="find-container">
+  <div class="find-container" @scroll="onScroll">
     <!-- 页面标题 -->
     <div class="page-header">
       <h2>发现音乐</h2>
       <p>探索最新最热的音乐内容</p>
     </div>
-    <!-- 推荐歌单 -->
+    <!-- 分类导航 -->
+    <div ref="categoryBarRef" class="category-bar">
+      <div class="hot-tags">
+        <button
+          class="tag-chip"
+          :class="{ active: activeTagId === '' }"
+          @click="onSelectTag('', '热门')"
+        >
+          热门
+        </button>
+        <button
+          v-for="t in hotTag"
+          :key="t.id"
+          class="tag-chip"
+          :class="{ active: activeTagId === t.id }"
+          @click="onSelectTag(t.id, t.name)"
+        >
+          {{ t.name }}
+        </button>
+        <t-button
+          ref="moreBtnRef"
+          class="tag-chip more"
+          shape="round"
+          variant="outline"
+          @click="toggleMore"
+          >更多分类 ∨</t-button
+        >
+      </div>
+      <transition name="dropdown">
+        <div v-if="showMore" class="more-panel" :style="morePanelStyle">
+          <t-tabs v-model:value="activeGroupName" size="medium">
+            <t-tab-panel
+              v-for="group in tags"
+              :key="group.name"
+              :value="group.name"
+              :label="group.name"
+            />
+          </t-tabs>
+          <div v-if="tags[activeGroupIndex]" class="panel-tags">
+            <button
+              v-for="t in tags[activeGroupIndex].list"
+              :key="t.id"
+              class="tag-chip"
+              :class="{ active: activeTagId === t.id }"
+              @click="onSelectTag(t.id, t.name)"
+            >
+              {{ t.name }}
+            </button>
+          </div>
+        </div>
+      </transition>
+    </div>
+
+    <!-- 分类歌单 -->
     <div class="section">
-      <h3 class="section-title">热门歌单Top{{ recommendPlaylists.length }}</h3>
+      <h3 class="section-title">{{ activeCategoryName }}歌单</h3>
 
       <!-- 加载状态 -->
-      <div v-if="loading" class="loading-container">
-        <t-loading size="large" text="正在加载热门歌单..." />
+      <div v-if="loading && recommendPlaylists.length === 0" class="loading-container">
+        <t-loading size="large" text="正在加载歌单..." />
       </div>
 
       <!-- 错误状态 -->
       <div v-else-if="error" class="error-container">
         <t-alert theme="error" :message="error" />
-        <t-button theme="primary" style="margin-top: 1rem" @click="fetchHotSonglist">
+        <t-button theme="primary" style="margin-top: 1rem" @click="fetchCategoryPlaylists(true)">
           重新加载
         </t-button>
       </div>
@@ -188,10 +406,16 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+      <div v-if="loadingMore && recommendPlaylists.length > 0" class="load-status">
+        <t-loading size="small" text="加载更多..." />
+      </div>
+      <div v-else-if="noMore && recommendPlaylists.length > 0" class="load-status">
+        <span class="no-more">没有更多内容</span>
+      </div>
     </div>
 
     <!-- 热门歌曲 -->
-    <div class="section" v-if="hotSongs.length > 0">
+    <div v-if="hotSongs.length > 0" class="section">
       <h3 class="section-title">热门歌曲</h3>
       <div class="song-list">
         <div
@@ -226,6 +450,67 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
+.category-bar {
+  margin-bottom: 1rem;
+  position: relative;
+  .hot-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .tag-chip {
+    padding: 6px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--find-border-color);
+    background: var(--find-card-bg);
+    color: var(--find-text-primary);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .tag-chip.active {
+    background: var(--find-song-hover-bg);
+    color: var(--td-brand-color-3);
+    border-color: var(--td-brand-color-3);
+  }
+  .tag-chip.more {
+    background: var(--search-content-bg);
+  }
+  .more-panel {
+    position: absolute;
+    z-index: 5;
+    background: var(--search-content-bg);
+    border-radius: 12px;
+    box-shadow: var(--search-content-shadow);
+    padding: 12px;
+  }
+  .panel-tabs {
+    margin-bottom: 12px;
+  }
+  .panel-tags {
+    display: flex;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    gap: 8px;
+  }
+}
+
+/* 下拉淡入缩放动画 */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.16s ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+.dropdown-enter-to,
+.dropdown-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
 .page-header {
   margin-bottom: 2rem;
 
@@ -258,6 +543,16 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
   padding: 4rem 0;
+}
+
+.load-status {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+  .no-more {
+    font-size: 12px;
+    color: var(--find-text-muted);
+  }
 }
 
 .error-container {

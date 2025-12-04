@@ -17,7 +17,7 @@
 |              **群友**：XIZ              |    3     |
 |                   YL                    |    10    |
 |            **群友**：way1437            |    50    |
-|      盆友捏：lqtmcstudio<QzMusic>       |   25.9   |
+|      盆友捏：lqtmcstudio&lt;QzMusic&gt;       |   25.9   |
 | 来自群“音乐交流群”的**堂堂一跑堂‎・ࡇ・** |    40    |
 |                    …                    |    …     |
 
