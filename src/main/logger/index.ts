@@ -12,7 +12,6 @@ if (!existsSync(logDir)) mkdirSync(logDir)
 // 获取日期 - YYYY-MM-DD
 const dateString = new Date().toISOString().slice(0, 10)
 const logFilePath = join(logDir, `${dateString}.log`)
-console.log(logFilePath, '546444444444444444444444444444444444')
 
 // 配置日志系统
 log.transports.console.useStyles = true // 颜色输出
@@ -33,6 +32,7 @@ console.error = defaultLog.error
 // 分作用域导出
 export { defaultLog }
 export const ipcLog = log.scope('ipc')
+export const pluginLog = log.scope('plugin')
 export const trayLog = log.scope('tray')
 export const thumbarLog = log.scope('thumbar')
 export const storeLog = log.scope('store')

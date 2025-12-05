@@ -208,10 +208,10 @@ const updateMorePanelPosition = () => {
   const barRect = barEl.getBoundingClientRect()
   const btnRect = btnEl.getBoundingClientRect()
   const top = btnRect.bottom - barRect.top + 8
-  const left = btnRect.left - barRect.left - 20
+
   morePanelStyle.value = {
     top: `${Math.round(top)}px`,
-    left: `${Math.round(left)}px`,
+    left: `${Math.round(0)}px`,
     minWidth: '520px'
   }
 }

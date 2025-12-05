@@ -83,9 +83,9 @@ export default {
     const sortSingle = (singer) =>
       singersRxp.test(singer)
         ? singer
-            .split(singersRxp)
-            .sort((a, b) => a.localeCompare(b))
-            .join('、')
+          .split(singersRxp)
+          .sort((a, b) => a.localeCompare(b))
+          .join('、')
         : singer || ''
     const sortMusic = (arr, callback) => {
       const tempResult = []
