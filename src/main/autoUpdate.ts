@@ -2,6 +2,7 @@ import { BrowserWindow, app, shell } from 'electron'
 import axios from 'axios'
 import fs from 'fs'
 import path from 'node:path'
+import { updateLog } from './logger'
 
 let mainWindow: BrowserWindow | null = null
 let currentUpdateInfo: UpdateInfo | null = null
@@ -34,7 +35,7 @@ async function getAlistToken(): Promise<string> {
   }
 
   try {
-    console.log('Authenticating with Alist...')
+    updateLog.log('Authenticating with Alist...')
     const response = await axios.post(
       `${ALIST_BASE_URL}/api/auth/login`,
       {
@@ -49,11 +50,11 @@ async function getAlistToken(): Promise<string> {
       }
     )
 
-    console.log('Alist auth response:', response.data)
+    updateLog.log('Alist auth response:', response.data)
 
     if (response.data.code === 200) {
       alistToken = response.data.data.token
-      console.log('Alist authentication successful')
+      updateLog.log('Alist authentication successful')
       return alistToken! // 我们已经确认 token 存在
     } else {
       throw new Error(`Alist authentication failed: ${response.data.message || 'Unknown error'}`)
@@ -76,7 +77,7 @@ async function getAlistDownloadUrl(version: string, fileName: string): Promise<s
   const filePath = `/${version}/${fileName}`
 
   try {
-    console.log(`Getting file info for: ${filePath}`)
+    updateLog.log(`Getting file info for: ${filePath}`)
     const response = await axios.post(
       `${ALIST_BASE_URL}/api/fs/get`,
       {
@@ -91,24 +92,24 @@ async function getAlistDownloadUrl(version: string, fileName: string): Promise<s
       }
     )
 
-    console.log('Alist file info response:', response.data)
+    updateLog.log('Alist file info response:', response.data)
 
     if (response.data.code === 200) {
       const fileInfo = response.data.data
 
       // 检查文件是否存在且有下载链接
       if (fileInfo && fileInfo.raw_url) {
-        console.log('Using raw_url for download:', fileInfo.raw_url)
+        updateLog.log('Using raw_url for download:', fileInfo.raw_url)
         return fileInfo.raw_url
       } else if (fileInfo && fileInfo.sign) {
         // 使用签名构建下载链接
         const downloadUrl = `${ALIST_BASE_URL}/d${filePath}?sign=${fileInfo.sign}`
-        console.log('Using signed download URL:', downloadUrl)
+        updateLog.log('Using signed download URL:', downloadUrl)
         return downloadUrl
       } else {
         // 尝试直接下载链接（无签名）
         const directUrl = `${ALIST_BASE_URL}/d${filePath}`
-        console.log('Using direct download URL:', directUrl)
+        updateLog.log('Using direct download URL:', directUrl)
         return directUrl
       }
     } else {
@@ -129,7 +130,7 @@ async function getAlistDownloadUrl(version: string, fileName: string): Promise<s
 // 初始化自动更新器
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window
-  console.log('Auto updater initialized')
+  updateLog.log('Auto updater initialized')
 }
 
 // 检查更新
@@ -139,17 +140,17 @@ export async function checkForUpdates(window?: BrowserWindow) {
   }
 
   try {
-    console.log('Checking for updates...')
+    updateLog.log('Checking for updates...')
     mainWindow?.webContents.send('auto-updater:checking-for-update')
 
     const updateInfo = await fetchUpdateInfo()
 
     if (updateInfo && isNewerVersion(updateInfo.name, app.getVersion())) {
-      console.log('Update available:', updateInfo)
+      updateLog.log('Update available:', updateInfo)
       currentUpdateInfo = updateInfo
       mainWindow?.webContents.send('auto-updater:update-available', updateInfo)
     } else {
-      console.log('No update available')
+      updateLog.log('No update available')
       mainWindow?.webContents.send('auto-updater:update-not-available')
     }
   } catch (error) {
@@ -218,13 +219,13 @@ export async function downloadUpdate() {
   }
 
   try {
-    console.log('Starting download:', currentUpdateInfo.url)
+    updateLog.log('Starting download:', currentUpdateInfo.url)
 
     // 通知渲染进程开始下载
     mainWindow?.webContents.send('auto-updater:download-started', currentUpdateInfo)
 
     const downloadPath = await downloadFile(currentUpdateInfo.url)
-    console.log('Download completed:', downloadPath)
+    updateLog.log('Download completed:', downloadPath)
 
     mainWindow?.webContents.send('auto-updater:update-downloaded', {
       downloadPath,
@@ -256,10 +257,10 @@ async function downloadFile(originalUrl: string): Promise<string> {
 
       // 尝试使用 alist API 获取下载链接
       downloadUrl = await getAlistDownloadUrl(version, fileName)
-      console.log('Using Alist download URL:', downloadUrl)
+      updateLog.log('Using Alist download URL:', downloadUrl)
     } catch (alistError) {
       console.warn('Alist download failed, falling back to original URL:', alistError)
-      console.log('Using original download URL:', originalUrl)
+      updateLog.log('Using original download URL:', originalUrl)
       downloadUrl = originalUrl
     }
 
@@ -314,26 +315,26 @@ async function downloadFile(originalUrl: string): Promise<string> {
           total: totalSize
         })
 
-        console.log('File download completed:', downloadPath)
+        updateLog.log('File download completed:', downloadPath)
         resolve(downloadPath)
       })
 
       writer.on('error', (error) => {
         // 删除部分下载的文件
-        fs.unlink(downloadPath, () => {})
+        fs.unlink(downloadPath, () => { })
         reject(error)
       })
 
       response.data.on('error', (error: Error) => {
         writer.destroy()
-        fs.unlink(downloadPath, () => {})
+        fs.unlink(downloadPath, () => { })
         reject(error)
       })
     })
   } catch (error: any) {
     // 删除可能创建的文件
     if (fs.existsSync(downloadPath)) {
-      fs.unlink(downloadPath, () => {})
+      fs.unlink(downloadPath, () => { })
     }
 
     if (error.response) {

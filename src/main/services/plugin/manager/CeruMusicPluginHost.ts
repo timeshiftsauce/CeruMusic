@@ -14,6 +14,7 @@ import fetch from 'node-fetch'
 import * as fs from 'fs'
 import { MusicItem } from '../../musicSdk/type'
 import { sendPluginNotice } from '../../../events/pluginNotice'
+import { pluginLog } from "../../../logger";
 
 // ==================== 常量定义 ====================
 const CONSTANTS = {
@@ -293,11 +294,11 @@ class CeruMusicPluginHost {
       throw new PluginError(`Action "${methodName}" is not implemented in plugin.`, methodName)
     }
     try {
-      console.log(`${CONSTANTS.LOG_PREFIX} 开始调用插件的 ${methodName} 方法...`)
+      pluginLog.log(`${CONSTANTS.LOG_PREFIX} 开始调用插件的 ${methodName} 方法...`)
 
       const result = await method.call(...[{ cerumusic: this._getCerumusicApi() }], ...args)
 
-      console.log(`${CONSTANTS.LOG_PREFIX} 插件 ${methodName} 方法调用成功`)
+      pluginLog.log(`${CONSTANTS.LOG_PREFIX} 插件 ${methodName} 方法调用成功`)
       return result
     } catch (error: any) {
       console.error(`${CONSTANTS.LOG_PREFIX} ${methodName} 方法执行失败:`, error.message)
@@ -493,7 +494,7 @@ class CeruMusicPluginHost {
     }, timeout)
 
     try {
-      // console.log(`${CONSTANTS.LOG_PREFIX} 发起请求: ${options.method || 'GET'} ${url}`)
+      // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 发起请求: ${options.method || 'GET'} ${url}`)
 
       const fetchOptions = {
         method: 'GET',
@@ -504,7 +505,7 @@ class CeruMusicPluginHost {
       const response = await fetch(url, fetchOptions)
       clearTimeout(timeoutId)
 
-      // console.log(`${CONSTANTS.LOG_PREFIX} 请求响应: ${response.status} ${response.statusText}`)
+      // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 请求响应: ${response.status} ${response.statusText}`)
 
       const body = await this._parseResponseBody(response)
       const headers = this._extractHeaders(response)
@@ -515,7 +516,7 @@ class CeruMusicPluginHost {
         headers
       }
 
-      // console.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
+      // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
       //   url,
       //   status: response.status,
       //   bodyType: typeof body
