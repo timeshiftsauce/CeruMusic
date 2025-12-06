@@ -35,7 +35,7 @@ onMounted(() => {
   import('@renderer/utils/audio/globalControls')
     .then((m) => m.installGlobalMusicControls())
     .catch(() => {})
-  import('@renderer/utils/audio/globaPlayList').then((m) => m.initPlayback?.()).catch(() => {})
+  // import('@renderer/utils/audio/globaPlayList').then((m) => m.initPlayback?.()).catch(() => {})
   import('@renderer/utils/lyrics/desktopLyricBridge')
     .then((m) => m.installDesktopLyricBridge())
     .catch(() => {})

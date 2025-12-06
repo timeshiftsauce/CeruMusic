@@ -87,7 +87,6 @@
         @mouseleave="handleSubmenuMouseLeave"
       >
         <ContextMenu
-          ref="submenuRef"
           :visible="true"
           :position="submenuPosition"
           :items="activeSubmenu.children || []"
@@ -152,7 +151,6 @@ const emit = defineEmits<{
 // 响应式引用
 const menuRef = ref<HTMLElement>()
 const scrollContainer = ref<HTMLElement>()
-const submenuRef = ref<any>()
 
 // 状态管理
 const isScrolling = ref(false)
@@ -613,7 +611,7 @@ defineExpose({
 .context-menu__scroll-container::-webkit-scrollbar {
   width: 6px;
 }
-/* 
+/*
 
 .context-menu__scroll-container::-webkit-scrollbar-track {
   background: transparent;

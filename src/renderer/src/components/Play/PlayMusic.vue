@@ -19,7 +19,7 @@ import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
 import { extractDominantColor } from '@renderer/utils/color/colorExtractor'
 import { getBestContrastTextColorWithOpacity } from '@renderer/utils/color/contrastColor'
-import { PlayMode, type SongList } from '@renderer/types/audio'
+import { PlayMode } from '@renderer/types/audio'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
   songInfo,

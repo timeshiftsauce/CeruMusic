@@ -1,57 +1,122 @@
 <template>
   <div class="welcome-container">
-    <!-- 左侧Logo区域 -->
-    <div class="logo-section">
-      <div class="image-container">
-        <div class="image-bg"></div>
-        <img class="logo-image" src="/logo.svg" alt="Ceru Music Logo" />
-      </div>
+    <!-- 背景装饰 -->
+    <div class="bg-decoration">
+      <div class="bg-circle circle-1"></div>
+      <div class="bg-circle circle-2"></div>
     </div>
 
-    <!-- 右侧内容区域 -->
-    <div class="content-section">
-      <div class="brand-content">
-        <h1 class="brand-title">Cerulean Music</h1>
-        <p class="brand-subtitle">澜音-纯净音乐，极致音乐体验</p>
+    <div class="content-wrapper">
+      <!-- 左侧：Logo区域 -->
+      <div class="left-section animate-in-left">
+        <div class="logo-wrapper">
+          <div class="logo-glow"></div>
+          <img class="logo-image" src="/logo.svg" alt="Ceru Music Logo" />
+        </div>
+      </div>
 
-        <!-- 特性标签 -->
-        <div class="feature-tags">
-          <span v-for="(feature, index) in features" :key="index" class="tag">
-            {{ feature }}
-          </span>
+      <!-- 右侧：内容区域 -->
+      <div class="right-section">
+        <div class="text-content animate-in-right">
+          <h1 class="brand-title">Ceru Music</h1>
+          <p class="brand-subtitle">纯净 · 极致 · 自由</p>
+        </div>
+
+        <div class="info-group animate-in-right-delay">
+          <div class="feature-tags">
+            <span v-for="(feature, index) in features" :key="index" class="tag">
+              {{ feature }}
+            </span>
+          </div>
+
+          <!-- 加载状态 -->
+          <div class="loading-bar-container">
+            <div class="loading-info">
+              <span class="loading-text">{{ loadingText }}</span>
+              <span v-if="loadingPercent" class="loading-percent">{{ loadingPercent }}%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-bar" :style="{ width: progressWidth }"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 版本信息 -->
-    <div class="version-info">v{{ version }}</div>
+    <!-- 底部版本信息 -->
+    <div class="version-info animate-fade">v{{ version }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const version = ref('1.0.0') // 默认版本号
+const version = ref('1.0.0')
+const loadingText = ref('正在初始化核心服务...')
+const loadingPercent = ref(0)
 
-// 特性列表
-const features = ['高品质音乐', '简约风', '离线播放', '丰富的插件支持']
+const features = ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
+
+const progressWidth = computed(() => `${loadingPercent.value}%`)
 
 onMounted(async () => {
-  // 通过IPC获取版本号
+  // 获取版本号
   try {
     const appVersion = await window.electron.ipcRenderer.invoke('get-app-version')
-    if (appVersion) {
-      version.value = appVersion
-    }
+    if (appVersion) version.value = appVersion
   } catch (error) {
-    console.warn('Failed to get app version via IPC:', error)
+    console.warn('Failed to get app version:', error)
+  }
+
+  const startTime = Date.now()
+
+  // 模拟进度条动画
+  let progress = 0
+  const timer = setInterval(() => {
+    if (progress < 90) {
+      progress += Math.random() * 5
+      if (progress > 90) progress = 90
+      loadingPercent.value = Math.floor(progress)
+    }
+  }, 100)
+
+  // 模拟加载步骤提示
+  setTimeout(() => (loadingText.value = '加载插件系统...'), 500)
+
+  try {
+    await window.electron.ipcRenderer.invoke('service-plugin-initialize-system')
+  } catch (e) {
+    console.error('Plugin init failed', e)
+    loadingText.value = '初始化遇到问题'
+  }
+
+  const endTime = Date.now()
+  const duration = endTime - startTime
+
+  // 动态计算等待时间
+  let waitTime = 0
+  if (duration < 2000) {
+    waitTime = 2000 - duration
+  } else {
+    waitTime = 1000
   }
 
   setTimeout(() => {
-    router.replace('/home')
-  }, 2000)
+    clearInterval(timer)
+    loadingPercent.value = 100
+    loadingText.value = '准备就绪'
+
+    import('@renderer/utils/audio/globaPlayList')
+      .then((m) => m.initPlayback?.())
+      .catch((e) => console.error('initPlayback failed', e))
+      .finally(() => {
+        setTimeout(() => {
+          router.replace('/home')
+        }, 200)
+      })
+  }, waitTime)
 })
 </script>
 
@@ -59,136 +124,200 @@ onMounted(async () => {
 .welcome-container {
   width: 100vw;
   height: 100vh;
-  background: var(--welcome-bg);
+  background: var(--welcome-bg, #ffffff);
   display: flex;
-  align-items: center;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-  position: relative;
-}
-
-/* 左侧Logo区域 */
-.logo-section {
-  flex: 1;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 2rem;
-}
-
-.image-container {
-  position: relative;
-  display: flex;
   align-items: center;
-  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--td-text-color-primary, #333);
 }
 
-.image-bg {
+/* 背景装饰 */
+.bg-decoration {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  border-radius: 50%;
-  width: min(30vw, 70vh);
-  height: min(30vw, 70vh);
-  background-image: linear-gradient(-45deg, #b8f1cf 50%, #47caff 50%);
-  filter: blur(56px);
-  transform: translate(-50%, -50%);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   z-index: 0;
+  pointer-events: none;
+}
+
+.bg-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+}
+
+.circle-1 {
+  width: 60vh;
+  height: 60vh;
+  top: -10%;
+  left: -10%;
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  animation: float 10s infinite ease-in-out;
+}
+
+.circle-2 {
+  width: 50vh;
+  height: 50vh;
+  bottom: -10%;
+  right: -5%;
+  background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+  animation: float 12s infinite ease-in-out reverse;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(20px, 30px);
+  }
+}
+
+/* 内容布局 */
+.content-wrapper {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 1200px;
+  padding: 0 4rem;
+  gap: 6rem;
+}
+
+/* 左侧 Logo */
+.left-section {
+  flex: 0 0 auto;
+}
+
+.logo-wrapper {
+  position: relative;
+  width: 320px;
+  height: 320px;
 }
 
 .logo-image {
-  width: min(30vw, 70vh);
-  height: min(30vw, 70vh);
+  width: 100%;
+  height: 100%;
   position: relative;
-  z-index: 1;
-  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.1));
+  z-index: 2;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.15));
 }
 
-/* 右侧内容区域 */
-.content-section {
+.logo-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 150%;
+  height: 150%;
+  background: radial-gradient(circle, rgba(66, 211, 146, 0.4) 0%, rgba(0, 0, 0, 0) 70%);
+  z-index: 1;
+  filter: blur(30px);
+}
+
+/* 右侧内容 */
+.right-section {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 2rem 4rem 2rem 2rem;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 500px;
 }
 
-.brand-content {
-  /* max-width: 400px; */
-  animation: slideInRight 1s ease-out;
+.text-content {
+  margin-bottom: 3rem;
+  text-align: left;
 }
 
 .brand-title {
-  font-size: 3.5rem;
-  font-weight: 700;
-  margin: 0 0 1rem 0;
-  background: -webkit-linear-gradient(120deg, #5dd6cc 30%, #b8f1cc);
+  font-size: 4rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(120deg, #42d392, #647eff);
+  font-family: Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: -2px;
+  letter-spacing: -1.5px;
   line-height: 1.1;
 }
 
 .brand-subtitle {
-  font-size: 1.5rem;
-  color: var(--welcome-subtitle-color);
-  margin: 1rem 0 5rem 0;
+  font-size: 1.25rem;
+  color: var(--td-text-color-secondary, #666);
   font-weight: 400;
-}
-
-/* 加载区域 */
-.loading-area {
-  margin-bottom: 2rem;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 4px;
-  background: var(--welcome-progress-bg);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 1rem;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(-45deg, #b8f1cf 0%, #47caff 100%);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
-.loading-text {
-  font-size: 0.9rem;
-  color: var(--welcome-loading-text);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  opacity: 0.8;
   margin: 0;
-  font-weight: 400;
 }
 
-/* 特性标签 */
+.info-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
 .feature-tags {
   display: flex;
+  gap: 1rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 .tag {
-  padding: 0.4rem 0.8rem;
-  background: var(--welcome-tag-bg);
-  border: 1px solid var(--welcome-tag-border);
-  border-radius: 20px;
+  padding: 0.4rem 1rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 100px;
   font-size: 0.8rem;
-  color: var(--welcome-tag-color);
+  color: var(--td-text-color-secondary, #555);
+  backdrop-filter: blur(10px);
   transition: all 0.3s ease;
-  opacity: 0.5;
 }
 
-.tag.active {
-  background: linear-gradient(-45deg, #25ff7c 0%, #47caff 100%);
-  border-color: transparent;
-  color: white;
-  opacity: 1;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(71, 202, 255, 0.3);
+/* 进度条样式 */
+.loading-bar-container {
+  width: 100%;
+}
+
+.loading-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--td-text-color-secondary, #666);
+}
+
+.loading-text {
+  font-weight: 500;
+}
+
+.loading-percent {
+  font-family: monospace;
+  opacity: 0.8;
+}
+
+.progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #42d392, #647eff);
+  border-radius: 2px;
+  transition: width 0.3s ease-out;
 }
 
 /* 版本信息 */
@@ -196,82 +325,126 @@ onMounted(async () => {
   position: absolute;
   bottom: 2rem;
   right: 2rem;
-  font-size: 0.8rem;
-  color: var(--welcome-version-color);
-  font-weight: 300;
+  font-size: 0.75rem;
+  color: var(--td-text-color-disabled, #ccc);
+  font-family: monospace;
 }
 
-/* 动画定义 */
-@keyframes slideInRight {
+/* 动画 */
+.animate-in-left {
+  animation: slideInLeft 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  opacity: 0;
+}
+
+.animate-in-right {
+  animation: slideInRight 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards;
+  opacity: 0;
+}
+
+.animate-in-right-delay {
+  animation: slideInRight 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s forwards;
+  opacity: 0;
+}
+
+.animate-fade {
+  animation: fadeIn 1s ease 1s forwards;
+  opacity: 0;
+}
+
+@keyframes slideInLeft {
   from {
     opacity: 0;
-    transform: translateX(30px);
+    transform: translateX(-50px);
   }
-
   to {
     opacity: 1;
     transform: translateX(0);
   }
 }
 
-/* 响应式设计
-@media (max-width: 1024px) {
-  .welcome-container {
-    flex-direction: column;
-    text-align: center;
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(50px);
   }
-
-  .logo-section {
-    flex: none;
-    padding: 2rem 2rem 1rem 2rem;
-  }
-
-  .content-section {
-    flex: none;
-    justify-content: center;
-    padding: 1rem 2rem 2rem 2rem;
-  }
-
-  .brand-title {
-    font-size: 2.8rem;
-  }
-
-  .image-bg {
-    width: 150px;
-    height: 150px;
-    filter: blur(40px);
-  }
-
-  .logo-image {
-    width: 100px;
-    height: 100px;
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
-@media (max-width: 768px) {
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 暗色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .welcome-container {
+    background: #121212;
+    color: #fff;
+  }
+
+  .bg-circle {
+    opacity: 0.15;
+  }
+
+  .tag {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #aaa;
+  }
+
+  .progress-track {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* 响应式适配 */
+@media (max-width: 900px) {
+  .content-wrapper {
+    flex-direction: column;
+    gap: 3rem;
+    text-align: center;
+    padding: 0 2rem;
+  }
+
+  .right-section {
+    align-items: center;
+  }
+
+  .text-content {
+    text-align: center;
+  }
+
+  .logo-wrapper {
+    width: 160px;
+    height: 160px;
+  }
+
   .brand-title {
-    font-size: 2.2rem;
+    font-size: 3rem;
   }
 
-  .brand-subtitle {
-    font-size: 1rem;
+  .animate-in-left,
+  .animate-in-right,
+  .animate-in-right-delay {
+    animation-name: slideInUp;
   }
+}
 
-  .content-section {
-    padding: 1rem;
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
   }
-
-  .image-bg {
-    width: 120px;
-    height: 120px;
-    filter: blur(30px);
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
-
-  .logo-image {
-    width: 80px;
-    height: 80px;
-  }
-} */
-
-/* 暗色主题适配已通过 CSS 变量实现 */
+}
 </style>

@@ -37,9 +37,21 @@ const pluginService = {
 
       // 读取文件内容
       let pluginCode = await fsPromise.readFile(filePath, 'utf-8')
-      if (type == 'lx') {
+
+      // 插件格式校验
+      if (type === 'cr') {
+        // 澜音格式校验：检查是否包含cerumusic关键字
+        if (!pluginCode.toLowerCase().includes('cerumusic')) {
+          throw new Error('澜音插件格式校验失败：代码有可能不是澜音格式插件')
+        }
+      } else if (type === 'lx') {
+        // 洛雪格式校验：检查是否包含lx关键字
+        if (!pluginCode.toLowerCase().includes('lx')) {
+          throw new Error('洛雪插件格式校验失败：代码有可能不是标准的洛雪插件')
+        }
         pluginCode = convertEventDrivenPlugin(pluginCode)
       }
+
       // 调用现有的添加插件方法
       return await this.addPlugin(pluginCode, fileName)
     } catch (error: any) {
@@ -234,11 +246,23 @@ const pluginService = {
       // 下载文件
       let pluginCode = await this.downloadFile(url)
 
-      // 生成临时文件名
-      const fileName = `downloaded_${Date.now()}.js`
-      if (type == 'lx') {
+      // 插件格式校验
+      if (type === 'cr') {
+        // 澜音格式校验：检查是否包含cerumusic关键字
+        if (!pluginCode.toLowerCase().includes('cerumusic')) {
+          throw new Error('澜音插件格式校验失败：代码中未找到cerumusic关键字')
+        }
+      } else if (type === 'lx') {
+        // 洛雪格式校验：检查是否包含lx关键字
+        if (!pluginCode.toLowerCase().includes('lx')) {
+          throw new Error('洛雪插件格式校验失败：代码中未找到lx关键字')
+        }
         pluginCode = convertEventDrivenPlugin(pluginCode)
       }
+
+      // 生成临时文件名
+      const fileName = `downloaded_${Date.now()}.js`
+
       // 调用现有的添加插件方法
       return await this.addPlugin(pluginCode, fileName)
     } catch (error: any) {

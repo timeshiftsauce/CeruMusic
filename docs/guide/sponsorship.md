@@ -17,8 +17,12 @@
 |              **群友**：XIZ              |    3     |
 |                   YL                    |    10    |
 |            **群友**：way1437            |    50    |
-|      盆友捏：lqtmcstudio&lt;QzMusic&gt;       |   25.9   |
+|   盆友捏：lqtmcstudio&lt;QzMusic&gt;    |   25.9   |
 | 来自群“音乐交流群”的**堂堂一跑堂‎・ࡇ・** |    40    |
+|                  枫叶                   |    10    |
+|                  庆山                   |    5     |
 |                    …                    |    …     |
 
-据不完全统计 如有疏漏可联系sqj@shiqianjiang.cn
+> **澜音在此感谢一路有您的相伴**
+>
+> 据不完全统计数据 如有疏漏可联系sqj@shiqianjiang.cn

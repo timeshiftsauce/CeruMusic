@@ -347,17 +347,21 @@ const initPlayback = async () => {
         artworkUrl: lastPlayedSong.img || defaultCoverImg
       })
       if (!Audio.value.isPlay) {
-        if (userInfo.value.currentTime && userInfo.value.currentTime > 0) {
-          pendingRestorePosition = userInfo.value.currentTime
-          pendingRestoreSongId = lastPlayedSong.songmid
-          if (Audio.value.audio) {
-            Audio.value.audio.currentTime = userInfo.value.currentTime
-          }
-        }
         try {
+          console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
         } catch {}
+        if (userInfo.value.currentTime) {
+          pendingRestorePosition = userInfo.value.currentTime
+          pendingRestoreSongId = lastPlayedSong.songmid
+          if (Audio.value.audio) {
+            console.log('上次进度', userInfo.value.currentTime)
+            await waitForAudioReady()
+            Audio.value.currentTime = userInfo.value.currentTime
+            Audio.value.audio.currentTime = userInfo.value.currentTime
+          }
+        }
       } else {
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(
