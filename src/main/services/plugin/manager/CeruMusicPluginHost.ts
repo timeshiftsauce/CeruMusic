@@ -12,9 +12,10 @@
 import * as vm from 'vm'
 import fetch from 'node-fetch'
 import * as fs from 'fs'
+import * as crypto from 'crypto'
 import { MusicItem } from '../../musicSdk/type'
 import { sendPluginNotice } from '../../../events/pluginNotice'
-import { pluginLog } from "../../../logger";
+import { pluginLog } from '../../../logger'
 
 // ==================== 常量定义 ====================
 const CONSTANTS = {
@@ -62,6 +63,12 @@ interface CeruMusicApiUtils {
   buffer: {
     from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => Buffer
     bufToString: (buffer: Buffer, encoding?: BufferEncoding) => string
+  }
+  crypto: {
+    aesEncrypt: (data: any, mode: string, key: string | Buffer, iv?: string | Buffer) => Buffer
+    md5: (str: string) => string
+    randomBytes: (size: number) => Buffer
+    rsaEncrypt: (data: string, key: string) => string
   }
 }
 
@@ -233,7 +240,7 @@ class CeruMusicPluginHost {
       )
     } catch (error: any) {
       logger.error(`${CONSTANTS.LOG_PREFIX} Error executing plugin code:`, error)
-      throw new PluginError('Failed to initialize plugin.')
+      throw new PluginError('无法初始化澜音插件,可能是插件格式不正确.' + error.message)
     }
   }
 
@@ -428,11 +435,34 @@ class CeruMusicPluginHost {
    * @private
    */
   private _createApiUtils(): CeruMusicApiUtils {
+    // 验证编码格式是否支持
+    const validateEncoding = (encoding?: BufferEncoding): BufferEncoding => {
+      const supportedEncodings = ['base64', 'hex', 'utf8']
+      if (encoding && !supportedEncodings.includes(encoding)) {
+        throw new Error(
+          `Unsupported encoding: ${encoding}. Only ${supportedEncodings.join(', ')} are supported.`
+        )
+      }
+      return encoding || 'utf8'
+    }
+
+    // 验证AES模式是否支持
+    const validateAesMode = (mode: string): string => {
+      const supportedModes = ['aes-128-cbc', 'aes-128-ecb']
+      if (!supportedModes.includes(mode)) {
+        throw new Error(
+          `Unsupported AES mode: ${mode}. Only ${supportedModes.join(', ')} are supported.`
+        )
+      }
+      return mode
+    }
+
     return {
       buffer: {
         from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
           if (typeof data === 'string') {
-            return Buffer.from(data, encoding)
+            const validatedEncoding = validateEncoding(encoding)
+            return Buffer.from(data, validatedEncoding)
           } else if (data instanceof Buffer) {
             return data
           } else if (data instanceof ArrayBuffer) {
@@ -441,7 +471,48 @@ class CeruMusicPluginHost {
             return Buffer.from(data as any)
           }
         },
-        bufToString: (buffer: Buffer, encoding?: BufferEncoding) => buffer.toString(encoding)
+        bufToString: (buffer: Buffer, encoding?: BufferEncoding) => {
+          const validatedEncoding = validateEncoding(encoding)
+          return buffer.toString(validatedEncoding)
+        }
+      },
+      crypto: {
+        aesEncrypt: (data: any, mode: string, key: string | Buffer, iv?: string | Buffer) => {
+          // AES 加密实现
+          const validatedMode = validateAesMode(mode)
+          const cipher = crypto.createCipheriv(
+            validatedMode,
+            key,
+            validatedMode === 'aes-128-ecb' ? Buffer.alloc(0) : iv || Buffer.alloc(0)
+          )
+          let encrypted
+          if (typeof data === 'string') {
+            encrypted = cipher.update(data, 'utf8')
+          } else if (Buffer.isBuffer(data)) {
+            encrypted = cipher.update(data)
+          } else {
+            encrypted = cipher.update(JSON.stringify(data), 'utf8')
+          }
+          encrypted = Buffer.concat([encrypted, cipher.final()])
+          return encrypted
+        },
+        md5: (str: string) => {
+          // MD5 哈希实现
+          return crypto.createHash('md5').update(str).digest('hex')
+        },
+        randomBytes: (size: number) => {
+          // 生成随机字节
+          return crypto.randomBytes(size)
+        },
+        rsaEncrypt: (data: string, key: string) => {
+          // RSA 加密实现
+          // 注意：这里假设 key 是 PEM 格式的公钥
+          const encrypted = crypto.publicEncrypt(
+            { key, padding: crypto.constants.RSA_PKCS1_PADDING },
+            Buffer.from(data, 'utf8')
+          )
+          return encrypted.toString('base64')
+        }
       }
     }
   }

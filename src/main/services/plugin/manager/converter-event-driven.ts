@@ -4,10 +4,12 @@ export default function convertEventDrivenPlugin(originalCode: string): string {
   const versionMatch = originalCode.match(/@version\s+(.+)/)
   const authorMatch = originalCode.match(/@author\s+(.+)/)
   const descMatch = originalCode.match(/@description\s+(.+)/)
+  const homepageMatch = originalCode.match(/@homepage\s+(.+)/)
   const author = authorMatch ? authorMatch[1].trim() : 'Unknown'
   const pluginName = nameMatch ? nameMatch[1].trim() : '未知插件'
   const pluginVersion = versionMatch ? versionMatch[1].trim() : '1.0.0'
   const pluginDesc = descMatch ? descMatch[1].trim() : '从事件驱动插件转换而来'
+  const pluginHomepage = homepageMatch ? homepageMatch[1].trim() : ''
 
   return `/**
  * 由 CeruMusic 插件转换器转换 - @author sqj
@@ -33,7 +35,7 @@ let sources = {};
 function getSourceName(sourceId) {
   const nameMap = {
     'kw': '酷我音乐',
-    'kg': '酷狗音乐', 
+    'kg': '酷狗音乐',
     'tx': 'QQ音乐',
     'wy': '网易云音乐',
     'mg': '咪咕音乐'
@@ -54,11 +56,11 @@ function extractDefaultSources() {
       } else if (qualityStr.startsWith('"') && qualityStr.endsWith('"')) {
         qualityStr = qualityStr.slice(1, -1);
       }
-      
+
       console.log('提取到的 MUSIC_QUALITY 字符串:', qualityStr);
       const qualityData = JSON.parse(qualityStr);
       console.log('解析后的 MUSIC_QUALITY 数据:', qualityData);
-      
+
       const extractedSources = {};
       Object.keys(qualityData).forEach(sourceId => {
         extractedSources[sourceId] = {
@@ -67,13 +69,13 @@ function extractDefaultSources() {
           qualitys: qualityData[sourceId] || ['128k', '320k']
         };
       });
-      
+
       return extractedSources;
     } catch (e) {
       console.log('解析 MUSIC_QUALITY 失败:', e.message);
     }
   }
-  
+
   // 默认音源配置
   return {
     kw: { name: "酷我音乐", type: "music", qualitys: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'master'] },
@@ -102,38 +104,38 @@ function handleUpdateAlert(data, cerumusicApi) {
     console.warn(\`[${pluginName}] updateAlert 事件每次运行脚本只能调用一次，忽略重复调用\`);
     return;
   }
-  
+
   if (!data || !data.log) {
     console.error(\`[${pluginName}] updateAlert 事件缺少必需的 log 参数\`);
     return;
   }
-  
+
   // 验证和处理参数
   let log = String(data.log);
   let updateUrl = data.updateUrl ? String(data.updateUrl) : undefined;
-  
+
   // 限制 log 长度为 1024 字符
   if (log.length > 1024) {
     log = log.substring(0, 1024);
     console.warn(\`[${pluginName}] 更新日志超过 1024 字符，已截断\`);
   }
-  
+
   // 验证 updateUrl 格式
   if (updateUrl) {
     if (updateUrl.length > 1024) {
       updateUrl = updateUrl.substring(0, 1024);
       console.warn(\`[${pluginName}] 更新地址超过 1024 字符，已截断\`);
     }
-    
+
     if (!updateUrl.startsWith('http://') && !updateUrl.startsWith('https://')) {
       console.error(\`[${pluginName}] updateUrl 必须是 HTTP 协议的 URL 地址\`);
       updateUrl = undefined;
     }
   }
-  
+
   // 标记已发送
   updateAlertSent = true;
-  
+
   // 通过 CeruMusic 的通知系统发送更新提示
   try {
     // 使用传入的 cerumusic API 对象发送通知
@@ -148,7 +150,7 @@ function handleUpdateAlert(data, cerumusicApi) {
           forcedUpdate: false
         }
       });
-      
+
       console.log(\`[${pluginName}] 更新提示已发送\`, { log: log.substring(0, 100) + '...', updateUrl });
     } else {
       console.error(\`[${pluginName}] CeruMusic API 不可用，无法发送更新提示\`);
@@ -160,9 +162,9 @@ function handleUpdateAlert(data, cerumusicApi) {
 initializePlugin()
 function initializePlugin() {
   if (isInitialized) return;
-  
+
   const { request, utils } = cerumusic;
-  
+
   // 创建完整的 lx 模拟环境
   const mockLx = {
     EVENT_NAMES: {
@@ -181,14 +183,14 @@ function initializePlugin() {
       if (event === 'inited' && data.sources) {
         // 动态更新音源信息，保持原始的音质配置
         pluginSources = data.sources;
-        
+
         // 将插件发送的音源信息转换为正确格式并同步到导出的 sources
         Object.keys(pluginSources).forEach(sourceId => {
           const sourceInfo = pluginSources[sourceId];
-          
+
           // 保留原始音质配置，如果存在的话
           const originalQualitys = sources[sourceId] && sources[sourceId].qualitys;
-          
+
           sources[sourceId] = {
             name: getSourceName(sourceId),
             type: sourceInfo.type || 'music',
@@ -237,21 +239,25 @@ function initializePlugin() {
       }
     },
     version: '1.0.0',
+    // API 版本号，API 变更时此版本号将会更改
+    apiVersion: '1.0.0',
     currentScriptInfo: {
       rawScript: originalPluginCode,
       name: '${pluginName}',
       version: '${pluginVersion}',
       author: '${author}',
-      description: '${pluginDesc}'
+      description: '${pluginDesc}',
+      homepage: '${pluginHomepage}'
     },
-    env: 'nodejs' // 添加环境信息
+    // 自定义源运行环境，移动端将固定为 mobile
+    env: 'nodejs'
   };
-  
+
   // 创建全局环境
   const globalThis = {
     lx: mockLx
   };
-  
+
   // 创建沙箱环境
   const sandbox = {
     globalThis: globalThis,
@@ -268,22 +274,22 @@ function initializePlugin() {
     exports: {},
     process: { env: { NODE_ENV: 'production' } }
   };
-  
+
   try {
     // 使用 Function 构造器执行插件代码
     const pluginFunction = new Function(
-      'globalThis', 'lx', 'console', 'setTimeout', 'clearTimeout', 
-      'setInterval', 'clearInterval', 'Buffer', 'JSON', 'require', 
+      'globalThis', 'lx', 'console', 'setTimeout', 'clearTimeout',
+      'setInterval', 'clearInterval', 'Buffer', 'JSON', 'require',
       'module', 'exports', 'process',
       originalPluginCode
     );
-    
+
     pluginFunction(
       globalThis, mockLx, console, setTimeout, clearTimeout,
       setInterval, clearInterval, Buffer, JSON, () => ({}),
       { exports: {} }, {}, { env: { NODE_ENV: 'production' } }
     );
-    
+
     isInitialized = true;
     console.log(\`[CeruMusic] 事件驱动插件初始化成功\`);
   } catch (error) {
@@ -297,18 +303,18 @@ function initializePlugin() {
 async function musicUrl(source, musicInfo, quality) {
   // 确保插件已初始化
   initializePlugin();
-  
+
   // 等待一小段时间让插件完全初始化
   await new Promise(resolve => setTimeout(resolve, 100));
-  
+
   if (!requestHandler) {
     const errorMessage = '插件请求处理器未初始化';
     console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
     throw new Error(errorMessage);
   }
-  
+
   console.log(\`[\${pluginInfo.name}] 使用事件驱动方式获取 \${source} 音源链接\`);
-  
+
   try {
     // 调用插件的请求处理器
     const result = await requestHandler({
@@ -319,28 +325,28 @@ async function musicUrl(source, musicInfo, quality) {
         type: quality
       }
     });
-    
+
     // 检查结果是否有效
     if (!result) {
       const errorMessage = \`获取 \${source} 音源链接失败: 返回结果为空\`;
       console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
       throw new Error(errorMessage);
     }
-    
+
     // 如果结果是对象且包含错误信息
     if (typeof result === 'object' && result.error) {
       const errorMessage = result.error || \`获取 \${source} 音源链接失败\`;
       console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
       throw new Error(errorMessage);
     }
-    
+
     // 如果结果是对象且包含状态码
     if (typeof result === 'object' && result.code && result.code !== 200) {
       const errorMessage = result.msg || \`接口错误 (Code: \${result.code})\`;
       console.error(\`[\${pluginInfo.name}] Error: \${errorMessage}\`);
       throw new Error(errorMessage);
     }
-    
+
     console.log(\`[\${pluginInfo.name}] Got URL: \${typeof result === 'string' ? result : result.url || result}\`);
     return result;
   } catch (error) {

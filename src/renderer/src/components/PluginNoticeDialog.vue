@@ -53,8 +53,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
 
 interface DialogNotice {
   type: string
@@ -112,6 +115,12 @@ const showNotice = (noticeData: DialogNotice) => {
 
 // 显示队列中的下一个通知
 const showNextNotice = () => {
+  // 如果在欢迎页，暂不显示通知
+  if (route.path === '/' || route.name === 'welcome') {
+    console.log('[PluginNotice] 当前在欢迎页，暂缓显示通知')
+    return
+  }
+
   if (noticeQueue.value.length === 0) {
     return
   }
@@ -167,6 +176,21 @@ const handleClose = () => {
     showNextNotice()
   }, 300)
 }
+
+// 监听路由变化，离开欢迎页时检查是否有待显示的通知
+watch(
+  () => route.path,
+  (newPath) => {
+    setTimeout(() => {
+      if (newPath !== '/' && route.name !== 'welcome') {
+        if (noticeQueue.value.length > 0 && !visible.value) {
+          console.log('[PluginNotice] 离开欢迎页，开始处理堆积的通知')
+          showNextNotice()
+        }
+      }
+    }, 1000)
+  }
+)
 
 // 监听插件通知事件
 const handlePluginNotice = (noticeData: DialogNotice) => {

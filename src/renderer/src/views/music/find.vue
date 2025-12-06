@@ -165,7 +165,8 @@ const fetchCategoryPlaylists = async (reset = false) => {
     // 更新分页与状态
     const loadedCount = recommendPlaylists.value.length
     noMore.value = loadedCount >= total.value
-    if (!reset) page.value += 1
+    // fix
+    if (!noMore.value) page.value += 1
     // 写入缓存
     categoryCache[cacheKey] = {
       list: recommendPlaylists.value.slice(),
@@ -380,7 +381,7 @@ onUnmounted(() => {
           @click="playPlaylist(playlist)"
         >
           <div class="playlist-cover">
-            <img :src="playlist.cover" :alt="playlist.title" />
+            <t-image :src="playlist.cover" :lazy="true" class="playlist-cover-image" />
           </div>
           <div
             class="playlist-info"
@@ -652,7 +653,7 @@ onUnmounted(() => {
       transition: opacity 0.3s ease;
     }
 
-    img {
+    .playlist-cover-image {
       width: 100%;
       height: 100%;
       object-fit: cover;
@@ -662,7 +663,7 @@ onUnmounted(() => {
     }
 
     // 图片悬浮缩放效果
-    &:hover img {
+    &:hover .playlist-cover-image {
       transform: scale(1.05);
     }
   }

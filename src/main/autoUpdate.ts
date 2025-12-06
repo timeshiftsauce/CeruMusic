@@ -321,20 +321,20 @@ async function downloadFile(originalUrl: string): Promise<string> {
 
       writer.on('error', (error) => {
         // 删除部分下载的文件
-        fs.unlink(downloadPath, () => { })
+        fs.unlink(downloadPath, () => {})
         reject(error)
       })
 
       response.data.on('error', (error: Error) => {
         writer.destroy()
-        fs.unlink(downloadPath, () => { })
+        fs.unlink(downloadPath, () => {})
         reject(error)
       })
     })
   } catch (error: any) {
     // 删除可能创建的文件
     if (fs.existsSync(downloadPath)) {
-      fs.unlink(downloadPath, () => { })
+      fs.unlink(downloadPath, () => {})
     }
 
     if (error.response) {

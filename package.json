@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.5.3",
+  "version": "1.5.5",
   "description": "一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "sqj,wldss,star",
@@ -107,8 +107,8 @@
     "vite-plugin-vue-devtools": "^8.0.0",
     "vite-plugin-wasm": "^3.5.0",
     "vitepress": "^1.6.4",
-    "vue": "^3.5.21",
+    "vue": "3.5.21",
     "vue-eslint-parser": "^10.2.0",
-    "vue-tsc": "^3.0.3"
+    "vue-tsc": "3.0.3"
   }
 }

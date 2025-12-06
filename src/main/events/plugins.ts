@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron'
 import pluginService from '../services/plugin'
+import { pluginLog } from '../logger'
+
 function PluginEvent() {
   ipcMain.handle('service-plugin-selectAndAddPlugin', async (_, type): Promise<any> => {
     try {
@@ -66,15 +68,21 @@ function PluginEvent() {
   })
 }
 
+let isPluginsInitialized = false
+
 export default function InitPluginService() {
-  setTimeout(async () => {
+  ipcMain.handle('service-plugin-initialize-system', async () => {
+    if (isPluginsInitialized) return true
     // 初始化插件系统
     try {
       await pluginService.initializePlugins()
       PluginEvent()
-      console.log('插件系统初始化完成')
+      pluginLog.info('插件系统初始化完成')
+      isPluginsInitialized = true
+      return true
     } catch (error) {
-      console.error('插件系统初始化失败:', error)
+      pluginLog.error('插件系统初始化失败:', error)
+      throw error
     }
-  }, 1000)
+  })
 }

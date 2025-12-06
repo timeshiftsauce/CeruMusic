@@ -19,6 +19,9 @@
           >
             <template #header>请选择你的插件类别</template>
             <template #body>
+              <p class="local-hint-container" style="margin-bottom: 15px">
+                Tips: 如果插件提供者，有提供澜音插件格式，建议使用澜音格式插件导入奥
+              </p>
               <t-radio-group v-model="type" variant="primary-filled" default-value="cr">
                 <t-radio-button value="cr">澜音插件</t-radio-button>
                 <t-radio-button value="lx">洛雪插件</t-radio-button>
@@ -59,7 +62,7 @@
                 </div>
 
                 <div v-else class="local-hint-container">
-                  <p class="hint-text">将从本地文件选择插件文件进行导入</p>
+                  Tips: 点击 "确定" 将从本地文件选择插件文件进行导入
                 </div>
               </div>
             </template>
