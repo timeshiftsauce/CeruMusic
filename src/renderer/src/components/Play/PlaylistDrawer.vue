@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { MessagePlugin, Popconfirm } from 'tdesign-vue-next'
 import { LocationIcon, DeleteIcon } from 'tdesign-icons-vue-next'
+import { useVirtualList } from '@vueuse/core'
 import type { SongList } from '@renderer/types/audio'
 
 // Props
@@ -26,6 +27,26 @@ const emit = defineEmits<{
 // Stores
 const localUserStore = LocalUserDetailStore()
 const { list } = storeToRefs(localUserStore)
+
+// 虚拟滚动
+const sourceList = ref([...list.value])
+
+watch(
+  list,
+  (newVal) => {
+    sourceList.value = [...newVal]
+  },
+  { deep: true }
+)
+
+const {
+  list: visibleList,
+  containerProps,
+  wrapperProps
+} = useVirtualList(sourceList, {
+  itemHeight: 66, // 预估高度：padding 0 + margin 10 + content 56
+  overscan: 10
+})
 
 // 拖拽排序相关状态
 const isDragSorting = ref(false)
@@ -68,12 +89,23 @@ const scrollToCurrentSong = () => {
 
   // 使用 nextTick 确保 DOM 已更新
   nextTick(() => {
-    const activeSong = window.document.querySelector('.playlist-song.active') as HTMLElement
-    if (activeSong) {
-      activeSong.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      })
+    const index = list.value.findIndex((song) => song.songmid === props.currentSongId)
+    if (index !== -1) {
+      const container = document.querySelector('.playlist-content')
+      if (container) {
+        const itemHeight = 66
+        const containerHeight = container.clientHeight
+        // Calculate scroll position to center the item
+        let targetScrollTop = index * itemHeight - containerHeight / 2 + itemHeight / 2
+
+        // Ensure not out of bounds
+        targetScrollTop = Math.max(0, targetScrollTop)
+
+        container.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
+        })
+      }
     }
   })
 }
@@ -308,10 +340,14 @@ const updateDragOverIndex = (clientY: number) => {
       const centerY = rect.top + rect.height / 2
 
       if (clientY < centerY) {
-        newOverIndex = i
+        if (visibleList.value[i]) {
+          newOverIndex = visibleList.value[i].index
+        }
         break
       } else if (i === playlistSongs.length - 1) {
-        newOverIndex = i + 1 // 允许插入到最后
+        if (visibleList.value[i]) {
+          newOverIndex = visibleList.value[i].index + 1 // 允许插入到最后
+        }
       }
     }
   } else if (clientY < containerRect.top) {
@@ -465,53 +501,63 @@ defineExpose({
         </button>
       </div>
 
-      <div class="playlist-content">
+      <div class="playlist-content" v-bind="containerProps">
         <div v-if="list.length === 0" class="playlist-empty">
           <p>播放列表为空</p>
           <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
         </div>
-        <TransitionGroup v-else :class="playlistSongsClass" name="list-item" tag="div">
+        <div v-else :class="playlistSongsClass" :style="wrapperProps.style">
           <div
-            v-for="(song, index) in list"
-            :key="song.songmid"
+            v-for="item in visibleList"
+            :key="item.data.songmid"
             class="playlist-song"
             :class="{
-              active: song.songmid === currentSongId,
-              dragging: isDragSorting && index === draggedIndex
+              active: item.data.songmid === currentSongId,
+              dragging: isDragSorting && item.index === draggedIndex
             }"
-            @mousedown="handleMouseDown($event, index, song)"
-            @touchstart="handleTouchStart($event, index, song)"
-            @mouseenter="handleMouseEnter(index)"
+            @mousedown="handleMouseDown($event, item.index, item.data)"
+            @touchstart="handleTouchStart($event, item.index, item.data)"
+            @mouseenter="handleMouseEnter(item.index)"
             @mouseleave="handleMouseLeave"
           >
-            <!-- 拖拽手柄 -->
-            <div v-if="isDragSorting && index === draggedIndex" class="drag-handle">
+            <!-- 拖拽手柄/序号 -->
+            <div v-if="isDragSorting && item.index === draggedIndex" class="drag-handle">
               <span class="drag-dots">⋮⋮</span>
             </div>
+            <div v-else class="song-index">{{ (item.index + 1).toString().padStart(2, '0') }}</div>
 
             <div class="song-info">
-              <div class="song-name">{{ song.name }}</div>
-              <div class="song-artist">{{ song.singer }}</div>
+              <div class="song-name">{{ item.data.name }}</div>
+              <div class="song-artist">{{ item.data.singer }}</div>
             </div>
-            <div class="song-duration">
-              {{
-                song.interval.includes(':')
-                  ? song.interval
-                  : formatTime(parseInt(song.interval) / 1000)
-              }}
+            <div class="song-actions">
+              <div class="song-duration">
+                {{
+                  item.data.interval.includes(':')
+                    ? item.data.interval
+                    : formatTime(parseInt(item.data.interval) / 1000)
+                }}
+              </div>
+              <button
+                class="song-remove"
+                @click.stop="localUserStore.removeSong(item.data.songmid)"
+              >
+                <span class="iconfont icon-xuanxiangshanchu"></span>
+              </button>
             </div>
-            <button class="song-remove" @click.stop="localUserStore.removeSong(song.songmid)">
-              <span class="iconfont icon-xuanxiangshanchu"></span>
-            </button>
 
             <!-- 悬停提示 -->
             <transition name="hover-tip">
-              <div v-if="hoverTipVisible && hoverTipIndex === index" class="hover-tip" @click.stop>
+              <div
+                v-if="hoverTipVisible && hoverTipIndex === item.index"
+                class="hover-tip"
+                @click.stop
+              >
                 长按可拖动排序
               </div>
             </transition>
           </div>
-        </TransitionGroup>
+        </div>
       </div>
 
       <!-- 底部操作按钮 -->
@@ -695,6 +741,7 @@ defineExpose({
 .playlist-songs {
   display: flex;
   flex-direction: column;
+  position: relative; /* Ensure absolute positioning works for leave transitions */
 }
 
 /* 拖拽排序时的动画优化 */
@@ -738,11 +785,15 @@ defineExpose({
 .playlist-song {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 0 16px;
   cursor: pointer;
   border-radius: 10px;
   margin: 5px 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 56px;
+  box-sizing: border-box;
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   user-select: none;
   transform: translateY(0);
@@ -776,6 +827,22 @@ defineExpose({
   transition: opacity 0.2s ease;
   cursor: grab;
   color: #999;
+}
+
+.song-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  margin-right: 15px;
+  color: #999;
+  font-size: 13px;
+  font-family: 'DIN Alternate', 'Roboto', sans-serif;
+  font-weight: 500;
+}
+
+.playlist-container.full-screen-mode .song-index {
+  color: #ccc;
 }
 
 .drag-handle:active {
@@ -829,31 +896,66 @@ defineExpose({
 .playlist-song .song-duration {
   font-size: 12px;
   color: #888;
-  margin: 0 12px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+  filter: blur(0);
+}
+
+.playlist-song:hover .song-duration {
+  opacity: 0;
+  filter: blur(4px);
+  transform: translate(-50%, -50%) scale(0.9);
 }
 
 .playlist-song .song-remove {
   background: transparent;
   border: none;
-  color: #999;
-  opacity: 0;
+  color: #5c5c5c;
   cursor: pointer;
   padding: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.2s ease;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  filter: blur(4px);
+  pointer-events: none;
 }
 
 .playlist-song:hover .song-remove {
   opacity: 1;
+  filter: blur(0);
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+
+.playlist-song:hover .song-remove:hover {
+  color: #e5484d;
+  // background: rgba(229, 72, 77, 0.1);
+  border-radius: 4px;
+}
+
+.song-actions {
+  position: relative;
+  width: 60px;
+  height: 100%;
+  // margin-right: 8px;
+  flex-shrink: 0;
 }
 
 /* 悬停提示样式 */
 .hover-tip {
   position: absolute;
   top: 50%;
-  right: 50px;
+  right: 70px;
   transform: translateY(-50%);
   background: rgba(0, 0, 0, 0.6);
   color: white;

@@ -31,8 +31,6 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
   return new Promise((resolve) => {
     // 获取歌曲支持的音质列表
     const availableQualities = buildQualityFormats(songInfo.types || [])
-    // 展示全部音质，但对超出用户最高音质的项做禁用呈现
-    const userMaxIndex = QUALITY_ORDER.indexOf(userQuality as KnownQuality)
     const qualityOptions = [...availableQualities]
 
     // 按音质优先级排序（高→低）
@@ -62,14 +60,13 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                 }
               },
               qualityOptions.map((quality) => {
-                const idx = QUALITY_ORDER.indexOf(quality.type as KnownQuality)
-                const disabled = userMaxIndex !== -1 && idx !== -1 && idx < userMaxIndex
+                const disabled = false
                 return h(
                   'div',
                   {
                     key: quality.type,
                     class: 'quality-item',
-                    title: disabled ? '超出你的最高音质设置，已禁用' : undefined,
+                    title: undefined,
                     style: {
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -97,12 +94,6 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                     },
                     onMouseleave: (e: MouseEvent) => {
                       const target = e.target as HTMLElement
-                      if (disabled) {
-                        target.style.backgroundColor =
-                          quality.type === userQuality ? '#f5faff' : '#fff'
-                        target.style.borderColor = '#f0f0f0'
-                        return
-                      }
                       target.style.backgroundColor =
                         quality.type === userQuality ? '#e6f7ff' : '#fff'
                       target.style.borderColor = '#e7e7e7'
@@ -118,9 +109,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                             fontSize: '14px',
                             color:
                               quality.type === userQuality
-                                ? disabled
-                                  ? '#8fbfff'
-                                  : '#1890ff'
+                                ? '#1890ff'
                                 : '#333'
                           }
                         },
@@ -131,7 +120,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                         {
                           style: {
                             fontSize: '12px',
-                            color: disabled ? '#bbb' : '#999',
+                            color: '#999',
                             marginTop: '2px'
                           }
                         },
@@ -144,7 +133,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                         class: 'quality-size',
                         style: {
                           fontSize: '12px',
-                          color: disabled ? '#999' : '#666',
+                          color: '#666',
                           fontWeight: '500'
                         }
                       },
@@ -167,7 +156,9 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
   try {
     console.log('开始下载', toRaw(songInfo))
     const LocalUserDetail = LocalUserDetailStore()
-    const userQuality = LocalUserDetail.userSource.quality as string
+    const userQuality =
+      (LocalUserDetail.userInfo.sourceQualityMap || {})[toRaw(songInfo.source) as any] ||
+      (LocalUserDetail.userSource.quality as string)
     const settingsStore = useSettingsStore()
 
     // 获取歌词
@@ -220,6 +211,8 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
         title: '下载成功',
         content: `${result.message} 保存位置: ${result.path}`
       })
+      if (!LocalUserDetail.userInfo.sourceQualityMap) LocalUserDetail.userInfo.sourceQualityMap = {}
+      LocalUserDetail.userInfo.sourceQualityMap[toRaw(songInfo.source) as any] = quality
     }
   } catch (error: any) {
     console.error('下载失败:', error)

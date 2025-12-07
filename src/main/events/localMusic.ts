@@ -24,7 +24,7 @@ async function walkDir(dir: string, results: string[]) {
         if (AUDIO_EXTS.has(ext)) results.push(full)
       }
     }
-  } catch {}
+  } catch { }
 }
 
 function readTags(filePath: string) {
@@ -41,7 +41,7 @@ function readTags(filePath: string) {
         const buf = tag.pictures[0].data
         const mime = tag.pictures[0].mimeType || 'image/jpeg'
         img = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
-      } catch {}
+      } catch { }
     }
     let lrc: string | null = null
     try {
@@ -49,7 +49,7 @@ function readTags(filePath: string) {
       if (raw && typeof raw === 'string') {
         lrc = normalizeLyricsToLrc(raw)
       }
-    } catch {}
+    } catch { }
     f.dispose()
     return { title, album, performers, img, lrc }
   } catch {
@@ -230,7 +230,7 @@ ipcMain.handle('local-music:scan', async (_e, dirs: string[]) => {
       }
       try {
         tags = readTags(p)
-      } catch {}
+      } catch { }
       const base = path.basename(p)
       const noExt = base.replace(path.extname(base), '')
       let name = tags.title || ''
@@ -311,10 +311,10 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
             songFile.tag.pictures = [pic]
             try {
               await fsp.unlink(tmp)
-            } catch {}
+            } catch { }
           }
         }
-      } catch {}
+      } catch { }
     }
     songFile.save()
     songFile.dispose()

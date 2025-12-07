@@ -296,6 +296,7 @@ function selectPlugin(plugin: Plugin) {
       // 即使没有音源，也可能需要选择该插件（如果插件有其他功能）
       // 这里我们只更新ID，清空音源相关信息
       localUserStore.userInfo.pluginId = pluginId
+      localUserStore.userInfo.pluginName = pluginInfo.name
       localUserStore.userInfo.supportedSources = {}
       localUserStore.userInfo.selectSources = ''
       localUserStore.userInfo.selectQuality = ''
@@ -331,6 +332,7 @@ function selectPlugin(plugin: Plugin) {
 
     // 更新userInfo
     localUserStore.userInfo.pluginId = pluginId
+    localUserStore.userInfo.pluginName = pluginInfo.name
     localUserStore.userInfo.supportedSources = supportedSourcesForStore
     localUserStore.userInfo.selectSources = selectSources
     localUserStore.userInfo.selectQuality = selectQuality
@@ -472,6 +474,7 @@ async function uninstallPlugin(pluginId: string, pluginName: string) {
           // 显示成功消息
           if (pluginId === localUserStore.userInfo.pluginId) {
             localUserStore.userInfo.pluginId = ''
+            localUserStore.userInfo.pluginName = ''
             localUserStore.userInfo.supportedSources = {}
             localUserStore.userInfo.selectSources = ''
             localUserStore.userInfo.selectQuality = ''
