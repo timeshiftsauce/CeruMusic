@@ -41,15 +41,14 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       if (typeof url === 'string') return url
       throw new Error('本地歌曲URL获取失败')
     }
-    // 获取当前用户的信息
     const LocalUserDetail = LocalUserDetailStore()
-    // 通过统一的request方法获取真实的播放URL
-    let quality = LocalUserDetail.userSource.quality as string
+    let quality =
+      (LocalUserDetail.userInfo.sourceQualityMap || {})[(song as any).source] ||
+      (LocalUserDetail.userSource.quality as string)
     // 读取设置：是否启用缓存
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
 
-    // 原有逻辑：检查歌曲支持的最高音质
     if (
       qualityKey.indexOf(quality) >
       qualityKey.indexOf((song.types[song.types.length - 1] as unknown as { type: any }).type)

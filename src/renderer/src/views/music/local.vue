@@ -42,7 +42,6 @@ const matchTargetSong = ref<MusicItem | null>(null)
 const sourcesOrder = ['wy', 'tx', 'kg', 'kw', 'mg']
 // 保留占位，后续可扩展更多菜单
 // const showMoreDropdown = ref(false)
-const playlistOptions = ref<{ label: string; value: string }[]>([])
 const selectedPlaylistId = ref<string>('')
 const showDirModal = ref(false)
 // const newDirInput = ref('')
@@ -371,32 +370,8 @@ const closeContextMenu = () => {
   contextMenuSong.value = null
 }
 
-const fetchPlaylists = async () => {
-  const res = await (window as any).api.songList.getAll()
-  const list = Array.isArray(res?.data) ? res.data : []
-  const locals = list.filter((p: any) => p.source === 'local')
-  if (locals.length === 0) {
-    const created = await (window as any).api.songList.create(
-      '本地音乐库',
-      '扫描导入的本地歌曲',
-      'local'
-    )
-    if (created?.success && created?.data?.hashId) {
-      selectedPlaylistId.value = created.data.hashId
-    }
-  }
-  const after = await (window as any).api.songList.getAll()
-  const all = Array.isArray(after?.data) ? after.data : []
-  const locals2 = all.filter((p: any) => p.source === 'local')
-  playlistOptions.value = locals2.map((p: any) => ({ label: p.name, value: p.hashId }))
-  if (!selectedPlaylistId.value && playlistOptions.value.length > 0) {
-    selectedPlaylistId.value = playlistOptions.value[0].value
-  }
-}
-
 const addToLocalPlaylist = async (song: MusicItem) => {
   if (!selectedPlaylistId.value) {
-    await fetchPlaylists()
     if (!selectedPlaylistId.value) {
       MessagePlugin.error('无法获取本地歌单')
       return
@@ -446,7 +421,6 @@ const matchBatch = async () => {
 }
 
 onMounted(async () => {
-  fetchPlaylists()
   const saved = await (window as any).api.localMusic.getDirs()
   if (Array.isArray(saved)) scanDirs.value = saved
   const list = await (window as any).api.localMusic.getList()

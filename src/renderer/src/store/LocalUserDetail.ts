@@ -16,6 +16,7 @@ export const LocalUserDetailStore = defineStore(
       const ListLocal = localStorage.getItem('songList')
       if (UserInfoLocal) {
         userInfo.value = JSON.parse(UserInfoLocal) as UserInfo
+        if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
       } else {
         userInfo.value = {
           lastPlaySongId: null,
@@ -23,7 +24,8 @@ export const LocalUserDetailStore = defineStore(
           mainColor: '#00DAC0',
           volume: 80,
           currentTime: 0,
-          selectSources: 'wy'
+          selectSources: 'wy',
+          sourceQualityMap: {}
         }
         localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
       }
@@ -84,7 +86,9 @@ export const LocalUserDetailStore = defineStore(
     function removeSong(songId: number | string) {
       const index = list.value.findIndex((item) => item.songmid === songId)
       if (index !== -1) {
-        list.value.splice(index, 1)
+        const newList = [...list.value]
+        newList.splice(index, 1)
+        list.value = newList
       }
     }
 
@@ -95,7 +99,9 @@ export const LocalUserDetailStore = defineStore(
       return {
         pluginId: userInfo.value.pluginId,
         source: userInfo.value.selectSources,
-        quality: userInfo.value.selectQuality
+        quality:
+          (userInfo.value.sourceQualityMap || {})[userInfo.value.selectSources as string] ||
+          userInfo.value.selectQuality
       }
     })
     return {

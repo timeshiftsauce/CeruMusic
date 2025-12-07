@@ -289,7 +289,8 @@ app.whenReady().then(() => {
     // 设置应用程序名称
     app.setName('澜音')
   }
-
+  lyricWindow.create()
+  initLyricIpc(mainWindow)
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
@@ -298,8 +299,6 @@ app.whenReady().then(() => {
   })
 
   createWindow()
-  lyricWindow.create()
-  initLyricIpc(mainWindow)
   // 仅在主进程初始化一次托盘
   setupTray()
 
@@ -323,11 +322,6 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-})
-
-// 当所有窗口关闭时不退出应用，因为我们有系统托盘
-app.on('window-all-closed', () => {
-  // 保持应用常驻，通过系统托盘管理
 })
 
 // In this file you can include the rest of your app's specific main process

@@ -10,7 +10,9 @@ export interface UserInfo {
   playMode?: PlayMode
   deepseekAPIkey?: string
   pluginId?: string
+  pluginName?: string
   supportedSources?: Sources['supportedSources']
   selectSources?: string
   selectQuality?: string
+  sourceQualityMap?: Record<string, string>
 }

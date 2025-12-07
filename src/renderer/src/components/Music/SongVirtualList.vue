@@ -25,14 +25,12 @@
           >
             <!-- 序号或播放状态图标 -->
             <div v-if="showIndex" class="col-index">
-              <Transition name="playSong" mode="out-in">
-                <span v-if="hoveredSong !== (song.id || song.songmid)" class="track-number">
-                  {{ String(visibleStartIndex + index + 1).padStart(2, '0') }}
-                </span>
-                <button v-else class="play-btn" title="播放" @click.stop="handlePlay(song)">
-                  <i class="icon-play"></i>
-                </button>
-              </Transition>
+              <span class="track-number">
+                {{ String(visibleStartIndex + index + 1).padStart(2, '0') }}
+              </span>
+              <button class="play-btn" title="播放" @click.stop="handlePlay(song)">
+                <i class="icon-play"></i>
+              </button>
             </div>
 
             <!-- 歌曲信息 -->
@@ -674,6 +672,7 @@ onUnmounted(() => {
       align-items: center;
       justify-content: center;
       width: 100%;
+      position: relative;
 
       .track-number {
         font-size: 14px;
@@ -681,6 +680,13 @@ onUnmounted(() => {
         font-variant-numeric: tabular-nums;
         width: 100%;
         text-align: center;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity: 1;
+        filter: blur(0);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
       }
 
       .play-btn {
@@ -691,13 +697,20 @@ onUnmounted(() => {
         font-size: 16px;
         padding: 8px;
         border-radius: 50%;
-        transition: all 0.2s;
         width: 32px;
         height: 32px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-style: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.9);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity: 0;
+        filter: blur(4px);
+        pointer-events: none;
 
         &:hover {
           background: var(--song-list-btn-bg-hover);
@@ -708,6 +721,21 @@ onUnmounted(() => {
           display: block;
           line-height: 1;
         }
+      }
+    }
+
+    &:hover .col-index {
+      .track-number {
+        opacity: 0;
+        filter: blur(4px);
+        transform: translate(-50%, -50%) scale(0.9);
+      }
+
+      .play-btn {
+        opacity: 1;
+        filter: blur(0);
+        transform: translate(-50%, -50%) scale(1);
+        pointer-events: auto;
       }
     }
 

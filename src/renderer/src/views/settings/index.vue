@@ -199,8 +199,7 @@ const hasPluginData = computed(() => {
 
 const currentPluginName = computed(() => {
   if (!hasPluginData.value) return ''
-  // 这里可以根据需要从插件信息中获取名称，暂时使用插件ID
-  return userInfo.value.pluginId || '未知插件'
+  return userInfo.value.pluginName || userInfo.value.pluginId || '未知插件'
 })
 
 const currentSourceQualities = computed(() => {
@@ -218,6 +217,49 @@ const qualityMarks = computed(() => {
   })
   return marks
 })
+
+const globalQualityOptions = computed(() => {
+  const sources = userInfo.value.supportedSources || {}
+  const keys = Object.keys(sources)
+  if (keys.length === 0) return []
+  const arrays = keys.map((k) => sources[k].qualitys || [])
+  const set = new Set(arrays[0])
+  for (let i = 1; i < arrays.length; i++) {
+    for (const q of Array.from(set)) {
+      if (!arrays[i].includes(q)) set.delete(q)
+    }
+  }
+  return Array.from(set)
+})
+
+const globalQualitySelected = ref<string>('')
+
+watch(
+  () => globalQualityOptions.value,
+  (opts) => {
+    if (!opts || opts.length === 0) {
+      globalQualitySelected.value = ''
+      return
+    }
+    if (!opts.includes(globalQualitySelected.value)) {
+      globalQualitySelected.value = opts[opts.length - 1]
+    }
+  },
+  { immediate: true }
+)
+
+const applyGlobalQuality = (q: string) => {
+  if (!q) return
+  if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
+  const sources = userInfo.value.supportedSources || {}
+  Object.keys(sources).forEach((key) => {
+    const arr = sources[key].qualitys || []
+    if (arr.includes(q)) userInfo.value.sourceQualityMap![key] = q
+  })
+  const currentKey = userInfo.value.selectSources as string
+  const arr = sources[currentKey]?.qualitys || []
+  if (arr.includes(q)) userInfo.value.selectQuality = q
+}
 
 // 监听当前选择的音质，更新滑块位置
 watch(
@@ -245,14 +287,14 @@ const selectSource = (sourceKey: string) => {
 
   userInfo.value.selectSources = sourceKey
 
-  // 自动选择该音源的最高音质
   const source = userInfo.value.supportedSources?.[sourceKey]
+  if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
   if (source && source.qualitys && source.qualitys.length > 0) {
-    // 检查当前选择的音质是否在新平台的支持列表中
-    const currentQuality = userInfo.value.selectQuality
-    if (!currentQuality || !source.qualitys.includes(currentQuality)) {
-      userInfo.value.selectQuality = source.qualitys[source.qualitys.length - 1]
-    }
+    const saved = userInfo.value.sourceQualityMap[sourceKey]
+    const useQuality =
+      saved && source.qualitys.includes(saved) ? saved : source.qualitys[source.qualitys.length - 1]
+    userInfo.value.sourceQualityMap[sourceKey] = useQuality
+    userInfo.value.selectQuality = useQuality
   }
 }
 
@@ -263,7 +305,11 @@ const onQualityChange = (value: any) => {
     value >= 0 &&
     value < currentSourceQualities.value.length
   ) {
-    userInfo.value.selectQuality = currentSourceQualities.value[value]
+    const q = currentSourceQualities.value[value]
+    userInfo.value.selectQuality = q
+    if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
+    const key = userInfo.value.selectSources as string
+    userInfo.value.sourceQualityMap[key] = q
   }
 }
 
@@ -610,6 +656,23 @@ const getTagOptionsStatus = () => {
                     <p class="quality-hint">
                       {{ getQualityDescription(userInfo.selectQuality || '') }}
                     </p>
+                  </div>
+                </div>
+
+                <div v-if="globalQualityOptions.length > 0" class="setting-group">
+                  <h3>全局音质（支持交集）</h3>
+                  <div class="quality-slider-container">
+                    <t-select
+                      v-model="globalQualitySelected"
+                      @change="(v) => applyGlobalQuality(v as string)"
+                    >
+                      <t-option
+                        v-for="q in globalQualityOptions"
+                        :key="q"
+                        :value="q"
+                        :label="getQualityDisplayName(q)"
+                      />
+                    </t-select>
                   </div>
                 </div>
 

@@ -98,14 +98,17 @@ const selectSource = (sourceKey: string) => {
   const LocalUserDetail = LocalUserDetailStore()
   LocalUserDetail.userInfo.selectSources = sourceKey
 
-  // 自动选择该音源的最高音质
   const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
+  if (!LocalUserDetail.userInfo.sourceQualityMap) {
+    LocalUserDetail.userInfo.sourceQualityMap = {}
+  }
   if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
-    const currentQuality = LocalUserDetail.userInfo.selectQuality
-    if (!currentQuality || !sourceDetail.qualitys.includes(currentQuality)) {
-      LocalUserDetail.userInfo.selectQuality =
-        sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
-    }
+    const saved = LocalUserDetail.userInfo.sourceQualityMap[sourceKey]
+    const useQuality = saved && sourceDetail.qualitys.includes(saved)
+      ? saved
+      : sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
+    LocalUserDetail.userInfo.sourceQualityMap[sourceKey] = useQuality
+    LocalUserDetail.userInfo.selectQuality = useQuality
   }
 
   // 更新音源图标
