@@ -104,9 +104,10 @@ const selectSource = (sourceKey: string) => {
   }
   if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
     const saved = LocalUserDetail.userInfo.sourceQualityMap[sourceKey]
-    const useQuality = saved && sourceDetail.qualitys.includes(saved)
-      ? saved
-      : sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
+    const useQuality =
+      saved && sourceDetail.qualitys.includes(saved)
+        ? saved
+        : sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
     LocalUserDetail.userInfo.sourceQualityMap[sourceKey] = useQuality
     LocalUserDetail.userInfo.selectQuality = useQuality
   }

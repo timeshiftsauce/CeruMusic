@@ -817,7 +817,7 @@ const getTagOptionsStatus = () => {
 
               <!-- 技术栈 -->
               <div class="setting-group">
-                <h3>技术栈&服务</h3>
+                <h3>技术栈&服务&友商</h3>
                 <div class="tech-stack">
                   <div class="tech-item">
                     <span class="tech-name">Electron</span>
@@ -838,6 +838,16 @@ const getTagOptionsStatus = () => {
                   <div class="tech-item">
                     <span class="tech-name">Vite</span>
                     <span class="tech-desc">快速前端构建工具</span>
+                  </div>
+                  <div
+                    class="tech-item link"
+                    style="cursor: pointer"
+                    @click="openLink('https://sadidc.com/aff/VQAXGBZT')"
+                  >
+                    <span class="tech-name">伤心的云</span>
+                    <span class="tech-desc"
+                      >🔗 强烈推荐 服务器低至一元 1000mbps超高带宽,16h16g 38.99元/月
+                    </span>
                   </div>
                   <div
                     class="tech-item link"
@@ -931,13 +941,6 @@ const getTagOptionsStatus = () => {
                     <p>
                       用户承诺仅通过合规插件获取音乐相关信息，且获取、使用版权内容的行为符合
                       《中华人民共和国著作权法》及相关法律法规，不侵犯任何第三方合法权益。
-                    </p>
-                  </div>
-                  <div class="notice-item">
-                    <h4>🚫 使用限制</h4>
-                    <p>
-                      本项目仅允许用于非商业、纯技术学习目的，禁止用于任何商业运营、盈利活动，
-                      禁止修改后用于侵犯第三方权益的场景。
                     </p>
                   </div>
                   <div class="notice-item">

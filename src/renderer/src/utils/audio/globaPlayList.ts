@@ -169,7 +169,7 @@ const playSong = async (song: SongList) => {
       const a = Audio.value.audio
       try {
         a.pause()
-      } catch { }
+      } catch {}
       a.removeAttribute('src')
       a.load()
     }
@@ -351,7 +351,7 @@ const initPlayback = async () => {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
-        } catch { }
+        } catch {}
         if (userInfo.value.currentTime) {
           pendingRestorePosition = userInfo.value.currentTime
           pendingRestoreSongId = lastPlayedSong.songmid

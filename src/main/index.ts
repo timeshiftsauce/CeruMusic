@@ -26,6 +26,14 @@ import initLyricIpc from './events/lyric'
 import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
 
+process.on('unhandledRejection', (reason: any) => {
+  console.error('Unhandled Rejection:', reason?.message || reason)
+})
+
+process.on('uncaughtException', (error: any) => {
+  console.error('Uncaught Exception:', error?.message || error)
+})
+
 // 获取单实例锁
 const gotTheLock = app.requestSingleInstanceLock()
 
@@ -289,8 +297,7 @@ app.whenReady().then(() => {
     // 设置应用程序名称
     app.setName('澜音')
   }
-  lyricWindow.create()
-  initLyricIpc(mainWindow)
+
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
@@ -312,9 +319,11 @@ app.whenReady().then(() => {
   ipcMain.on('stopPing', () => {
     clearInterval(ping)
   })
-  // 初始化自动更新器
+  // 初始化自动更新器 桌面歌词
   if (mainWindow) {
     initAutoUpdateForWindow(mainWindow)
+    lyricWindow.create()
+    initLyricIpc(mainWindow)
   }
 
   app.on('activate', function () {

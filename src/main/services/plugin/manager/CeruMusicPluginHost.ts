@@ -308,9 +308,9 @@ class CeruMusicPluginHost {
       pluginLog.log(`${CONSTANTS.LOG_PREFIX} 插件 ${methodName} 方法调用成功`)
       return result
     } catch (error: any) {
-      console.error(`${CONSTANTS.LOG_PREFIX} ${methodName} 方法执行失败:`, error.message)
+      pluginLog.error(`${CONSTANTS.LOG_PREFIX} ${methodName} 方法执行失败:`, error.message)
       if (methodName === 'musicUrl') {
-        console.error(`${CONSTANTS.LOG_PREFIX} 错误堆栈:`, error.stack)
+        pluginLog.error(`${CONSTANTS.LOG_PREFIX} 错误堆栈:`, error.stack)
       }
       throw new PluginError(`Plugin ${methodName} failed: ${error.message}`, methodName)
     }
@@ -601,7 +601,7 @@ class CeruMusicPluginHost {
         error.name === 'AbortError' ? `请求超时: ${url}` : `请求失败: ${error.message}`
 
       console.error(`${CONSTANTS.LOG_PREFIX} ${errorMessage}`)
-      throw error
+      return this._createErrorResult(error, url)
     }
   }
 

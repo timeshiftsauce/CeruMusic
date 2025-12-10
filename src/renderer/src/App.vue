@@ -42,6 +42,7 @@ onMounted(() => {
 
   // 全局监听来自主进程的播放控制事件，确保路由切换也可响应
   const forward = (name: string, val?: any) => {
+    console.log('forward', name, val)
     window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
   }
   window.electron?.ipcRenderer?.on?.('play', () => forward('play'))
