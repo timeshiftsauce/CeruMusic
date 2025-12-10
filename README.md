@@ -241,13 +241,11 @@ CeruMuisc/
    ```bash
    yarn install
    ```
-
 2. 启动开发服务器：
 
    ```bash
    yarn dev
    ```
-
 3. 构建应用：
 
    ```bash
@@ -261,13 +259,11 @@ CeruMuisc/
   ```bash
   yarn build:win
   ```
-
 - macOS
 
   ```bash
   yarn build:mac
   ```
-
 - Linux
 
   ```bash
@@ -297,6 +293,7 @@ CeruMuisc/
 
 如有技术问题或合作意向
 可通过如下方式联系
+
 - QQ:  2115295703
 - 微信：13600973542
 - 邮箱：sqj@shiqianjiang.cn
@@ -306,11 +303,9 @@ CeruMuisc/
 - **时迁酱**：产品总体设计与开发
 
   <img src="assets/head.jpg" alt="head.jpg (940×940)" style="zoom:15%;" />
-
 - **无聊的霜霜**：首页设计&Ai助手
 
   <img src="assets/image-20250827181604432.png" alt="image-20250827181604432" style="zoom:25%;" />
-
 - **Star**：**插件管理**相关功能&部分接口封装
 
   <img src="assets/image-20250827181535681.png" alt="image-20250827181535681" style="zoom:25%;" />
@@ -359,7 +354,14 @@ CeruMuisc/
 
 ## 赞助
 
-感谢雨云提供的云计算服务 [低价服务器来这里](https://www.rainyun.com/sqj_)
+感谢**伤心的云**提供的16h-16g长期支持
+
+> 伤心的云 服务器 低至1元/月 1000mbps 超高带宽
+>
+> 16h-16g 38.99元/月 独立ip
+>
+> [点击前往查看](https://sadidc.com/aff/VQAXGBZT)
+
 
 若您认可本项目的技术价值，欢迎通过以下方式支持开发者（仅用于项目技术维护与迭代）：
 <img src="assets/image-20250827175356006.png" alt="赞助方式1" style="zoom:33%;" /><img src="assets/image-20250827175547444.png" alt="赞助方式2" style="zoom: 33%;" />
