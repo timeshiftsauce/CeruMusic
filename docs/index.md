@@ -35,7 +35,6 @@ features:
     icon: 👐
     link: https://github.com/timeshiftsauce/CeruMusic
 ---
-
 <div style="margin-top:4rem"></div>
 
 # Ceru Music（澜音）
@@ -86,13 +85,11 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
    ```bash
    yarn install
    ```
-
 2. 启动开发服务器：
 
    ```bash
    yarn dev
    ```
-
 3. 构建应用：
 
    ```bash
@@ -106,13 +103,11 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
   ```bash
   yarn build:win
   ```
-
 - macOS
 
   ```bash
   yarn build:mac
   ```
-
 - Linux
 
   ```bash
@@ -147,16 +142,26 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 - **时迁酱**：产品总体设计与开发
 
   <img src="./assets/head.jpg" alt="head.jpg (940×940)" style="zoom:15%;" />
-
 - **无聊的霜霜**：首页设计&Ai助手
 
   <img src="./assets/image-20250827181604432.png" alt="image-20250827181604432" style="zoom:25%;" />
-
 - **Star**：**插件管理**相关功能&部分接口封装
 
   <img src="./assets/image-20250827181535681.png" alt="image-20250827181535681" style="zoom:25%;" />
 
 **Tips**: 排名不分先后
+
+
+### 友商
+
+感谢**伤心的云**提供的16h-16g长期支持
+
+> 伤心的云 服务器 低至1元/月 1000mbps 超高带宽
+>
+> 16h-16g 38.99元/月 独立ip
+>
+> [点击前往查看](https://sadidc.com/aff/VQAXGBZT)
+>
 
 # 法律声明与免责条款
 
