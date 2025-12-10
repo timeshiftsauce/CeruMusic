@@ -134,6 +134,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 发送主程序事件
   ipcMain.on('send-main-event', (_, name, val) => {
+    console.log('send-main-event', name, val)
     mainWin?.webContents.send(name, val)
   })
 

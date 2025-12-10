@@ -10,7 +10,12 @@ import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, toRaw } from 'vue'
 import { shouldUseBlackText } from '@renderer/utils/color/contrastColor'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
-import { Fullscreen1Icon, FullscreenExit1Icon, ChevronDownIcon } from 'tdesign-icons-vue-next'
+import {
+  Fullscreen1Icon,
+  FullscreenExit1Icon,
+  ChevronDownIcon,
+  PenBallIcon
+} from 'tdesign-icons-vue-next'
 // 直接从包路径导入，避免 WebAssembly 导入问题
 import {
   parseYrc,
@@ -20,11 +25,19 @@ import {
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
 import _ from 'lodash'
 import { storeToRefs } from 'pinia'
+import { NSwitch } from 'naive-ui'
 
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
 
 const playSetting = usePlaySettingStore()
+console.log('playSetting', playSetting)
+const showSettings = ref(false)
+
+const showLeftPanel = computed({
+  get: () => playSetting.getShowLeftPanel,
+  set: (val) => playSetting.setShowLeftPanel(val)
+})
 
 interface Props {
   show?: boolean
@@ -423,6 +436,60 @@ const lyricHeight = computed(() => {
 const lyricTranslateY = computed(() => {
   return playSetting.getisJumpLyric ? '0' : '-25%'
 })
+
+// --- 滚动文字逻辑 Start ---
+const titleRef = ref<HTMLElement | null>(null)
+const shouldScrollTitle = ref(false)
+const titleContentRef = ref<HTMLElement | null>(null)
+
+const songName = computed(() => {
+  const info = props.songInfo
+  if (info && 'name' in info && typeof info.name === 'string') {
+    return info.name
+  }
+  return '未知歌曲'
+})
+
+const checkOverflow = async () => {
+  await nextTick()
+
+  // 检查标题
+  if (titleRef.value && titleContentRef.value) {
+    // 比较内容宽度（scrollWidth）和容器宽度（clientWidth）
+    // 为了准确测量，暂时移除滚动相关的类可能会更准，但这里我们主要看 content 的自然宽度
+    const containerWidth = titleRef.value.clientWidth
+    const contentWidth = titleContentRef.value.offsetWidth
+    shouldScrollTitle.value = contentWidth > containerWidth
+  }
+}
+
+// 监听歌曲信息变化和窗口大小变化
+watch(() => [props.songInfo, props.show], checkOverflow, { immediate: true })
+
+// 点击外部关闭设置面板
+const floatActionRef = ref<HTMLElement | null>(null)
+const handleClickOutside = (event: MouseEvent) => {
+  if (
+    showSettings.value &&
+    floatActionRef.value &&
+    !floatActionRef.value.contains(event.target as Node)
+  ) {
+    showSettings.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', _.debounce(checkOverflow, 200))
+  document.addEventListener('click', handleClickOutside)
+  // 初始检查
+  setTimeout(checkOverflow, 500)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkOverflow)
+  document.removeEventListener('click', handleClickOutside)
+})
+// --- 滚动文字逻辑 End ---
 </script>
 
 <template>
@@ -461,43 +528,83 @@ const lyricTranslateY = computed(() => {
         :color="useBlackText ? 'black' : 'white'"
       />
     </Transition>
-    <div class="playbox">
-      <div class="left" :style="state.lyricLines.length <= 0 && 'width:100vw'">
-        <img
-          class="pointer"
-          :class="{ playing: Audio.isPlay }"
-          src="@renderer/assets/pointer.png"
-          alt="pointer"
-        />
-        <div
-          class="cd-container"
-          :class="{ playing: Audio.isPlay }"
-          :style="
-            !Audio.isPlay
-              ? 'animation-play-state: paused;'
-              : '' +
-                (state.lyricLines.length <= 0
-                  ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
-                  : '')
-          "
-        >
-          <!-- 黑胶唱片 -->
-          <div class="vinyl-record"></div>
-          <!-- 唱片标签 -->
-          <div class="vinyl-label">
-            <t-image :src="coverImage" shape="circle" class="cover" />
-            <div class="label-shine"></div>
+    <div
+      class="playbox"
+      :style="{ padding: playSetting.getLayoutMode === 'cover' ? '0 8vw' : '0 10vw' }"
+      :class="{
+        'mode-cover': playSetting.getLayoutMode === 'cover',
+        'single-column': !showLeftPanel
+      }"
+    >
+      <div class="left" :style="state.lyricLines.length <= 0 && showLeftPanel ? 'width:100vw' : ''">
+        <template v-if="playSetting.getLayoutMode === 'cd'">
+          <img
+            class="pointer"
+            :class="{ playing: Audio.isPlay }"
+            src="@renderer/assets/pointer.png"
+            alt="pointer"
+          />
+          <div
+            class="cd-container"
+            :class="{ playing: Audio.isPlay }"
+            :style="
+              !Audio.isPlay
+                ? 'animation-play-state: paused;'
+                : '' +
+                  (state.lyricLines.length <= 0
+                    ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
+                    : '')
+            "
+          >
+            <!-- 黑胶唱片 -->
+            <div class="vinyl-record"></div>
+            <!-- 唱片标签 -->
+            <div class="vinyl-label">
+              <t-image :src="coverImage" shape="circle" class="cover" />
+              <div class="label-shine"></div>
+            </div>
+            <!-- 中心孔 -->
+            <div class="center-hole"></div>
           </div>
-          <!-- 中心孔 -->
-          <div class="center-hole"></div>
-        </div>
+        </template>
+
+        <template v-else-if="playSetting.getLayoutMode === 'cover'">
+          <div class="cover-layout-container">
+            <div class="cover-wrapper-square">
+              <t-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
+            </div>
+            <div class="song-info-area">
+              <div ref="titleRef" class="song-title-large text-scroll-container">
+                <div class="text-scroll-wrapper" :class="{ 'animate-scroll': shouldScrollTitle }">
+                  <div ref="titleContentRef" class="text-scroll-item">
+                    {{ songName }}
+                  </div>
+                  <div v-if="shouldScrollTitle" class="text-scroll-item">
+                    {{ songName }}
+                  </div>
+                </div>
+              </div>
+              <div class="song-meta-large">
+                <span class="artist">{{ (props.songInfo as any)?.singer }}</span>
+                <span
+                  v-if="(props.songInfo as any)?.singer && (props.songInfo as any)?.albumName"
+                  class="divider"
+                >
+                  /
+                </span>
+                <span class="album">{{ (props.songInfo as any)?.albumName }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
-      <div v-show="state.lyricLines.length > 0" class="right">
+      <div v-if="state.lyricLines.length > 0" class="right">
         <LyricPlayer
           ref="lyricPlayerRef"
-          :lyric-lines="props.show ? toRaw(state.lyricLines) : []"
+          :lyric-lines="(props.show && state.lyricLines) || []"
           :current-time="state.currentTime"
           class="lyric-player"
+          :align-position="playSetting.getLayoutMode === 'cd' ? 0.5 : 0.32"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
           @line-click="jumpTime"
@@ -511,12 +618,65 @@ const lyricTranslateY = computed(() => {
       class="audio-visualizer-container"
     >
       <AudioVisualizer
-        :show="props.show && Audio.isPlay"
+        :show="Audio.isPlay"
         :height="70"
         :bar-count="80"
         :color="mainColor"
         @low-freq-update="handleLowFreqUpdate"
       />
+    </div>
+
+    <div ref="floatActionRef" class="float-action">
+      <t-Tooltip content="播放器主题" placement="bottom">
+        <button class="skin-btn" @click="showSettings = !showSettings">
+          <pen-ball-icon
+            :fill-color="'transparent'"
+            :stroke-color="'currentColor'"
+            :stroke-width="2"
+            :style="{ fontSize: '20px' }"
+          />
+        </button>
+      </t-Tooltip>
+      <Transition name="fade-up">
+        <div v-if="showSettings" class="settings-panel">
+          <div class="panel-header">播放器样式</div>
+          <div class="style-cards">
+            <div
+              class="style-card"
+              :class="{ active: playSetting.getLayoutMode === 'cd' }"
+              @click="playSetting.setLayoutMode('cd')"
+            >
+              <div class="card-preview cd-preview">
+                <!-- <div class="preview-circle"></div> -->
+                <img src="../../assets/images/cd.png" shape="circle" class="cover" width="100%" />
+              </div>
+              <span>经典黑胶</span>
+            </div>
+            <div
+              class="style-card"
+              :class="{ active: playSetting.getLayoutMode === 'cover' }"
+              @click="playSetting.setLayoutMode('cover')"
+            >
+              <div class="card-preview cover-preview">
+                <img
+                  src="../../assets/images/cover-play.png"
+                  shape="circle"
+                  class="cover"
+                  width="100%"
+                />
+              </div>
+
+              <span>沉浸封面</span>
+            </div>
+          </div>
+
+          <div class="panel-header" style="margin-top: 24px">界面设置</div>
+          <div class="control-row">
+            <span>显示左侧面板</span>
+            <n-switch v-model:value="showLeftPanel" />
+          </div>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -594,7 +754,7 @@ const lyricTranslateY = computed(() => {
   z-index: 100;
   position: fixed;
   top: var(--height);
-  transition: top 0.4s cubic-bezier(0.8, 0, 0.8, 0.43);
+  transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
   left: 0;
   width: 100vw;
   height: 100vh;
@@ -631,11 +791,14 @@ const lyricTranslateY = computed(() => {
 
     .left {
       width: 40%;
-      transition: all 0.3s ease;
+      transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      opacity: 1;
+      transform: translateX(0);
     }
 
     .right {
       width: 60%;
+      transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     .left {
@@ -679,6 +842,9 @@ const lyricTranslateY = computed(() => {
 
         /* 黑胶唱片主体 */
         .vinyl-record {
+          aspect-ratio: 1/1;
+
+          // margin-top: calc(var(--play-bottom-height) / 2);
           width: 100%;
           height: 100%;
           position: relative;
@@ -857,6 +1023,152 @@ const lyricTranslateY = computed(() => {
       margin: 80px 0 calc(var(--play-bottom-height)) 0;
       overflow: hidden;
     }
+
+    &.mode-cover {
+      .left {
+        width: 50%;
+        padding: 0 6vw;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      .right {
+        width: 50%;
+      }
+    }
+
+    &.single-column {
+      .left {
+        width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        opacity: 0;
+        transform: translateX(-100px);
+        pointer-events: none;
+      }
+
+      .right {
+        width: 100%;
+        padding: 0 10vw;
+        display: flex;
+        justify-content: center;
+
+        :deep(.lyric-player) {
+          width: 100%;
+          max-width: 1000px;
+          margin: 0 auto;
+        }
+      }
+    }
+
+    .cover-layout-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+      margin-top: calc(var(--play-bottom-height) / 2);
+      max-height: calc(100vh - 200px);
+
+      .cover-wrapper-square {
+        width: 100%;
+        max-width: min(480px, 45vh);
+        aspect-ratio: 1/1;
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow:
+          0 25px 50px -12px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(255, 255, 255, 0.1);
+        transition: transform 0.4s ease;
+        margin: 0 auto;
+
+        &:hover {
+          transform: scale(1.02);
+        }
+
+        .cover-img-square {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+      }
+
+      .song-info-area {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+
+        .song-title-large {
+          font-size: min(3vw, 42px);
+          font-weight: 800;
+          color: rgba(255, 255, 255, 0.95);
+          line-height: 1.2;
+          letter-spacing: -0.5px;
+          /* display: -webkit-box; */
+          /* -webkit-line-clamp: 2; */
+          /* -webkit-box-orient: vertical; */
+          /* overflow: hidden; */
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+
+          &.text-scroll-container {
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+            width: 100%;
+          }
+
+          .text-scroll-wrapper {
+            display: inline-flex;
+            &.animate-scroll {
+              animation: scroll 15s linear infinite;
+            }
+          }
+
+          .text-scroll-item {
+            font-weight: 800;
+            flex-shrink: 0;
+            padding-right: 2rem;
+            display: inline-block;
+          }
+        }
+
+        .song-meta-large {
+          font-size: min(1.5vw, 20px);
+          color: rgba(255, 255, 255, 0.6);
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+
+          .artist {
+            color: v-bind(lightMainColor);
+            filter: brightness(1.2);
+          }
+
+          .divider {
+            opacity: 0.4;
+          }
+        }
+
+        .song-extra-info {
+          margin-top: 8px;
+        }
+      }
+    }
+  }
+
+  @keyframes scroll {
+    0% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
   }
 
   .audio-visualizer-container {
@@ -876,6 +1188,162 @@ const lyricTranslateY = computed(() => {
     display: flex;
     align-items: center;
   }
+}
+
+.float-action {
+  position: absolute;
+  z-index: 5;
+  --bottom-height: 60px;
+  right: 20px;
+  bottom: calc(var(--bottom-height) + var(--play-bottom-height));
+  .skin-btn {
+    backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.15);
+    // box-shadow:
+    //   0 8px 32px 0 rgba(0, 0, 0, 0.1),
+    //   0 0 20px v-bind(lightMainColor),
+    //   inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.628);
+    // border: none;
+    height: 50px;
+    width: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+
+    /* 弹性过渡效果 */
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1px;
+
+    &:hover {
+      // transform: translateY(-2px);
+      background-color: rgba(255, 255, 255, 0.25);
+      box-shadow:
+        0 12px 40px 0 rgba(0, 0, 0, 0.15),
+        0 0 30px v-bind(lightMainColor),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+    }
+
+    &:active {
+      transform: translateY(1px) scale(0.92);
+      box-shadow:
+        0 4px 10px 0 rgba(0, 0, 0, 0.1),
+        0 0 10px v-bind(lightMainColor),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+      transition: all 0.1s ease;
+    }
+  }
+
+  .settings-panel {
+    position: absolute;
+    bottom: 70px;
+    right: 0;
+    width: 340px;
+    background: rgb(30 30 30 / 29%);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow:
+      0 20px 50px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.1);
+    transform-origin: bottom right;
+    z-index: 100;
+
+    .panel-header {
+      color: rgba(255, 255, 255, 0.95);
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      letter-spacing: 0.5px;
+    }
+
+    .style-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .style-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 16px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+        transform: translateY(-2px);
+      }
+
+      &.active {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: v-bind(lightMainColor);
+        box-shadow: 0 8px 20px -5px rgba(0, 0, 0, 0.3);
+      }
+
+      .card-preview {
+        width: 100%;
+        // height: 80px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: content-box;
+        &.cd-preview {
+          padding: 10px;
+        }
+
+        &.cover-preview {
+          padding: 10px;
+        }
+      }
+
+      span {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 500;
+      }
+    }
+
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+
+      span {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 14px;
+        font-weight: 500;
+      }
+    }
+  }
+}
+
+.fade-up-enter-active,
+.fade-up-leave-active {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.fade-up-enter-from,
+.fade-up-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
 }
 
 @keyframes rotateRecord {

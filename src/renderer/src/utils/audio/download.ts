@@ -107,10 +107,7 @@ function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<
                           style: {
                             fontWeight: '500',
                             fontSize: '14px',
-                            color:
-                              quality.type === userQuality
-                                ? '#1890ff'
-                                : '#333'
+                            color: quality.type === userQuality ? '#1890ff' : '#333'
                           }
                         },
                         getQualityDisplayName(quality.type)
