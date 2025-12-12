@@ -14,15 +14,89 @@ import { onMounted, ref } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useAutoUpdate } from './composables/useAutoUpdate'
 import { NConfigProvider, darkTheme, NGlobalStyle } from 'naive-ui'
+import { useSettingsStore } from '@renderer/store/Settings'
+import songListAPI from '@renderer/api/songList'
+import { MessagePlugin } from 'tdesign-vue-next'
+import {
+  importPlaylistFromPath,
+  validateImportedPlaylist
+} from '@renderer/utils/playlist/playlistExportImport'
+import router from './router'
 
 const userInfo = LocalUserDetailStore()
 const { checkForUpdates } = useAutoUpdate()
+const settingsStore = useSettingsStore()
+const { settings } = settingsStore
+const processedPaths = new Set<string>()
 
 import './assets/main.css'
 import './assets/theme/blue.css'
 import './assets/theme/pink.css'
 import './assets/theme/orange.css'
 import './assets/theme/cyan.css'
+
+const importPromptVisible = ref(false)
+const importPromptPath = ref('')
+const importPromptFileName = ref('')
+const dontAskAgain = ref(false)
+const appInteractiveReady = ref(false)
+const delayedOpenQueue: string[] = []
+
+const parseSonglistNameFromRaw = (rawName: string): string => {
+  let parsedName: string | null = null
+  const mSonglist = rawName.match(/^cerumusic-songlist-(.+?)-\d{4}-\d{2}-\d{2}$/i)
+  if (mSonglist) parsedName = mSonglist[1]
+  else {
+    const mSimple = rawName.match(/^cerumusic-(.+)$/i)
+    if (mSimple) parsedName = mSimple[1]
+  }
+  return parsedName || rawName
+}
+
+const confirmImportPrompt = async () => {
+  try {
+    const imported = await importPlaylistFromPath(importPromptPath.value)
+    if (!validateImportedPlaylist(imported)) {
+      MessagePlugin.error('导入的歌单格式不正确')
+      importPromptVisible.value = false
+      return
+    }
+    const rawName = importPromptFileName.value.replace(/\.(cmpl|cpl)$/i, '')
+    const finalName = parseSonglistNameFromRaw(rawName)
+    const createRes = await songListAPI.create(finalName, '从本地歌单文件导入', 'local')
+    if (!createRes.success || !createRes.data) {
+      MessagePlugin.error(createRes.error || '创建歌单失败')
+      importPromptVisible.value = false
+      return
+    }
+    const addRes = await songListAPI.addSongs(createRes.data.id, imported)
+    if (addRes.success) {
+      MessagePlugin.success(`成功导入 ${imported.length} 首歌曲到歌单“${finalName}”`)
+    } else {
+      MessagePlugin.error(addRes.error || '添加歌曲到歌单失败')
+    }
+  } catch (err) {
+    MessagePlugin.error(`导入失败: ${(err as Error).message}`)
+  } finally {
+    importPromptVisible.value = false
+    if (dontAskAgain.value) {
+      settingsStore.updateSettings({
+        autoCacheMusic: settings.autoCacheMusic,
+        showFloatBall: settings.showFloatBall,
+        tagWriteOptions: settings.tagWriteOptions,
+        // 新增偏好
+        // @ts-ignore
+        autoImportPlaylistOnOpen: true,
+        // @ts-ignore
+        suppressImportPrompt: true
+      })
+    }
+  }
+}
+
+const cancelImportPrompt = () => {
+  importPromptVisible.value = false
+}
 
 onMounted(() => {
   userInfo.init()
@@ -55,7 +129,60 @@ onMounted(() => {
   setTimeout(() => {
     checkForUpdates()
   }, 3000)
+
+  // 全局监听打开歌单文件
+  window.electron?.ipcRenderer?.on?.('open-playlist-file', (_: any, filePath: string) => {
+    const fileName = filePath.replace(/^.*[\\/]/, '')
+    if (processedPaths.has(filePath)) return
+    processedPaths.add(filePath)
+    if (!appInteractiveReady.value) {
+      delayedOpenQueue.push(filePath)
+      return
+    }
+    const silent = !!(settings as any).autoImportPlaylistOnOpen
+    confirmImportPromptPath(filePath, fileName, silent)
+  })
+  // 首次挂载时主动拉取待处理文件队列，防止事件在挂载前发送导致丢失
+  window.electron?.ipcRenderer
+    ?.invoke?.('get-pending-open-playlist-files')
+    .then((paths: string[]) => {
+      paths?.forEach((p) => {
+        if (processedPaths.has(p)) return
+        processedPaths.add(p)
+        if (!appInteractiveReady.value) {
+          delayedOpenQueue.push(p)
+          return
+        }
+        const fileName = p.replace(/^.*[\\/]/, '')
+        const silent = !!(settings as any).autoImportPlaylistOnOpen
+        confirmImportPromptPath(p, fileName, silent)
+      })
+    })
+    .catch(() => {})
+  // 等待路由就绪与首屏渲染后再处理导入队列，避免加载页面未过就提示
+  router.isReady().then(() => {
+    setTimeout(() => {
+      appInteractiveReady.value = true
+      while (delayedOpenQueue.length) {
+        const p = delayedOpenQueue.shift()!
+        const fileName = p.replace(/^.*[\\/]/, '')
+        const silent = !!(settings as any).autoImportPlaylistOnOpen
+        confirmImportPromptPath(p, fileName, silent)
+      }
+    }, 500)
+  })
 })
+
+const confirmImportPromptPath = (path: string, fileName: string, silent: boolean) => {
+  importPromptPath.value = path
+  importPromptFileName.value = fileName
+  dontAskAgain.value = false
+  if (silent) {
+    void confirmImportPrompt()
+  } else {
+    importPromptVisible.value = true
+  }
+}
 
 // 基于现有主题文件的配置
 const themes = [
@@ -175,6 +302,17 @@ const setupSystemThemeListener = () => {
           <component :is="Component" />
         </Transition>
       </router-view>
+      <t-dialog v-model:visible="importPromptVisible" header="是否导入此歌单" :footer="false">
+        <div>
+          <p>已打开歌单文件：{{ importPromptFileName }}</p>
+          <p>是否导入为本地歌单？</p>
+          <t-checkbox v-model="dontAskAgain">以后不再提醒，自动导入</t-checkbox>
+          <div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end">
+            <t-button theme="default" variant="outline" @click="cancelImportPrompt">取消</t-button>
+            <t-button theme="primary" @click="confirmImportPrompt">导入</t-button>
+          </div>
+        </div>
+      </t-dialog>
       <GlobalAudio />
       <FloatBall />
       <PluginNoticeDialog />

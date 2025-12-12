@@ -65,7 +65,7 @@ class LyricWindow {
       transparent: true,
       backgroundColor: 'rgba(0, 0, 0, 0)',
       alwaysOnTop: true,
-      resizable: true,
+      resizable: false,
       movable: true,
       // 不在任务栏显示
       skipTaskbar: true,

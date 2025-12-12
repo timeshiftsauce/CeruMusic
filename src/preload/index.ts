@@ -77,6 +77,10 @@ const api = {
     clear: () => ipcRenderer.invoke('music-cache:clear'),
     getSize: () => ipcRenderer.invoke('music-cache:get-size')
   },
+  // 文件读取
+  file: {
+    readFile: (path: string) => ipcRenderer.invoke('fs:read-file', path)
+  },
 
   // 歌单管理 API
   songList: {
