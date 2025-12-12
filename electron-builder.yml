@@ -30,9 +30,14 @@ win:
         - x64
         - ia32
   fileAssociations:
-    - ext: cerumusic
-      name: CeruMusic File
-      description: CeruMusic playlist file
+    - ext: cmpl
+      name: 澜音播放器（歌单/播放列表）文件
+      description: 澜音播放器加密压缩后的（播放列表/歌单）文件
+      icon: resources/cmpl.ico
+    - ext: cpl
+      name: 澜音播放器旧版（播放列表/歌单）文件
+      description: 澜音播放器旧版（加密播放列表/歌单）文件
+      icon: resources/cmpl.ico
 nsis:
   artifactName: ${name}-${version}-win-${arch}-setup.${ext}
   shortcutName: ${productName}

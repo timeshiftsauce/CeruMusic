@@ -14,6 +14,11 @@ import {
   calculateMenuPosition
 } from '@renderer/components/ContextMenu/utils'
 import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
+import {
+  importPlaylistFromFile,
+  validateImportedPlaylist,
+  exportPlaylistToFile
+} from '@renderer/utils/playlist/playlistExportImport'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -147,6 +152,58 @@ const currentEditingPlaylist = ref<SongList | null>(null)
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
 const contextMenuPlaylist = ref<SongList | null>(null)
+const songlistFileInputRef = ref<HTMLInputElement | null>(null)
+const songlistUploadedFile = ref<File | null>(null)
+const triggerSonglistFileInput = () => {
+  if (songlistFileInputRef.value) songlistFileInputRef.value.click()
+}
+const handleSonglistFileChange = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  if (input.files && input.files.length > 0) {
+    songlistUploadedFile.value = input.files[0]
+    importSonglistFromFile()
+  }
+}
+const importSonglistFromFile = async () => {
+  try {
+    showImportDialog.value = false
+    if (!songlistUploadedFile.value) {
+      MessagePlugin.warning('请先选择文件')
+      return
+    }
+    const imported = await importPlaylistFromFile(songlistUploadedFile.value)
+    if (!validateImportedPlaylist(imported)) {
+      MessagePlugin.error('导入的歌单格式不正确')
+      return
+    }
+    const rawName = songlistUploadedFile.value.name.replace(/\.(cmpl|cpl)$/i, '')
+    let parsedName: string | null = null
+    const mSonglist = rawName.match(/^cerumusic-songlist-(.+?)-\d{4}-\d{2}-\d{2}$/i)
+    if (mSonglist) parsedName = mSonglist[1]
+    else {
+      const mSimple = rawName.match(/^cerumusic-(.+)$/i)
+      if (mSimple) parsedName = mSimple[1]
+    }
+    const finalName = parsedName || rawName
+    const createRes = await songListAPI.create(finalName, '从本地歌单文件导入', 'local')
+    if (!createRes.success || !createRes.data) {
+      MessagePlugin.error(createRes.error || '创建歌单失败')
+      return
+    }
+    const addRes = await songListAPI.addSongs(createRes.data.id, imported)
+    if (addRes.success) {
+      MessagePlugin.success(`成功导入 ${imported.length} 首歌曲到歌单“${finalName}”`)
+      await loadPlaylists()
+    } else {
+      MessagePlugin.error(addRes.error || '添加歌曲到歌单失败')
+    }
+  } catch (err) {
+    MessagePlugin.error(`导入失败: ${(err as Error).message}`)
+  } finally {
+    songlistUploadedFile.value = null
+    if (songlistFileInputRef.value) songlistFileInputRef.value.value = ''
+  }
+}
 
 // 将时长字符串转换为秒数
 const parseInterval = (interval: string): number => {
@@ -848,6 +905,33 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       }
     }),
     createSeparator(),
+    createMenuItem('export', '导出歌单', {
+      onClick: async () => {
+        if (!contextMenuPlaylist.value) return
+        const pl = contextMenuPlaylist.value
+        try {
+          const res = await songListAPI.getSongs(pl.id)
+          if (!res.success) {
+            MessagePlugin.error(res.error || '获取歌单歌曲失败')
+            return
+          }
+          const songs = res.data || []
+          if (songs.length === 0) {
+            MessagePlugin.warning('歌单中没有可导出的歌曲')
+            return
+          }
+          const filtered = songs.filter((s) => s.source !== 'local')
+          const removed = songs.length - filtered.length
+          const safeName = pl.name.replace(/[\\/:*?"<>|]+/g, '_')
+          const fileName = `CeruMusic-${safeName}.cmpl`
+          const saved = await exportPlaylistToFile(filtered, fileName)
+          if (removed > 0) MessagePlugin.info(`已筛除 ${removed} 首本地歌曲`)
+          MessagePlugin.success(`歌单已导出为 ${saved}`)
+        } catch (e) {
+          MessagePlugin.error(`导出失败: ${(e as Error).message}`)
+        }
+      }
+    }),
     createMenuItem('edit', '编辑歌单', {
       icon: Edit2Icon,
       onClick: () => {
@@ -908,6 +992,13 @@ onMounted(() => {
 
 <template>
   <div class="page">
+    <input
+      ref="songlistFileInputRef"
+      type="file"
+      accept=".cmpl,.cpl"
+      style="display: none"
+      @change="handleSonglistFileChange"
+    />
     <div class="local-container">
       <!-- 页面标题和操作 -->
       <div class="page-header">
@@ -1120,6 +1211,18 @@ onMounted(() => {
           <div class="option-content">
             <h4>从播放列表</h4>
             <p>将当前播放列表保存为歌单</p>
+          </div>
+          <div class="option-arrow">
+            <i class="iconfont icon-youjiantou"></i>
+          </div>
+        </div>
+        <div class="import-option" @click="triggerSonglistFileInput">
+          <div class="option-icon">
+            <i class="iconfont icon-daoru"></i>
+          </div>
+          <div class="option-content">
+            <h4>从本地歌单文件</h4>
+            <p>导入加密歌单文件（.cmpl/.cpl）</p>
           </div>
           <div class="option-arrow">
             <i class="iconfont icon-youjiantou"></i>

@@ -52,7 +52,6 @@ declare module 'vue' {
     TContent: typeof import('tdesign-vue-next')['Content']
     TDialog: typeof import('tdesign-vue-next')['Dialog']
     TDivider: typeof import('tdesign-vue-next')['Divider']
-    TextScroll: typeof import('./src/components/Common/TextScroll.vue')['default']
     TForm: typeof import('tdesign-vue-next')['Form']
     TFormItem: typeof import('tdesign-vue-next')['FormItem']
     ThemeSelector: typeof import('./src/components/ThemeSelector.vue')['default']
