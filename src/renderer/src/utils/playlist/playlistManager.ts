@@ -14,8 +14,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-// 将事件总线挂载到全局
-;(window as any).musicEmitter = emitter
+  // 将事件总线挂载到全局
+  ; (window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -65,7 +65,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       isCache
     })
 
-    console.log(urlData)
+    // message.success(`使用音质: ${quality} - ${qualityMap[quality]}`)
     if (typeof urlData === 'object' && urlData.error) {
       throw new Error(urlData.error)
     } else {
@@ -171,13 +171,7 @@ export async function replacePlaylist(
       return
     }
 
-    // 清空当前播放列表
-    localUserStore.list.length = 0
-
-    // 添加所有歌曲到播放列表
-    songs.forEach((song) => {
-      localUserStore.addSong(song)
-    })
+    localUserStore.replaceSongList(songs)
 
     // 播放第一首歌曲
     if (songs[0]) {

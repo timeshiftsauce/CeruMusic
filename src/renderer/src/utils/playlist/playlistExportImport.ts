@@ -35,34 +35,69 @@ export function decryptPlaylist(encryptedData: string): SongList[] {
   }
 }
 
+async function gzipString(str: string): Promise<Blob> {
+  const cs = new CompressionStream('gzip')
+  const stream = new Blob([str]).stream().pipeThrough(cs)
+  return await new Response(stream).blob()
+}
+
+async function gunzipToString(input: ArrayBuffer | Blob): Promise<string> {
+  const ds = new DecompressionStream('gzip')
+  const inStream = input instanceof Blob ? input.stream() : new Blob([input]).stream()
+  const stream = inStream.pipeThrough(ds)
+  return await new Response(stream).text()
+}
+
+function getExtFromPath(p: string): string {
+  const m = p.match(/\.([^.]+)$/)
+  return m ? m[1].toLowerCase() : ''
+}
+
+/**
+ * 从系统路径导入播放列表（支持 .cmpl/.cpl）
+ */
+export async function importPlaylistFromPath(path: string): Promise<SongList[]> {
+  const buf = await (window as any).api.file.readFile(path)
+  const ext = getExtFromPath(path)
+  if (ext === 'cpl') {
+    const text = new TextDecoder().decode(buf)
+    return decryptPlaylist(text)
+  }
+  if (ext === 'cmpl') {
+    const text = await gunzipToString(buf)
+    return decryptPlaylist(text)
+  }
+  throw new Error('不支持的文件类型')
+}
+
 /**
  * 导出播放列表到文件
  * @param playlist 播放列表数据
  * @returns 下载的文件名
  */
-export function exportPlaylistToFile(playlist: SongList[]): string {
+export async function exportPlaylistToFile(
+  playlist: SongList[],
+  customFileName?: string
+): Promise<string> {
   try {
     if (!playlist || playlist.length === 0) {
       throw new Error('播放列表为空')
     }
 
     const encryptedData = encryptPlaylist(playlist)
-    const fileName = `cerumusic-playlist-${new Date().toISOString().slice(0, 10)}.cpl`
+    const fileName =
+      customFileName || `cerumusic-playlist-${new Date().toISOString().slice(0, 10)}.cmpl`
 
-    // 创建Blob对象
-    const blob = new Blob([encryptedData], { type: 'application/octet-stream' })
+    const blob = await gzipString(encryptedData)
 
-    // 创建下载链接
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = fileName
 
-    // 触发下载
     document.body.appendChild(link)
     link.click()
 
-    // 清理
     setTimeout(() => {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
@@ -107,21 +142,33 @@ export function importPlaylistFromFile(file: File): Promise<SongList[]> {
       return
     }
 
-    if (!file.name.endsWith('.cpl')) {
-      reject(new Error('文件格式不正确，请选择.cpl格式的播放列表文件'))
+    const isCompressed = file.name.endsWith('.cmpl')
+    const isLegacy = file.name.endsWith('.cpl')
+    if (!isCompressed && !isLegacy) {
+      reject(new Error('文件格式不正确，请选择.cmpl或.cpl格式的播放列表文件'))
       return
     }
 
     const reader = new FileReader()
 
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        if (!event.target || typeof event.target.result !== 'string') {
+        if (!event.target || event.target.result == null) {
           throw new Error('读取文件失败')
         }
 
-        const encryptedData = event.target.result
-        const playlist = decryptPlaylist(encryptedData)
+        if (isLegacy) {
+          if (typeof event.target.result !== 'string') throw new Error('读取文件失败')
+          const encryptedData = event.target.result
+          const playlist = decryptPlaylist(encryptedData)
+          resolve(playlist)
+          return
+        }
+
+        const buf = event.target.result as ArrayBuffer
+
+        const encryptedText = await gunzipToString(buf)
+        const playlist = decryptPlaylist(encryptedText)
         resolve(playlist)
       } catch (error) {
         reject(error)
@@ -132,7 +179,11 @@ export function importPlaylistFromFile(file: File): Promise<SongList[]> {
       reject(new Error('读取文件失败'))
     }
 
-    reader.readAsText(file)
+    if (isLegacy) {
+      reader.readAsText(file)
+    } else {
+      reader.readAsArrayBuffer(file)
+    }
   })
 }
 

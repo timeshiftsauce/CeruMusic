@@ -46,7 +46,7 @@
           backdrop-filter: blur(10px);
           z-index: 0;
           opacity: 0;
-          cursor: move;
+          /* cursor: move; */
           transition: opacity 0.3s;
         }
 
@@ -215,16 +215,17 @@
         display: flex;
         flex-direction: column;
         width: 100%;
-        transition: transform 0.35s ease, opacity 0.35s ease;
+        transition:
+          transform 0.35s ease,
+          opacity 0.35s ease;
         will-change: transform, opacity;
       }
-      .line *{
-                transition:
+      .line * {
+        transition:
           transform 0.35s ease,
           opacity 0.35s ease;
         will-change: transform, opacity;
         text-shadow: 0 0 4px var(--shadow-color);
-
       }
       .line .text {
         font-size: calc(var(--font-size) * 1px);
@@ -262,13 +263,25 @@
 
       /* 进入动画：使用关键帧，避免过渡时序问题 */
       @keyframes lyricEnter {
-        from { opacity: 0; transform: translateY(8px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       /* 备用：如果需要离场可再启用 */
       @keyframes lyricLeave {
-        from { opacity: 1; transform: translateY(0); }
-        to   { opacity: 0; transform: translateY(-8px); }
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
       }
     </style>
   </head>
@@ -733,11 +746,83 @@
             this.renderByIndex(index)
           }
         }
-        // 拖拽窗口
         setupWindowDragListeners() {
-          document.addEventListener('mousedown', this.startDrag.bind(this))
-          document.addEventListener('mousemove', this.dragWindow.bind(this))
+          this.isResizing = false
+          this.resizeEdge = null
+          this.resizeBorderSize = 14
+          document.addEventListener('mousedown', this.handleMouseDown.bind(this))
+          document.addEventListener('mousemove', this.handleMouseMove.bind(this))
           document.addEventListener('mouseup', this.endDrag.bind(this))
+        }
+        async handleMouseDown(event) {
+          if (event.button !== 0) return
+          const { clientX, clientY } = event
+          const w = window.innerWidth
+          const h = window.innerHeight
+          const b = this.resizeBorderSize || 8
+          const nearLeft = clientX <= b
+          const nearRight = clientX >= w - b
+          const nearTop = clientY <= b
+          const nearBottom = clientY >= h - b
+          let edge = null
+          if (nearLeft && nearTop) edge = 'top-left'
+          else if (nearRight && nearTop) edge = 'top-right'
+          else if (nearLeft && nearBottom) edge = 'bottom-left'
+          else if (nearRight && nearBottom) edge = 'bottom-right'
+          else if (nearLeft) edge = 'left'
+          else if (nearRight) edge = 'right'
+          else if (nearTop) edge = 'top'
+          else if (nearBottom) edge = 'bottom'
+          const { screenX, screenY } = event
+          const {
+            x: winX,
+            y: winY,
+            width,
+            height
+          } = await window.electron.ipcRenderer.invoke('get-window-bounds')
+          this.startX = screenX
+          this.startY = screenY
+          this.startWinX = winX
+          this.startWinY = winY
+          this.winWidth = width
+          this.winHeight = height
+          if (edge) {
+            this.isResizing = true
+            this.isDragging = false
+            this.resizeEdge = edge
+          } else {
+            this.isDragging = true
+            this.isResizing = false
+            this.resizeEdge = null
+          }
+        }
+        async handleMouseMove(event) {
+          if (!this.isDragging && !this.isResizing) {
+            const { clientX, clientY } = event
+            const w = window.innerWidth
+            const h = window.innerHeight
+            const b = this.resizeBorderSize || 14
+            const nearLeft = clientX <= b
+            const nearRight = clientX >= w - b
+            const nearTop = clientY <= b
+            const nearBottom = clientY >= h - b
+            let cursor = ''
+            if ((nearLeft && nearTop) || (nearRight && nearBottom)) {
+              cursor = 'nwse-resize'
+            } else if ((nearRight && nearTop) || (nearLeft && nearBottom)) {
+              cursor = 'nesw-resize'
+            } else if (nearLeft || nearRight) {
+              cursor = 'ew-resize'
+            } else if (nearTop || nearBottom) {
+              cursor = 'ns-resize'
+            }
+            document.body.style.cursor = cursor
+          }
+          if (this.isResizing) {
+            await this.resizeWindow(event)
+          } else if (this.isDragging) {
+            await this.dragWindow(event)
+          }
         }
         // 开始拖拽
         async startDrag(event) {
@@ -774,9 +859,63 @@
             this.winHeight
           )
         }
+        async resizeWindow(event) {
+          if (!this.isResizing || !this.resizeEdge) return
+          const { screenX, screenY } = event
+          const dx = screenX - this.startX
+          const dy = screenY - this.startY
+          const minWidth = 440
+          const minHeight = 120
+          const maxWidth = 1600
+          const maxHeight = 300
+          let newX = this.startWinX
+          let newY = this.startWinY
+          let newWidth = this.winWidth
+          let newHeight = this.winHeight
+          if (this.resizeEdge.indexOf('right') !== -1) {
+            newWidth = this.winWidth + dx
+          }
+          if (this.resizeEdge.indexOf('bottom') !== -1) {
+            newHeight = this.winHeight + dy
+          }
+          if (this.resizeEdge.indexOf('left') !== -1) {
+            newX = this.startWinX + dx
+            newWidth = this.winWidth - dx
+          }
+          if (this.resizeEdge.indexOf('top') !== -1) {
+            newY = this.startWinY + dy
+            newHeight = this.winHeight - dy
+          }
+          if (newWidth < minWidth) {
+            if (this.resizeEdge.indexOf('left') !== -1) {
+              newX -= minWidth - newWidth
+            }
+            newWidth = minWidth
+          } else if (newWidth > maxWidth) {
+            if (this.resizeEdge.indexOf('left') !== -1) {
+              newX -= maxWidth - newWidth
+            }
+            newWidth = maxWidth
+          }
+          if (newHeight < minHeight) {
+            if (this.resizeEdge.indexOf('top') !== -1) {
+              newY -= minHeight - newHeight
+            }
+            newHeight = minHeight
+          } else if (newHeight > maxHeight) {
+            if (this.resizeEdge.indexOf('top') !== -1) {
+              newY -= maxHeight - newHeight
+            }
+            newHeight = maxHeight
+          }
+          window.electron.ipcRenderer.send('move-window', newX, newY, newWidth, newHeight)
+        }
         // 结束拖拽
         endDrag() {
           this.isDragging = false
+          this.isResizing = false
+          this.resizeEdge = null
+          document.body.style.cursor = ''
         }
         // 更新高度
         updateWindowHeight() {

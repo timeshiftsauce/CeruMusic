@@ -31,7 +31,6 @@ import { NSwitch } from 'naive-ui'
 import { usePlaySettingStore } from '@renderer/store'
 
 const playSetting = usePlaySettingStore()
-console.log('playSetting', playSetting)
 const showSettings = ref(false)
 
 const showLeftPanel = computed({
@@ -601,10 +600,12 @@ onBeforeUnmount(() => {
       <div v-if="state.lyricLines.length > 0" class="right">
         <LyricPlayer
           ref="lyricPlayerRef"
-          :lyric-lines="(props.show && state.lyricLines) || []"
+          :lyric-lines="state.lyricLines || []"
           :current-time="state.currentTime"
           class="lyric-player"
-          :align-position="playSetting.getLayoutMode === 'cd' ? 0.5 : 0.32"
+          :align-position="
+            playSetting.getLayoutMode === 'cd' ? 0.5 : playSetting.getisJumpLyric ? 0.3 : 0.38
+          "
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
           @line-click="jumpTime"
@@ -1086,10 +1087,16 @@ onBeforeUnmount(() => {
           transform: scale(1.02);
         }
 
-        .cover-img-square {
+        :deep(.cover-img-square) {
           width: 100%;
           height: 100%;
           object-fit: cover;
+          user-select: none;
+          img {
+            -webkit-user-drag: none;
+
+            user-select: none;
+          }
         }
       }
 

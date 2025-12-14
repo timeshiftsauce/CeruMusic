@@ -11,6 +11,10 @@ import {
   initPlaylistEventListeners,
   destroyPlaylistEventListeners
 } from '@renderer/utils/playlist/playlistManager'
+import {
+  waitForAudioReady,
+  getCandidateSongs
+} from './audioHelpers'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -35,39 +39,9 @@ const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number | stri
 
 let pendingRestorePosition = 0
 let pendingRestoreSongId: number | string | null = null
-
-const waitForAudioReady = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const audio = Audio.value.audio
-    if (!audio) {
-      reject(new Error('音频元素未初始化'))
-      return
-    }
-    if (audio.readyState >= 3) {
-      resolve()
-      return
-    }
-    const timeout = setTimeout(() => {
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      reject(new Error('音频加载超时'))
-    }, 10000)
-    const onCanPlay = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      resolve()
-    }
-    const onError = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      reject(new Error('音频加载失败'))
-    }
-    audio.addEventListener('canplay', onCanPlay, { once: true })
-    audio.addEventListener('error', onError, { once: true })
-  })
-}
+let currentPlaybackErrorHandler: ((e: Event) => void) | null = null
+let currentPlaybackPlayingHandler: ((e: Event) => void) | null = null
+let currentPlayRequestId: number = 0
 
 const setUrl = controlAudio.setUrl
 const start = controlAudio.start
@@ -85,7 +59,9 @@ const handlePlay = async () => {
   }
   try {
     if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
-      await waitForAudioReady()
+      if (Audio.value.audio) {
+        await waitForAudioReady(Audio.value.audio)
+      }
       setCurrentTime(pendingRestorePosition)
       if (Audio.value.audio) {
         Audio.value.audio.currentTime = pendingRestorePosition
@@ -127,8 +103,34 @@ const togglePlayPause = async () => {
 }
 
 const playSong = async (song: SongList) => {
+  // 使用当前时间戳作为请求ID，解决快速切歌的竞态问题
+  const requestId = Date.now()
+  // songInfo 上不存在 requestId 属性，移除该行；requestId 仅通过闭包变量跟踪即可
+
+  // 更好的方式：使用闭包变量跟踪是否是最新请求
+  // 但是 playSong 是 async 的，我们需要在关键的 await 之后检查
+
+  // 更新全局的 currentPlayRequestId
+  currentPlayRequestId = requestId
+
+  // 防抖：给一个短暂的缓冲期，避免连续快速点击导致并发请求错误
+  await new Promise(resolve => setTimeout(resolve, 300))
+  if (currentPlayRequestId !== requestId) return
+
   try {
     isLoadingSong.value = true
+    // 清理之前的监听器
+    if (Audio.value.audio) {
+      if (currentPlaybackErrorHandler) {
+        Audio.value.audio.removeEventListener('error', currentPlaybackErrorHandler)
+        currentPlaybackErrorHandler = null
+      }
+      if (currentPlaybackPlayingHandler) {
+        Audio.value.audio.removeEventListener('playing', currentPlaybackPlayingHandler)
+        currentPlaybackPlayingHandler = null
+      }
+    }
+
     const isHistoryPlay =
       song.songmid === userInfo.value.lastPlaySongId &&
       userInfo.value.currentTime !== undefined &&
@@ -146,6 +148,9 @@ const playSong = async (song: SongList) => {
       Audio.value.audio.pause()
       Audio.value.audio.volume = Audio.value.volume / 100
     }
+
+    // 如果切歌了，这里先不更新 UI，等真正开始获取 URL 了再说？
+    // 不，UI 应该立即响应。
     songInfo.value.name = song.name
     songInfo.value.singer = song.singer
     songInfo.value.albumName = song.albumName
@@ -157,54 +162,250 @@ const playSong = async (song: SongList) => {
       album: song.albumName || '未知专辑',
       artworkUrl: song.img || defaultCoverImg
     })
+
     let urlToPlay = ''
+    // let usedAutoSwitch = false
     try {
       urlToPlay = await getSongRealUrl(toRaw(song))
     } catch (error: any) {
-      isLoadingSong.value = false
-      tryAutoNext('获取歌曲 URL 失败')
-      return
-    }
-    if (Audio.value.audio) {
-      const a = Audio.value.audio
+      // 检查是否已过期
+      if (currentPlayRequestId !== requestId) return
+
+      console.warn('Original source failed, trying auto switch...', error)
       try {
-        a.pause()
-      } catch {}
-      a.removeAttribute('src')
-      a.load()
+        throw new Error('Force switch')
+      } catch (switchError) {
+      }
     }
-    setUrl(urlToPlay)
-    await waitForAudioReady()
+
+    // 再次检查请求ID
+    if (currentPlayRequestId !== requestId) return
+
+    // 如果 urlToPlay 为空或者上面抛出了错误，说明原源不行，开始尝试 candidates
+    if (!urlToPlay || urlToPlay.includes('error')) {
+      try {
+        const candidates = await getCandidateSongs(song, userInfo.value)
+
+        // 再次检查请求ID，因为 search 也耗时
+        if (currentPlayRequestId !== requestId) return
+
+        let playSuccess = false
+        for (const item of candidates) {
+          // 每次循环前都检查是否被新的播放请求打断
+          if (currentPlayRequestId !== requestId) return
+
+          try {
+            const url = await getSongRealUrl(toRaw(item))
+            if (currentPlayRequestId !== requestId) return // getSongRealUrl 也是 async
+
+            if (!url || typeof url !== 'string' || url.includes('error')) continue;
+
+            setUrl(url)
+            if (Audio.value.audio) {
+              const a = Audio.value.audio
+              try { a.pause() } catch { }
+              a.removeAttribute('src')
+              a.load()
+
+              try {
+                await waitForAudioReady(Audio.value.audio)
+                if (currentPlayRequestId !== requestId) return // 等待期间可能切歌
+
+                MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
+                playSuccess = true
+                urlToPlay = url
+                songInfo.value = { ...song }
+                break
+              } catch (e) {
+                continue
+              }
+            }
+          } catch { continue }
+        }
+
+        if (currentPlayRequestId !== requestId) return
+
+        if (!playSuccess) {
+          isLoadingSong.value = false
+          tryAutoNext('自动换源失败：所有源均无法播放')
+          return
+        }
+      } catch (e) {
+        if (currentPlayRequestId !== requestId) return
+        isLoadingSong.value = false
+        tryAutoNext('自动换源失败')
+        return
+      }
+    } else {
+      // 原源 URL 获取成功，尝试播放
+      if (Audio.value.audio) {
+        const a = Audio.value.audio
+        try {
+          a.pause()
+        } catch { }
+        a.removeAttribute('src')
+        a.load()
+      }
+      setUrl(urlToPlay)
+      try {
+        if (Audio.value.audio) {
+          await waitForAudioReady(Audio.value.audio)
+        }
+        if (currentPlayRequestId !== requestId) return
+      } catch (e) {
+        if (currentPlayRequestId !== requestId) return
+        // 原源 URL 获取成功但播放/加载失败
+        console.warn('Audio ready failed, trying auto switch...', e)
+        try {
+          const candidates = await getCandidateSongs(song, userInfo.value)
+          if (currentPlayRequestId !== requestId) return
+
+          let playSuccess = false
+          for (const item of candidates) {
+            if (currentPlayRequestId !== requestId) return
+            try {
+              const url = await getSongRealUrl(toRaw(item))
+              if (currentPlayRequestId !== requestId) return
+
+              if (!url || typeof url !== 'string' || url.includes('error')) continue;
+
+              // 避免重复尝试那个失败的 URL
+              if (url === urlToPlay) continue;
+
+              setUrl(url)
+              if (Audio.value.audio) {
+                Audio.value.audio.load()
+                try {
+                  await waitForAudioReady(Audio.value.audio)
+                  if (currentPlayRequestId !== requestId) return
+
+                  MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
+                  playSuccess = true
+                  break
+                } catch (e) { continue }
+              }
+            } catch { continue }
+          }
+
+          if (currentPlayRequestId !== requestId) return
+
+          if (!playSuccess) {
+            throw e
+          }
+        } catch (switchError) {
+          if (currentPlayRequestId !== requestId) return
+          throw switchError
+        }
+      }
+    }
+
+    if (currentPlayRequestId !== requestId) return
+
     songInfo.value = { ...song }
     isLoadingSong.value = false
     start()
       .catch(async () => {
+        if (currentPlayRequestId !== requestId) return
         tryAutoNext('启动播放失败')
       })
       .then(() => {
+        if (currentPlayRequestId !== requestId) return
         autoNextCount.value = 0
       })
+
+    // 只有在确定是当前请求时，才挂载错误监听
     if (Audio.value.audio) {
+      currentPlaybackPlayingHandler = () => {
+        isLoadingSong.value = false
+        currentPlaybackPlayingHandler = null
+      }
       Audio.value.audio.addEventListener(
         'playing',
-        () => {
-          isLoadingSong.value = false
-        },
+        currentPlaybackPlayingHandler,
         { once: true }
       )
+      currentPlaybackErrorHandler = async () => {
+        // 如果触发了 error，也要检查是不是当前这首歌的 error
+        // 其实 error listener 是一次性的，并且每次 playSong 开头都会清理
+        // 所以理论上只要 playSong 没被新的打断，这个 listener 就是有效的。
+        // 但如果快速切歌，旧的 playSong 可能还在运行，挂载了 listener，
+        // 然后新的 playSong 运行，清理了 listener。
+        //
+        // 现在的逻辑是：只有 playSong 走到最后才会挂载 listener。
+        // 由于我们加了 currentPlayRequestId check，旧的 playSong 即使没执行完，
+        // 只要遇到 await 就会停止，不会走到最后挂载 listener。
+        //
+        // 唯一的问题是：如果旧的 playSong 已经挂载了 listener，然后新的 playSong 开始了，
+        // 新的 playSong 会清理旧的 listener。
+        // 所以这里不需要额外的 check，只要保证 playSong 中途退出即可。
+
+        console.warn('Playback error, trying auto switch...')
+        currentPlaybackErrorHandler = null
+
+        try {
+          const candidates = await getCandidateSongs(song, userInfo.value)
+          // 注意：这里的 song 是闭包变量，仍然引用着当时那首歌。
+          // 如果此时用户已经切到下一首了，我们不应该继续这个重试逻辑。
+          // 所以这里也需要检查 requestId。
+          if (currentPlayRequestId !== requestId) return
+
+          let playSuccess = false
+          for (const item of candidates) {
+            if (currentPlayRequestId !== requestId) return
+            try {
+              const url = await getSongRealUrl(toRaw(item))
+              if (currentPlayRequestId !== requestId) return
+              if (!url || typeof url !== 'string' || url.includes('error')) continue;
+
+              if (Audio.value.audio && Audio.value.audio.src === url) continue;
+
+              setUrl(url)
+              if (Audio.value.audio) {
+                Audio.value.audio.load()
+                await waitForAudioReady(Audio.value.audio)
+                if (currentPlayRequestId !== requestId) return
+
+                MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
+                playSuccess = true
+                start().catch(() => {
+                  if (currentPlayRequestId !== requestId) return
+                  tryAutoNext('换源后启动播放失败')
+                })
+                break;
+              }
+            } catch (e) {
+              continue
+            }
+          }
+
+          if (currentPlayRequestId !== requestId) return
+
+          if (!playSuccess) {
+            isLoadingSong.value = false
+            tryAutoNext('所有自动换源尝试均失败')
+          }
+
+        } catch (e) {
+          if (currentPlayRequestId !== requestId) return
+          isLoadingSong.value = false
+          tryAutoNext('播放出错且自动换源失败')
+        }
+      }
       Audio.value.audio.addEventListener(
         'error',
-        () => {
-          isLoadingSong.value = false
-        },
+        currentPlaybackErrorHandler,
         { once: true }
       )
     }
   } catch (error: any) {
+    if (currentPlayRequestId !== requestId) return
     tryAutoNext('播放歌曲失败')
     isLoadingSong.value = false
   } finally {
-    isLoadingSong.value = false
+    // 只有当前请求才能关闭 loading
+    if (currentPlayRequestId === requestId) {
+      isLoadingSong.value = false
+    }
   }
 }
 
@@ -351,13 +552,13 @@ const initPlayback = async () => {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
-        } catch {}
+        } catch { }
         if (userInfo.value.currentTime) {
           pendingRestorePosition = userInfo.value.currentTime
           pendingRestoreSongId = lastPlayedSong.songmid
           if (Audio.value.audio) {
             console.log('上次进度', userInfo.value.currentTime)
-            await waitForAudioReady()
+            await waitForAudioReady(Audio.value.audio)
             Audio.value.currentTime = userInfo.value.currentTime
             Audio.value.audio.currentTime = userInfo.value.currentTime
           }

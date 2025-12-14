@@ -15,6 +15,8 @@ export interface SettingsState {
     downloadDir: string
   }
   tagWriteOptions?: TagWriteOptions
+  autoImportPlaylistOnOpen?: boolean
+  suppressImportPrompt?: boolean
 }
 
 export const useSettingsStore = defineStore(
@@ -28,7 +30,9 @@ export const useSettingsStore = defineStore(
         basicInfo: true,
         cover: true,
         lyrics: true
-      }
+      },
+      autoImportPlaylistOnOpen: false,
+      suppressImportPrompt: false
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -92,6 +96,6 @@ export const useSettingsStore = defineStore(
     }
   },
   {
-    persist: false
+    persist: true
   }
 )

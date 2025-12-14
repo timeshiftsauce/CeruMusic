@@ -179,8 +179,16 @@ ipcMain.handle('songlist:exists', async (_, hashId: string) => {
 ipcMain.handle('songlist:add-songs', async (_, hashId: string, songs: Songs[]) => {
   try {
     const instance = new ManageSongList(hashId)
-    instance.addSongs(songs)
-    return { success: true, message: `成功添加 ${songs.length} 首歌曲` }
+    const added = instance.addSongs(songs)
+    const skipped = Math.max(0, (Array.isArray(songs) ? songs.length : 0) - added)
+    return {
+      success: true,
+      data: { added, skipped },
+      message:
+        skipped > 0
+          ? `成功添加 ${added} 首歌曲，跳过 ${skipped} 首重复`
+          : `成功添加 ${added} 首歌曲`
+    }
   } catch (error) {
     console.error('添加歌曲失败:', error)
     const message = error instanceof SongListError ? error.message : '添加歌曲失败'

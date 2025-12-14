@@ -67,6 +67,7 @@ export const LocalUserDetailStore = defineStore(
       if (!list.value.find((item) => item.songmid === song.songmid)) {
         list.value.push(song)
       }
+
       return list.value
     }
 
@@ -95,6 +96,34 @@ export const LocalUserDetailStore = defineStore(
     function clearList() {
       list.value = []
     }
+    function replaceSongList(songs: SongList[]) {
+      const seen1 = new Set<string | number>()
+      console.log(
+        'origin',
+        songs.filter((item) => {
+          const keyValue = item.songmid
+          if (seen1.has(keyValue)) {
+            return false
+          } else {
+            seen1.add(keyValue)
+            return true
+          }
+        })
+      )
+
+      const seen = new Set<string | number>()
+      const deduped: SongList[] = []
+      for (const s of songs) {
+        const mid = (s as any).songmid
+        if (!seen.has(mid)) {
+          seen.add(mid)
+          deduped.push(s)
+        }
+      }
+      console.log('size', seen.size)
+      list.value = deduped
+      return list.value
+    }
     const userSource = computed(() => {
       return {
         pluginId: userInfo.value.pluginId,
@@ -113,6 +142,7 @@ export const LocalUserDetailStore = defineStore(
       addSongToFirst,
       removeSong,
       clearList,
+      replaceSongList,
       userSource
     }
   },
