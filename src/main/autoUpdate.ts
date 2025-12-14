@@ -162,6 +162,7 @@ export async function checkForUpdates(window?: BrowserWindow) {
 // 获取更新信息
 async function fetchUpdateInfo(): Promise<UpdateInfo | null> {
   try {
+    updateLog.log('Fetching update info... url is ' + UPDATE_API_URL)
     const response = await axios.get(UPDATE_API_URL, {
       timeout: 10000, // 10秒超时
       validateStatus: (status) => status === 200 || status === 204 // 允许 200 和 204 状态码

@@ -513,18 +513,19 @@ export default class ManageSongList extends PlayListSongs {
    * 重写父类的addSongs方法，添加自动设置封面功能
    * @param songs 要添加的歌曲列表
    */
-  addSongs(songs: Songs[]): void {
+  addSongs(songs: Songs[]): number {
     if (!Array.isArray(songs) || songs.length === 0) {
-      return
+      return 0
     }
 
-    // 调用父类方法添加歌曲
-    super.addSongs(songs)
+    // 调用父类方法添加歌曲，获取实际新增数量
+    const added = super.addSongs(songs) || 0
 
     // 异步更新封面，不阻塞主要功能
     setImmediate(() => {
       this.updateCoverIfNeeded(songs)
     })
+    return added
   }
 
   /**

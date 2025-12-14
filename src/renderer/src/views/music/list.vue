@@ -266,7 +266,6 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const scrollY = ref(0)
 const isHeaderCompact = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
-const songListRef = ref<any>(null)
 
 // 点击封面修改图片（仅本地歌单）
 const handleCoverClick = () => {

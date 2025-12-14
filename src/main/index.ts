@@ -25,7 +25,19 @@ import './events/pluginNotice'
 import initLyricIpc from './events/lyric'
 import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
+import fs from 'node:fs'
 
+let pendingPlaylistFiles: string[] = []
+const queueOpenPlaylist = (filePath: string) => {
+  if (!filePath) return
+  if (!/\.(cmpl|cpl)$/i.test(filePath)) return
+  if (!pendingPlaylistFiles.includes(filePath)) pendingPlaylistFiles.push(filePath)
+  if (mainWindow && !mainWindow.webContents.isLoadingMainFrame()) {
+    // 已加载，立即分发并清空队列
+    pendingPlaylistFiles.forEach((p) => mainWindow!.webContents.send('open-playlist-file', p))
+    pendingPlaylistFiles = []
+  }
+}
 process.on('unhandledRejection', (reason: any) => {
   console.error('Unhandled Rejection:', reason?.message || reason)
 })
@@ -42,13 +54,15 @@ if (!gotTheLock) {
   app.quit()
 } else {
   // 当第二个实例尝试启动时，聚焦到第一个实例的窗口
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     // 如果有窗口存在，聚焦到该窗口
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       if (!mainWindow.isVisible()) mainWindow.show()
       mainWindow.focus()
     }
+    const argPath = argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
+    if (argPath) queueOpenPlaylist(argPath)
   })
 }
 
@@ -110,13 +124,13 @@ function setupTray() {
   if (g.__ceru_tray__) {
     try {
       g.__ceru_tray__.destroy()
-    } catch {}
+    } catch { }
     g.__ceru_tray__ = null
   }
   if (tray) {
     try {
       tray.destroy()
-    } catch {}
+    } catch { }
     tray = null
   }
 
@@ -154,7 +168,7 @@ function setupTray() {
   app.once('before-quit', () => {
     try {
       tray?.destroy()
-    } catch {}
+    } catch { }
     tray = null
     g.__ceru_tray__ = null
   })
@@ -324,6 +338,13 @@ app.whenReady().then(() => {
     initAutoUpdateForWindow(mainWindow)
     lyricWindow.create()
     initLyricIpc(mainWindow)
+    const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
+    if (startArg) queueOpenPlaylist(startArg)
+    mainWindow.webContents.on('did-finish-load', () => {
+      // 页面加载完成后分发并清空队列
+      pendingPlaylistFiles.forEach((p) => mainWindow!.webContents.send('open-playlist-file', p))
+      pendingPlaylistFiles = []
+    })
   }
 
   app.on('activate', function () {
@@ -331,6 +352,29 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// macOS 双击文件打开
+app.on('open-file', (event, filePath) => {
+  event.preventDefault()
+  queueOpenPlaylist(filePath)
+})
+
+// 读取文件内容供渲染层解析
+ipcMain.handle('fs:read-file', async (_event, path: string) => {
+  try {
+    const buf = await fs.promises.readFile(path)
+    return buf
+  } catch (err: any) {
+    return Promise.reject(err?.message || String(err))
+  }
+})
+
+// 查询并清空待处理的打开文件队列
+ipcMain.handle('get-pending-open-playlist-files', async () => {
+  const list = [...pendingPlaylistFiles]
+  pendingPlaylistFiles = []
+  return list
 })
 
 // In this file you can include the rest of your app's specific main process

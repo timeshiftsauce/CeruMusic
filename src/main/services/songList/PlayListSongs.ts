@@ -171,22 +171,27 @@ export default class PlayListSongs {
   /**
    * 添加歌曲到歌单
    */
-  addSongs(songs: SongItem[]): void {
+  addSongs(songs: SongItem[]): number {
     if (!Array.isArray(songs) || songs.length === 0) {
-      return
+      return 0
     }
     // 验证和过滤有效歌曲
     const validSongs = songs.filter(PlayListUtils.isValidSong)
     if (validSongs.length === 0) {
       console.warn('没有有效的歌曲可添加')
-      return
+      return 0
     }
 
-    // 使用 Set 提高查重性能，统一转换为字符串进行比较
+    // 使用 Set 提高查重性能：对现有列表和本次批量同时去重
     const existingSongMids = new Set(this.list.map((song) => String(song.songmid)))
-
-    // 添加不重复的歌曲
-    const newSongs = validSongs.filter((song) => !existingSongMids.has(String(song.songmid)))
+    const seen = new Set(existingSongMids)
+    const newSongs: SongItem[] = []
+    for (const song of validSongs) {
+      const mid = String(song.songmid)
+      if (seen.has(mid)) continue
+      seen.add(mid)
+      newSongs.push(song)
+    }
 
     if (newSongs.length > 0) {
       this.list.push(...newSongs)
@@ -196,8 +201,10 @@ export default class PlayListSongs {
       console.log(
         `成功添加 ${newSongs.length} 首歌曲，跳过 ${validSongs.length - newSongs.length} 首重复歌曲`
       )
+      return newSongs.length
     } else {
       console.log('所有歌曲都已存在，未添加任何歌曲')
+      return 0
     }
   }
 

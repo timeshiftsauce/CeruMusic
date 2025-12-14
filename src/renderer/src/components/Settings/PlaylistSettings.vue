@@ -32,7 +32,10 @@ const handleExportToFile = async () => {
       return
     }
 
-    const fileName = exportPlaylistToFile(list.value)
+    const filtered = list.value.filter((s) => s.source !== 'local')
+    const removed = list.value.length - filtered.length
+    const fileName = await exportPlaylistToFile(filtered)
+    if (removed > 0) MessagePlugin.info(`已筛除 ${removed} 首本地歌曲`)
     MessagePlugin.success(`播放列表已成功导出为 ${fileName}`)
     exportDialogVisible.value = false
   } catch (error) {
@@ -48,7 +51,10 @@ const handleCopyToClipboard = async () => {
       return
     }
 
-    await copyPlaylistToClipboard(list.value)
+    const filtered = list.value.filter((s) => s.source !== 'local')
+    const removed = list.value.length - filtered.length
+    await copyPlaylistToClipboard(filtered)
+    if (removed > 0) MessagePlugin.info(`已筛除 ${removed} 首本地歌曲`)
     MessagePlugin.success('播放列表已复制到剪贴板')
     exportDialogVisible.value = false
   } catch (error) {
@@ -361,7 +367,7 @@ watch(
           <div class="import-options">
             <t-card
               title="从文件导入"
-              description="从.cpl格式的加密文件中导入播放列表"
+              description="从.cmpl/.cpl格式的加密文件中导入播放列表"
               class="import-option-card"
             >
               <template #footer>
@@ -369,7 +375,7 @@ watch(
                   <input
                     ref="fileInputRef"
                     type="file"
-                    accept=".cpl"
+                    accept=".cmpl,.cpl"
                     style="display: none"
                     @change="handleFileChange"
                   />
