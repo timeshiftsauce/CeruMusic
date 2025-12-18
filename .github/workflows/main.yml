@@ -6,68 +6,93 @@ permissions:
 on:
   push:
     tags:
-      - 'v*' # 当推送以v开头的标签时触发此工作流
-  workflow_dispatch:
+      - 'v*' # 当推送以v开头的标签时触发
+  workflow_dispatch: # 允许手动点击按钮触发构建
 
 jobs:
   release:
-    name: build and release electron app # 任务名称
-    runs-on: ${{ matrix.os }} # 在matrix.os定义的操作系统上运行
+    name: build and release electron app
+    runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # 如果一个任务失败,其他任务继续运行
+      fail-fast: false # 即使一个平台失败，其他平台继续运行
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest] # 在Windows和macOS上运行任务
+        # 定义运行环境：Windows, macOS, Linux
+        os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
       - name: Check out git repository
-        uses: actions/checkout@v4 # 检出代码仓库
+        uses: actions/checkout@v4
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 安装Node.js 22 （这里node环境是能够运行代码的环境）
+          node-version: 22
+          # 【优化 1】启用 actions/setup-node 内置的 yarn 缓存
+          # 它会根据 yarn.lock 自动管理 node_modules 的缓存
+          cache: 'yarn'
+
+      - name: Cache Electron Binaries
+        # 【优化 2】缓存 Electron 预编译二进制文件
+        # Electron 首次打包会下载很大的压缩包，缓存后下次构建可秒速跳过下载阶段
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-v1-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-v1-
 
       - name: Install Dependencies
+        # 必须保留安装步骤，但由于有了上面的缓存，这一步会执行得非常快
         run: |
           npm i -g yarn
-          yarn  # 安装项目依赖
+          yarn install --frozen-lockfile
 
       - name: Build Electron App for windows
-        if: matrix.os == 'windows-latest' # 只在Windows上运行
-        run: yarn run build:win # 构建Windows版应用
+        if: matrix.os == 'windows-latest'
+        run: yarn run build:win
 
       - name: Build Electron App for macos
-        if: matrix.os == 'macos-latest' # 只在macOS上运行
-        run: |
-          yarn run build:mac:universal
+        if: matrix.os == 'macos-latest'
+        run: yarn run build:mac:universal
 
       - name: Build Electron App for linux
-        if: matrix.os == 'ubuntu-latest' # 只在Linux上运行
-        run: yarn run build:linux # 构建Linux版应用
+        if: matrix.os == 'ubuntu-latest'
+        run: yarn run build:linux
 
       - name: Cleanup Artifacts for Windows
         if: matrix.os == 'windows-latest'
         run: |
-          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"  # 清理Windows构建产物,只保留特定文件
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"
 
       - name: Cleanup Artifacts for MacOS
         if: matrix.os == 'macos-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"  # 清理macOS构建产物,只保留特定文件
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
 
       - name: Cleanup Artifacts for Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|latest*.yml)"  # 清理Linux构建产物,只保留特定文件
+          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|latest*.yml)"
 
-      - name: upload artifacts
+      - name: Upload Artifacts
+        # 将构建产物上传到 GitHub Actions 任务面板，方便在 Release 发布前检查包体
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}
-          path: dist # 上传构建产物作为工作流artifact
+          name: ${{ matrix.os }}-build-artifacts
+          path: dist
 
-      - name: release
+      - name: Release
+        # 只有在推送 Tag (v*) 时才触发真正的 GitHub Release 发布
         uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: 'dist/**' # 将dist目录下所有文件添加到release
-          body: ${{ github.event.head_commit.message }} # 自动将commit message写入release描述
+          files: 'dist/**'
+          body: ${{ github.event.head_commit.message }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
