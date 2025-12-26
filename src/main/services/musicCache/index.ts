@@ -145,7 +145,7 @@ export class MusicCacheService {
         writer.on('error', (error: Error) => {
           console.error(`下载歌曲失败: ${songId}`, error)
           // 清理失败的文件
-          fs.unlink(cacheFilePath).catch(() => {})
+          fs.unlink(cacheFilePath).catch(() => { })
           reject(error)
         })
       })

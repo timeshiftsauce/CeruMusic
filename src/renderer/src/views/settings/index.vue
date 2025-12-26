@@ -392,7 +392,7 @@ const getTagOptionsStatus = () => {
   <div class="main-container">
     <!-- 标题栏 -->
     <div class="header">
-      <TitleBarControls title="设置" :show-back="true" />
+      <TitleBarControls title="设置" :show-back="true" :show-account="false" />
     </div>
 
     <!-- 主要内容区域 -->

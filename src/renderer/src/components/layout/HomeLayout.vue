@@ -2,16 +2,26 @@
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'
-import { onMounted, ref, watchEffect, computed } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect, computed } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter } from 'vue-router'
 import { useSearchStore } from '@renderer/store'
 
+let stopWatchEffect: (() => void) | null = null
+
 onMounted(() => {
   const LocalUserDetail = LocalUserDetailStore()
-  watchEffect(() => {
+  stopWatchEffect = watchEffect(() => {
     source.value = sourceicon[LocalUserDetail.userSource.source || 'wy']
   })
+})
+
+onUnmounted(() => {
+  // 清理 watchEffect，防止内存泄漏
+  if (stopWatchEffect) {
+    stopWatchEffect()
+    stopWatchEffect = null
+  }
 })
 
 const sourceicon = {
@@ -266,7 +276,7 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
                 <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
 
-              <TitleBarControls></TitleBarControls>
+              <TitleBarControls :showAccount="true"></TitleBarControls>
             </div>
           </div>
 

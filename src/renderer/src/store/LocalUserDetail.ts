@@ -11,6 +11,7 @@ export const LocalUserDetailStore = defineStore(
     const list = ref<SongList[]>([])
     const userInfo = ref<UserInfo>({})
     const initialization = ref(false)
+    let isWatchStarted = false // 防止重复创建 watch
     function init(): void {
       const UserInfoLocal = localStorage.getItem('userInfo')
       const ListLocal = localStorage.getItem('songList')
@@ -42,6 +43,12 @@ export const LocalUserDetailStore = defineStore(
       Audio.setVolume(userInfo.value.volume as number)
     }
     function startWatch() {
+      // 防止重复创建 watch
+      if (isWatchStarted) {
+        console.log('watch already started, skipping')
+        return
+      }
+      isWatchStarted = true
       console.log('startWatch')
       watch(
         list,

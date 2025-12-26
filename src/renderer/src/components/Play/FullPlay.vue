@@ -477,15 +477,18 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
+// 保存 debounce 函数引用以便后续移除
+const debouncedCheckOverflow = _.debounce(checkOverflow, 200)
+
 onMounted(() => {
-  window.addEventListener('resize', _.debounce(checkOverflow, 200))
+  window.addEventListener('resize', debouncedCheckOverflow)
   document.addEventListener('click', handleClickOutside)
   // 初始检查
   setTimeout(checkOverflow, 500)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', checkOverflow)
+  window.removeEventListener('resize', debouncedCheckOverflow)
   document.removeEventListener('click', handleClickOutside)
 })
 // --- 滚动文字逻辑 End ---
@@ -525,6 +528,7 @@ onBeforeUnmount(() => {
         class="top"
         style="-webkit-app-region: drag"
         :color="useBlackText ? 'black' : 'white'"
+        :show-account="false"
       />
     </Transition>
     <div

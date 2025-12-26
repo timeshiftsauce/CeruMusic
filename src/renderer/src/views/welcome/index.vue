@@ -49,13 +49,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { initPlayback } from '@renderer/utils/audio/globaPlayList'
 
 const router = useRouter()
 const version = ref('1.0.0')
 const loadingText = ref('正在初始化核心服务...')
 const loadingPercent = ref(0)
+
+// 保存定时器ID以便清理
+let timer: number | null = null
 
 const features = ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
 
@@ -74,10 +78,10 @@ onMounted(async () => {
 
   // 模拟进度条动画
   let progress = 0
-  const timer = setInterval(() => {
-    if (progress < 90) {
+  timer = window.setInterval(() => {
+    if (progress < 70) {
       progress += Math.random() * 5
-      if (progress > 90) progress = 90
+      if (progress > 70) progress = 70
       loadingPercent.value = Math.floor(progress)
     }
   }, 100)
@@ -102,21 +106,32 @@ onMounted(async () => {
   } else {
     waitTime = 1000
   }
+  loadingPercent.value = 80
+  loadingText.value = '加载歌曲资源...'
 
-  setTimeout(() => {
-    clearInterval(timer)
-    loadingPercent.value = 100
-    loadingText.value = '准备就绪'
-
-    import('@renderer/utils/audio/globaPlayList')
-      .then((m) => m.initPlayback?.())
-      .catch((e) => console.error('initPlayback failed', e))
-      .finally(() => {
+  initPlayback()
+    .catch((e) => console.error('initPlayback failed', e))
+    .finally(() => {
+      setTimeout(() => {
+        if (timer) {
+          clearInterval(timer)
+          timer = null
+        }
+        loadingPercent.value = 100
+        loadingText.value = '准备就绪...'
         setTimeout(() => {
           router.replace('/home')
         }, 200)
-      })
-  }, waitTime)
+      }, waitTime)
+    })
+})
+
+// 清理定时器，防止路由快速切换时内存泄漏
+onUnmounted(() => {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 })
 </script>
 
