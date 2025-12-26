@@ -1,5 +1,5 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -10,7 +10,6 @@ import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         '@common': resolve('src/common')
@@ -22,11 +21,11 @@ export default defineConfig({
           index: resolve(__dirname, 'src/main/index.ts'),
           lyric: resolve(__dirname, 'src/web/lyric.html')
         }
-      }
+      },
+      minify: 'terser'
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         '@common': resolve('src/common')
@@ -34,6 +33,15 @@ export default defineConfig({
     }
   },
   renderer: {
+    build: {
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true
+        }
+      }
+    },
     plugins: [
       vue(),
       vueDevTools(),

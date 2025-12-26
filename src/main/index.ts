@@ -9,6 +9,7 @@ import {
   Tray,
   Menu
 } from 'electron'
+import http from 'node:http'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -281,6 +282,15 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
+
+  // 拦截 Logto 认证请求，使用系统浏览器打开
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.includes('auth.shiqianjiang.cn')) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url).then()
     return { action: 'deny' }
@@ -322,6 +332,52 @@ app.whenReady().then(() => {
   createWindow()
   // 仅在主进程初始化一次托盘
   setupTray()
+  function setTop(mainWindow: BrowserWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    if (!mainWindow.isVisible()) mainWindow.show()
+    // 窗口置顶逻辑
+    if (process.platform === 'win32') {
+      mainWindow.setAlwaysOnTop(true)
+      mainWindow.focus()
+      mainWindow.setAlwaysOnTop(false)
+    } else if (process.platform === 'darwin') {
+      mainWindow.show()
+      mainWindow.focus()
+    } else {
+      mainWindow.setAlwaysOnTop(true)
+      mainWindow.focus()
+      mainWindow.setAlwaysOnTop(false)
+    }
+  }
+  // 启动本地 HTTP 服务器处理 Logto 回调
+  const authServer = http.createServer((req, res) => {
+
+    if (req.url && req.url.startsWith('/callback')) {
+      const fullUrl = `http://127.0.0.1:43110${req.url}`
+      if (mainWindow) {
+        setTop(mainWindow)
+        mainWindow.webContents.send('logto-callback', fullUrl)
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(
+        '<html><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1>登录成功</h1><p>您可以关闭此窗口并返回应用。</p><script>window.close()</script></body></html>'
+      )
+    } else if (req.url && req.url.startsWith('/logout-callback')) {
+      if (mainWindow) setTop(mainWindow)
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(
+        '<html><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1>已退出登录</h1><p>您可以关闭此窗口并返回应用。</p><script>window.close()</script></body></html>'
+      )
+    } else {
+      res.writeHead(404)
+      res.end('Not Found')
+    }
+  })
+
+  authServer.listen(43110, '127.0.0.1', () => {
+    console.log('Auth server listening on http://127.0.0.1:43110')
+  })
 
   // 注册自动更新事件
   registerAutoUpdateEvents()

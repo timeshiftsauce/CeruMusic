@@ -10,7 +10,7 @@
   -->
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useAutoUpdate } from './composables/useAutoUpdate'
 import { NConfigProvider, darkTheme, NGlobalStyle } from 'naive-ui'
@@ -22,12 +22,18 @@ import {
   validateImportedPlaylist
 } from '@renderer/utils/playlist/playlistExportImport'
 import router from './router'
+import { useAuthStore } from '@renderer/store'
 
 const userInfo = LocalUserDetailStore()
 const { checkForUpdates } = useAutoUpdate()
 const settingsStore = useSettingsStore()
 const { settings } = settingsStore
 const processedPaths = new Set<string>()
+const authStore = useAuthStore()
+
+// 保存事件监听器清理函数
+let themeChangeHandler: (() => void) | null = null
+let mediaQueryChangeHandler: (() => void) | null = null
 
 import './assets/main.css'
 import './assets/theme/blue.css'
@@ -105,10 +111,20 @@ const cancelImportPrompt = () => {
 
 onMounted(() => {
   userInfo.init()
+  authStore.init()
   setupSystemThemeListener()
   loadSavedTheme()
   syncNaiveTheme()
-  window.addEventListener('theme-changed', () => syncNaiveTheme())
+
+  // 添加 theme-changed 事件监听器并保存清理函数
+  const handleThemeChange = () => syncNaiveTheme()
+  window.addEventListener('theme-changed', handleThemeChange)
+  themeChangeHandler = () => window.removeEventListener('theme-changed', handleThemeChange)
+
+  // 监听 Logto 回调
+  window.electron?.ipcRenderer?.on?.('logto-callback', (_: any, url: string) => {
+    authStore.handleCallback(url)
+  })
 
   // 全局键盘/托盘播放控制安装（解耦出组件）
   import('@renderer/utils/audio/globalControls')
@@ -283,16 +299,31 @@ const detectSystemTheme = () => {
 const setupSystemThemeListener = () => {
   if (window.matchMedia) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    mediaQuery.addEventListener('change', (e) => {
+    const handleMediaQueryChange = (e: MediaQueryListEvent) => {
       const savedDarkMode = localStorage.getItem('dark-mode')
       // 如果用户没有手动设置暗色模式，则跟随系统主题
       if (savedDarkMode === null) {
         const savedTheme = localStorage.getItem('selected-theme') || 'default'
         applyTheme(savedTheme, e.matches)
       }
-    })
+    }
+    mediaQuery.addEventListener('change', handleMediaQueryChange)
+    // 保存清理函数
+    mediaQueryChangeHandler = () => mediaQuery.removeEventListener('change', handleMediaQueryChange)
   }
 }
+
+// 清理事件监听器
+onUnmounted(() => {
+  if (themeChangeHandler) {
+    themeChangeHandler()
+    themeChangeHandler = null
+  }
+  if (mediaQueryChangeHandler) {
+    mediaQueryChangeHandler()
+    mediaQueryChangeHandler = null
+  }
+})
 </script>
 
 <template>

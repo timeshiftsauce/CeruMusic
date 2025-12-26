@@ -20,6 +20,10 @@ interface LyricLine {
 }
 
 let installed = false
+// 保存定时器ID以便清理
+let songCheckInterval: number | null = null
+let playStateInterval: number | null = null
+let lyricProgressInterval: number | null = null
 
 function buildLyricPayload(lines: LyricLine[]) {
   return (lines || []).map((l) => ({
@@ -180,7 +184,7 @@ export function installDesktopLyricBridge() {
 
   // 监听歌曲切换
   let lastSongId: any = undefined
-  setInterval(() => {
+  songCheckInterval = window.setInterval(() => {
     if (localUser.userInfo.lastPlaySongId !== lastSongId) {
       lastSongId = localUser.userInfo.lastPlaySongId
       fetchLyricsForCurrentSong()
@@ -189,7 +193,7 @@ export function installDesktopLyricBridge() {
 
   // 播放状态推送
   let lastPlayState: any = undefined
-  setInterval(() => {
+  playStateInterval = window.setInterval(() => {
     if (controlAudio.Audio.isPlay !== lastPlayState) {
       lastPlayState = controlAudio.Audio.isPlay
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
@@ -197,7 +201,7 @@ export function installDesktopLyricBridge() {
   }, 300)
 
   // 时间推进与当前行/进度推送
-  setInterval(() => {
+  lyricProgressInterval = window.setInterval(() => {
     const a = controlAudio.Audio
     const ms = Math.round((a?.currentTime || 0) * 1000)
     const idx = computeLyricIndex(ms, currentLines)
@@ -226,4 +230,22 @@ export function installDesktopLyricBridge() {
       })
     }
   }, 100)
+}
+
+// 导出清理函数，用于清除所有定时器
+export function uninstallDesktopLyricBridge() {
+  if (songCheckInterval !== null) {
+    clearInterval(songCheckInterval)
+    songCheckInterval = null
+  }
+  if (playStateInterval !== null) {
+    clearInterval(playStateInterval)
+    playStateInterval = null
+  }
+  if (lyricProgressInterval !== null) {
+    clearInterval(lyricProgressInterval)
+    lyricProgressInterval = null
+  }
+  installed = false
+  console.log('Desktop lyric bridge uninstalled')
 }

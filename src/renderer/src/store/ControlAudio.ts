@@ -75,6 +75,7 @@ export const ControlAudioStore = defineStore(
         const index = subscribers[eventType].findIndex((sub) => sub.id === id)
         if (index > -1) {
           subscribers[eventType].splice(index, 1)
+
         }
       }
     }
