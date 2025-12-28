@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { useElementVisibility } from '@vueuse/core'
+import defaultImg from '../../public/song.jpg?asset'
 const props = withDefaults(
   defineProps<{
     src: string | undefined
@@ -41,7 +42,7 @@ const props = withDefaults(
     nativeLazy?: boolean
   }>(),
   {
-    defaultSrc: '/song.jpg?asset',
+    defaultSrc: defaultImg,
     observeVisibility: true,
     releaseOnHide: false,
     decodeAsync: true,
