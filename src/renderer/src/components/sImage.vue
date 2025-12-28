@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { useElementVisibility } from '@vueuse/core'
-import defaultImg from '../../public/song.jpg?asset'
+import defaultImg from '../../public/song.jpg'
 const props = withDefaults(
   defineProps<{
     src: string | undefined
