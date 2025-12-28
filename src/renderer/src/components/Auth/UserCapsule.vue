@@ -56,6 +56,8 @@ const props = withDefaults(defineProps<Props>(), {
   color: 'var(--titlebar-btn-text-color)'
 })
 
+const color = computed(() => props.color)
+
 const authStore = useAuthStore()
 const router = useRouter()
 

@@ -36,7 +36,13 @@
             <!-- 歌曲信息 -->
             <div class="col-title" @click="handleSongClick(song)">
               <div v-if="song.img" class="song-cover">
-                <img :src="song.img" loading="lazy" alt="封面" />
+                <s-image
+                  :key="song.img"
+                  :src="song.img"
+                  :observeVisibility="true"
+                  :releaseOnHide="true"
+                  alt="封面"
+                />
               </div>
               <div class="song-info">
                 <div class="song-title" :title="song.name">{{ song.name }}</div>
@@ -778,6 +784,8 @@ onUnmounted(() => {
           text-overflow: ellipsis;
           line-height: 1.2;
           transition: color 0.2s ease;
+          font-weight: 500;
+          font-family: Arial, Helvetica, sans-serif;
         }
 
         .song-artist {
@@ -790,20 +798,20 @@ onUnmounted(() => {
           display: flex;
           align-items: center;
           gap: 4px;
-
+          font-family: Arial, Helvetica, sans-serif;
           .quality-tag {
             background: var(--song-list-quality-bg);
             color: var(--song-list-quality-color);
-            padding: 1px 4px;
-            border-radius: 2px;
+            padding: 3px 6px;
+            border-radius: 5px;
             font-size: 10px;
             line-height: 1;
           }
           .source-tag {
             background: var(--song-list-source-bg);
             color: var(--song-list-source-color);
-            padding: 1px 4px;
-            border-radius: 2px;
+            padding: 3px 6px;
+            border-radius: 5px;
             font-size: 10px;
             line-height: 1;
           }

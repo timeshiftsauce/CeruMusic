@@ -976,7 +976,7 @@ watch(showFullPlay, (val) => {
 /* 右侧：时间和其他控制 */
 .right-section {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 16px;
   flex: 1;
   justify-content: flex-end;

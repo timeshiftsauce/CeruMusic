@@ -1680,6 +1680,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 2rem;
+  font-family: Arial, Helvetica, sans-serif;
 
   .header-left {
     h2 {

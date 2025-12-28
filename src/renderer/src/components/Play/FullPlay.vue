@@ -563,7 +563,7 @@ onBeforeUnmount(() => {
             <div class="vinyl-record"></div>
             <!-- 唱片标签 -->
             <div class="vinyl-label">
-              <t-image :src="coverImage" shape="circle" class="cover" />
+              <s-image :src="coverImage" shape="circle" class="cover" />
               <div class="label-shine"></div>
             </div>
             <!-- 中心孔 -->
@@ -574,7 +574,7 @@ onBeforeUnmount(() => {
         <template v-else-if="playSetting.getLayoutMode === 'cover'">
           <div class="cover-layout-container">
             <div class="cover-wrapper-square">
-              <t-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
+              <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
             </div>
             <div class="song-info-area">
               <div ref="titleRef" class="song-title-large text-scroll-container">
@@ -1152,7 +1152,7 @@ onBeforeUnmount(() => {
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
-
+          opacity: 0.55;
           .artist {
             color: v-bind(lightMainColor);
             filter: brightness(1.2);
