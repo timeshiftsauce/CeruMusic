@@ -51,7 +51,7 @@
     "@pixi/sprite": "^7.4.3",
     "@types/needle": "^3.3.0",
     "animate.css": "^4.1.1",
-    "axios": "^1.11.0",
+    "axios": "^1.13.2",
     "color-extraction": "^1.0.8",
     "crypto-js": "^4.2.0",
     "dompurify": "^3.2.6",

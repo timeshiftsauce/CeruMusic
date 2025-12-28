@@ -2,12 +2,10 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import LogtoClient, { UserInfoResponse } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
-
-const appId = '2a22nn23flw9nyrwi6jw9'
-const endpoint = 'https://auth.shiqianjiang.cn/'
-const redirectUri = 'http://127.0.0.1:43110/callback'
-const postLogoutRedirectUri = 'http://127.0.0.1:43110/logout-callback'
-
+import { defaultRequest, Request } from '@renderer/utils/request'
+import config from '../config'
+const { redirectUri, postLogoutRedirectUri } = config
+const ceruRequest = new Request('https://api.ceru.shiqianjiang.cn/api')
 export const useAuthStore = defineStore(
   'auth',
   () => {
@@ -15,18 +13,12 @@ export const useAuthStore = defineStore(
     const isAuthenticated = ref(false)
     const loading = ref(false)
 
-    const logtoClient = new LogtoClient({
-      endpoint,
-      appId
-    })
+    const logtoClient = config.instance as LogtoClient
 
     const init = async () => {
       try {
         loading.value = true
-        isAuthenticated.value = await logtoClient.isAuthenticated()
-        if (isAuthenticated.value) {
-          user.value = await logtoClient.fetchUserInfo()
-        }
+        await updateUserInfo()
       } catch (error) {
         console.error('Failed to init auth:', error)
       } finally {
@@ -39,19 +31,21 @@ export const useAuthStore = defineStore(
         await logtoClient.signIn(redirectUri)
       } catch (error) {
         console.error('Sign in failed:', error)
-        // 某些情况下 signIn 会因为页面跳转被拦截而抛出错误，这是正常的
-        // 只要 localStorage 中有 logto:signInSession 即可
       }
     }
 
     const logout = async () => {
       try {
         await logtoClient.signOut(postLogoutRedirectUri)
+
         user.value = null
         isAuthenticated.value = false
+        logtoClient.clearAccessToken()
+        logtoClient.clearAllTokens()
       } catch (error) {
         console.error('Sign out failed:', error)
       }
+      MessagePlugin.success('退出成功')
     }
 
     const handleCallback = async (callbackUrl: string) => {
@@ -59,14 +53,12 @@ export const useAuthStore = defineStore(
         loading.value = true
         console.log('Handling callback:', callbackUrl)
 
-        // 尝试手动修复可能的 session 丢失问题（仅调试）
         const session = localStorage.getItem('logto:signInSession')
         console.log('Current session in storage:', session)
 
         await logtoClient.handleSignInCallback(callbackUrl)
-        isAuthenticated.value = await logtoClient.isAuthenticated()
+        await updateUserInfo()
         if (isAuthenticated.value) {
-          user.value = await logtoClient.fetchUserInfo()
           MessagePlugin.success('登录成功')
         } else {
           MessagePlugin.error('登录失败')
@@ -79,6 +71,78 @@ export const useAuthStore = defineStore(
       }
     }
 
+    const updateUserInfo = async () => {
+      isAuthenticated.value = await logtoClient.isAuthenticated()
+      if (isAuthenticated.value) {
+        user.value = await logtoClient.fetchUserInfo()
+      } else {
+        user.value = null
+      }
+    }
+
+    const updateProfile = async (data: any) => {
+      try {
+        const body: any = {}
+        let accountBody: any = {}
+        // Update profile (name, etc.)
+        if (data.name) {
+          body.nickname = data.name
+          accountBody.name = data.name
+        }
+
+        // Update custom data
+        const customData = {
+          intro: data.intro,
+          gender: data.gender,
+          birthday: data.birthday,
+          region: data.region
+        }
+
+        // 如果 customData 中的字段有值，则添加到 body 中
+        if (Object.values(customData).some(val => val !== undefined && val !== '')) {
+          accountBody.customData = customData
+        }
+
+        // 只有当有需要更新的数据时才发送请求
+        if (Object.keys(body).length > 0) {
+          await defaultRequest.patch('/api/my-account/profile', body)
+          await defaultRequest.patch('/api/my-account', accountBody)
+        }
+
+        await updateUserInfo()
+      } catch (error) {
+        console.error('Update profile failed:', error)
+        throw error
+      }
+    }
+
+    const uploadAvatar = async (file: File) => {
+      try {
+        // 验证文件类型
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('只支持 JPG、PNG、GIF 格式的图片')
+        }
+
+        // 验证文件大小（2MB限制）
+        const maxSize = 2 * 1024 * 1024 // 2MB
+        if (file.size > maxSize) {
+          throw new Error('图片大小不能超过 2MB')
+        }
+
+        // 使用 uploadFile 方法上传头像
+        const result = await ceruRequest.uploadFile('/user-info/avatar', file, 'file')
+
+        // 上传成功后更新用户信息
+        await updateUserInfo()
+
+        return result
+      } catch (error) {
+        console.error('Upload avatar failed:', error)
+        throw error
+      }
+    }
+
     return {
       user,
       isAuthenticated,
@@ -86,10 +150,14 @@ export const useAuthStore = defineStore(
       init,
       login,
       logout,
-      handleCallback
+      handleCallback,
+      updateUserInfo,
+      updateProfile,
+      uploadAvatar
     }
   },
   {
     persist: true
   }
 )
+
