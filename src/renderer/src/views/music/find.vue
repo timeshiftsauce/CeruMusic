@@ -15,9 +15,6 @@ const error = ref('')
 const mainColors = ref<any[]>([])
 const textColors = ref<string[]>([])
 
-// 热门歌曲数据
-const hotSongs: any = ref([])
-
 let watchSource: WatchHandle | null = null
 
 // 分类导航与分页状态
@@ -243,10 +240,6 @@ const playPlaylist = (playlist: any): void => {
   })
 }
 
-const playSong = (song: any): void => {
-  console.log('播放歌曲:', song.title)
-}
-
 // 获取 store 实例和响应式引用
 const LocalUserDetail = LocalUserDetailStore()
 const { userSource } = storeToRefs(LocalUserDetail)
@@ -381,7 +374,7 @@ onUnmounted(() => {
           @click="playPlaylist(playlist)"
         >
           <div class="playlist-cover">
-            <t-image :src="playlist.cover" :lazy="true" class="playlist-cover-image" />
+            <s-image :src="playlist.cover" class="playlist-cover-image" />
           </div>
           <div
             class="playlist-info"
@@ -412,31 +405,6 @@ onUnmounted(() => {
       </div>
       <div v-else-if="noMore && recommendPlaylists.length > 0" class="load-status">
         <span class="no-more">没有更多内容</span>
-      </div>
-    </div>
-
-    <!-- 热门歌曲 -->
-    <div v-if="hotSongs.length > 0" class="section">
-      <h3 class="section-title">热门歌曲</h3>
-      <div class="song-list">
-        <div
-          v-for="(song, index) in hotSongs"
-          :key="song.id"
-          class="song-item"
-          @click="playSong(song)"
-        >
-          <div class="song-index">{{ index + 1 }}</div>
-          <div class="song-info">
-            <div class="song-title">{{ song.title }}</div>
-            <div class="song-artist">{{ song.artist }} - {{ song.album }}</div>
-          </div>
-          <div class="song-duration">{{ song.duration }}</div>
-          <div class="song-actions">
-            <t-button shape="circle" theme="default" variant="text" size="small">
-              <i class="iconfont icon-gengduo"></i>
-            </t-button>
-          </div>
-        </div>
       </div>
     </div>
   </div>

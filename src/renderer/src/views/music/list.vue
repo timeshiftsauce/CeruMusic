@@ -39,7 +39,8 @@ const playlistInfo = ref({
   author: '',
   cover: '',
   total: 0,
-  source: ''
+  source: '',
+  desc: ''
 })
 
 // 获取歌单歌曲列表
@@ -54,7 +55,8 @@ const fetchPlaylistSongs = async () => {
       author: (route.query.author as string) || '未知',
       cover: (route.query.cover as string) || '',
       total: Number(route.query.total) || 0,
-      source: (route.query.source as string) || (LocalUserDetail.userSource.source as any)
+      source: (route.query.source as string) || (LocalUserDetail.userSource.source as any),
+      desc: (route.query.desc as string) || ''
     }
 
     // 检查是否是本地歌单
@@ -90,11 +92,13 @@ const fetchLocalPlaylistSongs = async () => {
       const playlistResult = await window.api.songList.getById(playlistInfo.value.id)
       if (playlistResult.success && playlistResult.data) {
         const playlist = playlistResult.data
+
         playlistInfo.value = {
           ...playlistInfo.value,
           title: playlist.name,
           cover: playlist.coverImgUrl || playlistInfo.value.cover,
-          total: songs.value.length
+          total: songs.value.length,
+          desc: playlist.description || ''
         }
       }
     } else {
@@ -144,6 +148,7 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
       // 获取新增歌曲封面
       setPic((currentPage.value - 1) * limit, playlistInfo.value.source)
+      console.log(result.info)
 
       // 如果API返回了歌单详细信息，更新歌单信息
       if (result.info) {
@@ -152,7 +157,8 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
           title: result.info.name || playlistInfo.value.title,
           author: result.info.author || playlistInfo.value.author,
           cover: result.info.img || playlistInfo.value.cover,
-          total: result.info.total || playlistInfo.value.total
+          total: result.info.total || playlistInfo.value.total,
+          desc: result.info.desc || ''
         }
       }
 
@@ -439,7 +445,7 @@ const handleScroll = (event?: Event) => {
 
   scrollY.value = scrollTop
   // 当滚动超过100px时，启用紧凑模式
-  isHeaderCompact.value = scrollY.value > 100 && scrollY.value < scrollHeight - clientHeight - 100
+  isHeaderCompact.value = scrollY.value > 100 && scrollHeight > clientHeight + 100
 
   // 触底加载（参考 search.vue）
   if (
@@ -491,15 +497,14 @@ onMounted(() => {
         />
         <div class="playlist-details">
           <h1 class="playlist-title">{{ playlistInfo.title }}</h1>
-          <p class="playlist-author" :class="{ hidden: isHeaderCompact }">
-            by {{ playlistInfo.author }}
-          </p>
-          <p class="playlist-stats" :class="{ hidden: isHeaderCompact }">
-            {{ playlistInfo.total || songs.length }} 首歌曲
-          </p>
-
+          <n-collapse-transition :show="!isHeaderCompact">
+            <p class="playlist-desc">
+              {{ playlistInfo.desc || 'By ' + playlistInfo.source }}
+            </p>
+            <p class="playlist-stats">{{ playlistInfo.total || songs.length }} 首歌曲</p>
+          </n-collapse-transition>
           <!-- 播放控制按钮 -->
-          <div class="playlist-actions" :class="{ compact: isHeaderCompact }">
+          <div class="playlist-actions">
             <t-button
               theme="primary"
               size="medium"
@@ -636,6 +641,7 @@ onMounted(() => {
   align-items: center;
   gap: 1.5rem;
   padding: 1.5rem;
+  height: 240px;
   background: var(--list-header-bg);
   border-radius: 0.75rem;
   box-shadow: var(--list-header-shadow);
@@ -646,13 +652,15 @@ onMounted(() => {
     gap: 1rem;
   }
 
-  &.compact .playlist-cover {
-    width: 80px !important;
-    height: 80px !important;
+  &.compact {
+    height: 120px;
+    .playlist-details .playlist-title {
+      font-size: 25px;
+    }
   }
   .playlist-cover {
-    width: 120px;
-    height: 120px;
+    height: 100%;
+    aspect-ratio: 1 / 1;
     border-radius: 0.5rem;
     overflow: hidden;
     flex-shrink: 0;
@@ -713,10 +721,13 @@ onMounted(() => {
   }
 
   .playlist-details {
+    font-family: lyricfont;
+
     flex: 1;
     .playlist-title {
-      font-size: 1.5rem;
-      font-weight: 600;
+      line-height: 1em;
+      font-size: 34px;
+      font-weight: 800;
       color: var(--list-title-color);
       margin: 0 0 0.5rem 0;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -727,14 +738,19 @@ onMounted(() => {
       }
     }
 
-    .playlist-author {
+    .playlist-desc {
       font-size: 1rem;
       color: var(--list-author-color);
-      margin: 0 0 0.5rem 0;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      // margin: 1.5rem 0 0.5rem 0;
+      transition: all 0.3s;
       opacity: 1;
       transform: translateY(0);
-
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      width: 100%;
       &.hidden {
         opacity: 0;
         transform: translateY(-10px);
@@ -747,7 +763,7 @@ onMounted(() => {
     .playlist-stats {
       font-size: 0.875rem;
       color: var(--list-stats-color);
-      margin: 0 0 1rem 0;
+      padding: 5px 0 0 0;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       opacity: 1;
       transform: translateY(0);
