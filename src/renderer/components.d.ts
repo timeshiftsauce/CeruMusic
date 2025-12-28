@@ -51,6 +51,7 @@ declare module 'vue' {
     TCheckbox: typeof import('tdesign-vue-next')['Checkbox']
     TColorPicker: typeof import('tdesign-vue-next')['ColorPicker']
     TContent: typeof import('tdesign-vue-next')['Content']
+    TDatePicker: typeof import('tdesign-vue-next')['DatePicker']
     TDialog: typeof import('tdesign-vue-next')['Dialog']
     TDivider: typeof import('tdesign-vue-next')['Divider']
     TForm: typeof import('tdesign-vue-next')['Form']
@@ -64,10 +65,12 @@ declare module 'vue' {
     TLayout: typeof import('tdesign-vue-next')['Layout']
     TLoading: typeof import('tdesign-vue-next')['Loading']
     TOption: typeof import('tdesign-vue-next')['Option']
+    TRadio: typeof import('tdesign-vue-next')['Radio']
     TRadioButton: typeof import('tdesign-vue-next')['RadioButton']
     TRadioGroup: typeof import('tdesign-vue-next')['RadioGroup']
     TSelect: typeof import('tdesign-vue-next')['Select']
     TSlider: typeof import('tdesign-vue-next')['Slider']
+    TSpace: typeof import('tdesign-vue-next')['Space']
     TSwitch: typeof import('tdesign-vue-next')['Switch']
     TTabPanel: typeof import('tdesign-vue-next')['TabPanel']
     TTabs: typeof import('tdesign-vue-next')['Tabs']
@@ -77,6 +80,7 @@ declare module 'vue' {
     UpdateExample: typeof import('./src/components/UpdateExample.vue')['default']
     UpdateProgress: typeof import('./src/components/UpdateProgress.vue')['default']
     UpdateSettings: typeof import('./src/components/Settings/UpdateSettings.vue')['default']
+    UserCapsule: typeof import('./src/components/Auth/UserCapsule.vue')['default']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }

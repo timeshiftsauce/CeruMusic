@@ -40,6 +40,11 @@ const routes: RouteRecordRaw[] = [
         path: 'list/:id',
         name: 'list',
         component: () => import('@renderer/views/music/list.vue')
+      },
+      {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('@renderer/views/user/Profile.vue')
       }
     ]
   },
