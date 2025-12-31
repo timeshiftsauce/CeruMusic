@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { HotkeyConfigPayload } from '@common/types/hotkeys'
 
 // Custom APIs for renderer
 const api = {
@@ -128,6 +129,11 @@ const api = {
   },
 
   getUserConfig: () => ipcRenderer.invoke('get-user-config'),
+
+  hotkeys: {
+    get: () => ipcRenderer.invoke('hotkeys:get'),
+    set: (payload: HotkeyConfigPayload) => ipcRenderer.invoke('hotkeys:set', payload)
+  },
 
   // 自动更新相关
   autoUpdater: {

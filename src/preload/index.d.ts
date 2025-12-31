@@ -1,5 +1,6 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import { MainApi, MethodParams } from '../main/services/musicSdk/index'
+import type { HotkeyConfig, HotkeyConfigPayload } from '../common/types/hotkeys'
 // 自定义 API 接口
 interface CustomAPI {
   autoUpdater: any
@@ -122,6 +123,13 @@ interface CustomAPI {
 
   // 用户配置API
   getUserConfig: () => Promise<any>
+
+  hotkeys: {
+    get: () => Promise<{ success: boolean; data?: HotkeyConfig; error?: string; errors?: string[] }>
+    set: (
+      payload: HotkeyConfigPayload
+    ) => Promise<{ success: boolean; data?: HotkeyConfig; error?: string; errors?: string[] }>
+  }
 
   pluginNotice: {
     onPluginNotice: (listener: (...args: any[]) => void) => () => void
