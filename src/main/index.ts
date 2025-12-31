@@ -27,6 +27,7 @@ import initLyricIpc from './events/lyric'
 import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
 import fs from 'node:fs'
+import { initHotkeyService } from './services/hotkeys'
 
 let pendingPlaylistFiles: string[] = []
 const queueOpenPlaylist = (filePath: string) => {
@@ -125,13 +126,13 @@ function setupTray() {
   if (g.__ceru_tray__) {
     try {
       g.__ceru_tray__.destroy()
-    } catch { }
+    } catch {}
     g.__ceru_tray__ = null
   }
   if (tray) {
     try {
       tray.destroy()
-    } catch { }
+    } catch {}
     tray = null
   }
 
@@ -169,7 +170,7 @@ function setupTray() {
   app.once('before-quit', () => {
     try {
       tray?.destroy()
-    } catch { }
+    } catch {}
     tray = null
     g.__ceru_tray__ = null
   })
@@ -232,6 +233,8 @@ function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow(defaultOptions)
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
+
+  initHotkeyService(mainWindow)
 
   // ⚠️ 关键修改 2: 监听 'moved' 事件，动态更新最大尺寸
   mainWindow.on('moved', () => {
@@ -351,7 +354,6 @@ app.whenReady().then(() => {
   }
   // 启动本地 HTTP 服务器处理 Logto 回调
   const authServer = http.createServer((req, res) => {
-
     if (req.url && req.url.startsWith('/callback')) {
       const fullUrl = `http://127.0.0.1:43110${req.url}`
       if (mainWindow) {
