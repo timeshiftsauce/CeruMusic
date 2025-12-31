@@ -83,7 +83,7 @@ export const useAuthStore = defineStore(
     const updateProfile = async (data: any) => {
       try {
         const body: any = {}
-        let accountBody: any = {}
+        const accountBody: any = {}
         // Update profile (name, etc.)
         if (data.name) {
           body.nickname = data.name
@@ -99,7 +99,7 @@ export const useAuthStore = defineStore(
         }
 
         // 如果 customData 中的字段有值，则添加到 body 中
-        if (Object.values(customData).some(val => val !== undefined && val !== '')) {
+        if (Object.values(customData).some((val) => val !== undefined && val !== '')) {
           accountBody.customData = customData
         }
 
@@ -160,4 +160,3 @@ export const useAuthStore = defineStore(
     persist: true
   }
 )
-
