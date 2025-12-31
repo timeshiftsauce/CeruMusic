@@ -9,8 +9,8 @@
     <img
       v-if="imgSrc"
       ref="imgRef"
-      :src="imgSrc"
       :key="imgSrc"
+      :src="imgSrc"
       :alt="alt || 'image'"
       :class="['cover', { loaded: isLoaded }]"
       :decoding="decodeAsync ? 'async' : 'auto'"

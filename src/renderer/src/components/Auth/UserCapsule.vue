@@ -27,9 +27,9 @@
           v-else
           size="small"
           style="margin-right: 4px; background: rgba(125, 125, 125, 0.2); color: inherit"
-          >{{ displayName.split('')[0] }}</t-avatar
+          >{{ Name.split('')[0] }}</t-avatar
         >
-        <span class="user-name">{{ displayName }}</span>
+        <span class="user-name">{{ Name }}</span>
       </div>
     </n-dropdown>
     <div v-else class="user-capsule" @click="handleLogin">
@@ -47,6 +47,7 @@ import { useAuthStore } from '@renderer/store/Auth'
 import { PoweroffIcon, UserIcon } from 'tdesign-icons-vue-next'
 import { NIcon } from 'naive-ui'
 import { h, type Component } from 'vue'
+import displayName from '@renderer/utils/auth/displayName'
 
 interface Props {
   color?: string
@@ -97,9 +98,9 @@ const handleMenuSelect = (key: string | number) => {
   }
 }
 
-const displayName = computed(() => {
+const Name = computed(() => {
   const u = authStore.user
-  return (u?.nickname || u?.name || u?.username || u?.email || '用户') as string
+  return displayName(u)
 })
 </script>
 <style scoped lang="scss">

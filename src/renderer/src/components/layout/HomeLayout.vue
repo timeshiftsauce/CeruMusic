@@ -188,6 +188,7 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
         <div class="logo-section">
           <div class="logo-icon">
             <i class="iconfont icon-music"></i>
+            <!-- <img src="../../assets/logo.png" width="100%"></img> -->
           </div>
           <p class="app-title">
             <span style="font-weight: 800">Ceru Music</span>
@@ -276,7 +277,7 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
                 <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
 
-              <TitleBarControls :showAccount="true"></TitleBarControls>
+              <TitleBarControls :show-account="true"></TitleBarControls>
             </div>
           </div>
 

@@ -92,6 +92,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@renderer/store/Auth'
 import { MessagePlugin } from 'tdesign-vue-next'
 import defaultAvatar from '@renderer/assets/user.webp'
+import displayName from '@renderer/utils/auth/displayName'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -113,10 +114,9 @@ const userAvatar = computed(() => {
 
 onActivated(() => {
   if (authStore.user) {
-    const { name, username, custom_data } = authStore.user
-    formData.name = name || username || ''
+    formData.name = displayName(authStore.user)
     // 假设 custom_data 中存储了这些扩展信息
-    const customData = (custom_data as any) || {}
+    const customData = (authStore.user.custom_data as any) || {}
     formData.intro = customData.intro || ''
     formData.gender = customData.gender || 'secret'
     formData.birthday = customData.birthday || ''
@@ -194,20 +194,21 @@ const handleCancel = () => {
   justify-content: center;
   flex-direction: column;
   background-color: transparent;
-  color: var(--text-color-primary, #000);
+  color: var(--td-text-color-primary, #000);
 }
 
 .profile-content {
   flex: 1;
   padding: 2rem 4rem;
   overflow-y: auto;
+  container-type: inline-size;
 
   .header {
     margin-bottom: 2rem;
     h1 {
       font-size: 1.5rem;
       font-weight: 600;
-      color: var(--text-color-primary);
+      color: var(--td-text-color-primary);
     }
   }
 }
@@ -215,6 +216,7 @@ const handleCancel = () => {
 .form-container {
   display: flex;
   gap: 4rem;
+  width: 100%;
   // justify-content: center;
   .left-form {
     flex: 1;
@@ -276,6 +278,27 @@ const handleCancel = () => {
         overflow: hidden;
         display: block;
       }
+    }
+  }
+}
+
+@container (max-width: 700px) {
+  .form-container {
+    flex-direction: column !important;
+    gap: 1.5rem;
+    align-items: center;
+
+    .right-avatar {
+      width: 100%;
+      padding-top: 0;
+      order: -1;
+      display: flex;
+      justify-content: center;
+    }
+
+    .left-form {
+      width: 100%;
+      max-width: 100%;
     }
   }
 }

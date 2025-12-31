@@ -70,8 +70,8 @@ export function installGlobalMusicControls() {
       (target as HTMLInputElement)?.type === 'number'
 
     throttle(() => {
+      if (isEditable) return
       if (e.code === 'Space') {
-        if (isEditable) return
         e.preventDefault()
         dispatch('toggle')
       } else if (e.code === 'ArrowUp') {
@@ -84,6 +84,9 @@ export function installGlobalMusicControls() {
         dispatch('seekDelta', -5)
       } else if (e.code === 'ArrowRight') {
         dispatch('seekDelta', 5)
+      } else if (e.code === 'KeyF') {
+        e.preventDefault()
+        dispatch('toggleFullPlay')
       }
     }, 100)
   }

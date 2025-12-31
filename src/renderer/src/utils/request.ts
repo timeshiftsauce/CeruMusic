@@ -96,7 +96,12 @@ export class Request {
   }
 
   // 文件上传方法
-  async uploadFile(url: string, file: File, fieldName: string = 'file', config?: AxiosRequestConfig) {
+  async uploadFile(
+    url: string,
+    file: File,
+    fieldName: string = 'file',
+    config?: AxiosRequestConfig
+  ) {
     if (!logtoClientInstance) {
       throw new Error('LogtoClient not initialized. Call Request.setLogtoClient() first.')
     }
