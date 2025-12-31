@@ -118,17 +118,17 @@ const toggleDesktopLyric = async () => {
 let isFull = false
 
 // 获取播放模式图标类名
-let playModeTip = ''
+const playModeTip = ref('')
 const playModeIconClass = computed(() => {
   switch (playMode.value) {
     case PlayMode.SEQUENCE:
-      playModeTip = '顺序播放'
+      playModeTip.value = '顺序播放'
       return 'iconfont icon-shunxubofangtubiao'
     case PlayMode.RANDOM:
-      playModeTip = '随机播放'
+      playModeTip.value = '随机播放'
       return 'iconfont icon-suijibofang'
     case PlayMode.SINGLE:
-      playModeTip = '单曲循环'
+      playModeTip.value = '单曲循环'
       return 'iconfont icon-bofang-xunhuanbofang'
     default:
       return 'iconfont icon-shunxubofangtubiao'
