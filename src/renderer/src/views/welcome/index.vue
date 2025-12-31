@@ -11,7 +11,8 @@
       <div class="left-section animate-in-left">
         <div class="logo-wrapper">
           <div class="logo-glow"></div>
-          <img class="logo-image" src="/logo_2026.svg" alt="Ceru Music Logo" />
+          <img v-if="!showNewYear" class="logo-image" src="/logo.svg" alt="Ceru Music Logo" />
+          <img v-else class="logo-image" src="/logo_2026.svg" alt="Ceru Music Logo" />
         </div>
       </div>
 
