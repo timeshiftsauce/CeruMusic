@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {
   BackgroundRender as CoreBackgroundRender,
-  MeshGradientRenderer
+  PixiRenderer
 } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
@@ -17,7 +17,7 @@ import {
 } from 'tdesign-icons-vue-next'
 // 直接从包路径导入，避免 WebAssembly 导入问题
 import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
-import _ from 'lodash'
+import * as _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { NSwitch } from 'naive-ui'
 
@@ -134,6 +134,44 @@ const state = reactive({
   lyricLines: [] as LyricLine[],
   lowFreqVolume: 1.0
 })
+
+const sanitizeLyricLines = (lines: LyricLine[]): LyricLine[] => {
+  const defaultLineDuration = 3000
+  const toFiniteNumber = (v: any, fallback: number) => {
+    const n = typeof v === 'number' ? v : Number(v)
+    return Number.isFinite(n) ? n : fallback
+  }
+  const cleaned: LyricLine[] = []
+  for (const rawLine of lines || []) {
+    const rawWords = Array.isArray((rawLine as any).words) ? (rawLine as any).words : []
+    const fixedWords: any[] = []
+    let prevEnd = -1
+    for (const rawWord of rawWords) {
+      const rawStart = toFiniteNumber(rawWord?.startTime, Number.NaN)
+      const rawEnd = toFiniteNumber(rawWord?.endTime, Number.NaN)
+      if (!Number.isFinite(rawStart)) continue
+      let startTime = Math.max(0, rawStart)
+      if (startTime < prevEnd) startTime = prevEnd
+      let endTime = Number.isFinite(rawEnd) ? rawEnd : startTime + 1
+      if (endTime <= startTime) endTime = startTime + 1
+      prevEnd = endTime
+      fixedWords.push({ ...rawWord, startTime, endTime })
+    }
+    if (fixedWords.length === 0) continue
+
+    const firstWordStart = fixedWords[0].startTime
+    const lastWordEnd = fixedWords[fixedWords.length - 1].endTime
+    let startTime = toFiniteNumber((rawLine as any).startTime, firstWordStart)
+    startTime = Math.max(0, startTime)
+    let endTime = toFiniteNumber((rawLine as any).endTime, lastWordEnd)
+    if (!Number.isFinite(endTime) || endTime <= startTime) endTime = startTime + defaultLineDuration
+    if (endTime < lastWordEnd) endTime = lastWordEnd
+
+    cleaned.push({ ...(rawLine as any), startTime, endTime, words: fixedWords })
+  }
+  cleaned.sort((a: any, b: any) => (a?.startTime ?? 0) - (b?.startTime ?? 0))
+  return cleaned
+}
 
 // 监听歌曲ID变化，获取歌词
 watch(
@@ -336,7 +374,7 @@ watch(
       }
       if (!active) return
       const oldHasLyric = state.lyricLines.length > 10
-      state.lyricLines = parsedLyrics.length > 0 ? parsedLyrics : []
+      state.lyricLines = parsedLyrics.length > 0 ? sanitizeLyricLines(parsedLyrics) : []
       const newHasLyric = state.lyricLines.length > 10
       // 如果hasLyric条件改变，更新背景渲染器的hasLyric参数
       if (oldHasLyric !== newHasLyric && bgRef.value) {
@@ -358,7 +396,7 @@ watch(
   { immediate: true }
 )
 
-const bgRef = ref<CoreBackgroundRender<MeshGradientRenderer> | undefined>(undefined)
+const bgRef = ref<CoreBackgroundRender<PixiRenderer> | undefined>(undefined)
 const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
 const backgroundContainer = ref<HTMLDivElement | null>(null)
 
@@ -432,7 +470,7 @@ const initBackgroundRender = async () => {
     }
 
     // 创建新实例
-    bgRef.value = CoreBackgroundRender.new(MeshGradientRenderer)
+    bgRef.value = CoreBackgroundRender.new(PixiRenderer)
 
     // 获取canvas元素并添加到DOM
     const canvas = bgRef.value.getElement()
