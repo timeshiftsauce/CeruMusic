@@ -7,7 +7,7 @@ import { formatSinger } from './util'
 
 export default {
   regExps: {
-    mInfo: /level:(\w+),bitrate:(\d+),format:(\w+),size:([\w.]+)/,
+    mInfo: /level:(\w+),bitrate:(\d+),format:(\w+),size:([\w.]+)/
   },
   limit: 30,
   total: 0,
@@ -51,31 +51,31 @@ export default {
             case '20900':
               types.push({ type: 'master', size: info[4] })
               _types.master = {
-                size: info[4].toLocaleUpperCase(),
+                size: info[4].toLocaleUpperCase()
               }
               break
             case '4000':
               types.push({ type: 'hires', size: info[4] })
               _types.hires = {
-                size: info[4].toLocaleUpperCase(),
+                size: info[4].toLocaleUpperCase()
               }
               break
             case '2000':
               types.push({ type: 'flac', size: info[4] })
               _types.flac = {
-                size: info[4].toLocaleUpperCase(),
+                size: info[4].toLocaleUpperCase()
               }
               break
             case '320':
               types.push({ type: '320k', size: info[4] })
               _types['320k'] = {
-                size: info[4].toLocaleUpperCase(),
+                size: info[4].toLocaleUpperCase()
               }
               break
             case '128':
               types.push({ type: '128k', size: info[4] })
               _types['128k'] = {
-                size: info[4].toLocaleUpperCase(),
+                size: info[4].toLocaleUpperCase()
               }
               break
           }
@@ -101,7 +101,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       })
     }
     // console.log(result)
@@ -128,8 +128,8 @@ export default {
         allPage: this.allPage,
         total: this.total,
         limit,
-        source: 'kw',
+        source: 'kw'
       })
     })
-  },
+  }
 }

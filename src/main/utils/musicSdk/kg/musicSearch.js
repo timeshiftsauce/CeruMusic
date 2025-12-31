@@ -64,7 +64,7 @@ export default {
         hash: item.FileHash,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       }
     })
   },
@@ -88,8 +88,8 @@ export default {
         allPage: this.allPage,
         limit,
         total: this.total,
-        source: 'kg',
+        source: 'kg'
       })
     })
-  },
+  }
 }

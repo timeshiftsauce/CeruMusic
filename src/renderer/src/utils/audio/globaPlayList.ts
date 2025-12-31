@@ -469,7 +469,7 @@ const playNext = async () => {
     const currentIndex = list.value.findIndex(
       (song) => song.songmid === userInfo.value.lastPlaySongId
     )
-    let nextIndex
+    let nextIndex: number | string
     if (playMode.value === PlayMode.RANDOM) {
       nextIndex = Math.floor(Math.random() * list.value.length)
     } else {
@@ -588,11 +588,11 @@ const initPlayback = async () => {
     }
   }, 1000)
   window.addEventListener('global-music-control', onGlobalCtrl)
-  controlAudio.subscribe('ended', () => {
-    window.requestAnimationFrame(() => {
-      void playNext()
-    })
-  })
+  // controlAudio.subscribe('ended', () => {
+  //   window.requestAnimationFrame(() => {
+  //     void playNext()
+  //   })
+  // })
 }
 
 const destroyPlayback = () => {

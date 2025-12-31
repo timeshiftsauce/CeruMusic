@@ -7,13 +7,13 @@ export const getBatchMusicQualityInfo = (songList) => {
   const requestObj = httpFetch('https://u.y.qq.com/cgi-bin/musicu.fcg', {
     method: 'post',
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
+      'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)'
     },
     body: {
       comm: {
         ct: '19',
         cv: '1859',
-        uin: '0',
+        uin: '0'
       },
       req: {
         module: 'music.trackInfo.UniformRuleCtrl',
@@ -21,10 +21,10 @@ export const getBatchMusicQualityInfo = (songList) => {
         param: {
           types: Array(songIds.length).fill(1),
           ids: songIds,
-          ctx: 0,
-        },
-      },
-    },
+          ctx: 0
+        }
+      }
+    }
   })
 
   const qualityInfoMap = {}

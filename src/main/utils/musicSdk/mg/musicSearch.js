@@ -30,8 +30,8 @@ export default {
           sign: signData.sign,
           channel: '0146921',
           'User-Agent':
-            'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
-        },
+            'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
+        }
       }
     )
     return searchRequest.promise.then(({ body }) => body)
@@ -56,28 +56,28 @@ export default {
                 size = sizeFormate(type.asize ?? type.isize)
                 types.push({ type: '128k', size })
                 _types['128k'] = {
-                  size,
+                  size
                 }
                 break
               case 'HQ':
                 size = sizeFormate(type.asize ?? type.isize)
                 types.push({ type: '320k', size })
                 _types['320k'] = {
-                  size,
+                  size
                 }
                 break
               case 'SQ':
                 size = sizeFormate(type.asize ?? type.isize)
                 types.push({ type: 'flac', size })
                 _types.flac = {
-                  size,
+                  size
                 }
                 break
               case 'ZQ24':
                 size = sizeFormate(type.asize ?? type.isize)
                 types.push({ type: 'hires', size })
                 _types.hires = {
-                  size,
+                  size
                 }
                 break
             }
@@ -102,7 +102,7 @@ export default {
           trcUrl: data.trcUrl,
           types,
           _types,
-          typeUrl: {},
+          typeUrl: {}
         })
       })
     })
@@ -130,8 +130,8 @@ export default {
         allPage: this.allPage,
         limit,
         total: this.total,
-        source: 'mg',
+        source: 'mg'
       }
     })
-  },
+  }
 }

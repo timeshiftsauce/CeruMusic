@@ -13,7 +13,7 @@ export const getHostIp = (hostname) => {
   dns.lookup(
     hostname,
     {
-      all: false,
+      all: false
     },
     (err, address, family) => {
       if (err) return console.log(err)

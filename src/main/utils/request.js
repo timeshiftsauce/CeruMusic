@@ -266,8 +266,8 @@ const fetchData = async (url, method = 'get', options = {}) => {
       rawData = Buffer.isBuffer(response.data)
         ? response.data
         : Buffer.from(
-          typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
-        )
+            typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+          )
     }
 
     return {
