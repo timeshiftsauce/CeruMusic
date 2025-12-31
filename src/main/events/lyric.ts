@@ -94,6 +94,10 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize
     event.returnValue = { width, height }
   })
+  // 获取所有屏幕工作区
+  ipcMain.handle('get-all-work-area', () => {
+    return screen.getAllDisplays().map((display) => display.workArea)
+  })
 
   // 移动窗口
   ipcMain.on('move-window', (_, x, y, width, height) => {
