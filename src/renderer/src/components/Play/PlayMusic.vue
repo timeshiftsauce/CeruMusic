@@ -224,22 +224,42 @@ const closePlaylist = () => {
 // 定期保存当前播放位置
 // 全局快捷控制事件由全局播放管理器处理
 // 初始化播放器
+
+function globalControls(e) {
+  console.log('全局:', e)
+  if (e.detail.name === 'toggleFullPlay') {
+    toggleFullPlay()
+  }
+}
+
 onMounted(async () => {
   // 监听来自主进程的锁定状态广播
   window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
     desktopLyricLocked.value = !!lock
+  })
+  window.electron?.ipcRenderer?.on?.('desktopLyricVisibility', async (_: any, visible: boolean) => {
+    desktopLyricOpen.value = !!visible
+    if (desktopLyricOpen.value) {
+      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+      desktopLyricLocked.value = !!lock
+    } else {
+      desktopLyricLocked.value = false
+    }
   })
   // 监听主进程通知关闭桌面歌词
   window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
     desktopLyricOpen.value = false
     desktopLyricLocked.value = false
   })
+  window.addEventListener('global-music-control', globalControls)
 })
 
 // 组件卸载时清理
 onUnmounted(() => {
   window.electron?.ipcRenderer?.removeAllListeners?.('toogleDesktopLyricLock')
+  window.electron?.ipcRenderer?.removeAllListeners?.('desktopLyricVisibility')
   window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
+  window.removeEventListener('global-music-control', globalControls)
 })
 
 // 组件被激活时（从缓存中恢复）

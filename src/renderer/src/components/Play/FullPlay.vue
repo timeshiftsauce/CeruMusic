@@ -1,10 +1,9 @@
 <script lang="ts" setup>
 import {
-  BackgroundRender,
-  LyricPlayer,
-  type BackgroundRenderRef,
-  type LyricPlayerRef
-} from '@applemusic-like-lyrics/vue'
+  BackgroundRender as CoreBackgroundRender,
+  MeshGradientRenderer
+} from '@applemusic-like-lyrics/core'
+import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, toRaw } from 'vue'
@@ -17,12 +16,7 @@ import {
   PenBallIcon
 } from 'tdesign-icons-vue-next'
 // 直接从包路径导入，避免 WebAssembly 导入问题
-import {
-  parseYrc,
-  parseLrc,
-  parseTTML,
-  parseQrc
-} from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js'
+import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
 import _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { NSwitch } from 'naive-ui'
@@ -91,6 +85,46 @@ const handleFullscreenChange = () => {
 const controlAudio = ControlAudioStore()
 const { Audio } = storeToRefs(controlAudio)
 
+// 响应式播放状态
+const isAudioPlaying = ref(false)
+
+// 更新播放状态的函数
+const updatePlayState = () => {
+  if (Audio.value.audio) {
+    isAudioPlaying.value = !Audio.value.audio.paused
+  } else {
+    isAudioPlaying.value = false
+  }
+}
+
+// 监听音频播放状态变化
+watch(
+  () => Audio.value.audio,
+  (newAudio, oldAudio) => {
+    // 移除旧音频的事件监听器
+    if (oldAudio) {
+      oldAudio.removeEventListener('play', updatePlayState)
+      oldAudio.removeEventListener('pause', updatePlayState)
+    }
+
+    // 添加新音频的事件监听器
+    if (newAudio) {
+      newAudio.addEventListener('play', updatePlayState)
+      newAudio.addEventListener('pause', updatePlayState)
+      // 初始化状态
+      updatePlayState()
+    }
+  },
+  { immediate: true }
+)
+
+// 清理事件监听器
+onBeforeUnmount(() => {
+  if (Audio.value.audio) {
+    Audio.value.audio.removeEventListener('play', updatePlayState)
+    Audio.value.audio.removeEventListener('pause', updatePlayState)
+  }
+})
 // 组件内部状态
 const state = reactive({
   audioUrl: Audio.value.url,
@@ -301,19 +335,32 @@ watch(
         }
       }
       if (!active) return
+      const oldHasLyric = state.lyricLines.length > 10
       state.lyricLines = parsedLyrics.length > 0 ? parsedLyrics : []
+      const newHasLyric = state.lyricLines.length > 10
+      // 如果hasLyric条件改变，更新背景渲染器的hasLyric参数
+      if (oldHasLyric !== newHasLyric && bgRef.value) {
+        bgRef.value.setHasLyric(newHasLyric)
+      }
     } catch (error) {
       console.error('获取歌词失败:', error)
       // 若已无效或已清理，避免写入与持有引用
       if (!active) return
+      const oldHasLyric = state.lyricLines.length > 10
       state.lyricLines = []
+      const newHasLyric = false
+      // 如果hasLyric条件改变，更新背景渲染器的hasLyric参数
+      if (oldHasLyric !== newHasLyric && bgRef.value) {
+        bgRef.value.setHasLyric(newHasLyric)
+      }
     }
   },
   { immediate: true }
 )
 
-const bgRef = ref<BackgroundRenderRef | undefined>(undefined)
+const bgRef = ref<CoreBackgroundRender<MeshGradientRenderer> | undefined>(undefined)
 const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
+const backgroundContainer = ref<HTMLDivElement | null>(null)
 
 // 订阅音频事件，保持数据同步
 const unsubscribeTimeUpdate = ref<(() => void) | undefined>(undefined)
@@ -341,7 +388,17 @@ const jumpTime = (e) => {
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
 // 监听封面图片变化
-watch(() => actualCoverImage.value, updateTextColor, { immediate: true })
+watch(
+  () => actualCoverImage.value,
+  async (newImage) => {
+    updateTextColor()
+    // 更新背景图片
+    if (bgRef.value) {
+      await bgRef.value.setAlbum(newImage, false)
+    }
+  },
+  { immediate: true }
+)
 
 // 在全屏播放显示时阻止系统息屏
 const blockerActive = ref(false)
@@ -363,9 +420,49 @@ watch(
   { immediate: true }
 )
 
+// 初始化背景渲染器的函数
+const initBackgroundRender = async () => {
+  if (backgroundContainer.value) {
+    // 清理旧实例
+    if (bgRef.value) {
+      bgRef.value.dispose()
+      // 移除canvas元素
+      const canvas = bgRef.value.getElement()
+      canvas?.parentNode?.removeChild(canvas)
+    }
+
+    // 创建新实例
+    bgRef.value = CoreBackgroundRender.new(MeshGradientRenderer)
+
+    // 获取canvas元素并添加到DOM
+    const canvas = bgRef.value.getElement()
+    canvas.style.position = 'absolute'
+    canvas.style.top = '0'
+    canvas.style.left = '0'
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.zIndex = '-1'
+
+    backgroundContainer.value.appendChild(canvas)
+
+    // 设置参数
+    bgRef.value.setRenderScale(0.5)
+    bgRef.value.setFlowSpeed(1)
+    bgRef.value.setFPS(60)
+    bgRef.value.setHasLyric(state.lyricLines.length > 10)
+
+    // 设置专辑图片
+    await bgRef.value.setAlbum(actualCoverImage.value, false)
+
+    // 恢复动画
+    bgRef.value.resume()
+  }
+}
+
 // 组件挂载时初始化
-onMounted(() => {
+onMounted(async () => {
   updateTextColor()
+  await initBackgroundRender()
 })
 
 // 组件卸载前清理订阅
@@ -384,7 +481,14 @@ onBeforeUnmount(async () => {
   if (unsubscribePlay.value) {
     unsubscribePlay.value()
   }
-  bgRef.value?.bgRender?.dispose()
+  // 清理背景渲染器资源
+  if (bgRef.value) {
+    const canvas = bgRef.value.getElement()
+    canvas?.parentNode?.removeChild(canvas)
+    bgRef.value.dispose()
+    bgRef.value = undefined
+  }
+  // 清理歌词播放器资源
   lyricPlayerRef.value?.lyricPlayer?.dispose()
 })
 
@@ -497,15 +601,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
-    <BackgroundRender
-      ref="bgRef"
-      :album="actualCoverImage"
-      :album-is-video="false"
-      :fps="30"
-      :flow-speed="4"
-      :has-lyric="state.lyricLines.length > 10"
+    <div
+      ref="backgroundContainer"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
-    />
+    ></div>
     <!-- 全屏按钮 -->
     <button
       class="fullscreen-btn"
@@ -543,15 +642,15 @@ onBeforeUnmount(() => {
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <img
             class="pointer"
-            :class="{ playing: Audio.isPlay }"
+            :class="{ playing: isAudioPlaying }"
             src="@renderer/assets/pointer.png"
             alt="pointer"
           />
           <div
             class="cd-container"
-            :class="{ playing: Audio.isPlay }"
+            :class="{ playing: isAudioPlaying }"
             :style="
-              !Audio.isPlay
+              !isAudioPlaying
                 ? 'animation-play-state: paused;'
                 : '' +
                   (state.lyricLines.length <= 0
@@ -606,6 +705,7 @@ onBeforeUnmount(() => {
           ref="lyricPlayerRef"
           :lyric-lines="state.lyricLines || []"
           :current-time="state.currentTime"
+          :playing="isAudioPlaying"
           class="lyric-player"
           :align-position="
             playSetting.getLayoutMode === 'cd' ? 0.5 : playSetting.getisJumpLyric ? 0.3 : 0.38
@@ -1015,7 +1115,9 @@ onBeforeUnmount(() => {
             font-weight: 600 !important;
           }
         }
-
+        [class^='interludeDots'] {
+          left: 1.2em;
+        }
         & > div {
           padding-bottom: 0;
           overflow: hidden;
