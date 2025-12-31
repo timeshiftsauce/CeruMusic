@@ -10,7 +10,7 @@
   -->
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useAutoUpdate } from './composables/useAutoUpdate'
 import { NConfigProvider, darkTheme, NGlobalStyle } from 'naive-ui'
@@ -47,6 +47,113 @@ const importPromptFileName = ref('')
 const dontAskAgain = ref(false)
 const appInteractiveReady = ref(false)
 const delayedOpenQueue: string[] = []
+
+const sponsorPromptVisible = ref(false)
+const usageTotalMs = ref(0)
+const sponsorUrl = 'https://ceru.docs.shiqianjiang.cn/#%E8%B5%9E%E5%8A%A9'
+const sponsorPromptAfterMs = 1 * 60 * 60 * 1000 + Math.round(Math.random() * 60 * 60 * 1000)
+const sponsorPromptHiddenKey = 'ceru_sponsor_prompt_hidden_v1'
+const usageTotalMsKey = 'ceru_usage_total_ms_v1'
+
+let usageInterval: number | null = null
+let usageActive = false
+let usageActiveSince = 0
+let usageTrackingEnabled = true
+
+const isWelcomeRoute = computed(() => {
+  const r = router.currentRoute.value
+  return r?.name === 'welcome' || r?.path === '/'
+})
+
+const sponsorUsageText = computed(() => {
+  const totalMinutes = Math.floor(usageTotalMs.value / 60000)
+  if (totalMinutes < 60) return `${totalMinutes} 分钟`
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
+})
+
+const parseStoredNumber = (value: string | null): number => {
+  if (!value) return 0
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+const persistUsage = () => {
+  try {
+    localStorage.setItem(usageTotalMsKey, String(usageTotalMs.value))
+  } catch {}
+}
+
+const maybeShowSponsorPrompt = () => {
+  if (sponsorPromptVisible.value) return
+  if (!appInteractiveReady.value) return
+  if (isWelcomeRoute.value) return
+  if (localStorage.getItem(sponsorPromptHiddenKey) === '1') return
+  if (usageTotalMs.value < sponsorPromptAfterMs) return
+  sponsorPromptVisible.value = true
+  stopUsageTracking()
+}
+
+const flushUsage = () => {
+  if (!usageActive) return
+  const now = Date.now()
+  const delta = now - usageActiveSince
+  if (delta > 0) {
+    usageTotalMs.value += delta
+    usageActiveSince = now
+    persistUsage()
+    maybeShowSponsorPrompt()
+  }
+}
+
+const setUsageActive = (active: boolean) => {
+  if (!usageTrackingEnabled) return
+  if (active === usageActive) return
+  if (!active) {
+    flushUsage()
+    usageActive = false
+    return
+  }
+  usageActive = true
+  usageActiveSince = Date.now()
+}
+
+const updateUsageActiveState = () => {
+  if (!usageTrackingEnabled) return
+  const active =
+    !document.hidden && (typeof document.hasFocus === 'function' ? document.hasFocus() : true)
+  setUsageActive(active)
+}
+
+const stopUsageTracking = () => {
+  if (!usageTrackingEnabled) return
+  usageTrackingEnabled = false
+  flushUsage()
+  usageActive = false
+  if (usageInterval) {
+    window.clearInterval(usageInterval)
+    usageInterval = null
+  }
+  document.removeEventListener('visibilitychange', updateUsageActiveState)
+  window.removeEventListener('focus', updateUsageActiveState)
+  window.removeEventListener('blur', updateUsageActiveState)
+  window.removeEventListener('beforeunload', flushUsage)
+}
+
+const closeSponsorPrompt = () => {
+  sponsorPromptVisible.value = false
+  localStorage.setItem(sponsorPromptHiddenKey, '1')
+}
+
+const openSponsor = () => {
+  try {
+    window.open(sponsorUrl)
+  } catch {
+  } finally {
+    closeSponsorPrompt()
+  }
+}
 
 const parseSonglistNameFromRaw = (rawName: string): string => {
   let parsedName: string | null = null
@@ -96,9 +203,7 @@ const confirmImportPrompt = async () => {
         showFloatBall: settings.showFloatBall,
         tagWriteOptions: settings.tagWriteOptions,
         // 新增偏好
-        // @ts-ignore
         autoImportPlaylistOnOpen: true,
-        // @ts-ignore
         suppressImportPrompt: true
       })
     }
@@ -115,6 +220,18 @@ onMounted(() => {
   setupSystemThemeListener()
   loadSavedTheme()
   syncNaiveTheme()
+
+  usageTotalMs.value = parseStoredNumber(localStorage.getItem(usageTotalMsKey))
+  if (localStorage.getItem(sponsorPromptHiddenKey) === '1') {
+    usageTrackingEnabled = false
+  } else {
+    updateUsageActiveState()
+    document.addEventListener('visibilitychange', updateUsageActiveState)
+    window.addEventListener('focus', updateUsageActiveState)
+    window.addEventListener('blur', updateUsageActiveState)
+    window.addEventListener('beforeunload', flushUsage)
+    usageInterval = window.setInterval(flushUsage, 15000)
+  }
 
   // 添加 theme-changed 事件监听器并保存清理函数
   const handleThemeChange = () => syncNaiveTheme()
@@ -145,6 +262,15 @@ onMounted(() => {
   window.electron?.ipcRenderer?.on?.('toggle', () => forward('toggle'))
   window.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
   window.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
+  window.electron?.ipcRenderer?.on?.('volumeDelta', (_: any, val: number) =>
+    forward('volumeDelta', val)
+  )
+  window.electron?.ipcRenderer?.on?.('seekDelta', (_: any, val: number) =>
+    forward('seekDelta', val)
+  )
+  window.electron?.ipcRenderer?.on?.('setPlayMode', (_: any, val: string) =>
+    forward('setPlayMode', val)
+  )
 
   // 应用启动后延迟3秒检查更新，避免影响启动速度
   setTimeout(() => {
@@ -192,6 +318,10 @@ onMounted(() => {
       }
     }, 500)
   })
+})
+
+watch([appInteractiveReady, isWelcomeRoute], () => {
+  maybeShowSponsorPrompt()
 })
 
 const confirmImportPromptPath = (path: string, fileName: string, silent: boolean) => {
@@ -315,6 +445,8 @@ const setupSystemThemeListener = () => {
 
 // 清理事件监听器
 onUnmounted(() => {
+  stopUsageTracking()
+
   if (themeChangeHandler) {
     themeChangeHandler()
     themeChangeHandler = null
@@ -346,6 +478,31 @@ onUnmounted(() => {
           <div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end">
             <t-button theme="default" variant="outline" @click="cancelImportPrompt">取消</t-button>
             <t-button theme="primary" @click="confirmImportPrompt">导入</t-button>
+          </div>
+        </div>
+      </t-dialog>
+      <t-dialog
+        v-model:visible="sponsorPromptVisible"
+        header="感谢使用澜音"
+        :close-btn="true"
+        :close-on-overlay-click="true"
+        :destroy-on-close="true"
+        :footer="false"
+        placement="center"
+        @close="closeSponsorPrompt"
+      >
+        <div style="max-width: 420px">
+          <p style="margin: 0 0 8px 0">
+            hi！ 大大澜音已经陪伴您
+            {{
+              sponsorUsageText
+            }}。如果您喜欢澜音可以给我们一点小小的支持吗，我相信我们会越做越好哒。
+          </p>
+          <div style="display: flex; gap: 8px; justify-content: flex-end">
+            <t-button theme="default" variant="outline" @click="closeSponsorPrompt"
+              >不再提示</t-button
+            >
+            <t-button theme="primary" @click="openSponsor">支持！必须加鸡腿</t-button>
           </div>
         </div>
       </t-dialog>

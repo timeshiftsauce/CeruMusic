@@ -1,5 +1,5 @@
 <template>
-  <div class="welcome-container">
+  <div class="welcome-container" :class="{ 'is-newyear': showNewYear }">
     <!-- 背景装饰 -->
     <div class="bg-decoration">
       <div class="bg-circle circle-1"></div>
@@ -18,8 +18,12 @@
       <!-- 右侧：内容区域 -->
       <div class="right-section">
         <div class="text-content animate-in-right">
+          <div v-if="showNewYear" class="newyear-banner">
+            <span class="newyear-text">新年快乐</span>
+            <span class="newyear-year">2026</span>
+          </div>
           <h1 class="brand-title">Ceru Music</h1>
-          <p class="brand-subtitle">纯净 · 极致 · 自由</p>
+          <p class="brand-subtitle">{{ showNewYear ? '' : '纯净 · 极致 · 自由' }}</p>
         </div>
 
         <div class="info-group animate-in-right-delay">
@@ -64,6 +68,14 @@ let timer: number | null = null
 const features = ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
 
 const progressWidth = computed(() => `${loadingPercent.value}%`)
+
+const showNewYear = computed(() => {
+  const preview = localStorage.getItem('ceru_welcome_newyear_preview')
+  if (preview === '1') return true
+  const now = new Date()
+  const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
+  return today >= 20260101 && today <= 20260103
+})
 
 onMounted(async () => {
   // 获取版本号
@@ -148,6 +160,76 @@ onUnmounted(() => {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: var(--td-text-color-primary, #333);
+}
+
+.welcome-container.is-newyear .circle-1 {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 215, 0, 0.95), rgba(255, 0, 0, 0) 60%);
+  opacity: 0.35;
+}
+
+.welcome-container.is-newyear .circle-2 {
+  background: radial-gradient(circle at 60% 40%, rgba(255, 0, 0, 0.95), rgba(255, 215, 0, 0) 65%);
+  opacity: 0.28;
+}
+
+.newyear-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.65rem;
+  margin-bottom: 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 215, 0, 0.22);
+  background: linear-gradient(90deg, rgba(255, 0, 0, 0.1), rgba(255, 215, 0, 0.1));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 28px rgba(255, 0, 0, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.newyear-banner::after {
+  content: '';
+  position: absolute;
+  inset: -40% -60%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.35) 0 1px, transparent 2px);
+  opacity: 0.35;
+  animation: nySparkle 2.2s linear infinite;
+}
+
+.newyear-text,
+.newyear-year {
+  position: relative;
+  z-index: 1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.newyear-text {
+  color: rgba(255, 0, 0, 0.95);
+}
+
+.newyear-year {
+  font-weight: 900;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+  background: linear-gradient(180deg, #fff0b3, #ffd65a, #ffb84a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 0.6px rgba(140, 20, 0, 0.35);
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+}
+
+@keyframes nySparkle {
+  0% {
+    transform: translateX(-10%) rotate(0deg);
+  }
+  100% {
+    transform: translateX(10%) rotate(180deg);
+  }
 }
 
 /* 背景装饰 */
@@ -265,6 +347,12 @@ onUnmounted(() => {
   line-height: 1.1;
 }
 
+.welcome-container.is-newyear .brand-title {
+  background: linear-gradient(120deg, #ff1f1f, #ffd65a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .brand-subtitle {
   font-size: 1.25rem;
   color: var(--td-text-color-secondary, #666);
@@ -333,6 +421,10 @@ onUnmounted(() => {
   background: linear-gradient(90deg, #42d392, #647eff);
   border-radius: 2px;
   transition: width 0.3s ease-out;
+}
+
+.welcome-container.is-newyear .progress-bar {
+  background: linear-gradient(90deg, #ff1f1f, #ffd65a, #ff1f1f);
 }
 
 /* 版本信息 */
