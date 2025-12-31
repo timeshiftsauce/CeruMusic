@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue'
+import HotkeySettings from '@renderer/components/Settings/HotkeySettings.vue'
 import { ref, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
@@ -8,6 +9,7 @@ import {
   TreeRoundDotIcon,
   PaletteIcon,
   ApiIcon,
+  KeyboardIcon,
   MusicIcon,
   InfoCircleIcon,
   PlayCircleIcon,
@@ -110,6 +112,12 @@ const settingsCategories = [
     label: '播放设置',
     icon: PlayCircleIcon,
     description: '播放列表，歌词管理和相关设置'
+  },
+  {
+    key: 'hotkeys',
+    label: '快捷键',
+    icon: KeyboardIcon,
+    description: '全局快捷键配置'
   },
   {
     key: 'plugins',
@@ -583,6 +591,14 @@ const getTagOptionsStatus = () => {
                     @change="playSettingStore.setIsAudioVisualizer(isAudioVisualizer)"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div v-else-if="activeCategory === 'hotkeys'" key="hotkeys" class="settings-section">
+              <div class="setting-group">
+                <h3>快捷键设置</h3>
+                <p>配置系统级全局快捷键，来快速达到你的理想效果</p>
+                <HotkeySettings />
               </div>
             </div>
 

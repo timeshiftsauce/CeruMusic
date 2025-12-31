@@ -39,8 +39,8 @@
                 <s-image
                   :key="song.img"
                   :src="song.img"
-                  :observeVisibility="true"
-                  :releaseOnHide="true"
+                  :observe-visibility="true"
+                  :release-on-hide="true"
                   alt="封面"
                 />
               </div>
