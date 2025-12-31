@@ -2,21 +2,21 @@ import { httpFetch } from '../../request'
 import { sizeFormate } from '../../index'
 
 export const getMusicQualityInfo = (id) => {
-
   const requestObj = httpFetch(`https://music.163.com/api/song/music/detail/get?songId=${id}`, {
     method: 'get',
     headers: {
       'User-Agent':
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-      origin: 'https://music.163.com',
-    },
+      origin: 'https://music.163.com'
+    }
   })
 
   const types = []
   const _types = {}
 
   requestObj.promise = requestObj.promise.then(({ statusCode, body }) => {
-    if (statusCode != 200 && body.code != 200) return Promise.reject(new Error('获取音质信息失败' + id))
+    if (statusCode != 200 && body.code != 200)
+      return Promise.reject(new Error('获取音质信息失败' + id))
 
     const data = body.data
 

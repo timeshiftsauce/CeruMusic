@@ -13,12 +13,12 @@ export default {
   sortList: [
     {
       name: '最热',
-      id: 5,
+      id: 5
     },
     {
       name: '最新',
-      id: 2,
-    },
+      id: 2
+    }
   ],
   regExps: {
     hotTagHtml: /class="c_bg_link js_tag_item" data-id="\w+">.+?<\/a>/g,
@@ -27,7 +27,7 @@ export default {
     // https://y.qq.com/n/yqq/playlist/7217720898.html
     // https://i.y.qq.com/n2/m/share/details/taoge.html?platform=11&appshare=android_qq&appversion=9050006&id=7217720898&ADTAG=qfshare
     listDetailLink: /\/playlist\/(\d+)/,
-    listDetailLink2: /id=(\d+)/,
+    listDetailLink2: /id=(\d+)/
   },
   tagsUrl:
     'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json&needNewCode=0&data=%7B%22tags%22%3A%7B%22method%22%3A%22get_all_categories%22%2C%22param%22%3A%7B%22qq%22%3A%22%22%7D%2C%22module%22%3A%22playlist.PlaylistAllCategoriesServer%22%7D%7D',
@@ -46,10 +46,10 @@ export default {
               category_id: id,
               size: this.limit_list,
               page: page - 1,
-              use_page: 1,
+              use_page: 1
             },
-            module: 'playlist.PlayListCategoryServer',
-          },
+            module: 'playlist.PlayListCategoryServer'
+          }
         })
       )}`
     }
@@ -63,10 +63,10 @@ export default {
             sin: this.limit_list * (page - 1),
             size: this.limit_list,
             order: sortId,
-            cur_page: page,
+            cur_page: page
           },
-          module: 'playlist.PlayListPlazaServer',
-        },
+          module: 'playlist.PlayListPlazaServer'
+        }
       })
     )}`
   },
@@ -106,7 +106,7 @@ export default {
       hotTags.push({
         id: parseInt(result[1]),
         name: result[2],
-        source: 'tx',
+        source: 'tx'
       })
     })
     return hotTags
@@ -119,8 +119,8 @@ export default {
         parent_name: type.group_name,
         id: item.id,
         name: item.name,
-        source: 'tx',
-      })),
+        source: 'tx'
+      }))
     }))
   },
 
@@ -152,12 +152,12 @@ export default {
         // grade: item.favorcnt / 10,
         total: item.song_ids?.length,
         desc: decodeName(item.desc).replace(/<br>/g, '\n'),
-        source: 'tx',
+        source: 'tx'
       })),
       total: data.total,
       page,
       limit: this.limit_list,
-      source: 'tx',
+      source: 'tx'
     }
   },
   filterList2({ content }, page) {
@@ -172,12 +172,12 @@ export default {
         img: basic.cover.medium_url || basic.cover.default_url,
         // grade: basic.favorcnt / 10,
         desc: decodeName(basic.desc).replace(/<br>/g, '\n'),
-        source: 'tx',
+        source: 'tx'
       })),
       total: content.total_cnt,
       page,
       limit: this.limit_list,
-      source: 'tx',
+      source: 'tx'
     }
   },
 
@@ -187,7 +187,7 @@ export default {
     const requestObj_listDetailLink = httpFetch(link)
     const {
       headers: { location },
-      statusCode,
+      statusCode
     } = await requestObj_listDetailLink.promise
     // console.log(headers)
     if (statusCode > 400) return this.handleParseId(link, ++retryNum)
@@ -217,12 +217,12 @@ export default {
     const requestObj_listDetail = httpFetch(this.getListDetailUrl(id), {
       headers: {
         Origin: 'https://y.qq.com',
-        Referer: `https://y.qq.com/n/yqq/playsquare/${id}.html`,
-      },
+        Referer: `https://y.qq.com/n/yqq/playsquare/${id}.html`
+      }
     })
     const { body } = await requestObj_listDetail.promise
-    console.log(body);
-    
+    console.log(body)
+
     if (body.code !== this.successCode) return this.getListDetail(id, ++tryNum)
     const cdlist = body.cdlist[0]
     return {
@@ -236,8 +236,8 @@ export default {
         img: cdlist.logo,
         desc: decodeName(cdlist.desc).replace(/<br>/g, '\n'),
         author: cdlist.nickname,
-        play_count: formatPlayCount(cdlist.visitnum),
-      },
+        play_count: formatPlayCount(cdlist.visitnum)
+      }
     }
   },
   async filterListDetail(rawList) {
@@ -274,7 +274,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       }
     })
   },
@@ -282,7 +282,7 @@ export default {
     return Promise.all([this.getTag(), this.getHotTag()]).then(([tags, hotTag]) => ({
       tags,
       hotTag,
-      source: 'tx',
+      source: 'tx'
     }))
   },
 
@@ -303,8 +303,8 @@ export default {
       {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
-          Referer: 'http://y.qq.com/portal/search.html',
-        },
+          Referer: 'http://y.qq.com/portal/search.html'
+        }
       }
     ).promise.then(({ body }) => {
       if (body.code != 0) return this.search(text, page, limit, ++retryNum)
@@ -321,15 +321,15 @@ export default {
             // grade: item.favorcnt / 10,
             total: item.song_count,
             desc: decodeName(decodeName(item.introduction)).replace(/<br>/g, '\n'),
-            source: 'tx',
+            source: 'tx'
           }
         }),
         limit,
         total: body.data.sum,
-        source: 'tx',
+        source: 'tx'
       }
     })
-  },
+  }
 }
 
 // getList

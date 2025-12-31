@@ -11,7 +11,7 @@
       <div class="left-section animate-in-left">
         <div class="logo-wrapper">
           <div class="logo-glow"></div>
-          <img class="logo-image" src="/logo.svg" alt="Ceru Music Logo" />
+          <img class="logo-image" src="/logo_2026.svg" alt="Ceru Music Logo" />
         </div>
       </div>
 
@@ -23,7 +23,13 @@
             <span class="newyear-year">2026</span>
           </div>
           <h1 class="brand-title">Ceru Music</h1>
-          <p class="brand-subtitle">{{ showNewYear ? '' : '纯净 · 极致 · 自由' }}</p>
+          <p class="brand-subtitle">
+            {{
+              showNewYear
+                ? '澜音伴你，每一声波澜，都是新生；愿岁月长青，欢乐满盈。'
+                : '纯净 · 极致 · 自由'
+            }}
+          </p>
         </div>
 
         <div class="info-group animate-in-right-delay">

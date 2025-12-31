@@ -25,62 +25,62 @@ const boardList = [
     id: 'mg__27553319',
     name: '新歌榜',
     bangid: '27553319',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__27186466',
     name: '热歌榜',
     bangid: '27186466',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__27553408',
     name: '原创榜',
     bangid: '27553408',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__75959118',
     name: '音乐风向榜',
     bangid: '75959118',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__76557036',
     name: '彩铃分贝榜',
     bangid: '76557036',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__76557745',
     name: '会员臻爱榜',
     bangid: '76557745',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__23189800',
     name: '港台榜',
     bangid: '23189800',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__23189399',
     name: '内地榜',
     bangid: '23189399',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__19190036',
     name: '欧美榜',
     bangid: '19190036',
-    source: 'mg',
+    source: 'mg'
   },
   {
     id: 'mg__83176390',
     name: '国风金曲榜',
     bangid: '83176390',
-    source: 'mg',
-  },
+    source: 'mg'
+  }
 ]
 export default {
   limit: 200,
@@ -88,53 +88,53 @@ export default {
     {
       id: 'mgyyb',
       name: '音乐榜',
-      bangid: '27553319',
+      bangid: '27553319'
     },
     {
       id: 'mgysb',
       name: '影视榜',
-      bangid: '23603721',
+      bangid: '23603721'
     },
     {
       id: 'mghybnd',
       name: '华语内地榜',
-      bangid: '23603926',
+      bangid: '23603926'
     },
     {
       id: 'mghyjqbgt',
       name: '华语港台榜',
-      bangid: '23603954',
+      bangid: '23603954'
     },
     {
       id: 'mgomb',
       name: '欧美榜',
-      bangid: '23603974',
+      bangid: '23603974'
     },
     {
       id: 'mgrhb',
       name: '日韩榜',
-      bangid: '23603982',
+      bangid: '23603982'
     },
     {
       id: 'mgwlb',
       name: '网络榜',
-      bangid: '23604058',
+      bangid: '23604058'
     },
     {
       id: 'mgclb',
       name: '彩铃榜',
-      bangid: '23604023',
+      bangid: '23604023'
     },
     {
       id: 'mgktvb',
       name: 'KTV榜',
-      bangid: '23604040',
+      bangid: '23604040'
     },
     {
       id: 'mgrcb',
       name: '原创榜',
-      bangid: '23604032',
-    },
+      bangid: '23604032'
+    }
   ],
   getUrl(id, page) {
     return `https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do?columnId=${id}&needAll=0`
@@ -149,9 +149,10 @@ export default {
       // this.requestBoardsObj = httpFetch('https://app.c.nf.migu.cn/MIGUM2.0/v2.0/content/indexrank.do?templateVersion=8', {
       headers: {
         Referer: 'https://app.c.nf.migu.cn/',
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Mobile Safari/537.36',
-        channel: '0146921',
-      },
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Mobile Safari/537.36',
+        channel: '0146921'
+      }
     })
     return this.requestBoardsObj.promise
   },
@@ -212,21 +213,22 @@ export default {
     this.list = boardList
     return {
       list: boardList,
-      source: 'mg',
+      source: 'mg'
     }
   },
   getList(bangid, page, retryNum = 0) {
     if (++retryNum > 3) return Promise.reject(new Error('try max num'))
     return this.getData(this.getUrl(bangid, page)).then(({ statusCode, body }) => {
       // console.log(body)
-      if (statusCode !== 200 || body.code !== this.successCode) return this.getList(bangid, page, retryNum)
-      const list = filterMusicInfoList(body.columnInfo.contents.map(m => m.objectInfo))
+      if (statusCode !== 200 || body.code !== this.successCode)
+        return this.getList(bangid, page, retryNum)
+      const list = filterMusicInfoList(body.columnInfo.contents.map((m) => m.objectInfo))
       return {
         total: list.length,
         list,
         limit: this.limit,
         page,
-        source: 'mg',
+        source: 'mg'
       }
     })
   },
@@ -239,5 +241,5 @@ export default {
       }
     }
     return null
-  },
+  }
 }

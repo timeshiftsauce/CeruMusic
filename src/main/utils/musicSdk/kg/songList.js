@@ -14,7 +14,7 @@ const handleSignature = (id, page, limit) =>
         isCDN: !0,
         callback(i) {
           resolve(i.signature)
-        },
+        }
       }
     )
   })
@@ -27,36 +27,36 @@ export default {
   listDetailLimit: 10000,
   currentTagInfo: {
     id: undefined,
-    info: undefined,
+    info: undefined
   },
   sortList: [
     {
       name: '推荐',
-      id: '5',
+      id: '5'
     },
     {
       name: '最热',
-      id: '6',
+      id: '6'
     },
     {
       name: '最新',
-      id: '7',
+      id: '7'
     },
     {
       name: '热藏',
-      id: '3',
+      id: '3'
     },
     {
       name: '飙升',
-      id: '8',
-    },
+      id: '8'
+    }
   ],
   cache: new Map(),
   regExps: {
     listData: /global\.data = (\[.+\]);/,
     listInfo: /global = {[\s\S]+?name: "(.+)"[\s\S]+?pic: "(.+)"[\s\S]+?};/,
     // https://www.kugou.com/yy/special/single/1067062.html
-    listDetailLink: /^.+\/(\d+)\.html(?:\?.*|&.*$|#.*$|$)/,
+    listDetailLink: /^.+\/(\d+)\.html(?:\?.*|&.*$|#.*$|$)/
   },
   parseHtmlDesc(html) {
     const prefix = '<div class="pc_specail_text pc_singer_tab_content" id="specailIntroduceWrap">'
@@ -92,10 +92,10 @@ export default {
       info: {
         name,
         img: pic,
-        desc,
+        desc
         // author: body.result.info.userinfo.username,
         // play_count: formatPlayCount(body.result.listen_num),
-      },
+      }
     }
   },
   getInfoUrl(tagId) {
@@ -119,7 +119,7 @@ export default {
       result.push({
         id: tag.special_id,
         name: tag.special_name,
-        source: 'kg',
+        source: 'kg'
       })
     }
     return result
@@ -134,8 +134,8 @@ export default {
           parent_name: tag.pname,
           id: tag.id,
           name: tag.name,
-          source: 'kg',
-        })),
+          source: 'kg'
+        }))
       })
     }
     return result
@@ -158,7 +158,7 @@ export default {
       {
         method: 'post',
         headers: {
-          'User-Agent': 'KuGou2012-8275-web_browser_event_handler',
+          'User-Agent': 'KuGou2012-8275-web_browser_event_handler'
         },
         body: {
           appid: 1001,
@@ -169,8 +169,8 @@ export default {
           platform: 'pc',
           userid: '262643156',
           return_min: 6,
-          return_max: 15,
-        },
+          return_max: 15
+        }
       }
     )
     return this._requestObj_listRecommend.promise.then(({ body }) => {
@@ -189,7 +189,7 @@ export default {
       total: item.songcount,
       grade: item.grade,
       desc: item.intro,
-      source: 'kg',
+      source: 'kg'
     }))
   },
 
@@ -229,7 +229,7 @@ export default {
       dfid: '-',
       clienttime: Date.now(),
       key: 'OIlwieks28dk2k092lksi2UIkp',
-      fields: 'album_info,author_name,audio_info,ori_audio_name,base,songname',
+      fields: 'album_info,author_name,audio_info,ori_audio_name,base,songname'
     }
     let list = hashs
     let tasks = []
@@ -249,8 +249,8 @@ export default {
           'KG-Fake': '0',
           'KG-RF': '00869891',
           'User-Agent': 'Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi',
-          'x-router': 'kmr.service.kugou.com',
-        },
+          'x-router': 'kmr.service.kugou.com'
+        }
       }).then((data) => data.map((s) => s[0]))
     )
   },
@@ -268,7 +268,7 @@ export default {
       headers: {
         'KG-RC': 1,
         'KG-THash': 'network_super_call.cpp:3676261689:379',
-        'User-Agent': '',
+        'User-Agent': ''
       },
       body: {
         appid: 1001,
@@ -276,8 +276,8 @@ export default {
         mid: '21511157a05844bd085308bc76ef3343',
         clienttime: 640612895,
         key: '36164c4015e704673c588ee202b9ecb8',
-        data: id,
-      },
+        data: id
+      }
     })
     // console.log(songInfo)
     // type 1单曲，2歌单，3电台，4酷狗码，5别人的播放队列
@@ -298,7 +298,7 @@ export default {
         headers: {
           'KG-RC': 1,
           'KG-THash': 'network_super_call.cpp:3676261689:379',
-          'User-Agent': '',
+          'User-Agent': ''
         },
         body: {
           appid: 1001,
@@ -312,9 +312,9 @@ export default {
             userid: info.userid,
             collect_type: 0,
             page: 1,
-            pagesize: info.count,
-          },
-        },
+            pagesize: info.count
+          }
+        }
       })
       // console.log(songList)
     }
@@ -329,9 +329,9 @@ export default {
         name: info.name,
         img: (info.img_size && info.img_size.replace('{size}', 240)) || info.img,
         // desc: body.result.info.list_desc,
-        author: info.username,
+        author: info.username
         // play_count: formatPlayCount(info.count),
-      },
+      }
     }
   },
 
@@ -341,8 +341,8 @@ export default {
       {
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
-        },
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1'
+        }
       }
     )
     if (!songInfo.list) {
@@ -365,9 +365,9 @@ export default {
         name: songInfo.info.name,
         img: songInfo.info.img,
         // desc: body.result.info.list_desc,
-        author: songInfo.info.username,
+        author: songInfo.info.username
         // play_count: formatPlayCount(info.count),
-      },
+      }
     }
   },
 
@@ -387,18 +387,22 @@ export default {
       data: [
         {
           id: gcid,
-          id_type: 2,
-        },
-      ],
+          id_type: 2
+        }
+      ]
     }
-    const result = await this.createHttp(`https://t.kugou.com/v1/songlist/batch_decode?${params}&signature=${signatureParams(params, 'android', JSON.stringify(body))}`, {
-      method: 'POST',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; HUAWEI HMA-AL00) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Mobile Safari/537.36',
-        Referer: 'https://m.kugou.com/',
-      },
-      body,
-    })
+    const result = await this.createHttp(
+      `https://t.kugou.com/v1/songlist/batch_decode?${params}&signature=${signatureParams(params, 'android', JSON.stringify(body))}`,
+      {
+        method: 'POST',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Linux; Android 10; HUAWEI HMA-AL00) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Mobile Safari/537.36',
+          Referer: 'https://m.kugou.com/'
+        },
+        body
+      }
+    )
     return result.list[0].global_collection_id
   },
 
@@ -418,8 +422,8 @@ export default {
             headers: {
               'User-Agent':
                 'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
-              Referer: link,
-            },
+              Referer: link
+            }
           }
         ).then((data) => data.list.info)
       )
@@ -437,9 +441,9 @@ export default {
         name: listInfo.name,
         img: listInfo.pic && listInfo.pic.replace('{size}', 240),
         // desc: body.result.info.list_desc,
-        author: listInfo.list_create_username,
+        author: listInfo.list_create_username
         // play_count: formatPlayCount(listInfo.count),
-      },
+      }
     }
   },
   createGetListDetail2Task(id, total) {
@@ -470,8 +474,8 @@ export default {
               'User-Agent':
                 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1',
               dfid: '-',
-              clienttime: '1586163263991',
-            },
+              clienttime: '1586163263991'
+            }
           }
         ).then((data) => data.info)
       )
@@ -497,8 +501,8 @@ export default {
           'User-Agent':
             'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1',
           dfid: '-',
-          clienttime: '1586163242519',
-        },
+          clienttime: '1586163242519'
+        }
       }
     )
     const songInfo = await this.createGetListDetail2Task(id, info.songcount)
@@ -515,8 +519,8 @@ export default {
         img: info.imgurl && info.imgurl.replace('{size}', 240),
         desc: info.intro,
         author: info.nickname,
-        play_count: formatPlayCount(info.playcount),
-      },
+        play_count: formatPlayCount(info.playcount)
+      }
     }
   },
 
@@ -525,8 +529,8 @@ export default {
     const { body } = await httpFetch(`https://m.kugou.com/share/?chain=${chain}&id=${chain}`, {
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
-      },
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+      }
     }).promise
     let result = body.match(/var\sphpParam\s=\s({.+?});/)
     if (result) result = JSON.parse(result[1])
@@ -540,8 +544,8 @@ export default {
     const { body } = await httpFetch(`http://www.kugou.com/share/${chain}.html`, {
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36',
-      },
+          'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36'
+      }
     }).promise
     let result = body.match(/var\sdataFromSmarty\s=\s(\[.+?\])/)
     if (result) result = JSON.parse(result[1])
@@ -555,7 +559,7 @@ export default {
     const limit = 100
     const [listInfo, list] = await Promise.all([
       this.getListInfoByChain(chain),
-      this.getUserListDetailById(songInfo.id, page, limit),
+      this.getUserListDetailById(songInfo.id, page, limit)
     ])
     return {
       list: list || [],
@@ -567,16 +571,16 @@ export default {
         name: listInfo.specialname,
         img: listInfo.imgurl && listInfo.imgurl.replace('{size}', 240),
         // desc: body.result.info.list_desc,
-        author: listInfo.nickname,
+        author: listInfo.nickname
         // play_count: formatPlayCount(info.count),
-      },
+      }
     }
   },
 
   async getUserListDetail5(chain) {
     const [listInfo, list] = await Promise.all([
       this.getListInfoByChain(chain),
-      this.getUserListDetailByPcChain(chain),
+      this.getUserListDetailByPcChain(chain)
     ])
     return {
       list: list || [],
@@ -588,9 +592,9 @@ export default {
         name: listInfo.specialname,
         img: listInfo.imgurl && listInfo.imgurl.replace('{size}', 240),
         // desc: body.result.info.list_desc,
-        author: listInfo.nickname,
+        author: listInfo.nickname
         // play_count: formatPlayCount(info.count),
-      },
+      }
     }
   },
 
@@ -603,8 +607,8 @@ export default {
           Referer: 'https://m3ws.kugou.com/share/index.php',
           'User-Agent':
             'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1',
-          dfid: '-',
-        },
+          dfid: '-'
+        }
       }
     )
 
@@ -617,7 +621,10 @@ export default {
   async getUserListDetail(link, page, retryNum = 0) {
     if (retryNum > 3) return Promise.reject(new Error('link try max num'))
     if (link.includes('#')) link = link.replace(/#.*$/, '')
-    if (link.includes('global_collection_id')) return this.getUserListDetail2(link.replace(/^.*?global_collection_id=(\w+)(?:&.*$|#.*$|$)/, '$1'))
+    if (link.includes('global_collection_id'))
+      return this.getUserListDetail2(
+        link.replace(/^.*?global_collection_id=(\w+)(?:&.*$|#.*$|$)/, '$1')
+      )
     if (link.includes('gcid_')) {
       let gcid = link.match(/gcid_\w+/)?.[0]
       if (gcid) {
@@ -625,7 +632,8 @@ export default {
         if (global_collection_id) return this.getUserListDetail2(global_collection_id)
       }
     }
-    if (link.includes('chain=')) return this.getUserListDetail3(link.replace(/^.*?chain=(\w+)(?:&.*$|#.*$|$)/, '$1'), page)
+    if (link.includes('chain='))
+      return this.getUserListDetail3(link.replace(/^.*?chain=(\w+)(?:&.*$|#.*$|$)/, '$1'), page)
     if (link.includes('.html')) {
       if (link.includes('zlist.html')) {
         link = link.replace(/^(.*)zlist\.html/, 'https://m3ws.kugou.com/zlist/list')
@@ -647,19 +655,22 @@ export default {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
-        Referer: link,
-      },
+        Referer: link
+      }
     })
     const {
       headers: { location },
       statusCode,
-      body,
+      body
     } = await requestObj_listDetailLink.promise
     // console.log(body, location)
     if (statusCode > 400) return this.getUserListDetail(link, page, ++retryNum)
     if (location) {
       // console.log(location)
-      if (location.includes('global_collection_id')) return this.getUserListDetail2(location.replace(/^.*?global_collection_id=(\w+)(?:&.*$|#.*$|$)/, '$1'))
+      if (location.includes('global_collection_id'))
+        return this.getUserListDetail2(
+          location.replace(/^.*?global_collection_id=(\w+)(?:&.*$|#.*$|$)/, '$1')
+        )
       if (location.includes('gcid_')) {
         let gcid = link.match(/gcid_\w+/)?.[0]
         if (gcid) {
@@ -667,7 +678,11 @@ export default {
           if (global_collection_id) return this.getUserListDetail2(global_collection_id)
         }
       }
-      if (location.includes('chain=')) return this.getUserListDetail3(location.replace(/^.*?chain=(\w+)(?:&.*$|#.*$|$)/, '$1'), page)
+      if (location.includes('chain='))
+        return this.getUserListDetail3(
+          location.replace(/^.*?chain=(\w+)(?:&.*$|#.*$|$)/, '$1'),
+          page
+        )
       if (location.includes('.html')) {
         if (location.includes('zlist.html')) {
           let link = location.replace(/^(.*)zlist\.html/, 'https://m3ws.kugou.com/zlist/list')
@@ -735,7 +750,7 @@ export default {
         limit: body.data.params.pagesize,
         page: body.data.params.p,
         total: body.data.params.total,
-        source: 'kg',
+        source: 'kg'
       }
     })
   },
@@ -758,7 +773,7 @@ export default {
       if (recommendList) list.unshift(...recommendList)
       return {
         list,
-        ...info,
+        ...info
       }
     })
   },
@@ -773,7 +788,7 @@ export default {
       return {
         hotTag: this.filterInfoHotTag(body.data.hotTag),
         tags: this.filterTagInfo(body.data.tagids),
-        source: 'kg',
+        source: 'kg'
       }
     })
   },
@@ -808,15 +823,15 @@ export default {
             grade: item.grade,
             desc: item.intro,
             total: item.songcount,
-            source: 'kg',
+            source: 'kg'
           }
         }),
         limit,
         total: body.data.total,
-        source: 'kg',
+        source: 'kg'
       }
     })
-  },
+  }
 }
 
 // getList

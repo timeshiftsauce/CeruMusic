@@ -599,7 +599,7 @@
   --song-list-btn-bg-hover: var(--td-brand-color-light);
   --song-list-quality-bg: #3a2a1a;
   --song-list-quality-color: #fa8c16;
-    --song-list-source-bg: #343939;
+  --song-list-source-bg: #343939;
   --song-list-source-color: #00eeff;
 
   /* Search 页面专用变量 - 暗色主题 */

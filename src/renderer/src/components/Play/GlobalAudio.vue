@@ -84,9 +84,15 @@ onDeactivated(() => {
 //     audioStore.Audio.duration = audioMeta.value.duration || 0
 //   }
 // }
+const forward = (name: string, val?: any) => {
+  console.log('forward', name, val)
+  window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
+}
+
 const handleEnded = (): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('ended')
+  forward('playNext')
 }
 
 const handleSeeked = (): void => {

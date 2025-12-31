@@ -14,7 +14,7 @@ export default {
       type: 1, // 1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单, 1002: 用户, 1004: MV, 1006: 歌词, 1009: 电台, 1014: 视频
       limit,
       total: page == 1,
-      offset: limit * (page - 1),
+      offset: limit * (page - 1)
     })
     return searchRequest.promise.then(({ body }) => body)
   },
@@ -40,8 +40,8 @@ export default {
               headers: {
                 'User-Agent':
                   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-                origin: 'https://music.163.com',
-              },
+                origin: 'https://music.163.com'
+              }
             }
           )
 
@@ -100,7 +100,7 @@ export default {
             lrc: null,
             types,
             _types,
-            typeUrl: {},
+            typeUrl: {}
           }
         } catch (error) {
           console.error(error.message)
@@ -127,9 +127,9 @@ export default {
           allPage: this.allPage,
           limit: this.limit,
           total: this.total,
-          source: 'wy',
+          source: 'wy'
         }
       })
     })
-  },
+  }
 }
