@@ -2,6 +2,76 @@
 
 ## 日志
 
+- ###### 2026-01-02（[v1.7.1](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.1)）
+  1. feat: 新增排行榜功能及优化本地音乐扫描
+     - feat(leaderboard): 添加排行榜组件及卡片样式
+     - feat(musicSdk): 实现各平台排行榜API支持
+     - feat(local): 添加本地音乐扫描进度显示
+  2. fix(lyrics): 修复本地音乐歌词获取问题
+  3. refactor & style
+     - refactor(音乐发现页): 重构歌单列表滚动容器结构
+     - refactor(utils): 优化数字格式化工具函数
+     - style(LeaderBoard): 为排行榜容器添加底部内边距
+     - style: 调整页面布局及样式细节
+
+- ###### 2026-01-01（[v1.7.0](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.0)）
+  1. 全新的背景渲染效果过度
+  2. 歌词间奏点过度
+  3. 自定义快捷键功能
+  4. 迎接新年2026ui
+
+- ###### 2025-12-28（[v1.6.4](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.6.4)）
+  1. feat(账号):新增基于单点登录的澜音账号系统，未来会拓展其余基于账号的功能
+  2. perf(img):优化歌曲图片加载性能
+  3. fix(songlist):顶部收缩样式
+
+- ###### 2025-12-12（[v1.6.3](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.6.3)）
+  1. feat(播放器): 增强歌曲播放的自动换源和错误处理逻辑
+     - 重构播放逻辑，增加自动换源功能，当当前源播放失败时自动尝试其他源。优化错误处理流程，解决快速切歌导致的竞态问题。添加请求ID机制确保播放操作的原子性，完善加载状态管理。
+     - 新增音频辅助工具函数，包括音频准备等待、候选歌曲匹配和自动换源逻辑。改进播放失败时的用户提示，显示更详细的错误信息。
+     - 在歌单管理中增加去重处理，优化导入歌单时的重复歌曲提示。更新相关文档说明播放列表导入导出规范。
+
+- ###### 2025-12-11（[v1.6.1](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.6.1)）
+  1. feat: 添加歌单文件导入导出功能并优化歌词窗口
+     - 新增.cmpl格式压缩歌单文件支持
+     - 实现双击打开歌单文件自动导入功能
+     - 添加导入确认提示和自动导入设置选项
+     - 优化歌词窗口拖拽和大小调整交互
+     - 修复本地歌曲导出时的过滤逻辑
+     - 更新文件关联图标和描述信息
+
+- ###### 2025-12-10（[v1.6.0](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.6.0)）
+  1. feat(播放器): 新增播放器布局模式切换与左侧面板显示控制
+     - refactor(FullPlay): 重构播放器布局，支持经典黑胶和沉浸封面两种模式
+     - feat(FullPlay): 添加播放器样式设置面板，包含布局切换和左侧面板显示控制
+     - fix(FullPlay): 修复歌词播放器在单列模式下的宽度问题，桌面歌词操作无反应问题
+     - style(FullPlay): 优化动画效果和过渡，提升视觉体验
+
+- ###### 2025-12-05（[v1.5.6](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.5.6)）
+  1. feat: 添加音源质量映射和全局音质设置
+     - refactor(播放列表): 使用虚拟滚动优化性能
+     - fix(本地音乐): 修复歌单管理逻辑
+     - style: 优化播放列表样式和交互
+
+- ###### 2025-12-01（[v1.5.5](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.5.5)）
+  1. feat:(welcome,plugin): 更换欢迎界面UI，插件导入提示优化，校验升级；fix: 修复部分设备歌曲恢复上次播放进度的问题，歌单加载会重复加载第一页问题
+     - 重构欢迎页UI，添加动画效果和进度条显示
+     - 改进插件系统初始化逻辑，添加加载状态提示
+     - 修复插件格式校验和加密工具函数
+     - 更新赞助者列表和文档格式
+     - 优化播放列表封面图片懒加载
+     - 修复窗口关闭时歌词窗口未关闭的问题
+     - 添加插件通知在欢迎页的延迟显示逻辑
+
+- ###### 2025-11-28（[v1.5.3](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.5.3)）
+  1. fix(find,main): 优化主进程日志打印，以及咪咕源歌单接口失效的问题，首页分类更多布局问题
+
+- ###### 2025-11-27（[v1.5.2](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.5.2)）
+  1. fix(find,setting): 优化首页歌单展示，设置相关信息
+
+- ###### 2025-11-25（[v1.5.1](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.5.1)）
+  1. update(v1.5.1)：支持歌单搜索啦，调整了本地歌单的 细节
+
 - ###### 2025-11-24（[v1.5.0](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.5.0)）
   1. 本地播放第一版上线
      - 为本地音乐添加精准匹配功能及批量匹配进度显示 优化歌曲列表UI样式和操作体验
