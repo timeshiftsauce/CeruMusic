@@ -231,88 +231,86 @@ export const arrShuffle = <T>(array: T[]) => {
     randomIndex = Math.floor(Math.random() * currentIndex)
     currentIndex--
 
-      // And swap it with the current element.
-      ;[array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]]
+    // And swap it with the current element.
+    ;[array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]]
   }
 
   return array
 }
 
-
 // 更简洁的版本，更符合你的示例
 export function formatNumberToChineseSimple(num: number) {
-  let number = typeof num === 'string' ? parseFloat(num) : num;
+  let number = typeof num === 'string' ? parseFloat(num) : num
 
-  if (isNaN(number)) return '0';
+  if (isNaN(number)) return '0'
 
-  const isNegative = number < 0;
-  number = Math.abs(number);
+  const isNegative = number < 0
+  number = Math.abs(number)
 
   // 处理亿级
   if (number >= 100000000) {
-    const value = number / 100000000;
+    const value = number / 100000000
     // 亿级别总是显示1位小数
-    const formattedValue = value.toFixed(1);
+    const formattedValue = value.toFixed(1)
     // 如果小数部分为0，则去掉小数
-    const resultValue = parseFloat(formattedValue).toString();
-    return (isNegative ? '-' : '') + resultValue + '亿';
+    const resultValue = parseFloat(formattedValue).toString()
+    return (isNegative ? '-' : '') + resultValue + '亿'
   }
 
   // 处理万级
   if (number >= 10000) {
-    const value = number / 10000;
+    const value = number / 10000
     // 万级别：如果小数部分为0则不显示小数
-    const fixedValue = value.toFixed(1);
-    const resultValue = parseFloat(fixedValue).toString();
-    return (isNegative ? '-' : '') + resultValue + '万';
+    const fixedValue = value.toFixed(1)
+    const resultValue = parseFloat(fixedValue).toString()
+    return (isNegative ? '-' : '') + resultValue + '万'
   }
 
   // 小于1万，直接返回整数
-  return (isNegative ? '-' : '') + Math.round(number).toString();
+  return (isNegative ? '-' : '') + Math.round(number).toString()
 }
 
-
 interface FormatMinutesOptions {
-  minuteThreshold?: number;
-  hourThreshold?: number;
-  tenThousandThreshold?: number;
-  hourDecimal?: number;
-  tenThousandDecimal?: number;
+  minuteThreshold?: number
+  hourThreshold?: number
+  tenThousandThreshold?: number
+  hourDecimal?: number
+  tenThousandDecimal?: number
 }
 
 // 更灵活的版本，可以自定义阈值
 export function formatMinutesFlexible(minutes: number, options: FormatMinutesOptions = {}) {
   const {
-    minuteThreshold = 3000,      // 分钟阈值，超过则转换为小时
-    hourThreshold = 14400,        // 小时阈值，超过则取整显示
+    minuteThreshold = 3000, // 分钟阈值，超过则转换为小时
+    hourThreshold = 14400, // 小时阈值，超过则取整显示
     tenThousandThreshold = 200000, // 万小时阈值
-    hourDecimal = 1,              // 小时的小数位数
-    tenThousandDecimal = 1        // 万小时的小数位数
-  } = options;
+    hourDecimal = 1, // 小时的小数位数
+    tenThousandDecimal = 1 // 万小时的小数位数
+  } = options
 
   if (typeof minutes !== 'number' || isNaN(minutes)) {
-    return '0分钟';
+    return '0分钟'
   }
 
-  const isNegative = minutes < 0;
-  const absMinutes = Math.abs(minutes);
+  const isNegative = minutes < 0
+  const absMinutes = Math.abs(minutes)
 
-  let result;
+  let result
 
   if (absMinutes < minuteThreshold) {
-    result = `${Math.round(absMinutes)}分钟`;
+    result = `${Math.round(absMinutes)}分钟`
   } else if (absMinutes < hourThreshold) {
-    const hours = absMinutes / 60;
-    result = `${hours.toFixed(hourDecimal)}小时`;
+    const hours = absMinutes / 60
+    result = `${hours.toFixed(hourDecimal)}小时`
   } else if (absMinutes < tenThousandThreshold) {
-    const hours = absMinutes / 60;
-    result = `${Math.round(hours)}小时`;
+    const hours = absMinutes / 60
+    result = `${Math.round(hours)}小时`
   } else {
-    const tenThousandHours = absMinutes / 60 / 10000;
+    const tenThousandHours = absMinutes / 60 / 10000
     // 移除尾随的零
-    const formattedHours = parseFloat(tenThousandHours.toFixed(tenThousandDecimal)).toString();
-    result = `${formattedHours}万小时`;
+    const formattedHours = parseFloat(tenThousandHours.toFixed(tenThousandDecimal)).toString()
+    result = `${formattedHours}万小时`
   }
 
-  return isNegative ? `-${result}` : result;
+  return isNegative ? `-${result}` : result
 }
