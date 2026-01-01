@@ -153,6 +153,21 @@ function main(source: string) {
     },
     async searchPlaylist({ keyword, page = 1, limit = 30 }: SearchArg) {
       return (await Api.songList.search(keyword, page, limit)) as PlaylistResult
+    },
+
+    async getLeaderboards() {
+      if (Api.leaderboard && Api.leaderboard.getBoards) {
+        const res = await Api.leaderboard.getBoards()
+        return res.list
+      }
+      return []
+    },
+
+    async getLeaderboardDetail({ id, page }: { id: string; page: number }) {
+      if (Api.leaderboard && Api.leaderboard.getList) {
+        return (await Api.leaderboard.getList(id, page)) as PlaylistDetailResult
+      }
+      return { list: [], total: 0 } as unknown as PlaylistDetailResult
     }
   }
 }
