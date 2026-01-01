@@ -181,7 +181,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     if (
       songMaxQuality &&
       QUALITY_ORDER.indexOf(quality as KnownQuality) <
-        QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)
+      QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)
     ) {
       quality = songMaxQuality
       MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)
@@ -199,7 +199,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       isCache: true
     })
 
-    ;(await tip).close()
+      ; (await tip).close()
 
     if (!Object.hasOwn(result, 'path')) {
       MessagePlugin.info(result.message)
@@ -208,14 +208,12 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
         title: '下载成功',
         content: `${result.message} 保存位置: ${result.path}`
       })
-      if (!LocalUserDetail.userInfo.sourceQualityMap) LocalUserDetail.userInfo.sourceQualityMap = {}
-      LocalUserDetail.userInfo.sourceQualityMap[toRaw(songInfo.source) as any] = quality
     }
   } catch (error: any) {
     console.error('下载失败:', error)
     await NotifyPlugin.error({
       title: '下载失败',
-      content: `${error.message.includes('歌曲正在') ? '歌曲正在下载中' : '未知错误'}`
+      content: `${error.message.includes('歌曲正在') ? error.message : '未知错误'}`
     })
   }
 }
