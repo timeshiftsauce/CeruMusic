@@ -96,14 +96,14 @@ export function installDesktopLyricBridge() {
     if (!songId) {
       currentLines = []
       lastIndex = -1
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', { index: -1, lyric: [] })
+        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', { index: -1, lyric: [] })
       return
     }
     const song = localUser.list.find((s: any) => s.songmid === songId)
     if (!song) {
       currentLines = []
       lastIndex = -1
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', { index: -1, lyric: [] })
+        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', { index: -1, lyric: [] })
       return
     }
 
@@ -152,9 +152,16 @@ export function installDesktopLyricBridge() {
         }
         parsed = mergeTranslation(parsed, lyricData?.tlyric)
       } else {
-        const text = (song as any).lrc as string | null
+        let text = (song as any).lrc as string | null
+        if (!text) {
+          try {
+            text = await (window as any).api.music.invoke('local-music:get-lyric', (song as any).songmid)
+          } catch (e) {
+            console.error('获取本地歌词失败:', e)
+          }
+        }
         if (text && (/^\[(\d+),\d+\]/.test(text) || /\(\d+,\d+,\d+\)/.test(text))) {
-          parsed = text ? (parseQrc(text) as any) : []
+          parsed = text ? (parseYrc(text) as any) : []
         } else {
           parsed = text ? (parseLrc(text) as any) : []
         }
@@ -166,12 +173,12 @@ export function installDesktopLyricBridge() {
 
     currentLines = parsed || []
     lastIndex = -1
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
-      index: -1,
-      lyric: buildLyricPayload(currentLines)
-    })
-    // 提示前端进入准备态：先渲染 1、2 句左右铺开
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
+      ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
+        index: -1,
+        lyric: buildLyricPayload(currentLines)
+      })
+      // 提示前端进入准备态：先渲染 1、2 句左右铺开
+      ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
 
     // 同步歌名
     try {
@@ -179,7 +186,7 @@ export function installDesktopLyricBridge() {
       const artist = (song as any)?.singer || ''
       const title = [name, artist].filter(Boolean).join(' - ')
       if (title) (window as any)?.electron?.ipcRenderer?.send?.('play-song-change', title)
-    } catch {}
+    } catch { }
   }
 
   // 监听歌曲切换
@@ -196,7 +203,7 @@ export function installDesktopLyricBridge() {
   playStateInterval = window.setInterval(() => {
     if (controlAudio.Audio.isPlay !== lastPlayState) {
       lastPlayState = controlAudio.Audio.isPlay
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
+        ; (window as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
     }
   }, 300)
 
@@ -215,7 +222,7 @@ export function installDesktopLyricBridge() {
     }
 
     // 首先推送进度，便于前端做 30% 判定（避免 setTimeout 带来的抖动）
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
+    ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
       index: idx,
       progress
     })
@@ -223,11 +230,11 @@ export function installDesktopLyricBridge() {
     // 当行变化时，推送 index（立即切换高亮），并附带完整歌词集合（仅在变化时下发，减少开销）
     if (idx !== lastIndex) {
       lastIndex = idx
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
-        index: idx,
-        lyric: buildLyricPayload(currentLines)
-      })
+        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
+        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
+          index: idx,
+          lyric: buildLyricPayload(currentLines)
+        })
     }
   }, 100)
 }

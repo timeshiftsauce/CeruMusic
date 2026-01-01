@@ -273,6 +273,7 @@ watch(
 
             let lyrics: null | LyricLine[] = null
             if (lyricData?.crlyric) {
+              console.log('crlyric', lyricData.crlyric)
               lyrics = parseCrLyricBySource(source, lyricData.crlyric)
             } else if (lyricData?.lyric) {
               lyrics = parseLrc(lyricData.lyric)
@@ -365,7 +366,15 @@ watch(
 
         parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
       } else {
-        const text = (props.songInfo as any).lrc as string | null
+        let text = (props.songInfo as any).lrc as string | null
+        // 如果是本地音乐且没有歌词，则从主进程获取
+        if (!text) {
+          text = await window.api.music.invoke(
+            'local-music:get-lyric',
+            (props.songInfo as any).songmid
+          )
+        }
+
         if (text && (/^\[(\d+),\d+\]/.test(text) || /\(\d+,\d+,\d+\)/.test(text))) {
           parsedLyrics = text ? (parseYrc(text) as any) : []
         } else {
