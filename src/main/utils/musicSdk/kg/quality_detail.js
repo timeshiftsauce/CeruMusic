@@ -3,13 +3,12 @@ import { dnsLookup } from '../utils'
 import { headers, timeout } from '../options'
 import { sizeFormate, decodeName, formatPlayTime } from '../../index'
 import { formatSingerName } from '../utils'
-console.log(headers)
 
 export const getBatchMusicQualityInfo = (hashList) => {
   const resources = hashList.map((hash) => ({
     id: 0,
     type: 'audio',
-    hash
+    hash,
   }))
 
   const requestObj = httpFetch(
@@ -32,11 +31,11 @@ export const getBatchMusicQualityInfo = (hashList) => {
           'dolby',
           'viper_atmos',
           'viper_tape',
-          'viper_clear'
-        ]
+          'viper_clear',
+        ],
       },
       lookup: dnsLookup,
-      family: 4
+      family: 4,
     }
   )
 
@@ -59,7 +58,7 @@ export const getBatchMusicQualityInfo = (hashList) => {
           types.push({ type: '128k', size, hash: quality_data.hash })
           _types['128k'] = {
             size,
-            hash: quality_data.hash
+            hash: quality_data.hash,
           }
         }
         if (quality_data.quality === '320') {
@@ -67,7 +66,7 @@ export const getBatchMusicQualityInfo = (hashList) => {
           types.push({ type: '320k', size, hash: quality_data.hash })
           _types['320k'] = {
             size,
-            hash: quality_data.hash
+            hash: quality_data.hash,
           }
         }
         if (quality_data.quality === 'flac') {
@@ -75,7 +74,7 @@ export const getBatchMusicQualityInfo = (hashList) => {
           types.push({ type: 'flac', size, hash: quality_data.hash })
           _types.flac = {
             size,
-            hash: quality_data.hash
+            hash: quality_data.hash,
           }
         }
         if (quality_data.quality === 'high') {
@@ -83,7 +82,7 @@ export const getBatchMusicQualityInfo = (hashList) => {
           types.push({ type: 'hires', size, hash: quality_data.hash })
           _types.hires = {
             size,
-            hash: quality_data.hash
+            hash: quality_data.hash,
           }
         }
         if (quality_data.quality === 'viper_clear') {
@@ -91,7 +90,7 @@ export const getBatchMusicQualityInfo = (hashList) => {
           types.push({ type: 'master', size, hash: quality_data.hash })
           _types.master = {
             size,
-            hash: quality_data.hash
+            hash: quality_data.hash,
           }
         }
         if (quality_data.quality === 'viper_atmos') {
@@ -99,7 +98,7 @@ export const getBatchMusicQualityInfo = (hashList) => {
           types.push({ type: 'atmos', size, hash: quality_data.hash })
           _types.atmos = {
             size,
-            hash: quality_data.hash
+            hash: quality_data.hash,
           }
         }
       }
@@ -166,7 +165,7 @@ export const filterData = async (rawList, options = {}) => {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       }
     }
 
@@ -183,7 +182,7 @@ export const filterData = async (rawList, options = {}) => {
       hash: item.hash,
       types,
       _types,
-      typeUrl: {}
+      typeUrl: {},
     }
   })
 }

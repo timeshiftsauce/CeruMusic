@@ -18,6 +18,7 @@ interface CustomAPI {
         source: any
       } & (MethodParams<T> extends object ? MethodParams<T> : { [key: string]: any })
     ) => ReturnType<MainApi[T]>
+    invoke: (channel: string, ...args: any[]) => Promise<any>
   }
 
   musicCache: {
@@ -143,6 +144,10 @@ interface CustomAPI {
       songInfo: any,
       tagWriteOptions: any
     ) => Promise<{ success: boolean; message?: string }>
+    onScanProgress: (callback: (processed: number, total: number) => void) => void
+    onScanFinished: (callback: (resList: any[]) => void) => void
+    removeScanProgress: () => void
+    removeScanFinished: () => void
   }
 }
 

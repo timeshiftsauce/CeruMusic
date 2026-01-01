@@ -36,7 +36,8 @@ const api = {
   // 音乐相关方法
   music: {
     requestSdk: (api: string, args: any) =>
-      ipcRenderer.invoke('service-music-sdk-request', api, args)
+      ipcRenderer.invoke('service-music-sdk-request', api, args),
+    invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
   },
   //音源插件
   plugins: {
@@ -220,7 +221,23 @@ const api = {
     setDirs: (dirs: string[]) => ipcRenderer.invoke('local-music:set-dirs', dirs),
     getList: () => ipcRenderer.invoke('local-music:get-list'),
     getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id),
-    clearIndex: () => ipcRenderer.invoke('local-music:clear-index')
+    clearIndex: () => ipcRenderer.invoke('local-music:clear-index'),
+    onScanProgress: (callback: (processed: number, total: number) => void) => {
+      const handler = (_event: any, data: { processed: number; total: number }) => callback(data.processed, data.total)
+      ipcRenderer.on('local-music:scan-progress', handler)
+      return () => ipcRenderer.removeListener('local-music:scan-progress', handler)
+    },
+    onScanFinished: (callback: (resList: any[]) => void) => {
+      const handler = (_event: any, resList: any[]) => callback(resList)
+      ipcRenderer.on('local-music:scan-finished', handler)
+      return () => ipcRenderer.removeListener('local-music:scan-finished', handler)
+    },
+    removeScanProgress: () => {
+      ipcRenderer.removeAllListeners('local-music:scan-progress')
+    },
+    removeScanFinished: () => {
+      ipcRenderer.removeAllListeners('local-music:scan-finished')
+    }
   },
 
   // 插件通知相关
