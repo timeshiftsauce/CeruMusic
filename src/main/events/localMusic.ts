@@ -4,6 +4,7 @@ import fsp from 'fs/promises'
 import path from 'node:path'
 import crypto from 'crypto'
 import { localMusicIndexService } from '../services/LocalMusicIndex'
+import { convertLrcFormat } from '../utils/downloadSongs'
 // remove static import to avoid runtime failures if native module is missing
 
 const AUDIO_EXTS = new Set(['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.wma'])
@@ -24,10 +25,10 @@ async function walkDir(dir: string, results: string[]) {
         if (AUDIO_EXTS.has(ext)) results.push(full)
       }
     }
-  } catch {}
+  } catch { }
 }
 
-function readTags(filePath: string) {
+function readTags(filePath: string, includeLrc = false) {
   try {
     const taglib = require('node-taglib-sharp')
     const f = taglib.File.createFromPath(filePath)
@@ -41,15 +42,17 @@ function readTags(filePath: string) {
         const buf = tag.pictures[0].data
         const mime = tag.pictures[0].mimeType || 'image/jpeg'
         img = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
-      } catch {}
+      } catch { }
     }
     let lrc: string | null = null
-    try {
-      const raw = tag.lyrics || ''
-      if (raw && typeof raw === 'string') {
-        lrc = normalizeLyricsToLrc(raw)
-      }
-    } catch {}
+    if (includeLrc) {
+      try {
+        const raw = tag.lyrics || ''
+        if (raw && typeof raw === 'string') {
+          lrc = normalizeLyricsToCrLyric(raw)
+        }
+      } catch { }
+    }
     f.dispose()
     return { title, album, performers, img, lrc }
   } catch {
@@ -84,9 +87,6 @@ function normalizeLyricsToLrc(input: string): string {
       let text = mNew[3] || ''
       text = text.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
       text = text.replace(/<\d{2}:\d{2}\.\d{3}>/g, '')
-      if (/(<\d{2}:\d{2}\.\d{3}>)|(\(\d+,\d+(?:,\d+)?\))/.test(mNew[3] || '')) {
-        text = text.replace(/[()]/g, '')
-      }
       text = text.replace(/\s+/g, ' ').trim()
       const tag = msFormat(startMs)
       out.push(`${tag}${text}`)
@@ -97,9 +97,6 @@ function normalizeLyricsToLrc(input: string): string {
       let text = mOld[2] || ''
       text = text.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
       text = text.replace(/<\d{2}:\d{2}\.\d{3}>/g, '')
-      if (/(<\d{2}:\d{2}\.\d{3}>)|(\(\d+,\d+(?:,\d+)?\))/.test(mOld[2] || '')) {
-        text = text.replace(/[()]/g, '')
-      }
       text = text.replace(/\s+/g, ' ').trim()
       const tag = `[${mOld[1]}]`
       out.push(`${tag}${text}`)
@@ -110,95 +107,95 @@ function normalizeLyricsToLrc(input: string): string {
   return out.join('\n')
 }
 
-// function timeToMs(s: string): number {
-//   const m = /(\d{2}):(\d{2})\.(\d{3})/.exec(s)
-//   if (!m) return NaN
-//   return parseInt(m[1]) * 60000 + parseInt(m[2]) * 1000 + parseInt(m[3])
-// }
+function timeToMs(s: string): number {
+  const m = /(\d{2}):(\d{2})\.(\d{3})/.exec(s)
+  if (!m) return NaN
+  return parseInt(m[1]) * 60000 + parseInt(m[2]) * 1000 + parseInt(m[3])
+}
 
-// function normalizeLyricsToCrLyric(input: string): string {
-//   const raw = String(input).replace(/\r/g, '')
-//   const lines = raw.split('\n')
-//   let offset = 0
-//   const res: string[] = []
-//   for (let i = 0; i < lines.length; i++) {
-//     const line = lines[i]
-//     if (!line.trim()) {
-//       res.push(line)
-//       continue
-//     }
-//     const off = /^\[offset:([+-]?\d+)\]$/i.exec(line.trim())
-//     if (off) {
-//       offset = parseInt(off[1]) || 0
-//       res.push(line)
-//       continue
-//     }
-//     const yrcLike = /\[\d+,\d+\]/.test(line) && /\(\d+,\d+,\d+\)/.test(line)
-//     if (yrcLike) {
-//       res.push(line)
-//       continue
-//     }
-//     const mLine = /^\[(\d{2}:\d{2}\.\d{3})\](.*)$/.exec(line)
-//     if (!mLine) {
-//       res.push(line)
-//       continue
-//     }
-//     const lineStart = timeToMs(mLine[1]) + offset
-//     let rest = mLine[2]
-//     rest = rest.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
-//     const segs: { start: number; text: string }[] = []
-//     const re = /<(\d{2}:\d{2}\.\d{3})>([^<]*)/g
-//     let m: RegExpExecArray | null
-//     while ((m = re.exec(rest))) {
-//       const start = timeToMs(m[1]) + offset
-//       const text = m[2] || ''
-//       if (text) segs.push({ start, text })
-//     }
-//     if (segs.length === 0) {
-//       res.push(line)
-//       continue
-//     }
-//     let nextLineStart: number | null = null
-//     for (let j = i + 1; j < lines.length; j++) {
-//       const ml = /^\[(\d{2}:\d{2}\.\d{3})\]/.exec(lines[j])
-//       if (ml) {
-//         nextLineStart = timeToMs(ml[1]) + offset
-//         break
-//       }
-//       const skip = lines[j].trim()
-//       if (!skip || /^\[offset:/.test(skip)) continue
-//       break
-//     }
-//     const tokens: string[] = []
-//     for (let k = 0; k < segs.length; k++) {
-//       const cur = segs[k]
-//       const nextStart =
-//         k < segs.length - 1 ? segs[k + 1].start : (nextLineStart ?? cur.start + 1000)
-//       const span = Math.max(1, nextStart - cur.start)
-//       const chars = Array.from(cur.text).filter((ch) => !/\s/.test(ch))
-//       if (chars.length <= 1) {
-//         if (chars.length === 1) tokens.push(`(${cur.start},${span},0)` + chars[0])
-//       } else {
-//         const per = Math.max(1, Math.floor(span / chars.length))
-//         for (let c = 0; c < chars.length; c++) {
-//           const cs = cur.start + c * per
-//           const cd = c === chars.length - 1 ? Math.max(1, nextStart - cs) : per
-//           tokens.push(`(${cs},${cd},0)` + chars[c])
-//         }
-//       }
-//     }
-//     const lineEnd =
-//       nextLineStart ??
-//       segs[segs.length - 1].start +
-//         Math.max(
-//           1,
-//           (nextLineStart ?? segs[segs.length - 1].start + 1000) - segs[segs.length - 1].start
-//         )
-//     const ld = Math.max(0, lineEnd - lineStart)
-//     res.push(`[${lineStart},${ld}]` + tokens.join(' '))
-//   }
-//   return res.join('\n')
-// }
+function normalizeLyricsToCrLyric(input: string): string {
+  const raw = String(input).replace(/\r/g, '')
+  const lines = raw.split('\n')
+  let offset = 0
+  const res: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.trim()) {
+      res.push(line)
+      continue
+    }
+    const off = /^\[offset:([+-]?\d+)\]$/i.exec(line.trim())
+    if (off) {
+      offset = parseInt(off[1]) || 0
+      res.push(line)
+      continue
+    }
+    const yrcLike = /\[\d+,\d+\]/.test(line) && /\(\d+,\d+,\d+\)/.test(line)
+    if (yrcLike) {
+      res.push(line)
+      continue
+    }
+    const mLine = /^\[(\d{2}:\d{2}\.\d{3})\](.*)$/.exec(line)
+    if (!mLine) {
+      res.push(line)
+      continue
+    }
+    const lineStart = timeToMs(mLine[1]) + offset
+    let rest = mLine[2]
+    rest = rest.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
+    const segs: { start: number; text: string }[] = []
+    const re = /<(\d{2}:\d{2}\.\d{3})>([^<]*)/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(rest))) {
+      const start = timeToMs(m[1]) + offset
+      const text = m[2] || ''
+      if (text) segs.push({ start, text })
+    }
+    if (segs.length === 0) {
+      res.push(line)
+      continue
+    }
+    let nextLineStart: number | null = null
+    for (let j = i + 1; j < lines.length; j++) {
+      const ml = /^\[(\d{2}:\d{2}\.\d{3})\]/.exec(lines[j])
+      if (ml) {
+        nextLineStart = timeToMs(ml[1]) + offset
+        break
+      }
+      const skip = lines[j].trim()
+      if (!skip || /^\[offset:/.test(skip)) continue
+      break
+    }
+    const tokens: string[] = []
+    for (let k = 0; k < segs.length; k++) {
+      const cur = segs[k]
+      const nextStart =
+        k < segs.length - 1 ? segs[k + 1].start : (nextLineStart ?? cur.start + 1000)
+      const span = Math.max(1, nextStart - cur.start)
+      const chars = Array.from(cur.text)
+      if (chars.length <= 1) {
+        if (chars.length === 1) tokens.push(`(${cur.start},${span},0)` + chars[0])
+      } else {
+        const per = Math.max(1, Math.floor(span / chars.length))
+        for (let c = 0; c < chars.length; c++) {
+          const cs = cur.start + c * per
+          const cd = c === chars.length - 1 ? Math.max(1, nextStart - cs) : per
+          tokens.push(`(${cs},${cd},0)` + chars[c])
+        }
+      }
+    }
+    const lineEnd =
+      nextLineStart ??
+      segs[segs.length - 1].start +
+      Math.max(
+        1,
+        (nextLineStart ?? segs[segs.length - 1].start + 1000) - segs[segs.length - 1].start
+      )
+    const ld = Math.max(0, lineEnd - lineStart)
+    res.push(`[${lineStart},${ld}]` + tokens.join(''))
+  }
+  return res.join('\n')
+}
 
 ipcMain.handle('local-music:select-dirs', async () => {
   const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'multiSelections'] })
@@ -206,10 +203,13 @@ ipcMain.handle('local-music:select-dirs', async () => {
   return res.filePaths
 })
 
-ipcMain.handle('local-music:scan', async (_e, dirs: string[]) => {
+ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
   if (!Array.isArray(dirs) || dirs.length === 0) {
     return []
   }
+
+  const sender = e.sender
+
   const existsDirs = dirs.filter((d) => {
     try {
       return fs.existsSync(d)
@@ -217,66 +217,95 @@ ipcMain.handle('local-music:scan', async (_e, dirs: string[]) => {
       return false
     }
   })
+
   const files: string[] = []
   try {
     for (const d of existsDirs) await walkDir(d, files)
-    const list = files.map((p) => {
-      let tags = {
-        title: '',
-        album: '',
-        performers: [] as string[],
-        img: '',
-        lrc: null as null | string
-      }
-      try {
-        tags = readTags(p)
-      } catch {}
-      const base = path.basename(p)
-      const noExt = base.replace(path.extname(base), '')
-      let name = tags.title || ''
-      let singer = ''
-      if (!name) {
-        const segs = noExt
-          .split(/[-_]|\s{2,}/)
-          .map((s) => s.trim())
-          .filter(Boolean)
-        if (segs.length >= 2) {
-          singer = segs[0]
-          name = segs.slice(1).join(' ')
-        } else {
-          name = noExt
+
+    const CHUNK_SIZE = 50 // 每批处理 50 个文件
+    const totalFiles = files.length
+    let processedCount = 0
+    const allSongs: any[] = []
+
+    for (let i = 0; i < totalFiles; i += CHUNK_SIZE) {
+      const chunk = files.slice(i, i + CHUNK_SIZE)
+      const promises = chunk.map(async (p) => {
+        let tags = {
+          title: '',
+          album: '',
+          performers: [] as string[],
+          img: '',
+          lrc: null as null | string
         }
-      } else {
-        singer =
-          Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : ''
-      }
-      const songmid = genId(p)
-      const item = {
-        songmid,
-        singer: singer || '未知艺术家',
-        name: name || '未知曲目',
-        albumName: tags.album || '未知专辑',
-        albumId: 0,
-        source: 'local',
-        interval: '',
-        img: tags.img || '',
-        lrc: tags.lrc || null,
-        types: [],
-        _types: {},
-        typeUrl: {},
-        url: 'file://' + p,
-        path: p
-      }
-      return item
-    })
+        try {
+          tags = readTags(p, false) // 扫描时不读取歌词
+        } catch { }
+
+        const base = path.basename(p)
+        const noExt = base.replace(path.extname(base), '')
+        let name = tags.title || ''
+        let singer = ''
+
+        if (!name) {
+          const segs = noExt
+            .split(/[-_]|\s{2,}/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+          if (segs.length >= 2) {
+            singer = segs[0]
+            name = segs.slice(1).join(' ')
+          } else {
+            name = noExt
+          }
+        } else {
+          singer =
+            Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : ''
+        }
+
+        const songmid = genId(p)
+        return {
+          songmid,
+          singer: singer || '未知艺术家',
+          name: name || '未知曲目',
+          albumName: tags.album || '未知专辑',
+          albumId: 0,
+          source: 'local',
+          interval: '',
+          img: tags.img || '',
+          lrc: null, // 初始歌词为空
+          types: [],
+          _types: {},
+          typeUrl: {},
+          url: 'file://' + p,
+          path: p
+        }
+      })
+
+      const chunkSongs = await Promise.all(promises)
+      allSongs.push(...chunkSongs)
+      processedCount += chunk.length
+
+      // 发送进度更新
+      sender.send('local-music:scan-progress', { processed: processedCount, total: totalFiles })
+
+      // 短暂延时，避免完全阻塞 UI
+      await new Promise(resolve => setImmediate(resolve))
+    }
+
     await localMusicIndexService.setDirs(existsDirs)
-    await localMusicIndexService.upsertSongs(list)
+    await localMusicIndexService.upsertSongs(allSongs)
+
+    // 通知 renderer 扫描完成
+    sender.send('local-music:scan-finished', allSongs)
+
     try {
-      return JSON.stringify(list)
+      return JSON.stringify(allSongs)
     } catch {
       return '[]'
     }
   } catch (e) {
+    // 出错也要通知完成，避免界面一直转
+    sender.send('local-music:scan-finished', [])
     return '[]'
   }
 })
@@ -295,8 +324,13 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     songFile.tag.performers = artists
     songFile.tag.albumArtists = artists
     if (tagWriteOptions?.lyrics && songInfo?.lrc) {
-      const normalized = normalizeLyricsToLrc(songInfo.lrc)
-      songFile.tag.lyrics = normalized
+      let finalLrc = songInfo.lrc
+      if (/\[\d+,\d+\]/.test(finalLrc)) {
+        finalLrc = convertLrcFormat(finalLrc)
+      } else {
+        finalLrc = normalizeLyricsToLrc(finalLrc)
+      }
+      songFile.tag.lyrics = finalLrc
     }
     if (tagWriteOptions?.cover && songInfo?.img) {
       try {
@@ -311,10 +345,10 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
             songFile.tag.pictures = [pic]
             try {
               await fsp.unlink(tmp)
-            } catch {}
+            } catch { }
           }
         }
-      } catch {}
+      } catch { }
     }
     songFile.save()
     songFile.dispose()
@@ -352,6 +386,19 @@ ipcMain.handle('local-music:set-dirs', async (_e, dirs: string[]) => {
 
 ipcMain.handle('local-music:get-list', async () => {
   return localMusicIndexService.getAllSongs()
+})
+
+ipcMain.handle('local-music:get-lyric', async (_e, songmid: string) => {
+  if (!songmid) return null
+  const song = localMusicIndexService.getSongById(songmid)
+  if (!song || !song.path) return null
+
+  try {
+    const tags = readTags(song.path, true) // 读取歌词
+    return tags.lrc
+  } catch {
+    return null
+  }
 })
 
 ipcMain.handle('local-music:get-url', async (_e, id: string | number) => {
