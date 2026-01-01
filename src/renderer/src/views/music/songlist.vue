@@ -1438,6 +1438,7 @@ onMounted(() => {
 }
 .local-container {
   padding: 2rem;
+  padding-top: 1rem;
   margin: 0 auto;
   width: 100%;
   position: relative;
@@ -1684,6 +1685,10 @@ onMounted(() => {
 
   .header-left {
     h2 {
+      border-left: 8px solid var(--td-brand-color-3);
+      padding-left: 12px;
+      border-radius: 8px;
+      line-height: 1.5em;
       color: var(--local-text-primary);
       margin-bottom: 0.5rem;
       font-size: 1.875rem;
