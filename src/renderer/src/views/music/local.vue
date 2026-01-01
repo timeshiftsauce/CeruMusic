@@ -36,6 +36,7 @@ const songs = ref<MusicItem[]>([])
 const loading = ref(false)
 const matching = ref<Record<string | number, boolean>>({})
 const batchState = ref({ total: 0, done: 0, running: false })
+const scanProgress = ref({ processed: 0, total: 0, running: false })
 const showMatchModal = ref(false)
 const matchResults = ref<any[]>([])
 const matchTargetSong = ref<MusicItem | null>(null)
@@ -264,22 +265,25 @@ const scanLibrary = async () => {
     MessagePlugin.warning('请先选择扫描目录')
     return
   }
+  if (scanProgress.value.running) {
+    MessagePlugin.warning('扫描正在进行中…')
+    return
+  }
   loading.value = true
+  scanProgress.value = { processed: 0, total: 0, running: true }
   try {
     const api = (window as any).api
     if (!api || !api.localMusic || !api.localMusic.scan) {
       MessagePlugin.error('请在Electron应用中使用本地扫描功能')
       return
     }
-    const resList = await api.localMusic.scan(toRaw(scanDirs.value))
-    const list = Array.isArray(resList) ? resList : await api.localMusic.getList()
-    songs.value = Array.isArray(list) ? list : []
-    for (const s of songs.value) await ensureDuration(s)
+    await api.localMusic.scan(toRaw(scanDirs.value))
   } catch (e: any) {
     console.error('本地扫描失败:', e)
     MessagePlugin.error(e?.message || '扫描失败')
   } finally {
     loading.value = false
+    scanProgress.value.running = false
   }
 }
 
@@ -429,6 +433,24 @@ onMounted(async () => {
     console.log('本地音乐库:', songs.value)
     for (const s of songs.value) await ensureDuration(s)
   }
+
+  // 监听扫描进度
+  window.api.localMusic.onScanProgress((processed: number, total: number) => {
+    scanProgress.value = { processed, total, running: true }
+  })
+
+  // 监听扫描完成
+  window.api.localMusic.onScanFinished((resList: any[]) => {
+    songs.value = Array.isArray(resList) ? resList : []
+    for (const s of songs.value) ensureDuration(s)
+    scanProgress.value.running = false
+    loading.value = false
+  })
+})
+
+onBeforeUnmount(() => {
+  window.api.localMusic.removeScanProgress()
+  window.api.localMusic.removeScanFinished()
 })
 </script>
 
@@ -490,6 +512,10 @@ onMounted(async () => {
       /> -->
       <div v-if="batchState.running" style="margin-left: 8px; font-size: 12px; color: #999">
         {{ batchState.done }}/{{ batchState.total }}
+      </div>
+      <div v-if="scanProgress.running" style="margin-left: 8px; font-size: 12px; color: #999">
+        <t-loading size="small" />
+        扫描中... {{ scanProgress.processed }}/{{ scanProgress.total }}
       </div>
     </div>
 
@@ -605,11 +631,13 @@ onMounted(async () => {
 <style lang="scss" scoped>
 .local-container {
   padding: 0 32px;
+  padding-top: 1rem;
   height: 100%;
   display: flex;
   flex-direction: column;
   .local-header {
-    height: 70px;
+    // height: 70px;
+    margin-bottom: 1rem;
     display: flex;
     flex-direction: row;
     justify-content: space-between;
@@ -617,6 +645,10 @@ onMounted(async () => {
     .left-container {
       gap: 8px;
       .title {
+        border-left: 8px solid var(--td-brand-color-3);
+        padding-left: 12px;
+        border-radius: 8px;
+        line-height: 1.5em;
         font-size: 28px;
         font-weight: 900;
         span {
