@@ -856,7 +856,7 @@
             x + width <= area.x + area.width &&
             y >= area.y &&
             y + height <= area.y + area.height
-          );
+          )
         }
         /**
          * 将窗口位置限制在多个显示器的工作区内
@@ -870,94 +870,93 @@
         clampToAreas(x, y, width, height, areas) {
           // 如果没有工作区信息，返回原始位置
           if (!areas || areas.length === 0) {
-            return { x, y };
+            return { x, y }
           }
 
           // 1. 检查窗口是否完全在某个工作区内
           for (const area of areas) {
             if (this.isWindowInArea(x, y, width, height, area)) {
-              return { x, y };
+              return { x, y }
             }
           }
 
           // 2. 如果窗口不完全在任何工作区内，寻找最近的工作区
-          let bestArea = null;
-          let minDistance = Infinity;
+          let bestArea = null
+          let minDistance = Infinity
 
           // 计算窗口中心点
-          const windowCenterX = x + width / 2;
-          const windowCenterY = y + height / 2;
+          const windowCenterX = x + width / 2
+          const windowCenterY = y + height / 2
 
           // 遍历所有工作区，找到最近的工作区
           for (const area of areas) {
             // 计算工作区中心点
-            const areaCenterX = area.x + area.width / 2;
-            const areaCenterY = area.y + area.height / 2;
+            const areaCenterX = area.x + area.width / 2
+            const areaCenterY = area.y + area.height / 2
 
             // 计算中心点之间的欧几里得距离
             const distance = Math.sqrt(
-              Math.pow(windowCenterX - areaCenterX, 2) +
-              Math.pow(windowCenterY - areaCenterY, 2)
-            );
+              Math.pow(windowCenterX - areaCenterX, 2) + Math.pow(windowCenterY - areaCenterY, 2)
+            )
 
             if (distance < minDistance) {
-              minDistance = distance;
-              bestArea = area;
+              minDistance = distance
+              bestArea = area
             }
           }
 
           // 3. 将窗口吸附到最近的工作区内
           if (bestArea) {
             // 确保窗口完全在工作区内
-            let newX = x;
-            let newY = y;
+            let newX = x
+            let newY = y
 
             // 水平方向限制
             if (newX < bestArea.x) {
-              newX = bestArea.x;
+              newX = bestArea.x
             } else if (newX + width > bestArea.x + bestArea.width) {
-              newX = bestArea.x + bestArea.width - width;
+              newX = bestArea.x + bestArea.width - width
             }
 
             // 垂直方向限制
             if (newY < bestArea.y) {
-              newY = bestArea.y;
+              newY = bestArea.y
             } else if (newY + height > bestArea.y + bestArea.height) {
-              newY = bestArea.y + bestArea.height - height;
+              newY = bestArea.y + bestArea.height - height
             }
 
             // 如果窗口宽度大于工作区宽度，则居中对齐
             if (width > bestArea.width) {
-              newX = bestArea.x + (bestArea.width - width) / 2;
+              newX = bestArea.x + (bestArea.width - width) / 2
             }
 
             // 如果窗口高度大于工作区高度，则居中对齐
             if (height > bestArea.height) {
-              newY = bestArea.y + (bestArea.height - height) / 2;
+              newY = bestArea.y + (bestArea.height - height) / 2
             }
 
-            return { x: Math.round(newX), y: Math.round(newY) };
+            return { x: Math.round(newX), y: Math.round(newY) }
           }
 
           // 4. 如果所有逻辑都失败，将窗口移动到第一个工作区
-          const firstArea = areas[0];
-          let safeX = x;
-          let safeY = y;
+          const firstArea = areas[0]
+          let safeX = x
+          let safeY = y
 
           // 确保窗口在第一个工作区内
           if (safeX < firstArea.x) {
-            safeX = firstArea.x;
+            safeX = firstArea.x
           } else if (safeX + width > firstArea.x + firstArea.width) {
-            safeX = firstArea.x + firstArea.width - width;
+            safeX = firstArea.x + firstArea.width - width
           }
 
           if (safeY < firstArea.y) {
-            safeY = firstArea.y;
+            safeY = firstArea.y
           } else if (safeY + height > firstArea.y + firstArea.height) {
-            safeY = firstArea.y + firstArea.height - height;
+            safeY = firstArea.y + firstArea.height - height
           }
 
-          return { x: Math.round(safeX), y: Math.round(safeY) };
+          return { x: Math.round(safeX), y: Math.round(safeY) }
         }
         // 拖拽
         async dragWindow(event) {

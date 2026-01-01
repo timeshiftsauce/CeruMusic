@@ -223,7 +223,8 @@ const api = {
     getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id),
     clearIndex: () => ipcRenderer.invoke('local-music:clear-index'),
     onScanProgress: (callback: (processed: number, total: number) => void) => {
-      const handler = (_event: any, data: { processed: number; total: number }) => callback(data.processed, data.total)
+      const handler = (_event: any, data: { processed: number; total: number }) =>
+        callback(data.processed, data.total)
       ipcRenderer.on('local-music:scan-progress', handler)
       return () => ipcRenderer.removeListener('local-music:scan-progress', handler)
     },

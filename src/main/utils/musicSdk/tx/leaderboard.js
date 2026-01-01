@@ -144,49 +144,49 @@ export default {
         let size = sizeFormate(item.file.size_128mp3)
         types.push({ type: '128k', size })
         _types['128k'] = {
-          size,
+          size
         }
       }
       if (item.file.size_320mp3 !== 0) {
         let size = sizeFormate(item.file.size_320mp3)
         types.push({ type: '320k', size })
         _types['320k'] = {
-          size,
+          size
         }
       }
       if (item.file.size_flac !== 0) {
         let size = sizeFormate(item.file.size_flac)
         types.push({ type: 'flac', size })
         _types.flac = {
-          size,
+          size
         }
       }
       if (item.file.size_hires !== 0) {
         let size = sizeFormate(item.file.size_hires)
         types.push({ type: 'hires', size })
         _types.hires = {
-          size,
+          size
         }
       }
       if (item.file.size_new[1] !== 0) {
         let size = sizeFormate(item.file.size_new[1])
         types.push({ type: 'atmos', size })
         _types.atmos = {
-          size,
+          size
         }
       }
       if (item.file.size_new[2] !== 0) {
         let size = sizeFormate(item.file.size_new[2])
         types.push({ type: 'atmos_plus', size })
         _types.atmos_plus = {
-          size,
+          size
         }
       }
       if (item.file.size_new[0] !== 0) {
         let size = sizeFormate(item.file.size_new[0])
         types.push({ type: 'master', size })
         _types.master = {
-          size,
+          size
         }
       }
       // types.reverse()
@@ -211,7 +211,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       }
     })
   },
@@ -270,7 +270,7 @@ export default {
     this.list = list
     return {
       list,
-      source: 'tx',
+      source: 'tx'
     }
     this.list = boardList
     return {

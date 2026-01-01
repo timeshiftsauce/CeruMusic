@@ -181,7 +181,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     if (
       songMaxQuality &&
       QUALITY_ORDER.indexOf(quality as KnownQuality) <
-      QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)
+        QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)
     ) {
       quality = songMaxQuality
       MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)
@@ -199,7 +199,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       isCache: true
     })
 
-      ; (await tip).close()
+    ;(await tip).close()
 
     if (!Object.hasOwn(result, 'path')) {
       MessagePlugin.info(result.message)

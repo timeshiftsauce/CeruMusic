@@ -3,7 +3,6 @@ import { formatPlayTime, decodeName } from '../index'
 import { formatSinger, wbdCrypto } from './util'
 import { formatNumberToChineseSimple } from '@common/utils/common'
 
-
 const boardList = [
   { id: 'kw__93', name: '飙升榜', bangid: '93' },
   { id: 'kw__17', name: '新歌榜', bangid: '17' },
@@ -205,11 +204,10 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       }
     })
   },
-
 
   filterBoardsData(rawList) {
     // console.log(rawList)
@@ -245,7 +243,7 @@ export default {
     this.list = list
     return {
       list,
-      source: 'kw',
+      source: 'kw'
     }
     this.list = boardList
     return {
