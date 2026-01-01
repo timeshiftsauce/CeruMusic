@@ -251,146 +251,148 @@ onUnmounted(() => {
     watchSource = null
   }
 })
-const songlistPaneRef = ref<HTMLDivElement>()
+const songlistScrollRef = ref<HTMLDivElement>()
 </script>
 
 <template>
-  <div class="find-container" @scroll="onScroll">
+  <div class="find-container">
     <!-- 页面标题 -->
     <div class="page-header">
       <h2>发现音乐</h2>
       <p>探索最新最热的音乐内容</p>
     </div>
     <n-tabs type="segment" animated class="find-tabs" default-value="songlist" size="small">
-      <n-tab-pane name="songlist" tab="歌单" class="find-tab-pane" ref="songlistPaneRef">
-        <!-- 分类导航 -->
-        <n-back-top :listen-to="songlistPaneRef" :right="40" :bottom="120"> </n-back-top>
+      <n-tab-pane name="songlist" tab="歌单" class="songlist-tab-pane">
+        <div class="scroll-container" @scroll="onScroll" ref="songlistScrollRef">
+          <!-- 分类导航 -->
+          <n-back-top :listen-to="songlistScrollRef" :right="40" :bottom="120"> </n-back-top>
 
-        <div ref="categoryBarRef" class="category-bar">
-          <div class="hot-tags">
-            <button
-              class="tag-chip"
-              :class="{ active: activeTagId === '' }"
-              @click="onSelectTag('', '热门')"
-            >
-              热门
-            </button>
-            <button
-              v-for="t in hotTag"
-              :key="t.id"
-              class="tag-chip"
-              :class="{ active: activeTagId === t.id }"
-              @click="onSelectTag(t.id, t.name)"
-            >
-              {{ t.name }}
-            </button>
+          <div ref="categoryBarRef" class="category-bar">
+            <div class="hot-tags">
+              <button
+                class="tag-chip"
+                :class="{ active: activeTagId === '' }"
+                @click="onSelectTag('', '热门')"
+              >
+                热门
+              </button>
+              <button
+                v-for="t in hotTag"
+                :key="t.id"
+                class="tag-chip"
+                :class="{ active: activeTagId === t.id }"
+                @click="onSelectTag(t.id, t.name)"
+              >
+                {{ t.name }}
+              </button>
 
-            <div
-              class="more-category-wrapper"
-              @mouseenter="showMore = true"
-              @mouseleave="showMore = false"
-            >
-              <t-button ref="moreBtnRef" class="tag-chip more" shape="round" variant="outline">
-                更多分类
-                <template #suffix>
-                  <i class="iconfont icon-arrow-down" :class="{ rotate: showMore }">
-                    <ChevronDownIcon />
-                  </i>
-                </template>
-              </t-button>
+              <div
+                class="more-category-wrapper"
+                @mouseenter="showMore = true"
+                @mouseleave="showMore = false"
+              >
+                <t-button ref="moreBtnRef" class="tag-chip more" shape="round" variant="outline">
+                  更多分类
+                  <template #suffix>
+                    <i class="iconfont icon-arrow-down" :class="{ rotate: showMore }">
+                      <ChevronDownIcon />
+                    </i>
+                  </template>
+                </t-button>
 
-              <transition name="dropdown">
-                <div v-if="showMore" class="more-panel">
-                  <div class="panel-inner">
-                    <div class="panel-content">
-                      <t-tabs v-model:value="activeGroupName" size="medium">
-                        <t-tab-panel
-                          v-for="group in tags"
-                          :key="group.name"
-                          :value="group.name"
-                          :label="group.name"
-                        />
-                      </t-tabs>
-                      <div v-if="tags[activeGroupIndex]" class="panel-tags">
-                        <button
-                          v-for="t in tags[activeGroupIndex].list"
-                          :key="t.id"
-                          class="tag-chip"
-                          :class="{ active: activeTagId === t.id }"
-                          @click="onSelectTag(t.id, t.name)"
-                        >
-                          {{ t.name }}
-                        </button>
+                <transition name="dropdown">
+                  <div v-if="showMore" class="more-panel">
+                    <div class="panel-inner">
+                      <div class="panel-content">
+                        <t-tabs v-model:value="activeGroupName" size="medium">
+                          <t-tab-panel
+                            v-for="group in tags"
+                            :key="group.name"
+                            :value="group.name"
+                            :label="group.name"
+                          />
+                        </t-tabs>
+                        <div v-if="tags[activeGroupIndex]" class="panel-tags">
+                          <button
+                            v-for="t in tags[activeGroupIndex].list"
+                            :key="t.id"
+                            class="tag-chip"
+                            :class="{ active: activeTagId === t.id }"
+                            @click="onSelectTag(t.id, t.name)"
+                          >
+                            {{ t.name }}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </transition>
+                </transition>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 分类歌单 -->
-        <div class="section">
-          <h3 class="section-title">{{ activeCategoryName }}歌单</h3>
+          <!-- 分类歌单 -->
+          <div class="section">
+            <h3 class="section-title">{{ activeCategoryName }}歌单</h3>
 
-          <!-- 加载状态 -->
-          <div v-if="loading && recommendPlaylists.length === 0" class="loading-container">
-            <t-loading size="large" text="正在加载歌单..." />
-          </div>
+            <!-- 加载状态 -->
+            <div v-if="loading && recommendPlaylists.length === 0" class="loading-container">
+              <t-loading size="large" text="正在加载歌单..." />
+            </div>
 
-          <!-- 错误状态 -->
-          <div v-else-if="error" class="error-container">
-            <t-alert theme="error" :message="error" />
-            <t-button
-              theme="primary"
-              style="margin-top: 1rem"
-              @click="fetchCategoryPlaylists(true)"
-            >
-              重新加载
-            </t-button>
-          </div>
-
-          <!-- 歌单列表 -->
-          <div v-else class="playlist-grid">
-            <div
-              v-for="(playlist, index) in recommendPlaylists"
-              :key="playlist.id"
-              class="playlist-card"
-              @click="playPlaylist(playlist)"
-            >
-              <div class="playlist-cover">
-                <s-image :src="playlist.cover" class="playlist-cover-image" />
-              </div>
-              <div
-                class="playlist-info"
-                :style="{
-                  '--hover-bg-color': mainColors[index],
-                  '--hover-text-color': textColors[index]
-                }"
+            <!-- 错误状态 -->
+            <div v-else-if="error" class="error-container">
+              <t-alert theme="error" :message="error" />
+              <t-button
+                theme="primary"
+                style="margin-top: 1rem"
+                @click="fetchCategoryPlaylists(true)"
               >
-                <h4 class="playlist-title">
-                  {{ playlist.title }}
-                </h4>
-                <p class="playlist-desc">
-                  {{ playlist.description }}
-                </p>
-                <div class="playlist-meta">
-                  <span class="play-count">
-                    <i class="iconfont icon-bofang"></i>
-                    {{ playlist.playCount }}
-                  </span>
-                  <span v-if="playlist.total" class="song-count">{{ playlist.total }}首</span>
+                重新加载
+              </t-button>
+            </div>
+
+            <!-- 歌单列表 -->
+            <div v-else class="playlist-grid">
+              <div
+                v-for="(playlist, index) in recommendPlaylists"
+                :key="playlist.id"
+                class="playlist-card"
+                @click="playPlaylist(playlist)"
+              >
+                <div class="playlist-cover">
+                  <s-image :src="playlist.cover" class="playlist-cover-image" />
                 </div>
-                <!-- <div class="playlist-author">by {{ playlist.author }}</div> -->
+                <div
+                  class="playlist-info"
+                  :style="{
+                    '--hover-bg-color': mainColors[index],
+                    '--hover-text-color': textColors[index]
+                  }"
+                >
+                  <h4 class="playlist-title">
+                    {{ playlist.title }}
+                  </h4>
+                  <p class="playlist-desc">
+                    {{ playlist.description }}
+                  </p>
+                  <div class="playlist-meta">
+                    <span class="play-count">
+                      <i class="iconfont icon-bofang"></i>
+                      {{ playlist.playCount }}
+                    </span>
+                    <span v-if="playlist.total" class="song-count">{{ playlist.total }}首</span>
+                  </div>
+                  <!-- <div class="playlist-author">by {{ playlist.author }}</div> -->
+                </div>
               </div>
             </div>
-          </div>
-          <div v-if="loadingMore && recommendPlaylists.length > 0" class="load-status">
-            <t-loading size="small" text="加载更多..." />
-          </div>
-          <div v-else-if="noMore && recommendPlaylists.length > 0" class="load-status">
-            <span class="no-more">没有更多内容</span>
+            <div v-if="loadingMore && recommendPlaylists.length > 0" class="load-status">
+              <t-loading size="small" text="加载更多..." />
+            </div>
+            <div v-else-if="noMore && recommendPlaylists.length > 0" class="load-status">
+              <span class="no-more">没有更多内容</span>
+            </div>
           </div>
         </div>
       </n-tab-pane>
@@ -428,8 +430,19 @@ const songlistPaneRef = ref<HTMLDivElement>()
         height: 100%;
         overflow-y: auto;
       }
+      .songlist-tab-pane {
+        height: 100%;
+        overflow: hidden;
+        padding: 0 !important;
+      }
     }
   }
+}
+
+.scroll-container {
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 2rem;
 }
 
 .category-bar {
@@ -500,7 +513,7 @@ const songlistPaneRef = ref<HTMLDivElement>()
       align-items: center;
       gap: 4px;
       background: var(--td-bg-color-secondarycontainer);
-      color: var(--td-text-color-primary);
+      // color: var(--td-text-color-primary);
 
       &:hover {
         background: var(--td-bg-color-component-hover);
