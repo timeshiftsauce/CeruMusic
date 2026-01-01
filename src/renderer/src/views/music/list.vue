@@ -130,11 +130,28 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       loadingMore.value = true
     }
 
-    const result = (await window.api.music.requestSdk('getPlaylistDetail', {
-      source: playlistInfo.value.source,
-      id: playlistInfo.value.id,
-      page: currentPage.value
-    })) as any
+    // 检查是否是排行榜 (ID通常包含 source 前缀且在 leaderboard 列表中)
+    // 这里简单通过 ID 格式判断，或者让调用方传入 type
+    const isLeaderboard =
+      playlistInfo.value.id.includes('__') ||
+      ['wy', 'mg', 'kg', 'tx', 'kw'].some((s) => playlistInfo.value.id.startsWith(s + '_'))
+
+    let method = 'getPlaylistDetail'
+    let id = playlistInfo.value.id
+    if (isLeaderboard) {
+      method = 'getLeaderboardDetail'
+      id = id.replace(/^.*__/, '')
+      console.log(id)
+    }
+    const result = (await window.api.music.requestSdk(
+      method as 'getPlaylistDetail' | 'getLeaderboardDetail',
+      {
+        source: playlistInfo.value.source,
+        id,
+        page: currentPage.value
+      }
+    )) as any
+    console.log(result)
     const limit = Number(result?.limit ?? pageSize)
 
     if (result && Array.isArray(result.list)) {
@@ -148,7 +165,6 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
       // 获取新增歌曲封面
       setPic((currentPage.value - 1) * limit, playlistInfo.value.source)
-      console.log(result.info)
 
       // 如果API返回了歌单详细信息，更新歌单信息
       if (result.info) {
