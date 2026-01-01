@@ -89,7 +89,7 @@ function resolveCoverExt(imgUrl: string, contentType?: string): string {
     if (i !== -1) {
       urlExt = pathname.substring(i).toLowerCase()
     }
-  } catch { }
+  } catch {}
 
   if (urlExt && validExts.has(urlExt)) {
     return urlExt === '.jpeg' ? '.jpg' : urlExt
@@ -339,7 +339,7 @@ export default async function download(
       if (coverDownloaded) {
         try {
           await fsPromise.unlink(coverPath)
-        } catch { }
+        } catch {}
       }
     } catch (error) {
       console.warn('写入音乐元信息失败:', error)

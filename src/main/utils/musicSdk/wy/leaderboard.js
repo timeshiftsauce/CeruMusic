@@ -3,8 +3,6 @@ import { httpFetch } from '../../request'
 import musicDetailApi from './musicDetail'
 import { formatNumberToChineseSimple } from '@common/utils/common'
 
-
-
 export default {
   limit: 100000,
   list: [
@@ -119,7 +117,7 @@ export default {
     this.list = list
     return {
       list,
-      source: 'wy',
+      source: 'wy'
     }
   },
   async getList(bangid, page, retryNum = 0) {

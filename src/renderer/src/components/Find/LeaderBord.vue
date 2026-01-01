@@ -38,16 +38,6 @@ const router = useRouter()
 const localUserStore = LocalUserDetailStore()
 
 const currentSource = computed(() => localUserStore.userSource.source)
-const currentSourceName = computed(() => {
-  const map: Record<string, string> = {
-    wy: '网易云音乐',
-    mg: '咪咕音乐',
-    kg: '酷狗音乐',
-    kw: '酷我音乐',
-    tx: 'QQ音乐'
-  }
-  return map[currentSource.value || ''] || currentSource.value || ''
-})
 
 const fetchBoards = async () => {
   loading.value = true

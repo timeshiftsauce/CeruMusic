@@ -4,7 +4,6 @@ import { formatSingerName } from '../utils'
 import { formatMinutesFlexible } from '@common/utils/common'
 import { filterData } from './quality_detail'
 
-
 const boardList = [
   { id: 'kg__8888', name: 'TOP500', bangid: '8888' },
   { id: 'kg__6666', name: '飙升榜', bangid: '6666' },
@@ -180,7 +179,7 @@ export default {
     this.list = list
     return {
       list,
-      source: 'kg',
+      source: 'kg'
     }
     this.list = boardList
     return {
@@ -204,11 +203,11 @@ export default {
       list: listData,
       limit,
       page,
-      source: 'kg',
+      source: 'kg'
     }
   },
   getDetailPageUrl(id) {
     if (typeof id == 'string') id = id.replace('kg__', '')
     return `https://www.kugou.com/yy/rank/home/1-${id}.html`
-  },
+  }
 }
