@@ -87,6 +87,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .leaderboard-container {
+  padding-bottom: 1rem;
   .section-header {
     display: flex;
     align-items: center;
