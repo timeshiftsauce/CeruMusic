@@ -15,7 +15,7 @@ const fileLock: Record<string, boolean> = {}
  * @param lrcContent 原始LRC内容
  * @returns 转换后的LRC内容
  */
-function convertLrcFormat(lrcContent: string): string {
+export function convertLrcFormat(lrcContent: string): string {
   if (!lrcContent) return ''
 
   const lines = lrcContent.split('\n')
@@ -32,8 +32,13 @@ function convertLrcFormat(lrcContent: string): string {
     const newFormatMatch = line.match(/^\[(\d+),(\d+)\](.*)$/)
     if (newFormatMatch) {
       const [, startTimeMs, , content] = newFormatMatch
-      const convertedLine = convertNewFormat(parseInt(startTimeMs), content)
-      convertedLines.push(convertedLine)
+      const baseTimeMs = parseInt(startTimeMs, 10)
+      if (!/\(\d+,\d+,\d+\)/.test(content)) {
+        convertedLines.push(`[${formatTimestamp(baseTimeMs)}]${content}`)
+        continue
+      }
+      const convertedLine = convertNewFormat(baseTimeMs, content)
+      convertedLines.push(convertedLine ?? `[${formatTimestamp(baseTimeMs)}]${content}`)
       continue
     }
 
@@ -43,13 +48,13 @@ function convertLrcFormat(lrcContent: string): string {
       const [, timestamp, content] = oldFormatMatch
 
       // 如果内容中没有位置信息，直接返回原行
-      if (!content.includes('(') || !content.includes(')')) {
+      if (!/\(\d+,\d+\)/.test(content)) {
         convertedLines.push(line)
         continue
       }
 
       const convertedLine = convertOldFormat(timestamp, content)
-      convertedLines.push(convertedLine)
+      convertedLines.push(convertedLine ?? line)
       continue
     }
 
@@ -66,9 +71,10 @@ function convertLrcFormat(lrcContent: string): string {
  * @returns 格式化的时间字符串
  */
 function formatTimestamp(timeMs: number): string {
-  const minutes = Math.floor(timeMs / 60000)
-  const seconds = Math.floor((timeMs % 60000) / 1000)
-  const milliseconds = timeMs % 1000
+  const t = Math.max(0, Math.floor(timeMs))
+  const minutes = Math.floor(t / 60000)
+  const seconds = Math.floor((t % 60000) / 1000)
+  const milliseconds = t % 1000
 
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
 }
@@ -83,7 +89,7 @@ function resolveCoverExt(imgUrl: string, contentType?: string): string {
     if (i !== -1) {
       urlExt = pathname.substring(i).toLowerCase()
     }
-  } catch {}
+  } catch { }
 
   if (urlExt && validExts.has(urlExt)) {
     return urlExt === '.jpeg' ? '.jpg' : urlExt
@@ -102,27 +108,40 @@ function resolveCoverExt(imgUrl: string, contentType?: string): string {
 /**
  * 转换新格式：[开始时间,持续时间](开始时间,字符持续时间,0)字符
  */
-function convertNewFormat(baseTimeMs: number, content: string): string {
+function convertNewFormat(baseTimeMs: number, content: string): string | null {
   const baseTimestamp = formatTimestamp(baseTimeMs)
-  let convertedContent = `<${baseTimestamp}>`
+  let convertedContent = `<${formatTimestamp(0)}>`
 
   // 匹配模式：(开始时间,字符持续时间,0)字符
   const charPattern = /\((\d+),(\d+),(\d+)\)([^(]*?)(?=\(|$)/g
   let match
   let isFirstChar = true
+  let lastConsumedIndex = 0
 
   while ((match = charPattern.exec(content)) !== null) {
     const [, charStartMs, , , char] = match
-    const charTimeMs = parseInt(charStartMs)
+    const charTimeMs = parseInt(charStartMs, 10)
     const charTimestamp = formatTimestamp(charTimeMs)
+    const text = char ?? ''
+    lastConsumedIndex = match.index + match[0].length
 
     if (isFirstChar) {
-      // 第一个字符直接添加
-      convertedContent += char.trim()
+      if (charTimeMs !== 0) {
+        convertedContent += `<${charTimestamp}>${text}`
+      } else {
+        convertedContent += text
+      }
       isFirstChar = false
     } else {
-      convertedContent += `<${charTimestamp}>${char.trim()}`
+      convertedContent += `<${charTimestamp}>${text}`
     }
+  }
+
+  if (isFirstChar) return null
+
+  if (lastConsumedIndex < content.length) {
+    const remainingText = content.substring(lastConsumedIndex)
+    if (remainingText) convertedContent += remainingText
   }
 
   return `[${baseTimestamp}]${convertedContent}`
@@ -131,24 +150,21 @@ function convertNewFormat(baseTimeMs: number, content: string): string {
 /**
  * 转换旧格式：[mm:ss.xxx]字符(偏移,持续时间)
  */
-function convertOldFormat(timestamp: string, content: string): string {
-  // 解析基础时间戳（毫秒）
-  const [minutes, seconds] = timestamp.split(':')
-  const [sec, ms] = seconds.split('.')
-  const baseTimeMs = parseInt(minutes) * 60 * 1000 + parseInt(sec) * 1000 + parseInt(ms)
-
-  let convertedContent = `<${timestamp}>`
+function convertOldFormat(timestamp: string, content: string): string | null {
+  let convertedContent = `<${formatTimestamp(0)}>`
 
   // 匹配所有字符(偏移,持续时间)的模式
-  const charPattern = /([^()]+)\((\d+),(\d+)\)/g
+  const charPattern = /\s*([^()]+?)\s*\((\d+),(\d+)\)/g
   let match
   let lastIndex = 0
   let isFirstChar = true
+  let matched = false
 
   while ((match = charPattern.exec(content)) !== null) {
     const [fullMatch, char, offsetMs, _durationMs] = match
-    const charTimeMs = baseTimeMs + parseInt(offsetMs)
+    const charTimeMs = parseInt(offsetMs, 10)
     const charTimestamp = formatTimestamp(charTimeMs)
+    matched = true
 
     // 添加匹配前的普通文本
     if (match.index > lastIndex) {
@@ -160,14 +176,19 @@ function convertOldFormat(timestamp: string, content: string): string {
 
     // 添加带时间戳的字符
     if (isFirstChar) {
-      // 第一个字符直接添加，不需要额外的时间戳
-      convertedContent += char
+      if (charTimeMs !== 0) {
+        convertedContent += `<${charTimestamp}>${char}`
+      } else {
+        convertedContent += char
+      }
       isFirstChar = false
     } else {
       convertedContent += `<${charTimestamp}>${char}`
     }
     lastIndex = match.index + fullMatch.length
   }
+
+  if (!matched) return null
 
   // 添加剩余的普通文本
   if (lastIndex < content.length) {
@@ -318,7 +339,7 @@ export default async function download(
       if (coverDownloaded) {
         try {
           await fsPromise.unlink(coverPath)
-        } catch {}
+        } catch { }
       }
     } catch (error) {
       console.warn('写入音乐元信息失败:', error)
