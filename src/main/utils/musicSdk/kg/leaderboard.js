@@ -1,6 +1,9 @@
 import { httpFetch } from '../../request'
 import { decodeName, formatPlayTime, sizeFormate } from '../index'
 import { formatSingerName } from '../utils'
+import { formatMinutesFlexible } from '@common/utils/common'
+import { filterData } from './quality_detail'
+
 
 const boardList = [
   { id: 'kg__8888', name: 'TOP500', bangid: '8888' },
@@ -143,61 +146,6 @@ export default {
     })
     return arr.join('、')
   },
-  filterData(rawList) {
-    // console.log(rawList)
-    return rawList.map((item) => {
-      const types = []
-      const _types = {}
-      if (item.filesize !== 0) {
-        const size = sizeFormate(item.filesize)
-        types.push({ type: '128k', size, hash: item.hash })
-        _types['128k'] = {
-          size,
-          hash: item.hash
-        }
-      }
-      if (item['320filesize'] !== 0) {
-        const size = sizeFormate(item['320filesize'])
-        types.push({ type: '320k', size, hash: item['320hash'] })
-        _types['320k'] = {
-          size,
-          hash: item['320hash']
-        }
-      }
-      if (item.sqfilesize !== 0) {
-        const size = sizeFormate(item.sqfilesize)
-        types.push({ type: 'flac', size, hash: item.sqhash })
-        _types.flac = {
-          size,
-          hash: item.sqhash
-        }
-      }
-      if (item.filesize_high !== 0) {
-        const size = sizeFormate(item.filesize_high)
-        types.push({ type: 'flac24bit', size, hash: item.hash_high })
-        _types.flac24bit = {
-          size,
-          hash: item.hash_high
-        }
-      }
-      return {
-        singer: formatSingerName(item.authors, 'author_name'),
-        name: decodeName(item.songname),
-        albumName: decodeName(item.remark),
-        albumId: item.album_id,
-        songmid: item.audio_id,
-        source: 'kg',
-        interval: formatPlayTime(item.duration),
-        img: null,
-        lrc: null,
-        hash: item.hash,
-        otherSource: null,
-        types,
-        _types,
-        typeUrl: {}
-      }
-    })
-  },
 
   filterBoardsData(rawList) {
     // console.log(rawList)
@@ -207,29 +155,33 @@ export default {
       list.push({
         id: 'kg__' + board.rankid,
         name: board.rankname,
-        bangid: String(board.rankid)
+        bangid: String(board.rankid),
+        pic: board.imgurl.replaceAll('{size}', '512'),
+        listen: formatMinutesFlexible(board.play_times),
+        update_frequency: board.update_frequency,
+        source: 'kg'
       })
     }
     return list
   },
   async getBoards(retryNum = 0) {
-    // if (++retryNum > 3) return Promise.reject(new Error('try max num'))
-    // let response
-    // try {
-    //   response = await this.getBoardsData()
-    // } catch (error) {
-    //   return this.getBoards(retryNum)
-    // }
-    // // console.log(response.body)
-    // if (response.statusCode !== 200 || response.body.errcode !== 0) return this.getBoards(retryNum)
-    // const list = this.filterBoardsData(response.body.data.info)
+    if (++retryNum > 3) return Promise.reject(new Error('try max num'))
+    let response
+    try {
+      response = await this.getBoardsData()
+    } catch (error) {
+      return this.getBoards(retryNum)
+    }
+    // console.log(response.body)
+    if (response.statusCode !== 200 || response.body.errcode !== 0) return this.getBoards(retryNum)
+    const list = this.filterBoardsData(response.body.data.info)
     // console.log(list)
-    // // console.log(JSON.stringify(list))
-    // this.list = list
-    // return {
-    //   list,
-    //   source: 'kg',
-    // }
+    // console.log(JSON.stringify(list))
+    this.list = list
+    return {
+      list,
+      source: 'kg',
+    }
     this.list = boardList
     return {
       list: boardList,
@@ -243,20 +195,20 @@ export default {
     if (body.errcode != 0) return this.getList(bangid, page, retryNum)
 
     // console.log(body)
-    const total = body.data.total
-    const limit = 100
-    const listData = this.filterData(body.data.info)
+    let total = body.data.total
+    let limit = 100
+    let listData = await filterData(body.data.info, { removeDuplicates: true })
     // console.log(listData)
     return {
       total,
       list: listData,
       limit,
       page,
-      source: 'kg'
+      source: 'kg',
     }
   },
   getDetailPageUrl(id) {
-    if (typeof id === 'string') id = id.replace('kg__', '')
+    if (typeof id == 'string') id = id.replace('kg__', '')
     return `https://www.kugou.com/yy/rank/home/1-${id}.html`
-  }
+  },
 }

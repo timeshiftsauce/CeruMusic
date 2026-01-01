@@ -1,6 +1,7 @@
 import { httpFetch } from '../../request'
 import { formatPlayTime, sizeFormate } from '../index'
 import { formatSingerName } from '../utils'
+import { formatNumberToChineseSimple } from '@common/utils/common'
 
 const boardList = [
   { id: 'tx__4', name: '流行指数榜', bangid: '4' },
@@ -137,34 +138,55 @@ export default {
   filterData(rawList) {
     // console.log(rawList)
     return rawList.map((item) => {
-      const types = []
-      const _types = {}
+      let types = []
+      let _types = {}
       if (item.file.size_128mp3 !== 0) {
-        const size = sizeFormate(item.file.size_128mp3)
+        let size = sizeFormate(item.file.size_128mp3)
         types.push({ type: '128k', size })
         _types['128k'] = {
-          size
+          size,
         }
       }
       if (item.file.size_320mp3 !== 0) {
-        const size = sizeFormate(item.file.size_320mp3)
+        let size = sizeFormate(item.file.size_320mp3)
         types.push({ type: '320k', size })
         _types['320k'] = {
-          size
+          size,
         }
       }
       if (item.file.size_flac !== 0) {
-        const size = sizeFormate(item.file.size_flac)
+        let size = sizeFormate(item.file.size_flac)
         types.push({ type: 'flac', size })
         _types.flac = {
-          size
+          size,
         }
       }
       if (item.file.size_hires !== 0) {
-        const size = sizeFormate(item.file.size_hires)
-        types.push({ type: 'flac24bit', size })
-        _types.flac24bit = {
-          size
+        let size = sizeFormate(item.file.size_hires)
+        types.push({ type: 'hires', size })
+        _types.hires = {
+          size,
+        }
+      }
+      if (item.file.size_new[1] !== 0) {
+        let size = sizeFormate(item.file.size_new[1])
+        types.push({ type: 'atmos', size })
+        _types.atmos = {
+          size,
+        }
+      }
+      if (item.file.size_new[2] !== 0) {
+        let size = sizeFormate(item.file.size_new[2])
+        types.push({ type: 'atmos_plus', size })
+        _types.atmos_plus = {
+          size,
+        }
+      }
+      if (item.file.size_new[0] !== 0) {
+        let size = sizeFormate(item.file.size_new[0])
+        types.push({ type: 'master', size })
+        _types.master = {
+          size,
         }
       }
       // types.reverse()
@@ -189,7 +211,7 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       }
     })
   },
@@ -224,29 +246,32 @@ export default {
       list.push({
         id: 'tx__' + board.id,
         name: board.topTitle,
-        bangid: String(board.id)
+        bangid: String(board.id),
+        pic: board.picUrl,
+        listen: formatNumberToChineseSimple(board.listenCount),
+        source: 'tx'
       })
     }
     return list
   },
   async getBoards(retryNum = 0) {
-    // if (++retryNum > 3) return Promise.reject(new Error('try max num'))
-    // let response
-    // try {
-    //   response = await this.getBoardsData()
-    // } catch (error) {
-    //   return this.getBoards(retryNum)
-    // }
-    // // console.log(response.body)
-    // if (response.statusCode !== 200 || response.body.code !== 0) return this.getBoards(retryNum)
-    // const list = this.filterBoardsData(response.body.data.topList)
+    if (++retryNum > 3) return Promise.reject(new Error('try max num'))
+    let response
+    try {
+      response = await this.getBoardsData()
+    } catch (error) {
+      return this.getBoards(retryNum)
+    }
+    // console.log(response.body)
+    if (response.statusCode !== 200 || response.body.code !== 0) return this.getBoards(retryNum)
+    const list = this.filterBoardsData(response.body.data.topList)
     // console.log(list)
     // console.log(JSON.stringify(list))
-    // this.list = list
-    // return {
-    //   list,
-    //   source: 'tx',
-    // }
+    this.list = list
+    return {
+      list,
+      source: 'tx',
+    }
     this.list = boardList
     return {
       list: boardList,

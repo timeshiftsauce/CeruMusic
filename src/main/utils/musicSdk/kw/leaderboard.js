@@ -1,6 +1,8 @@
 import { httpFetch } from '../../request'
 import { formatPlayTime, decodeName } from '../index'
 import { formatSinger, wbdCrypto } from './util'
+import { formatNumberToChineseSimple } from '@common/utils/common'
+
 
 const boardList = [
   { id: 'kw__93', name: '飙升榜', bangid: '93' },
@@ -141,7 +143,7 @@ export default {
   getBoardsData() {
     if (this._requestBoardsObj) this._requestBoardsObj.cancelHttp()
     this._requestBoardsObj = httpFetch(
-      'http://qukudata.kuwo.cn/q.k?op=query&cont=tree&node=2&pn=0&rn=1000&fmt=json&level=2'
+      'http://qukudata.kuwo.cn/q.k?op=query&cont=tree&node=2&pn=0&rn=1000&fmt=json&level=3'
     )
     return this._requestBoardsObj.promise
   },
@@ -166,9 +168,13 @@ export default {
         qualitys.add(quality)
 
         switch (quality) {
+          case '20900':
+            types.push({ type: 'master', size })
+            _types.master = { size }
+            break
           case '4000':
-            types.push({ type: 'flac24bit', size })
-            _types.flac24bit = { size }
+            types.push({ type: 'hires', size })
+            _types.hires = { size }
             break
           case '2000':
             types.push({ type: 'flac', size })
@@ -199,42 +205,48 @@ export default {
         otherSource: null,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
       }
     })
   },
 
+
   filterBoardsData(rawList) {
     // console.log(rawList)
+    rawList = rawList.sort((a, b) => b.listen - a.listen)
     const list = []
     for (const board of rawList) {
-      if (board.source != '1') continue
+      // if (board.source != '1') continue
       list.push({
         id: 'kw__' + board.sourceid,
         name: board.name,
-        bangid: String(board.sourceid)
+        bangid: String(board.sourceid),
+        pic: board.pic,
+        listen: formatNumberToChineseSimple(board.listen),
+        update_frequency: board.info,
+        source: 'kw'
       })
     }
     return list
   },
   async getBoards(retryNum = 0) {
-    // if (++retryNum > 3) return Promise.reject(new Error('try max num'))
-    // let response
-    // try {
-    //   response = await this.getBoardsData()
-    // } catch (error) {
-    //   return this.getBoards(retryNum)
-    // }
+    if (++retryNum > 3) return Promise.reject(new Error('try max num'))
+    let response
+    try {
+      response = await this.getBoardsData()
+    } catch (error) {
+      return this.getBoards(retryNum)
+    }
     // console.log(response.body)
-    // if (response.statusCode !== 200 || !response.body.child) return this.getBoards(retryNum)
-    // const list = this.filterBoardsData(response.body.child)
-    // // console.log(list)
+    if (response.statusCode !== 200 || !response.body.child) return this.getBoards(retryNum)
+    const list = this.filterBoardsData(response.body.child)
+    // console.log(list)
     // console.log(JSON.stringify(list))
-    // this.list = list
-    // return {
-    //   list,
-    //   source: 'kw',
-    // }
+    this.list = list
+    return {
+      list,
+      source: 'kw',
+    }
     this.list = boardList
     return {
       list: boardList,
