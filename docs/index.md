@@ -156,6 +156,10 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
   <img src="./assets/image-20250827181535681.png" alt="image-20250827181535681" style="zoom:25%;" />
 
+- **lemon**：修复部分bug&新增部分功能（简称：打杂）
+
+  <img src="./assets/image-20260102767362357.jpg" alt="image-20260102767362357" style="zoom:25%;" />
+
 **Tips**: 排名不分先后
 
 ### 友商
