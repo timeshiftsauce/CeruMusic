@@ -39,7 +39,7 @@ const activeGroupName = ref<string>('')
 const fetchTags = async () => {
   try {
     const res = await window.api.music.requestSdk('getPlaylistTags', {
-      source: userSource.value.source
+      source: userSource.value.source || 'wy'
     })
     tags.value = res?.tags || []
     hotTag.value = res?.hotTag || []
@@ -104,7 +104,7 @@ const fetchCategoryPlaylists = async (reset = false) => {
   loadingMore.value = true
   try {
     const res = await window.api.music.requestSdk('getCategoryPlaylists', {
-      source: userSource.value.source,
+      source: userSource.value.source || 'wy',
       sortId: 'hot',
       tagId: activeTagId.value,
       page: page.value,
@@ -221,18 +221,16 @@ onMounted(() => {
   // 设置音源变化监听器
   watchSource = watch(
     userSource,
-    (newSource) => {
-      if (newSource.source) {
-        loading.value = true
-        error.value = ''
-        // 初始化分类
-        fetchTags().then(() => {
-          // 默认热门分类
-          activeTagId.value = ''
-          activeCategoryName.value = '热门'
-          fetchCategoryPlaylists(true)
-        })
-      }
+    () => {
+      loading.value = true
+      error.value = ''
+      // 初始化分类
+      fetchTags().then(() => {
+        // 默认热门分类
+        activeTagId.value = ''
+        activeCategoryName.value = '热门'
+        fetchCategoryPlaylists(true)
+      })
     },
     { deep: true, immediate: true }
   )
@@ -245,17 +243,24 @@ onMounted(() => {
     document.removeEventListener('click', onDocClick)
   })
 })
+const backTop = ref(false)
 onUnmounted(() => {
   if (watchSource) {
     watchSource()
     watchSource = null
   }
 })
+onActivated(() => {
+  backTop.value = true
+})
+onDeactivated(() => {
+  backTop.value = false
+})
 const songlistScrollRef = ref<HTMLDivElement>()
 </script>
 
 <template>
-  <div class="find-container">
+  <div class="find-container" id="findContainerRef">
     <!-- 页面标题 -->
     <div class="page-header">
       <h2>发现音乐</h2>
@@ -265,7 +270,14 @@ const songlistScrollRef = ref<HTMLDivElement>()
       <n-tab-pane name="songlist" tab="歌单" class="songlist-tab-pane">
         <div class="scroll-container" @scroll="onScroll" ref="songlistScrollRef">
           <!-- 分类导航 -->
-          <n-back-top :listen-to="songlistScrollRef" :right="40" :bottom="120"> </n-back-top>
+          <n-back-top
+            :listen-to="songlistScrollRef"
+            :right="40"
+            :bottom="120"
+            v-if="backTop"
+            style="z-index: 100"
+          >
+          </n-back-top>
 
           <div ref="categoryBarRef" class="category-bar">
             <div class="hot-tags">

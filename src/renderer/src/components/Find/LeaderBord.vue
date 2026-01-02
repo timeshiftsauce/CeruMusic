@@ -42,7 +42,7 @@ const currentSource = computed(() => localUserStore.userSource.source)
 const fetchBoards = async () => {
   loading.value = true
   try {
-    const source = localUserStore.userSource.source
+    const source = localUserStore.userSource.source || 'wy'
     if (!source) {
       loading.value = false
       return
@@ -87,6 +87,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .leaderboard-container {
+  min-height: 100%;
   padding-bottom: 1rem;
   .section-header {
     display: flex;
@@ -124,7 +125,7 @@ onMounted(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 200px;
+    height: 100%;
     color: var(--td-text-color-secondary);
 
     .empty-text {

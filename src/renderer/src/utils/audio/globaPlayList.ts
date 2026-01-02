@@ -45,6 +45,14 @@ const start = controlAudio.start
 const stop = controlAudio.stop
 const setCurrentTime = controlAudio.setCurrentTime
 
+const PluginErrorMsgs = [
+  '插件都不配就想播放，想的倒挺美呢',
+  '插件插件老弟我需要插件',
+  '我肚子饿啦，请给我安装一个插件吧',
+  '插件呢？插件呢？插件呢？',
+  '哥哥~ 你需要安装一个插件来播放歌曲哦~'
+]
+
 const handlePlay = async () => {
   if (!Audio.value.url) {
     if (list.value.length > 0) {
@@ -52,6 +60,9 @@ const handlePlay = async () => {
     } else {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
     }
+    return
+  } else if (!localUserStore.userSource.pluginId) {
+    MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
   }
   try {
@@ -100,6 +111,10 @@ const togglePlayPause = async () => {
 }
 
 const playSong = async (song: SongList) => {
+  if (!localUserStore.userSource.pluginId) {
+    MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
+    return
+  }
   // 使用当前时间戳作为请求ID，解决快速切歌的竞态问题
   const requestId = Date.now()
   // songInfo 上不存在 requestId 属性，移除该行；requestId 仅通过闭包变量跟踪即可
@@ -171,7 +186,7 @@ const playSong = async (song: SongList) => {
       console.warn('Original source failed, trying auto switch...', error)
       try {
         throw new Error('Force switch')
-      } catch (switchError) {}
+      } catch (switchError) { }
     }
 
     // 再次检查请求ID
@@ -201,7 +216,7 @@ const playSong = async (song: SongList) => {
               const a = Audio.value.audio
               try {
                 a.pause()
-              } catch {}
+              } catch { }
               a.removeAttribute('src')
               a.load()
 
@@ -242,7 +257,7 @@ const playSong = async (song: SongList) => {
         const a = Audio.value.audio
         try {
           a.pause()
-        } catch {}
+        } catch { }
         a.removeAttribute('src')
         a.load()
       }
@@ -405,6 +420,9 @@ const playSong = async (song: SongList) => {
 }
 
 const tryAutoNext = (reason: string) => {
+  if (localUserStore.userSource.pluginId === undefined) {
+    return
+  }
   const limit = getAutoNextLimit()
   MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
   if ((autoNextCount.value >= limit || autoNextCount.value >= 10) && autoNextCount.value > 2) {
@@ -563,7 +581,7 @@ const initPlayback = async () => {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
-        } catch {}
+        } catch { }
         if (userInfo.value.currentTime) {
           pendingRestorePosition = userInfo.value.currentTime
           pendingRestoreSongId = lastPlayedSong.songmid

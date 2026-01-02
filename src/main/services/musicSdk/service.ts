@@ -15,7 +15,7 @@ import musicSdk from '../../utils/musicSdk/index'
 import { musicCacheService } from '../musicCache'
 import download from '../../utils/downloadSongs'
 
-function main(source: string) {
+function main(source: string = 'wy') {
   const Api = musicSdk[source]
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {

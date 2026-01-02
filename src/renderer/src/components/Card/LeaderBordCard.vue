@@ -1,7 +1,7 @@
 <template>
   <div class="leaderboard-card" @click="handleClick">
     <div class="card-image">
-      <img v-if="data.pic" :src="data.pic" :alt="data.name" loading="lazy" />
+      <s-image v-if="data.pic" :src="data.pic" :alt="data.name" loading="lazy" />
       <div v-else class="placeholder">{{ data.name[0] }}</div>
 
       <div class="play-count" v-if="data.listen">
