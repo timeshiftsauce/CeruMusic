@@ -909,6 +909,15 @@ const getTagOptionsStatus = () => {
                       <p>插件管理相关功能 & 部分接口封装</p>
                     </div>
                   </div>
+                  <div class="developer-item">
+                    <div class="developer-avatar">
+                      <img src="/lemon.jpg" alt="lemon" />
+                    </div>
+                    <div class="developer-info">
+                      <h4>lemon</h4>
+                      <p>修复部分bug & 新增部分功能（简称：打杂）</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
