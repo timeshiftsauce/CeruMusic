@@ -337,11 +337,36 @@ export default class DownloadManager extends EventEmitter {
 
   public pauseAllTasks() {
     log.info('Pausing all tasks')
-    this.tasks.forEach((task) => {
-      if (task.status === DownloadStatus.Downloading || task.status === DownloadStatus.Queued) {
-        this.pauseTask(task.id)
+    const activeIds = Array.from(this.activeDownloads.keys())
+    const queuedIds = [...this.queue]
+    const initIds = Array.from(this.initializingTasks.values())
+
+    for (const id of activeIds) {
+      this.cleanupTask(id)
+      const task = this.tasks.get(id)
+      if (task && task.status === DownloadStatus.Downloading) {
+        task.status = DownloadStatus.Paused
       }
-    })
+    }
+
+    this.queue = []
+    for (const id of queuedIds) {
+      const task = this.tasks.get(id)
+      if (task && task.status === DownloadStatus.Queued) {
+        task.status = DownloadStatus.Paused
+      }
+    }
+
+    this.initializingTasks.clear()
+    for (const id of initIds) {
+      const task = this.tasks.get(id)
+      if (task) {
+        task.status = DownloadStatus.Paused
+      }
+    }
+
+    this.saveTasks()
+    this.emit('tasks-reset', this.getTasks())
   }
 
   public resumeAllTasks() {

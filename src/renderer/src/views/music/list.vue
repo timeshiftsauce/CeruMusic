@@ -405,13 +405,22 @@ const handlePlayPlaylist = () => {
 
   const dialog = DialogPlugin.confirm({
     header: '播放歌单',
-    body: `确定要用歌单"${playlistInfo.value.title}"中的 ${songs.value.length} 首歌曲替换当前播放列表吗？`,
+    body: `确定要用歌单"${playlistInfo.value.title}"中的 ${playlistInfo.value.total || songs.value.length} 首歌曲替换当前播放列表吗？`,
     confirmBtn: '确定替换',
     cancelBtn: '取消',
-    onConfirm: () => {
-      console.log('播放歌单:', playlistInfo.value.title)
-      replacePlaylist(songs.value, false)
+    onConfirm: async () => {
       dialog.destroy()
+      let loadingMsg: Promise<any> | null = null
+      if (!isLocalPlaylist.value && hasMore.value) {
+        loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
+        while (hasMore.value) {
+          await fetchNetworkPlaylistSongs(false)
+        }
+        if (loadingMsg) {
+          loadingMsg.then((res) => res.close())
+        }
+      }
+      replacePlaylist(songs.value, false)
     },
     onCancel: () => {
       dialog.destroy()
@@ -430,10 +439,19 @@ const handleShufflePlaylist = () => {
     body: `确定要用歌单"${playlistInfo.value.title}"中的 ${songs.value.length} 首歌曲随机替换当前播放列表吗？`,
     confirmBtn: '确定替换',
     cancelBtn: '取消',
-    onConfirm: () => {
-      console.log('随机播放歌单:', playlistInfo.value.title)
-      replacePlaylist(songs.value, true)
+    onConfirm: async () => {
       dialog.destroy()
+      let loadingMsg: Promise<any> | null = null
+      if (!isLocalPlaylist.value && hasMore.value) {
+        loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
+        while (hasMore.value) {
+          await fetchNetworkPlaylistSongs(false)
+        }
+        if (loadingMsg) {
+          loadingMsg.then((res) => res.close())
+        }
+      }
+      replacePlaylist(songs.value, true)
     },
     onCancel: () => {
       dialog.destroy()
