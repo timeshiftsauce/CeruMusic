@@ -27,6 +27,30 @@ interface CustomAPI {
     getSize: () => Promise<string>
   }
 
+  // 下载管理
+  download: {
+    getTasks: () => Promise<any[]>
+    pauseTask: (taskId: string) => Promise<void>
+    resumeTask: (taskId: string) => Promise<void>
+    pauseAllTasks: () => Promise<void>
+    resumeAllTasks: () => Promise<void>
+    cancelTask: (taskId: string) => Promise<void>
+    deleteTask: (taskId: string, deleteFile?: boolean) => Promise<void>
+    retryTask: (taskId: string) => Promise<void>
+    setMaxConcurrent: (max: number) => Promise<void>
+    getMaxConcurrent: () => Promise<number>
+    clearTasks: (type: 'queue' | 'completed' | 'failed' | 'all') => Promise<void>
+    validateFiles: () => Promise<any[]>
+    openFileLocation: (filePath: string) => Promise<void>
+    onTaskAdded: (callback: (event: any, task: any) => void) => () => void
+    onTaskProgress: (callback: (event: any, task: any) => void) => () => void
+    onTaskStatusChanged: (callback: (event: any, task: any) => void) => () => void
+    onTaskCompleted: (callback: (event: any, task: any) => void) => () => void
+    onTaskError: (callback: (event: any, task: any) => void) => () => void
+    onTaskDeleted: (callback: (event: any, taskId: string) => void) => () => void
+    onTasksReset: (callback: (event: any, tasks: any[]) => void) => () => void
+  }
+
   // 歌单管理 API
   songList: {
     // === 歌单管理 ===

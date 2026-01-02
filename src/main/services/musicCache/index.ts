@@ -6,6 +6,7 @@ import { configManager } from '../ConfigManager'
 
 export class MusicCacheService {
   private cacheIndex: Map<string, string> = new Map()
+  private lyricCacheIndex: Map<string, string> = new Map()
 
   constructor() {
     this.initCache()
@@ -27,6 +28,10 @@ export class MusicCacheService {
     return path.join(this.cacheDir, 'cache-index.json')
   }
 
+  public get lyricIndexFilePath(): string {
+    return path.join(this.cacheDir, 'cache-lyric-index.json')
+  }
+
   private async initCache() {
     try {
       // 确保缓存目录存在
@@ -34,6 +39,7 @@ export class MusicCacheService {
 
       // 加载缓存索引
       await this.loadCacheIndex()
+      await this.loadLyricCacheIndex()
     } catch (error) {
       console.error('初始化音乐缓存失败:', error)
     }
@@ -51,12 +57,32 @@ export class MusicCacheService {
     }
   }
 
+  private async loadLyricCacheIndex() {
+    try {
+      const indexData = await fs.readFile(this.lyricIndexFilePath, 'utf-8')
+      const index = JSON.parse(indexData)
+      this.lyricCacheIndex = new Map(Object.entries(index))
+    } catch (error) {
+      this.lyricCacheIndex = new Map()
+      await this.saveLyricCacheIndex()
+    }
+  }
+
   private async saveCacheIndex() {
     try {
       const indexObj = Object.fromEntries(this.cacheIndex)
       await fs.writeFile(this.indexFilePath, JSON.stringify(indexObj, null, 2))
     } catch (error) {
       console.error('保存缓存索引失败:', error)
+    }
+  }
+
+  private async saveLyricCacheIndex() {
+    try {
+      const indexObj = Object.fromEntries(this.lyricCacheIndex)
+      await fs.writeFile(this.lyricIndexFilePath, JSON.stringify(indexObj, null, 2))
+    } catch (error) {
+      console.error('保存歌词缓存索引失败:', error)
     }
   }
 
@@ -106,6 +132,35 @@ export class MusicCacheService {
     } catch (error) {
       console.error(`缓存歌曲失败: ${songId}`, error)
       throw error
+    }
+  }
+
+  async getCachedLyric(songId: string): Promise<string | null> {
+    const cacheKey = this.generateCacheKey(songId)
+    if (this.lyricCacheIndex.has(cacheKey)) {
+      const cachedFilePath = this.lyricCacheIndex.get(cacheKey)!
+      try {
+        const lyric = await fs.readFile(cachedFilePath, 'utf-8')
+        return lyric
+      } catch (error) {
+        this.lyricCacheIndex.delete(cacheKey)
+        await this.saveLyricCacheIndex()
+      }
+    }
+    return null
+  }
+
+  async cacheLyric(songId: string, lyric: string): Promise<void> {
+    const cacheKey = this.generateCacheKey(songId)
+    if (this.lyricCacheIndex.has(cacheKey)) return
+
+    try {
+      const cacheFilePath = path.join(this.cacheDir, `${cacheKey}.lrc`)
+      await fs.writeFile(cacheFilePath, lyric, 'utf-8')
+      this.lyricCacheIndex.set(cacheKey, cacheFilePath)
+      await this.saveLyricCacheIndex()
+    } catch (error) {
+      console.error(`缓存歌词失败: ${songId}`, error)
     }
   }
 

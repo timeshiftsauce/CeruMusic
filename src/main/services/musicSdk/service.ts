@@ -125,11 +125,16 @@ function main(source: string = 'wy') {
       pluginId,
       songInfo,
       quality,
-      tagWriteOptions
+      tagWriteOptions,
+      lazy
     }: DownloadSingleSongArgs) {
-      const url = await this.getMusicUrl({ pluginId, songInfo, quality })
-      if (typeof url === 'object') throw new Error('无法获取歌曲链接')
-      return await download(url, songInfo, tagWriteOptions)
+      let url = ''
+      if (!lazy) {
+        const result = await this.getMusicUrl({ pluginId, songInfo, quality })
+        if (typeof result === 'object') throw new Error('无法获取歌曲链接')
+        url = result
+      }
+      return await download(songInfo, url, tagWriteOptions, pluginId, quality)
     },
 
     async parsePlaylistId({ url }: { url: string }) {

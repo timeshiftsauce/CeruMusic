@@ -375,7 +375,9 @@ const openLink = (url: string) => {
 const tagWriteOptions = ref({
   basicInfo: settings.value.tagWriteOptions?.basicInfo ?? true,
   cover: settings.value.tagWriteOptions?.cover ?? true,
-  lyrics: settings.value.tagWriteOptions?.lyrics ?? true
+  lyrics: settings.value.tagWriteOptions?.lyrics ?? true,
+  downloadLyrics: settings.value.tagWriteOptions?.downloadLyrics ?? false,
+  lyricFormat: settings.value.tagWriteOptions?.lyricFormat ?? 'word-by-word'
 })
 
 // 更新标签写入选项
@@ -391,6 +393,7 @@ const getTagOptionsStatus = () => {
   if (tagWriteOptions.value.basicInfo) enabled.push('基础信息')
   if (tagWriteOptions.value.cover) enabled.push('封面')
   if (tagWriteOptions.value.lyrics) enabled.push('歌词')
+  if (tagWriteOptions.value.downloadLyrics) enabled.push('单独下载歌词')
 
   return enabled.length > 0 ? enabled.join('、') : '未选择任何选项'
 }
@@ -776,9 +779,33 @@ const getTagOptionsStatus = () => {
 
                   <div class="tag-option">
                     <t-checkbox v-model="tagWriteOptions.lyrics" @change="updateTagWriteOptions">
-                      普通歌词
+                      歌词信息
                     </t-checkbox>
-                    <p class="option-desc">将歌词信息写入到音频文件的标签中</p>
+                    <p class="option-desc">将歌词信息写入音频文件的元信息中</p>
+                  </div>
+
+                  <div class="tag-option">
+                    <t-checkbox
+                      v-model="tagWriteOptions.downloadLyrics"
+                      @change="updateTagWriteOptions"
+                    >
+                      单独下载歌词文件
+                    </t-checkbox>
+                    <p class="option-desc">
+                      在下载歌曲的同时，在相同目录下保存一个独立的LRC歌词文件
+                    </p>
+                  </div>
+
+                  <div class="tag-option lyric-format-options">
+                    <t-radio-group
+                      v-model="tagWriteOptions.lyricFormat"
+                      :disabled="!tagWriteOptions.lyrics && !tagWriteOptions.downloadLyrics"
+                      @change="updateTagWriteOptions"
+                    >
+                      <t-radio-button value="lrc">标准LRC歌词</t-radio-button>
+                      <t-radio-button value="word-by-word">逐字歌词</t-radio-button>
+                    </t-radio-group>
+                    <p class="option-desc">选择写入或下载的歌词格式</p>
                   </div>
                 </div>
 
@@ -2028,14 +2055,18 @@ const getTagOptionsStatus = () => {
       line-height: 1.4;
     }
   }
-}
+  .tag-options-status {
+    background: var(--settings-tag-status-bg);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--settings-tag-status-border);
+  }
 
-.tag-options-status {
-  background: var(--settings-tag-status-bg);
-  padding: 1rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--settings-tag-status-border);
-
+  .lyric-format-options {
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--settings-group-border);
+  }
   .status-summary {
     display: flex;
     align-items: center;

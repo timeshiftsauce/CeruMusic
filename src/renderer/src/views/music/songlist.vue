@@ -2,11 +2,20 @@
 import { ref, onMounted, computed, toRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { Edit2Icon, PlayCircleIcon, DeleteIcon, ViewListIcon } from 'tdesign-icons-vue-next'
+import {
+  Edit2Icon,
+  PlayCircleIcon,
+  DeleteIcon,
+  ViewListIcon,
+  DownloadIcon
+} from 'tdesign-icons-vue-next'
+import { createQualityDialog } from '@renderer/utils/audio/download'
+import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useSettingsStore } from '@renderer/store/Settings'
 import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
 import {
   createMenuItem,
@@ -929,6 +938,88 @@ const handleNetworkPlaylistImport = async (input: string) => {
   }
 }
 
+const downloadPlaylist = async (playlist: SongList) => {
+  try {
+    const res = await songListAPI.getSongs(playlist.id)
+    if (!res.success) {
+      MessagePlugin.error(res.error || '获取歌单歌曲失败')
+      return
+    }
+    const songs = res.data || []
+    if (songs.length === 0) {
+      MessagePlugin.warning('歌单中没有可下载的歌曲')
+      return
+    }
+
+    const settingsStore = useSettingsStore()
+    const LocalUserDetail = LocalUserDetailStore()
+
+    // 1. 收集所有可能的音质选项
+    // 我们使用标准的 QUALITY_ORDER 作为基础，展示所有可能的选项
+    // 或者，我们可以收集当前歌单中所有歌曲支持的音质合集
+    const allPossibleTypes = QUALITY_ORDER.map((t) => ({ type: t, size: '' }))
+
+    // 2. 弹出音质选择框
+    const userQuality = await createQualityDialog(
+      allPossibleTypes,
+      LocalUserDetail.userSource.quality || '128k',
+      '选择批量下载音质(自动降级)'
+    )
+
+    if (!userQuality) return
+
+    let count = 0
+    for (const song of songs) {
+      // Skip local songs
+      if (song.source === 'local') continue
+
+      // 3. 计算每首歌的最佳匹配音质
+      // 如果歌曲有 types 信息，使用 calculateBestQuality
+      // 如果没有 types 信息（可能还没获取详情），尝试使用 userQuality，或者默认降级逻辑
+      // 注意：song 对象可能没有 types 属性，取决于 API 返回的详情程度。
+      // 如果没有 types，这里可能无法准确降级。
+      // 但是 requestSdk('downloadSingleSong') 内部通常会处理单个歌曲的下载。
+      // 如果我们在这里直接调用 requestSdk，我们需要传 quality。
+      // 如果 song.types 存在：
+      let qualityToUse = userQuality
+      if (song.types && song.types.length > 0) {
+        const best = calculateBestQuality(song.types, userQuality)
+        if (best) qualityToUse = best
+      }
+
+      // 如果 song.types 不存在，我们只能传 userQuality，
+      // 并期望后端或 downloadSingleSong 在下载前能获取详情并做降级？
+      // 但 downloadSingleSong 需要 songInfo。
+      // 实际上，如果批量下载时 song 对象没有 types，可能需要先 fetch 详情。
+      // 不过目前的逻辑似乎是直接调用的。
+      // 假设 song 对象已经有了必要信息。
+
+      window.api.music
+        .requestSdk('downloadSingleSong', {
+          pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
+          source: song.source,
+          quality: qualityToUse,
+          songInfo: toRaw(song),
+          tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
+          lazy: true // Enable lazy loading
+        })
+        .catch((err) => {
+          console.error('Download failed for song:', song.name, err)
+        })
+      count++
+    }
+
+    if (count > 0) {
+      MessagePlugin.success(`已添加 ${count} 首歌曲到下载队列`)
+    } else {
+      MessagePlugin.warning('没有可下载的在线歌曲')
+    }
+  } catch (error) {
+    console.error('Download playlist failed:', error)
+    MessagePlugin.error('下载失败')
+  }
+}
+
 // 右键菜单项配置
 const contextMenuItems = computed((): ContextMenuItem[] => {
   if (!contextMenuPlaylist.value) return []
@@ -947,6 +1038,14 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       onClick: () => {
         if (contextMenuPlaylist.value) {
           viewPlaylist(contextMenuPlaylist.value)
+        }
+      }
+    }),
+    createMenuItem('download-all', '全部下载', {
+      icon: DownloadIcon,
+      onClick: () => {
+        if (contextMenuPlaylist.value) {
+          downloadPlaylist(contextMenuPlaylist.value)
         }
       }
     }),

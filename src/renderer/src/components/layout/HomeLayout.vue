@@ -52,6 +52,11 @@ const menuList: MenuItem[] = [
     name: '本地',
     icon: 'icon-shouye',
     path: '/home/local'
+  },
+  {
+    name: '下载',
+    icon: 'icon-xiazai',
+    path: '/home/download'
   }
   // {
   //   name: '最近',

@@ -4,14 +4,14 @@
       <s-image v-if="data.pic" :src="data.pic" :alt="data.name" loading="lazy" />
       <div v-else class="placeholder">{{ data.name[0] }}</div>
 
-      <div class="play-count" v-if="data.listen">
+      <div v-if="data.listen" class="play-count">
         <EarphoneIcon class="icon" />
         <span>{{ data.listen }}</span>
       </div>
 
       <div class="card-info">
         <div class="name">{{ data.name }}</div>
-        <div class="update-freq" v-if="data.update_frequency">{{ data.update_frequency }}</div>
+        <div v-if="data.update_frequency" class="update-freq">{{ data.update_frequency }}</div>
       </div>
     </div>
   </div>

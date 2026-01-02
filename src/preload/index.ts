@@ -84,6 +84,54 @@ const api = {
     readFile: (path: string) => ipcRenderer.invoke('fs:read-file', path)
   },
 
+  // 下载管理
+  download: {
+    getTasks: () => ipcRenderer.invoke('download:get-tasks'),
+    pauseTask: (taskId: string) => ipcRenderer.invoke('download:pause-task', taskId),
+    resumeTask: (taskId: string) => ipcRenderer.invoke('download:resume-task', taskId),
+    cancelTask: (taskId: string) => ipcRenderer.invoke('download:cancel-task', taskId),
+    deleteTask: (taskId: string, deleteFile: boolean = false) =>
+      ipcRenderer.invoke('download:delete-task', taskId, deleteFile),
+    pauseAllTasks: () => ipcRenderer.invoke('download:pause-all-tasks'),
+    resumeAllTasks: () => ipcRenderer.invoke('download:resume-all-tasks'),
+    retryTask: (taskId: string) => ipcRenderer.invoke('download:retry-task', taskId),
+    setMaxConcurrent: (max: number) => ipcRenderer.invoke('download:set-max-concurrent', max),
+    getMaxConcurrent: () => ipcRenderer.invoke('download:get-max-concurrent'),
+    clearTasks: (type: 'queue' | 'completed' | 'failed' | 'all') =>
+      ipcRenderer.invoke('download:clear-tasks', type),
+    validateFiles: () => ipcRenderer.invoke('download:validate-files'),
+    openFileLocation: (filePath: string) =>
+      ipcRenderer.invoke('download:open-file-location', filePath),
+    onTaskAdded: (callback: (event: Electron.IpcRendererEvent, task: any) => void) => {
+      ipcRenderer.on('download:task-added', callback)
+      return () => ipcRenderer.removeListener('download:task-added', callback)
+    },
+    onTaskProgress: (callback: (event: Electron.IpcRendererEvent, task: any) => void) => {
+      ipcRenderer.on('download:task-progress', callback)
+      return () => ipcRenderer.removeListener('download:task-progress', callback)
+    },
+    onTaskStatusChanged: (callback: (event: Electron.IpcRendererEvent, task: any) => void) => {
+      ipcRenderer.on('download:task-status-changed', callback)
+      return () => ipcRenderer.removeListener('download:task-status-changed', callback)
+    },
+    onTaskCompleted: (callback: (event: Electron.IpcRendererEvent, task: any) => void) => {
+      ipcRenderer.on('download:task-completed', callback)
+      return () => ipcRenderer.removeListener('download:task-completed', callback)
+    },
+    onTaskError: (callback: (event: Electron.IpcRendererEvent, task: any) => void) => {
+      ipcRenderer.on('download:task-error', callback)
+      return () => ipcRenderer.removeListener('download:task-error', callback)
+    },
+    onTaskDeleted: (callback: (event: Electron.IpcRendererEvent, taskId: string) => void) => {
+      ipcRenderer.on('download:task-deleted', callback)
+      return () => ipcRenderer.removeListener('download:task-deleted', callback)
+    },
+    onTasksReset: (callback: (event: Electron.IpcRendererEvent, tasks: any[]) => void) => {
+      ipcRenderer.on('download:tasks-reset', callback)
+      return () => ipcRenderer.removeListener('download:tasks-reset', callback)
+    }
+  },
+
   // 歌单管理 API
   songList: {
     // === 歌单管理 ===

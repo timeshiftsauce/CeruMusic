@@ -4,7 +4,7 @@ import fsp from 'fs/promises'
 import path from 'node:path'
 import crypto from 'crypto'
 import { localMusicIndexService } from '../services/LocalMusicIndex'
-import { convertLrcFormat } from '../utils/downloadSongs'
+import { convertLrcFormat } from '../utils/lrcParser'
 // remove static import to avoid runtime failures if native module is missing
 
 const AUDIO_EXTS = new Set(['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.wma'])

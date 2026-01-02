@@ -14,8 +14,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-  // 将事件总线挂载到全局
-  ; (window as any).musicEmitter = emitter
+// 将事件总线挂载到全局
+;(window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -126,6 +126,7 @@ export async function addToPlaylistAndPlay(
     }
 
     // 播放插入的歌曲
+    console.log('播放插入的歌曲:', song)
     const playResult = playSongCallback(song)
     if (playResult && typeof playResult.then === 'function') {
       await playResult

@@ -15,15 +15,15 @@ export interface MusicItem {
   singer: string
   name: string
   albumName: string
-  albumId: number
+  albumId: number | string
   source: string
   interval: string
-  songmid: number
+  songmid: number | string
   img: string
   lrc: null | string
-  types: string[]
-  _types: Record<string, any>
-  typeUrl: Record<string, any>
+  types?: string[]
+  _types?: Record<string, any>
+  typeUrl?: Record<string, any>
 }
 
 // 搜索结果的类型定义
@@ -95,11 +95,14 @@ export interface TagWriteOptions {
   basicInfo?: boolean
   cover?: boolean
   lyrics?: boolean
+  downloadLyrics?: boolean
+  lyricFormat?: 'lrc' | 'word-by-word'
 }
 
 export interface DownloadSingleSongArgs extends GetMusicUrlArg {
   path?: string
   tagWriteOptions?: TagWriteOptions
+  lazy?: boolean
 }
 
 // 搜索联想结果的类型定义

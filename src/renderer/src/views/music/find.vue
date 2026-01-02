@@ -260,7 +260,7 @@ const songlistScrollRef = ref<HTMLDivElement>()
 </script>
 
 <template>
-  <div class="find-container" id="findContainerRef">
+  <div id="findContainerRef" class="find-container">
     <!-- 页面标题 -->
     <div class="page-header">
       <h2>发现音乐</h2>
@@ -268,13 +268,13 @@ const songlistScrollRef = ref<HTMLDivElement>()
     </div>
     <n-tabs type="segment" animated class="find-tabs" default-value="songlist" size="small">
       <n-tab-pane name="songlist" tab="歌单" class="songlist-tab-pane">
-        <div class="scroll-container" @scroll="onScroll" ref="songlistScrollRef">
+        <div ref="songlistScrollRef" class="scroll-container" @scroll="onScroll">
           <!-- 分类导航 -->
           <n-back-top
+            v-if="backTop"
             :listen-to="songlistScrollRef"
             :right="40"
             :bottom="120"
-            v-if="backTop"
             style="z-index: 100"
           >
           </n-back-top>

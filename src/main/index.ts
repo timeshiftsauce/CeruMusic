@@ -199,6 +199,140 @@ function updateWindowMaxLimits(win: BrowserWindow | null): void {
   win.setMaximumSize(currentScreenWidth, currentScreenHeight)
 }
 
+import { downloadManager } from './services/DownloadManager'
+import pluginService from './services/plugin/index'
+import musicSdkService from './services/musicSdk/service'
+import { musicCacheService } from './services/musicCache'
+
+function setupDownloadManager() {
+  // Setup URL Fetcher for lazy loading
+  downloadManager.setUrlFetcher(async (task) => {
+    if (!task.pluginId || !task.songInfo || !task.quality) {
+      throw new Error('Task missing required info for fetching URL')
+    }
+
+    const usePlugin = pluginService.getPluginById(task.pluginId)
+    if (!usePlugin) throw new Error('Plugin not found')
+
+    const source = task.songInfo.source
+    const songId = `${task.songInfo.name}-${task.songInfo.singer}-${source}-${task.quality}`
+
+    // Check cache
+    const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
+    if (cachedUrl) return cachedUrl
+
+    // Fetch from plugin
+    const originalUrl = await usePlugin.getMusicUrl(source, task.songInfo, task.quality)
+    if (typeof originalUrl === 'object')
+      throw new Error('Failed to get URL: ' + JSON.stringify(originalUrl))
+
+    // Cache result
+    musicCacheService.cacheMusic(songId, originalUrl).catch(console.error)
+
+    return originalUrl
+  })
+
+  // Setup Lyric Fetcher for lazy loading
+  downloadManager.setLyricFetcher(async (task) => {
+    if (!task.songInfo) {
+      throw new Error('Task missing required info for fetching lyric')
+    }
+
+    const source = task.songInfo.source
+    const songId = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
+
+    // Check cache
+    const cachedLyric = await musicCacheService.getCachedLyric(songId)
+    if (cachedLyric) return cachedLyric
+
+    let lyric: string | null = null
+
+    // 2. Fallback to built-in SDK if no lyric found yet and source is supported
+    if (!lyric && ['wy', 'kw', 'tx', 'mg', 'kg'].includes(source)) {
+      try {
+        const api = musicSdkService(source)
+        const result = await api.getLyric({ songInfo: task.songInfo })
+        if (result && !result.error) {
+          lyric = result.lyric || result.lrc || null
+        } else if (result && result.error) {
+          console.warn(`Built-in SDK getLyric error for ${source}:`, result.error)
+        }
+      } catch (error) {
+        console.warn(`Built-in SDK getLyric exception for ${source}:`, error)
+      }
+    }
+
+    if (lyric && typeof lyric === 'object') {
+      throw new Error('Failed to get lyric: ' + JSON.stringify(lyric))
+    }
+
+    // Cache result
+    if (lyric) {
+      musicCacheService.cacheLyric(songId, lyric).catch(console.error)
+    }
+
+    return lyric
+  })
+
+  // Setup Event Forwarding
+  const forwardEvent = (eventName: string, task: any) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(`download:${eventName}`, task)
+    }
+  }
+
+  downloadManager.on('task-added', (task) => forwardEvent('task-added', task))
+  downloadManager.on('task-progress', (task) => forwardEvent('task-progress', task))
+  downloadManager.on('task-status-changed', (task) => forwardEvent('task-status-changed', task))
+  downloadManager.on('task-completed', (task) => forwardEvent('task-completed', task))
+  downloadManager.on('task-error', (task) => forwardEvent('task-error', task))
+  downloadManager.on('task-retrying', (task) => forwardEvent('task-retrying', task))
+  downloadManager.on('task-deleted', (taskId) => forwardEvent('task-deleted', taskId))
+  downloadManager.on('tasks-reset', (tasks) => forwardEvent('tasks-reset', tasks))
+
+  // Setup IPC Handlers
+  ipcMain.handle('download:get-tasks', () => {
+    return downloadManager.getTasks()
+  })
+  ipcMain.handle('download:pause-task', (_, taskId) => {
+    downloadManager.pauseTask(taskId)
+  })
+  ipcMain.handle('download:resume-task', (_, taskId) => {
+    downloadManager.resumeTask(taskId)
+  })
+  ipcMain.handle('download:cancel-task', (_, taskId) => {
+    downloadManager.cancelTask(taskId)
+  })
+  ipcMain.handle('download:delete-task', (_, taskId, deleteFile) => {
+    downloadManager.deleteTask(taskId, deleteFile)
+  })
+  ipcMain.handle('download:retry-task', (_, taskId) => {
+    downloadManager.retryTask(taskId)
+  })
+  ipcMain.handle('download:open-file-location', (_, filePath) => {
+    shell.showItemInFolder(filePath)
+  })
+  ipcMain.handle('download:set-max-concurrent', (_, max) => {
+    downloadManager.setMaxConcurrentDownloads(max)
+  })
+  ipcMain.handle('download:get-max-concurrent', () => {
+    return downloadManager.getMaxConcurrentDownloads()
+  })
+  ipcMain.handle('download:validate-files', async () => {
+    await downloadManager.validateFiles()
+    return downloadManager.getTasks()
+  })
+  ipcMain.handle('download:clear-tasks', (_, type) => {
+    downloadManager.clearTasks(type)
+  })
+  ipcMain.handle('download:pause-all-tasks', () => {
+    downloadManager.pauseAllTasks()
+  })
+  ipcMain.handle('download:resume-all-tasks', () => {
+    downloadManager.resumeAllTasks()
+  })
+}
+
 function createWindow(): void {
   // 获取保存的窗口位置和大小
   const savedBounds = configManager.getWindowBounds()
@@ -314,7 +448,7 @@ import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/auto
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows - 确保与 electron-builder.yml 中的 appId 一致
   electronApp.setAppUserModelId('com.cerumusic.app')
 
@@ -332,7 +466,19 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Initialize plugins before starting download manager
+  try {
+    console.log('Initializing plugins...')
+    await pluginService.initializePlugins()
+    console.log('Plugins initialized.')
+  } catch (error) {
+    console.error('Failed to initialize plugins:', error)
+  }
+
   createWindow()
+  setupDownloadManager()
+  downloadManager.start()
+
   // 仅在主进程初始化一次托盘
   setupTray()
   function setTop(mainWindow: BrowserWindow) {

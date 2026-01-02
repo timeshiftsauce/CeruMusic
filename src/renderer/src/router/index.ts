@@ -42,6 +42,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@renderer/views/music/list.vue')
       },
       {
+        path: 'download',
+        name: 'download',
+        component: () => import('@renderer/views/download/index.vue')
+      },
+      {
         path: 'profile',
         name: 'profile',
         component: () => import('@renderer/views/user/Profile.vue')
