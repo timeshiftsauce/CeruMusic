@@ -72,6 +72,17 @@ const filteredTasks = computed(() => {
   })
 })
 
+const downloadingTasks = computed(() =>
+  store.tasks.filter((t) =>
+    [DownloadStatus.Downloading, DownloadStatus.Queued, DownloadStatus.Paused].includes(t.status)
+  )
+)
+const completedTasks = computed(() =>
+  store.tasks.filter((t) => t.status === DownloadStatus.Completed)
+)
+const failedTasks = computed(() =>
+  store.tasks.filter((t) => [DownloadStatus.Error, DownloadStatus.Cancelled].includes(t.status))
+)
 const formatSpeed = (speed: number) => {
   if (speed === 0) return '0 B/s'
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
@@ -176,9 +187,21 @@ const getStatusText = (status: DownloadStatus) => {
     </div>
 
     <t-tabs v-model="activeTab" class="tabs">
-      <t-tab-panel value="downloading" label="进行中" :destroy-on-hide="false" />
-      <t-tab-panel value="completed" label="已完成" :destroy-on-hide="false" />
-      <t-tab-panel value="failed" label="失败/已取消" :destroy-on-hide="false" />
+      <t-tab-panel
+        value="downloading"
+        :label="downloadingTasks.length ? `进行中(${downloadingTasks.length})` : '进行中'"
+        :destroy-on-hide="false"
+      />
+      <t-tab-panel
+        value="completed"
+        :label="completedTasks.length ? `已完成(${completedTasks.length})` : '已完成'"
+        :destroy-on-hide="false"
+      />
+      <t-tab-panel
+        value="failed"
+        :label="failedTasks.length ? `失败/已取消(${failedTasks.length})` : '失败/已取消'"
+        :destroy-on-hide="false"
+      />
     </t-tabs>
 
     <div class="task-list">
@@ -303,6 +326,16 @@ const getStatusText = (status: DownloadStatus) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  h2 {
+    border-left: 8px solid var(--td-brand-color-3);
+    padding-left: 12px;
+    border-radius: 8px;
+    line-height: 1.5em;
+    color: var(--td-text-color-primary);
+    margin-bottom: 0.5rem;
+    font-size: 1.875rem;
+    font-weight: 600;
+  }
 }
 
 .settings {
