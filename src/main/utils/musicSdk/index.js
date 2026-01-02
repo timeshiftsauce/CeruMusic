@@ -1,4 +1,5 @@
 import kw from './kw/index'
+import bd from './bd/index'
 import kg from './kg/index'
 import tx from './tx/index'
 import wy from './wy/index'
@@ -19,6 +20,10 @@ const sources = {
     {
       name: '酷我音乐',
       id: 'kw'
+    },
+    {
+      name: '波点音乐',
+      id: 'bd'
     },
     {
       name: '酷狗音乐',
@@ -42,6 +47,7 @@ const sources = {
     }
   ],
   kw,
+  bd,
   kg,
   tx,
   wy,

@@ -8,5 +8,5 @@ export type SongList = {
   updateTime: string
   description: string // 歌单描述
   coverImgUrl: string //歌单封面 默认第一首歌的图片
-  source: 'local' | 'wy' | 'tx' | 'mg' | 'kg' | 'kw' // 来源
+  source: 'local' | 'wy' | 'tx' | 'mg' | 'kg' | 'kw' | 'bd' // 来源
 }

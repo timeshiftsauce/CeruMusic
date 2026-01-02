@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script lang="ts" setup>
 import { ref, onMounted, computed, toRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
@@ -682,6 +682,35 @@ const handleNetworkPlaylistImport = async (input: string) => {
         }
       }
       platformName = '酷我音乐'
+    } else if (importPlatformType.value === 'bd') {
+      // 波点音乐歌单ID解析
+      const bdPlaylistRegexes = [
+        // 手机版歌单链接
+        /h5app\.kuwo\.cn\/m\/bodian\/collection\.html.*[?&]playlistId=(\d+)/i,
+        // 通用ID提取
+        /[?&]playlistId=(\d+)/i
+      ]
+
+      let match: RegExpMatchArray | null = null
+      for (const regex of bdPlaylistRegexes) {
+        match = input.match(regex)
+        if (match && match[1]) {
+          playlistId = match[1]
+          break
+        }
+      }
+
+      if (!match || !match[1]) {
+        const numericMatch = input.match(/^\d+$/)
+        if (numericMatch) {
+          playlistId = input
+        } else {
+          MessagePlugin.error('无法识别的波点音乐歌单链接或ID格式，请检查链接是否正确')
+          load1.then((res) => res.close())
+          return
+        }
+      }
+      platformName = '波点音乐'
     } else if (importPlatformType.value === 'kg') {
       // 酷狗音乐链接处理 - 传递完整链接给getUserListDetail
       const kgPlaylistRegexes = [
@@ -1011,9 +1040,9 @@ onMounted(() => {
   <div class="page">
     <input
       ref="songlistFileInputRef"
-      type="file"
       accept=".cmpl,.cpl"
       style="display: none"
+      type="file"
       @change="handleSonglistFileChange"
     />
     <div class="local-container">
@@ -1053,10 +1082,10 @@ onMounted(() => {
           <h3>我的歌单 ({{ playlists.length }})</h3>
           <div class="section-actions">
             <t-button
+              :loading="loading"
+              size="small"
               theme="primary"
               variant="text"
-              size="small"
-              :loading="loading"
               @click="loadPlaylists"
             >
               <i class="iconfont icon-shuaxin"></i>
@@ -1081,10 +1110,10 @@ onMounted(() => {
             <div class="playlist-cover" @click="viewPlaylist(playlist)">
               <img
                 v-if="playlist.coverImgUrl"
+                :alt="playlist.name"
                 :src="
                   playlist.coverImgUrl === 'default-cover' ? defaultCover : playlist.coverImgUrl
                 "
-                :alt="playlist.name"
                 class="cover-image"
               />
               <div class="cover-overlay">
@@ -1092,18 +1121,18 @@ onMounted(() => {
               </div>
             </div>
             <div class="playlist-info">
-              <div class="playlist-name" :title="playlist.name" @click="viewPlaylist(playlist)">
+              <div :title="playlist.name" class="playlist-name" @click="viewPlaylist(playlist)">
                 {{ playlist.name }}
                 <t-tag
                   v-if="playlist.id === favoritesId"
-                  theme="danger"
-                  variant="light-outline"
                   size="small"
                   style="margin-left: 6px"
+                  theme="danger"
+                  variant="light-outline"
                   >我的喜欢</t-tag
                 >
               </div>
-              <div class="playlist-description" :title="playlist.description">
+              <div :title="playlist.description" class="playlist-description">
                 {{ playlist.description || '这个人很懒并没有留下任何描述...' }}
               </div>
               <div class="playlist-meta">
@@ -1115,9 +1144,9 @@ onMounted(() => {
               <t-tooltip content="播放歌单">
                 <t-button
                   shape="circle"
+                  size="small"
                   theme="primary"
                   variant="text"
-                  size="small"
                   @click="playPlaylist(playlist)"
                 >
                   <i class="iconfont icon-bofang"></i>
@@ -1126,9 +1155,9 @@ onMounted(() => {
               <t-tooltip content="查看详情">
                 <t-button
                   shape="circle"
+                  size="small"
                   theme="default"
                   variant="text"
-                  size="small"
                   @click="viewPlaylist(playlist)"
                 >
                   <view-list-icon
@@ -1141,9 +1170,9 @@ onMounted(() => {
               <t-tooltip content="编辑歌单">
                 <t-button
                   shape="circle"
+                  size="small"
                   theme="success"
                   variant="text"
-                  size="small"
                   @click="editPlaylist(playlist)"
                 >
                   <Edit2Icon />
@@ -1153,9 +1182,9 @@ onMounted(() => {
               <t-tooltip content="删除歌单">
                 <t-button
                   shape="circle"
+                  size="small"
                   theme="danger"
                   variant="text"
-                  size="small"
                   @click="deletePlaylist(playlist)"
                 >
                   <i class="iconfont icon-shanchu"></i>
@@ -1183,11 +1212,11 @@ onMounted(() => {
     <!-- 创建歌单对话框 -->
     <t-dialog
       v-model:visible="showCreatePlaylistDialog"
-      placement="center"
-      header="创建新歌单"
-      width="500px"
-      :confirm-btn="{ content: '创建', theme: 'primary' }"
       :cancel-btn="{ content: '取消' }"
+      :confirm-btn="{ content: '创建', theme: 'primary' }"
+      header="创建新歌单"
+      placement="center"
+      width="500px"
       @confirm="createPlaylist"
     >
       <div class="create-form">
@@ -1195,17 +1224,17 @@ onMounted(() => {
           <t-form-item label="歌单名称" name="name" required>
             <t-input
               v-model="newPlaylistForm.name"
-              placeholder="请输入歌单名称"
               clearable
+              placeholder="请输入歌单名称"
               @keyup.enter="createPlaylist"
             />
           </t-form-item>
           <t-form-item label="歌单描述" name="description">
             <t-textarea
               v-model="newPlaylistForm.description"
-              placeholder="请输入歌单描述（可选）"
-              :maxlength="200"
               :autosize="{ minRows: 3, maxRows: 5 }"
+              :maxlength="200"
+              placeholder="请输入歌单描述（可选）"
             />
           </t-form-item>
         </t-form>
@@ -1215,10 +1244,10 @@ onMounted(() => {
     <!-- 导入选择对话框 -->
     <t-dialog
       v-model:visible="showImportDialog"
-      placement="center"
-      header="选择导入方式"
-      width="400px"
       :footer="false"
+      header="选择导入方式"
+      placement="center"
+      width="400px"
     >
       <div class="import-options">
         <div class="import-option" @click="importFromPlaylist">
@@ -1263,14 +1292,14 @@ onMounted(() => {
     <!-- 网络歌单导入对话框 -->
     <t-dialog
       v-model:visible="showNetworkImportDialog"
-      placement="center"
-      header="导入网络歌单"
-      :confirm-btn="{ content: '开始导入', theme: 'primary' }"
       :cancel-btn="{ content: '取消', variant: 'outline' }"
-      width="600px"
+      :confirm-btn="{ content: '开始导入', theme: 'primary' }"
       :style="{ maxHeight: '80vh' }"
-      @confirm="confirmNetworkImport"
+      header="导入网络歌单"
+      placement="center"
+      width="600px"
       @cancel="cancelNetworkImport"
+      @confirm="confirmNetworkImport"
     >
       <div class="network-import-content">
         <!-- 平台选择 -->
@@ -1280,6 +1309,7 @@ onMounted(() => {
             <t-radio-button value="wy"> 网易云音乐 </t-radio-button>
             <t-radio-button value="tx"> QQ音乐 </t-radio-button>
             <t-radio-button value="kw"> 酷我音乐 </t-radio-button>
+            <t-radio-button value="bd"> 波点音乐 </t-radio-button>
             <t-radio-button value="kg"> 酷狗音乐 </t-radio-button>
             <t-radio-button value="mg"> 咪咕音乐 </t-radio-button>
           </t-radio-group>
@@ -1287,7 +1317,7 @@ onMounted(() => {
 
         <!-- 内容区域 - 添加过渡动画 -->
         <div class="import-content-wrapper">
-          <transition name="fade-slide" mode="out-in">
+          <transition mode="out-in" name="fade-slide">
             <div :key="importPlatformType" class="import-content">
               <div style="margin-bottom: 1em">
                 请输入{{
@@ -1297,11 +1327,13 @@ onMounted(() => {
                       ? 'QQ音乐'
                       : importPlatformType === 'kw'
                         ? '酷我音乐'
-                        : importPlatformType === 'kg'
-                          ? '酷狗音乐'
-                          : importPlatformType === 'mg'
-                            ? '咪咕音乐'
-                            : '音乐平台'
+                        : importPlatformType === 'bd'
+                          ? '波点音乐'
+                          : importPlatformType === 'kg'
+                            ? '酷狗音乐'
+                            : importPlatformType === 'mg'
+                              ? '咪咕音乐'
+                              : '音乐平台'
                 }}歌单链接或歌单ID，系统将自动识别格式并导入歌单中的所有歌曲到本地歌单。
               </div>
               <t-input
@@ -1313,15 +1345,17 @@ onMounted(() => {
                       ? '支持链接或ID：https://y.qq.com/n/ryqq/playlist/123456789 或 123456789'
                       : importPlatformType === 'kw'
                         ? '支持链接或ID：http://www.kuwo.cn/playlist_detail/123456789 或 123456789'
-                        : importPlatformType === 'kg'
-                          ? '手机链接或酷狗码：https://www.kugou.com/yy/special/single/123456789 或 123456789'
-                          : importPlatformType === 'mg'
-                            ? '支持链接或ID：https://music.migu.cn/v3/music/playlist/123456789 或 123456789'
-                            : '请输入歌单链接或ID'
+                        : importPlatformType === 'bd'
+                          ? '支持链接或ID：https://h5app.kuwo.cn/m/bodian/collection.html?playlistId=123456789 或 123456789'
+                          : importPlatformType === 'kg'
+                            ? '手机链接或酷狗码：https://www.kugou.com/yy/special/single/123456789 或 123456789'
+                            : importPlatformType === 'mg'
+                              ? '支持链接或ID：https://music.migu.cn/v3/music/playlist/123456789 或 123456789'
+                              : '请输入歌单链接或ID'
                 "
-                clearable
                 autofocus
                 class="url-input"
+                clearable
                 @enter="confirmNetworkImport"
               />
 
@@ -1334,11 +1368,13 @@ onMounted(() => {
                         ? 'QQ音乐'
                         : importPlatformType === 'kw'
                           ? '酷我音乐'
-                          : importPlatformType === 'kg'
-                            ? '酷狗音乐'
-                            : importPlatformType === 'mg'
-                              ? '咪咕音乐'
-                              : '音乐平台'
+                          : importPlatformType === 'bd'
+                            ? '波点音乐'
+                            : importPlatformType === 'kg'
+                              ? '酷狗音乐'
+                              : importPlatformType === 'mg'
+                                ? '咪咕音乐'
+                                : '音乐平台'
                   }}支持的输入格式：
                 </p>
                 <ul v-if="importPlatformType === 'wy'" class="tip-list">
@@ -1361,6 +1397,13 @@ onMounted(() => {
                   <li>参数链接：http://www.kuwo.cn/playlist?pid=123456789</li>
                   <li>纯数字ID：123456789</li>
                   <li>其他包含ID的酷我音乐链接格式</li>
+                </ul>
+                <ul v-else-if="importPlatformType === 'bd'" class="tip-list">
+                  <li>
+                    手机链接：https://h5app.kuwo.cn/m/bodian/collection.html?playlistId=123456789
+                  </li>
+                  <li>纯数字ID：123456789</li>
+                  <li>其他包含ID的波点音乐链接格式</li>
                 </ul>
                 <ul v-else-if="importPlatformType === 'kg'" class="tip-list">
                   <li>酷狗码（推荐）：123456789</li>
@@ -1387,23 +1430,23 @@ onMounted(() => {
     <!-- 编辑歌单对话框 -->
     <t-dialog
       v-model:visible="showEditPlaylistDialog"
-      placement="center"
-      header="编辑歌单信息"
-      :confirm-btn="{ content: '保存', theme: 'primary' }"
       :cancel-btn="{ content: '取消', variant: 'outline' }"
+      :confirm-btn="{ content: '保存', theme: 'primary' }"
+      header="编辑歌单信息"
+      placement="center"
       width="500px"
-      @confirm="savePlaylistEdit"
       @cancel="cancelPlaylistEdit"
+      @confirm="savePlaylistEdit"
     >
       <div class="edit-playlist-content">
         <div class="form-item">
           <label class="form-label">歌单名称</label>
           <t-input
             v-model="editPlaylistForm.name"
-            placeholder="请输入歌单名称"
-            clearable
             autofocus
+            clearable
             maxlength="50"
+            placeholder="请输入歌单名称"
             show-word-limit
           />
         </div>
@@ -1412,9 +1455,9 @@ onMounted(() => {
           <label class="form-label">歌单描述</label>
           <t-textarea
             v-model="editPlaylistForm.description"
-            placeholder="请输入歌单描述（可选）"
             :autosize="{ minRows: 3, maxRows: 6 }"
             maxlength="200"
+            placeholder="请输入歌单描述（可选）"
             show-word-limit
           />
         </div>
@@ -1424,10 +1467,10 @@ onMounted(() => {
     <!-- 歌单右键菜单 -->
     <ContextMenu
       v-model:visible="contextMenuVisible"
-      :position="contextMenuPosition"
       :items="contextMenuItems"
-      @item-click="handleContextMenuItemClick"
+      :position="contextMenuPosition"
       @close="closeContextMenu"
+      @item-click="handleContextMenuItemClick"
     />
   </div>
 </template>
@@ -1534,27 +1577,31 @@ onMounted(() => {
 
     :deep(.t-radio-group) {
       width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+    }
 
-      .t-radio-button {
-        flex: 1;
+    :deep(.t-radio-button) {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+
+      .t-radio-button__label {
         display: flex;
+        align-items: center;
         justify-content: center;
-        .t-radio-button__label {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          font-weight: 500;
-          text-align: center;
-          .iconfont {
-            font-size: 16px;
-            transition: all 0.2s ease;
-          }
-        }
+        gap: 0.5rem;
+        font-weight: 500;
+        text-align: center;
 
-        &.t-is-checked .t-radio-button__label .iconfont {
-          transform: scale(1.1);
+        .iconfont {
+          font-size: 16px;
+          transition: all 0.2s ease;
         }
+      }
+
+      &.t-is-checked .t-radio-button__label .iconfont {
+        transform: scale(1.1);
       }
     }
   }
