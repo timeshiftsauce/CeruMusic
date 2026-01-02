@@ -29,7 +29,8 @@
     "buildico": "electron-icon-builder --input=./resources/logo.png --output=resources --flatten",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "test": "jest"
   },
   "dependencies": {
     "@applemusic-like-lyrics/lyric": "^0.2.4",
@@ -72,6 +73,7 @@
     "pinia-plugin-persistedstate": "4.5.0",
     "tdesign-icons-vue-next": "^0.4.1",
     "tdesign-vue-next": "^1.15.2",
+    "uuid": "^13.0.0",
     "vue-router": "^4.5.1",
     "zlib": "^1.0.5"
   },
@@ -83,9 +85,11 @@
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@tdesign-vue-next/auto-import-resolver": "^0.1.1",
     "@types/crypto-js": "^4.2.2",
+    "@types/jest": "^30.0.0",
     "@types/markdown-it-footnote": "^3.0.4",
     "@types/node": "^22.16.5",
     "@types/node-fetch": "^2.6.13",
+    "@types/uuid": "^11.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vueuse/core": "^13.9.0",
     "electron": "^38.1.0",
@@ -94,11 +98,13 @@
     "electron-vite": "^5.0.0",
     "eslint": "^9.31.0",
     "eslint-plugin-vue": "^10.3.0",
+    "jest": "^30.2.0",
     "naive-ui": "^2.43.1",
     "prettier": "^3.6.2",
     "sass-embedded": "^1.90.0",
     "scss": "^0.2.4",
     "terser": "^5.44.1",
+    "ts-jest": "^29.4.6",
     "typescript": "^5.8.3",
     "unplugin-auto-import": "^20.0.0",
     "unplugin-vue-components": "^29.0.0",

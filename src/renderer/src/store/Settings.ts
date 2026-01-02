@@ -5,6 +5,8 @@ export interface TagWriteOptions {
   basicInfo: boolean // 基础信息（标题、艺术家、专辑）
   cover: boolean // 封面
   lyrics: boolean // 普通歌词
+  downloadLyrics: boolean // 单独下载歌词文件
+  lyricFormat: 'lrc' | 'word-by-word' // 歌词格式
 }
 
 export interface SettingsState {
@@ -29,7 +31,9 @@ export const useSettingsStore = defineStore(
       tagWriteOptions: {
         basicInfo: true,
         cover: true,
-        lyrics: true
+        lyrics: true,
+        downloadLyrics: false,
+        lyricFormat: 'word-by-word'
       },
       autoImportPlaylistOnOpen: false,
       suppressImportPrompt: false
@@ -53,7 +57,13 @@ export const useSettingsStore = defineStore(
                 (defaultSettings.tagWriteOptions as TagWriteOptions).cover,
               lyrics:
                 parsed.tagWriteOptions?.lyrics ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).lyrics
+                (defaultSettings.tagWriteOptions as TagWriteOptions).lyrics,
+              downloadLyrics:
+                parsed.tagWriteOptions?.downloadLyrics ??
+                (defaultSettings.tagWriteOptions as TagWriteOptions).downloadLyrics,
+              lyricFormat:
+                parsed.tagWriteOptions?.lyricFormat ??
+                (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat
             }
           }
         }
@@ -72,7 +82,13 @@ export const useSettingsStore = defineStore(
         settings.value.autoCacheMusic = true
       }
       if (!settings.value.tagWriteOptions) {
-        settings.value.tagWriteOptions = { basicInfo: true, cover: true, lyrics: true }
+        settings.value.tagWriteOptions = {
+          basicInfo: true,
+          cover: true,
+          lyrics: true,
+          downloadLyrics: false,
+          lyricFormat: 'word-by-word'
+        }
       }
       localStorage.setItem('appSettings', JSON.stringify(settings.value))
     }

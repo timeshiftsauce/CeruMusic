@@ -19,7 +19,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          lyric: resolve(__dirname, 'src/web/lyric.html')
+          lyric: resolve(__dirname, 'src/web/lyric.html'),
+          downloadWorker: resolve(__dirname, 'src/main/workers/downloadWorker.ts')
         }
       },
       minify: 'terser'

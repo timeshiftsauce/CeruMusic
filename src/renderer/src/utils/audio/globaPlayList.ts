@@ -186,7 +186,7 @@ const playSong = async (song: SongList) => {
       console.warn('Original source failed, trying auto switch...', error)
       try {
         throw new Error('Force switch')
-      } catch (switchError) { }
+      } catch (switchError) {}
     }
 
     // 再次检查请求ID
@@ -216,7 +216,7 @@ const playSong = async (song: SongList) => {
               const a = Audio.value.audio
               try {
                 a.pause()
-              } catch { }
+              } catch {}
               a.removeAttribute('src')
               a.load()
 
@@ -257,7 +257,7 @@ const playSong = async (song: SongList) => {
         const a = Audio.value.audio
         try {
           a.pause()
-        } catch { }
+        } catch {}
         a.removeAttribute('src')
         a.load()
       }
@@ -581,7 +581,7 @@ const initPlayback = async () => {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
-        } catch { }
+        } catch {}
         if (userInfo.value.currentTime) {
           pendingRestorePosition = userInfo.value.currentTime
           pendingRestoreSongId = lastPlayedSong.songmid

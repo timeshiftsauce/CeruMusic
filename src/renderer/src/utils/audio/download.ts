@@ -3,12 +3,10 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { toRaw, h } from 'vue'
 import {
-  QUALITY_ORDER,
   getQualityDisplayName,
   buildQualityFormats,
-  getHighestQualityType,
   compareQuality,
-  type KnownQuality
+  calculateBestQuality
 } from '@common/utils/quality'
 
 interface MusicItem {
@@ -27,17 +25,28 @@ interface MusicItem {
 }
 
 // 创建音质选择弹窗
-function createQualityDialog(songInfo: MusicItem, userQuality: string): Promise<string | null> {
+export function createQualityDialog(
+  songInfoOrTypes: MusicItem | Array<{ type: string; size?: string }>,
+  userQuality: string,
+  title: string = '选择下载音质(可滚动)'
+): Promise<string | null> {
   return new Promise((resolve) => {
+    let types: Array<{ type: string; size?: string }> = []
+    if (Array.isArray(songInfoOrTypes)) {
+      types = songInfoOrTypes
+    } else {
+      types = songInfoOrTypes.types || []
+    }
+
     // 获取歌曲支持的音质列表
-    const availableQualities = buildQualityFormats(songInfo.types || [])
+    const availableQualities = buildQualityFormats(types)
     const qualityOptions = [...availableQualities]
 
     // 按音质优先级排序（高→低）
     qualityOptions.sort((a, b) => compareQuality(a.type, b.type))
 
     const dialog = DialogPlugin.confirm({
-      header: '选择下载音质(可滚动)',
+      header: title,
       width: 400,
       placement: 'center',
       body: () =>
@@ -159,10 +168,37 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     const settingsStore = useSettingsStore()
 
     // 获取歌词
-    const { crlyric, lyric } = await window.api.music.requestSdk('getLyric', {
-      source: toRaw(songInfo.source),
-      songInfo: toRaw(songInfo) as any
-    })
+    let lrcData: any = {}
+    let retryCount = 0
+    const maxRetries = 3
+
+    while (retryCount < maxRetries) {
+      try {
+        lrcData = await window.api.music.requestSdk('getLyric', {
+          source: toRaw(songInfo.source),
+          songInfo: toRaw(songInfo) as any
+        })
+
+        // Check if valid result (not error and has content)
+        if (lrcData && !lrcData.error && (lrcData.lyric || lrcData.crlyric)) {
+          break
+        }
+        // If we got an error object, treat it as failure and retry
+        if (lrcData && lrcData.error) {
+          console.warn(`获取歌词返回错误 (尝试 ${retryCount + 1}/${maxRetries}):`, lrcData.error)
+        }
+      } catch (e) {
+        console.warn(`获取歌词抛出异常 (尝试 ${retryCount + 1}/${maxRetries}):`, e)
+      }
+
+      retryCount++
+      if (retryCount < maxRetries) {
+        // Linear backoff: 500ms, 1000ms, 1500ms...
+        await new Promise((r) => setTimeout(r, 500 * retryCount))
+      }
+    }
+
+    const { crlyric, lyric } = lrcData || {}
     console.log(songInfo)
     songInfo.lrc = crlyric && songInfo.source !== 'tx' ? crlyric : lyric
 
@@ -177,13 +213,9 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     let quality = selectedQuality as string
 
     // 检查选择的音质是否超出歌曲支持的最高音质
-    const songMaxQuality = getHighestQualityType(songInfo.types)
-    if (
-      songMaxQuality &&
-      QUALITY_ORDER.indexOf(quality as KnownQuality) <
-        QUALITY_ORDER.indexOf(songMaxQuality as KnownQuality)
-    ) {
-      quality = songMaxQuality
+    const calculatedQuality = calculateBestQuality(songInfo.types, quality)
+    if (calculatedQuality && calculatedQuality !== quality) {
+      quality = calculatedQuality
       MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)
     }
 
@@ -201,20 +233,37 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
 
     ;(await tip).close()
 
-    if (!Object.hasOwn(result, 'path')) {
-      MessagePlugin.info(result.message)
+    // 兼容 DownloadManager 返回的 Task 对象 (包含 filePath) 和旧版返回对象 (包含 path)
+    const savePath = result.filePath || result.path
+
+    if (!savePath) {
+      MessagePlugin.info(result.message || '未知状态')
     } else {
       await NotifyPlugin.success({
-        title: '下载成功',
-        content: `${result.message} 保存位置: ${result.path}`
+        title: '已添加到下载队列',
+        content: `歌曲已添加，可在下载管理中查看进度`
       })
     }
   } catch (error: any) {
     console.error('下载失败:', error)
-    await NotifyPlugin.error({
-      title: '下载失败',
-      content: `${error.message.includes('歌曲正在') ? error.message : '未知错误'}`
-    })
+    // Handle specific error messages from backend
+    const msg = error.message || ''
+    if (msg.includes('歌曲正在下载中')) {
+      await NotifyPlugin.warning({
+        title: '提示',
+        content: '该歌曲正在下载中，请勿重复添加'
+      })
+    } else if (msg.includes('歌曲已下载完成')) {
+      await NotifyPlugin.info({
+        title: '提示',
+        content: '该歌曲已下载完成'
+      })
+    } else {
+      await NotifyPlugin.error({
+        title: '下载失败',
+        content: msg || '未知错误'
+      })
+    }
   }
 }
 
