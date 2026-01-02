@@ -21,6 +21,10 @@ function convertNewFormat(baseTimeMs: number, content: string): string | null {
     const charTimeMs = parseInt(charStartMs, 10)
     const charTimestamp = formatTimestamp(charTimeMs)
     const text = char ?? ''
+    if (match.index > lastConsumedIndex) {
+      const beforeText = content.substring(lastConsumedIndex, match.index)
+      convertedContent += beforeText
+    }
     lastConsumedIndex = match.index + match[0].length
 
     if (isFirstChar) {
@@ -48,7 +52,7 @@ function convertNewFormat(baseTimeMs: number, content: string): string | null {
 function convertOldFormat(timestamp: string, content: string): string | null {
   let convertedContent = `<${formatTimestamp(0)}>`
 
-  const charPattern = /\s*([^()]+?)\s*\((\d+),(\d+)\)/g
+  const charPattern = /([^()]*?)\((\d+),(\d+)\)/g
   let match
   let lastIndex = 0
   let isFirstChar = true
@@ -62,9 +66,7 @@ function convertOldFormat(timestamp: string, content: string): string | null {
 
     if (match.index > lastIndex) {
       const beforeText = content.substring(lastIndex, match.index)
-      if (beforeText.trim()) {
-        convertedContent += beforeText
-      }
+      convertedContent += beforeText
     }
 
     if (isFirstChar) {
@@ -84,9 +86,7 @@ function convertOldFormat(timestamp: string, content: string): string | null {
 
   if (lastIndex < content.length) {
     const remainingText = content.substring(lastIndex)
-    if (remainingText.trim()) {
-      convertedContent += remainingText
-    }
+    convertedContent += remainingText
   }
 
   return `[${timestamp}]${convertedContent}`
