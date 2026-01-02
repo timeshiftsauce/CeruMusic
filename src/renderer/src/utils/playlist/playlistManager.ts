@@ -14,8 +14,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-// 将事件总线挂载到全局
-;(window as any).musicEmitter = emitter
+  // 将事件总线挂载到全局
+  ; (window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -57,8 +57,9 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     }
 
     console.log(`使用音质: ${quality} - ${qualityMap[quality]}`)
+    if (!LocalUserDetail.userSource.pluginId) throw new Error('插件都不配就想播放，想的倒挺美呢')
     const urlData = await window.api.music.requestSdk('getMusicUrl', {
-      pluginId: LocalUserDetail.userSource.pluginId as unknown as string,
+      pluginId: LocalUserDetail.userSource.pluginId,
       source: song.source,
       songInfo: song as any,
       quality,
@@ -77,6 +78,14 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
   }
 }
 
+const PluginErrorMsgs = [
+  '插件都不配就想播放，想的倒挺美呢',
+  '插件插件老弟我需要插件',
+  '我肚子饿啦，请给我安装一个插件吧',
+  '插件呢？插件呢？插件呢？',
+  '哥哥~ 你需要安装一个插件来播放歌曲哦~'
+]
+
 /**
  * 添加歌曲到播放列表第一项并播放
  * @param song 要添加的歌曲
@@ -88,6 +97,10 @@ export async function addToPlaylistAndPlay(
   localUserStore: any,
   playSongCallback: (song: SongList) => Promise<void>
 ) {
+  if (!localUserStore.userSource.pluginId) {
+    MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
+    return
+  }
   try {
     // 获取当前正在播放的歌曲索引
     const currentId = localUserStore.userInfo?.lastPlaySongId

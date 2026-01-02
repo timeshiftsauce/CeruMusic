@@ -389,6 +389,14 @@
   --plugins-mac-close: #ff5f57;
   --plugins-mac-minimize: #ffbd2e;
   --plugins-mac-maximize: #28ca42;
+
+  /* Player 组件专用变量 - 亮色主题 */
+  --player-bg-default: #ffffff46;
+  --player-bg-idle: #ffffff;
+  --player-text-idle: rgba(0, 0, 0, .8);
+  --player-text-hover-idle: var(--td-brand-color-5);
+  --player-btn-bg-idle: var(--td-brand-color-2);
+  --player-btn-bg-hover-idle: var(--td-brand-color-3);
 }
 
 :root[data-theme='dark'] {
@@ -757,6 +765,14 @@
   --plugins-mac-close: #ff5f57;
   --plugins-mac-minimize: #ffbd2e;
   --plugins-mac-maximize: #28ca42;
+
+  /* Player 组件专用变量 - 暗色主题 */
+  --player-bg-default: rgba(0, 0, 0, 0.2);
+  --player-bg-idle: #2d2d2d;
+  --player-text-idle: rgba(255, 255, 255, 0.9);
+  --player-text-hover-idle: var(--td-brand-color-7);
+  --player-btn-bg-idle: rgba(255, 255, 255, 0.1);
+  --player-btn-bg-hover-idle: rgba(255, 255, 255, 0.2);
 }
 
 :root {

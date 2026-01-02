@@ -456,10 +456,10 @@ const handleProgressDragStart = (event: MouseEvent) => {
 // 歌曲信息由全局播放管理器提供
 const maincolor = ref('var(--td-brand-color-5)')
 const startmaincolor = ref('rgba(0, 0, 0, 1)')
-const contrastTextColor = ref('rgba(0, 0, 0, .8)')
-const hoverColor = ref('var(--td-brand-color-5)')
-const playbg = ref('var(--td-brand-color-2)')
-const playbghover = ref('var(--td-brand-color-3)')
+const contrastTextColor = ref('var(--player-text-idle)')
+const hoverColor = ref('var(--player-text-hover-idle)')
+const playbg = ref('var(--player-btn-bg-idle)')
+const playbghover = ref('var(--player-btn-bg-hover-idle)')
 async function setColor() {
   console.log('主题色刷新')
   const color = await extractDominantColor(songInfo.value.img)
@@ -471,19 +471,30 @@ async function setColor() {
   playbg.value = 'rgba(255,255,255,0.2)'
   playbghover.value = 'rgba(255,255,255,0.33)'
 }
-const bg = ref('#ffffff46')
+
+function resetColor() {
+  maincolor.value = 'var(--td-brand-color-5)'
+  startmaincolor.value = 'rgba(0, 0, 0, 1)'
+  contrastTextColor.value = 'var(--player-text-idle)'
+  hoverColor.value = 'var(--player-text-hover-idle)'
+  playbg.value = 'var(--player-btn-bg-idle)'
+  playbghover.value = 'var(--player-btn-bg-hover-idle)'
+}
+
+const bg = ref('var(--player-bg-default)')
 
 watch(
   songInfo,
   async (newVal) => {
-    bg.value = bg.value === '#ffffff' ? '#ffffff46' : toRaw(bg.value)
+    bg.value = bg.value === 'var(--player-bg-idle)' ? 'var(--player-bg-default)' : toRaw(bg.value)
     if (newVal.img) {
       await setColor()
     } else if (songInfo.value.songmid) {
       songInfo.value.img = defaultCoverImg
       await setColor()
     } else {
-      bg.value = '#ffffff'
+      bg.value = 'var(--player-bg-idle)'
+      resetColor()
     }
   },
   { deep: true, immediate: true }
@@ -494,7 +505,7 @@ watch(showFullPlay, (val) => {
     console.log('背景hei')
     bg.value = '#00000020'
   } else {
-    bg.value = '#ffffff46'
+    bg.value = 'var(--player-bg-default)'
   }
 })
 // onMounted(setColor)

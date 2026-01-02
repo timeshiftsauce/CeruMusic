@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { useElementVisibility } from '@vueuse/core'
-import defaultImg from '../../public/song.jpg'
+import songCover from '@assets/images/song.jpg'
 const props = withDefaults(
   defineProps<{
     src: string | undefined
@@ -42,7 +42,7 @@ const props = withDefaults(
     nativeLazy?: boolean
   }>(),
   {
-    defaultSrc: defaultImg,
+    defaultSrc: songCover,
     observeVisibility: true,
     releaseOnHide: false,
     decodeAsync: true,
@@ -176,8 +176,8 @@ onUnmounted(() => {
   }
   .loading {
     position: absolute;
-    // top: 0;
-    // left: 0;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     z-index: 0;
@@ -194,5 +194,16 @@ onUnmounted(() => {
       opacity: 1;
     }
   }
+}
+
+// 修复闪烁问题的过渡动画
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease; // 比图片淡入稍微慢一点，防止透出背景
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
