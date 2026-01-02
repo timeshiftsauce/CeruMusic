@@ -654,8 +654,10 @@ const handleNetworkPlaylistImport = async (input: string) => {
       const kwPlaylistRegexes = [
         // 标准歌单链接
         /(?:kuwo\.cn\/playlist_detail\/|kuwo\.cn\/.*[?&]pid=)(\d+)/i,
-        // 手机版链接
+        // 手机版歌单链接（旧格式）
         /(?:m\.kuwo\.cn\/h5app\/playlist\/|kuwo\.cn\/.*[?&]id=)(\d+)/i,
+        // 手机版歌单链接 (新格式)
+        /m\.kuwo\.cn\/newh5app\/playlist_detail\/(\d+)/i,
         // 通用ID提取
         /[?&](?:pid|id)=(\d+)/i
       ]
