@@ -17,7 +17,7 @@ export default defineConfig({
       }
     ],
     ['meta', { name: 'baidu-site-verification', content: 'codeva-ocKFImCsOO' }],
-    ['script', { defer: 'defer', src: 'https://umami.shiqianjiang.cn/script.js', 'data-website-id': '62b3c383-7648-4f65-b59e-2ef73c3cc29d' }]//<script defer src="https://umami.shiqianjiang.cn/script.js" data-website-id="62b3c383-7648-4f65-b59e-2ef73c3cc29d"></script>
+    ['script', { defer: 'defer', src: 'https://umami.shiqianjiang.cn/script.js', 'data-website-id': '173d8bd2-740c-46ee-b581-9c0c003ae5ea' }]//<script defer src="http://211.101.247.38:3500/script.js" data-website-id="173d8bd2-740c-46ee-b581-9c0c003ae5ea"></script>
   ],
   description:
     'Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，一个跨平台的音乐播放器应用，支持基于合规插件获取公开音乐信息与播放功能。',
