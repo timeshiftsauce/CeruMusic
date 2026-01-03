@@ -27,3 +27,7 @@
 > **澜音在此感谢一路有您的相伴**
 >
 > 据不完全统计数据 如有疏漏可联系sqj@shiqianjiang.cn
+
+若您认可本项目的技术价值，欢迎通过以下方式支持开发者（仅用于项目技术维护与迭代）：
+<img src="../assets/image-20250827175356006.png" alt="赞助方式1" style="zoom:33%;" /><img src="../assets/image-20250827175547444.png" alt="赞助方式2" style="zoom: 33%;" />
+
