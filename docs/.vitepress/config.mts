@@ -58,6 +58,12 @@ export default defineConfig({
       {
         text: '鸣谢名单',
         link: '/guide/sponsorship'
+      }, {
+        text: '参考资源',
+        items: [
+          { text: '如何高效提问', link: '/guide/source/qa' },
+          { text: '官方Q群', link: '/guide/source/qq_group' }
+        ]
       }
     ],
 
@@ -90,6 +96,18 @@ export default defineConfig({
   },
   sitemap: {
     hostname: 'https://ceru.docs.shiqianjiang.cn'
+  },
+  vite: {
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: 'modern'
+        },
+        sass: {
+          api: 'modern'
+        }
+      }
+    }
   },
   lastUpdated: true
 })
