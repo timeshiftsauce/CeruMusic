@@ -275,10 +275,10 @@ html .vp-doc div[class*='language-'] pre {
     margin-bottom: 1rem;
   }
 }
-// .VPDoc,
-// .VPDoc .container > .content {
-//   padding: 0 !important;
-// }
+.VPDoc,
+.VPDoc .container > .content {
+  padding: 0px !important;
+}
 .vp-doc li {
   position: relative;
 }
