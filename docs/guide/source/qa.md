@@ -213,6 +213,18 @@ Simon Tatham 的《[如何有效地报告Bug](http://www.chiark.greenend.org.uk/
 
 遇到报错、问题时，截图最直观。截图要清楚、完整，尤其是报错的最后一行。不要用手机拍屏，直接用电脑截图。
 
+<details class="details custom-block" close>
+<summary>截图教学</summary>
+
+* Windows系统官方截图按键—— Shift+Win+S
+* QQ截图快捷键 Ctrl+Alt+A 录屏快捷键 Ctrl+Alt+S
+* 在你截图后可以直接把截下来的图黏贴至聊天栏发出
+* 截图确保清晰完整，哪怕拍多了都不要拍少了
+* 报错的最下面一行是最重要的一行，请不要舍本逐末
+* 请不要使用手机拍屏，爱护别人的眼睛
+* 如果你在远程桌面上操作，你可以将远程桌面小窗以后使用你本机的截图方式
+
+</details>
 
 ## 如果得不到回答
 
@@ -399,3 +411,4 @@ RTFM 有一个年轻的亲戚：STFW（Search The Fucking Web）。如果你收�
   * 乐于主动参与解决问题
 
 如果你做不到这些事情，建议付费去找商业服务解决问题，而不是在这里等待“白嫖”。
+
