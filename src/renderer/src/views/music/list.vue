@@ -153,14 +153,18 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
     )) as any
     console.log(result)
     const limit = Number(result?.limit ?? pageSize)
+    const apiTotal = Number(result?.total ?? 0)
 
     if (result && Array.isArray(result.list)) {
       const newList = result.list
+      const existed = new Set(songs.value.map((s) => s.songmid))
+      const filtered = newList.filter((item: any) => !existed.has(item.songmid))
+      const appendedCount = filtered.length
 
       if (reset) {
-        songs.value = newList
+        songs.value = filtered
       } else {
-        songs.value = [...songs.value, ...newList]
+        songs.value = [...songs.value, ...filtered]
       }
 
       // 获取新增歌曲封面
@@ -173,18 +177,18 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
           title: result.info.name || playlistInfo.value.title,
           author: result.info.author || playlistInfo.value.author,
           cover: result.info.img || playlistInfo.value.cover,
-          total: result.info.total || playlistInfo.value.total,
+          total: Number(apiTotal || result.info.total || playlistInfo.value.total || 0),
           desc: result.info.desc || ''
         }
       }
 
       // 更新分页状态
       currentPage.value += 1
-      const total = result.info?.total ?? playlistInfo.value.total ?? 0
-      if (total) {
+      const total = Number(apiTotal || result.info?.total || playlistInfo.value.total || 0)
+      if (total > 0) {
         hasMore.value = songs.value.length < total
       } else {
-        hasMore.value = newList.length >= limit
+        hasMore.value = appendedCount > 0 && newList.length >= limit
       }
     } else {
       hasMore.value = false
