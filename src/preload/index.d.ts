@@ -54,7 +54,7 @@ interface CustomAPI {
   // 歌单管理 API
   songList: {
     // === 歌单管理 ===
-    create: (name: string, description?: string, source?: string) => Promise<any>
+    create: (name: string, description?: string, source?: string, meta?: Record<string, any>) => Promise<any>
     getAll: () => Promise<any>
     getById: (hashId: string) => Promise<any>
     delete: (hashId: string) => Promise<any>

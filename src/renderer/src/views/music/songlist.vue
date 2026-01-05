@@ -419,8 +419,9 @@ const viewPlaylist = (playlist: SongList) => {
       author: 'local',
       cover: playlist.coverImgUrl || '',
       total: '0', // 这里可以后续优化为实际歌曲数量
-      source: 'local',
-      type: 'local' // 标识这是本地歌单
+      source: playlist.source,
+      type: 'local', // 标识这是本地歌单
+      meta: JSON.stringify(playlist.meta) // 歌单元数据
     }
   })
 }
@@ -865,8 +866,13 @@ const handleNetworkPlaylistImport = async (input: string) => {
 
       const createResult = await songListAPI.create(
         `${playlistInfo.name} (导入)`,
-        `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
-        importPlatformType.value
+        playlistInfo.desc
+          ? playlistInfo.desc
+          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
+        importPlatformType.value,
+        {
+          playlistId
+        }
       )
 
       const newPlaylistId = createResult.data!.id
@@ -893,8 +899,13 @@ const handleNetworkPlaylistImport = async (input: string) => {
     } else {
       const createResult = await songListAPI.create(
         `${playlistInfo.name} (导入)`,
-        `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
-        importPlatformType.value
+        playlistInfo.desc
+          ? playlistInfo.desc
+          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
+        importPlatformType.value,
+        {
+          playlistId
+        }
       )
 
       const newPlaylistId = createResult.data!.id

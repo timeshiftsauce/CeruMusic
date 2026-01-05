@@ -189,6 +189,9 @@ export default {
           name: body.title,
           img: body.pic,
           desc: body.info,
+          meta: {
+            playlistId: id
+          },
           author: body.uname,
           play_count: this.formatPlayCount(body.playnum)
         }

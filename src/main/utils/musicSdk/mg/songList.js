@@ -111,6 +111,9 @@ export default {
         name: body.data.title,
         img: body.data.imgItem.img,
         desc: body.data.summary,
+        meta: {
+          playlistId: id
+        },
         author: body.data.ownerName,
         play_count: formatPlayCount(body.data.opNumItem.playNum)
       })

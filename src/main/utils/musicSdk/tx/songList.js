@@ -235,6 +235,9 @@ export default {
         name: cdlist.dissname,
         img: cdlist.logo,
         desc: decodeName(cdlist.desc).replace(/<br>/g, '\n'),
+        meta: {
+          playlistId: id
+        },
         author: cdlist.nickname,
         play_count: formatPlayCount(cdlist.visitnum)
       }

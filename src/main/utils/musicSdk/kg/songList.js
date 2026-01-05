@@ -92,7 +92,10 @@ export default {
       info: {
         name,
         img: pic,
-        desc
+        desc,
+        meta: {
+          playlistId: id
+        }
         // author: body.result.info.userinfo.username,
         // play_count: formatPlayCount(body.result.listen_num),
       }

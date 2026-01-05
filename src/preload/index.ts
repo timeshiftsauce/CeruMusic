@@ -135,8 +135,8 @@ const api = {
   // 歌单管理 API
   songList: {
     // === 歌单管理 ===
-    create: (name: string, description?: string, source?: string) =>
-      ipcRenderer.invoke('songlist:create', name, description, source),
+    create: (name: string, description?: string, source?: string, meta?: Record<string, any>) =>
+      ipcRenderer.invoke('songlist:create', name, description, source, meta),
     getAll: () => ipcRenderer.invoke('songlist:get-all'),
     getById: (hashId: string) => ipcRenderer.invoke('songlist:get-by-id', hashId),
     delete: (hashId: string) => ipcRenderer.invoke('songlist:delete', hashId),

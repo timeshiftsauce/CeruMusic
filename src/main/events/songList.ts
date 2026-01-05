@@ -6,9 +6,15 @@ import { configManager } from '../services/ConfigManager'
 // 创建新歌单
 ipcMain.handle(
   'songlist:create',
-  async (_, name: string, description: string = '', source: SongList['source']) => {
+  async (
+    _,
+    name: string,
+    description: string = '',
+    source: SongList['source'],
+    meta: Record<string, any>
+  ) => {
     try {
-      const result = ManageSongList.createPlaylist(name, description, source)
+      const result = ManageSongList.createPlaylist(name, description, source, meta)
       return { success: true, data: result, message: '歌单创建成功' }
     } catch (error) {
       console.error('创建歌单失败:', error)
