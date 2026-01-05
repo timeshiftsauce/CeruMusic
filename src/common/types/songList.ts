@@ -9,4 +9,5 @@ export type SongList = {
   description: string // 歌单描述
   coverImgUrl: string //歌单封面 默认第一首歌的图片
   source: 'local' | 'wy' | 'tx' | 'mg' | 'kg' | 'kw' | 'bd' // 来源
+  meta: Record<string, any> // 歌单元数据
 }

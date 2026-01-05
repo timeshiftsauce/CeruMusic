@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
+import songListAPI from '@renderer/api/songList'
 
 interface MusicItem {
   singer: string
@@ -40,7 +41,8 @@ const playlistInfo = ref({
   cover: '',
   total: 0,
   source: '',
-  desc: ''
+  desc: '',
+  meta: {}
 })
 
 // 获取歌单歌曲列表
@@ -56,7 +58,8 @@ const fetchPlaylistSongs = async () => {
       cover: (route.query.cover as string) || '',
       total: Number(route.query.total) || 0,
       source: (route.query.source as string) || (LocalUserDetail.userSource.source as any),
-      desc: (route.query.desc as string) || ''
+      desc: (route.query.desc as string) || '',
+      meta: JSON.parse(<string>route.query.meta)
     }
 
     // 检查是否是本地歌单
@@ -462,6 +465,158 @@ const handleShufflePlaylist = () => {
     }
   })
 }
+
+const handleSyncPlaylist = async () => {
+  // 获取歌单详情
+  const load1 = MessagePlugin.loading('正在获取歌单信息,请不要离开页面...', 0)
+  const id = playlistInfo.value.id
+  const total = playlistInfo.value.total
+  const source = playlistInfo.value.source
+  const playlistId = (playlistInfo.value.meta as { playlistId: string }).playlistId
+
+  console.log("lemon:", total)
+  console.log("lemon1:", source)
+  console.log("lemon2:", playlistId)
+
+  const getListDetail = async (page: number) => {
+    let detailResult: any
+    try {
+      detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
+        source,
+        id: playlistId,
+        page: page
+      })) as any
+      console.log('list', detailResult)
+    } catch {
+      MessagePlugin.error(`获取歌单详情失败`)
+      load1.then((res) => res.close())
+      return
+    }
+
+    if (detailResult.error) {
+      MessagePlugin.error(`获取歌单详情失败：` + detailResult.error)
+      load1.then((res) => res.close())
+      return
+    }
+
+    return detailResult
+  }
+
+  let page: number = 1
+  const detailResult = await getListDetail(page)
+  let songs: Array<any> = detailResult.list || []
+
+  if (songs.length === 0) {
+    MessagePlugin.warning('该歌单没有歌曲')
+    load1.then((res) => res.close())
+    return
+  }
+
+  while (true) {
+    if (detailResult.total < songs.length) break
+    page++
+    const { list: songsList } = await getListDetail(page)
+    if (!(songsList && songsList.length)) {
+      break
+    }
+    songs = songs.concat(songsList)
+  }
+
+  // 处理导入结果
+  let successCount = 0
+  let failCount = 0
+
+  // 为酷狗音乐获取封面图片
+  if (source === 'kg') {
+    load1.then((res) => res.close())
+    const load2 = MessagePlugin.loading('正在获取歌曲封面...')
+    if (songs.length > 100) MessagePlugin.info('歌曲较多，封面获取可能较慢')
+
+    try {
+      await setPicForPlaylist(songs, source)
+    } catch (error) {
+      console.warn('获取封面失败，但继续导入:', error)
+    }
+
+    load2.then((res) => res.close())
+
+    await songListAPI.updateCover(id, detailResult.info.img)
+
+    const addResult = await songListAPI.addSongs(id, songs)
+
+    if (addResult.success) {
+      const added = (addResult.data && (addResult.data as any).added) ?? songs.length
+      successCount = added
+      failCount = Math.max(0, songs.length - added)
+    } else {
+      successCount = 0
+      failCount = songs.length
+      console.error('批量添加歌曲失败:', addResult.error)
+    }
+  } else {
+    await songListAPI.updateCover(id, detailResult.info.img)
+
+    const addResult = await songListAPI.addSongs(id, songs)
+    load1.then((res) => res.close())
+
+    if (addResult.success) {
+      const added = (addResult.data && (addResult.data as any).added) ?? songs.length
+      successCount = added
+      failCount = Math.max(0, songs.length - added)
+    } else {
+      successCount = 0
+      failCount = songs.length
+      console.error('批量添加歌曲失败:', addResult.error)
+    }
+  }
+
+  // 显示导入结果
+  if (successCount > 0) {
+    MessagePlugin.success(
+      `同步完成！成功新增 ${successCount} 首歌曲` +
+      (failCount > 0 ? `，${failCount} 首歌曲重复` : '')
+    )
+  } else {
+    MessagePlugin.error('所有歌曲都已存在，未添加任何歌曲')
+  }
+}
+
+// 为歌单歌曲获取封面图片
+const setPicForPlaylist = async (songs: any[], source: string) => {
+  // 筛选出需要获取封面的歌曲
+  const songsNeedPic = songs.filter((song) => !song.img)
+
+  if (songsNeedPic.length === 0) return
+
+  // 批量请求封面
+  const picPromises = songsNeedPic.map(async (song, index) => {
+    try {
+      const url = await window.api.music.requestSdk('getPic', {
+        source,
+        songInfo: toRaw(song)
+      })
+      return {
+        song,
+        url: typeof url !== 'object' ? url : ''
+      }
+    } catch (e) {
+      console.log('获取封面失败 index' + index, e)
+      return {
+        song,
+        url: ''
+      }
+    }
+  })
+
+  // 等待所有请求完成
+  const results = await Promise.all(picPromises)
+
+  // 更新歌曲封面
+  results.forEach((result) => {
+    result.song.img = result.url
+  })
+}
+
 /**
  * 滚动事件处理：更新头部紧凑状态，并在接近底部时触发分页加载
  */
@@ -573,6 +728,54 @@ onMounted(() => {
                 </svg>
               </template>
               随机播放
+            </t-button>
+
+            <t-button
+              variant="outline"
+              size="medium"
+              :disabled="!('playlistId' in playlistInfo.meta)"
+              class="sync-btn"
+              @click="handleSyncPlaylist"
+            >
+              <template #icon>
+                <svg
+                  t="1767633150266"
+                  class="icon"
+                  viewBox="0 0 1024 1024"
+                  version="1.1"
+                  xmlns="http://www.w3.org/2000/svg"
+                  p-id="8804"
+                  width="96"
+                  height="96"
+                >
+                  <path
+                    d="M512.881 893.207c-49.82 0.001-98.547-9.233-143.443-27.632-41.295-16.924-77.161-40.7-106.603-70.67-30.839-31.393-53.186-68.148-66.418-109.248a275.173 275.173 0 0 1-5.817-20.855c-4.07-17.197 6.571-34.439 23.769-38.51 17.198-4.067 34.439 6.571 38.51 23.77a210.575 210.575 0 0 0 4.458 15.981c32.548 101.093 136.931 163.071 255.752 163.075 35.771 0.001 72.84-5.615 109.663-17.471 132.818-42.764 224.054-154.224 221.867-271.051-0.331-17.67 13.726-32.262 31.396-32.593 17.666-0.329 32.263 13.725 32.593 31.396 2.711 144.819-106.771 281.823-266.24 333.168-42.779 13.774-86.541 20.638-129.487 20.64z"
+                    fill=""
+                    p-id="8805"
+                  ></path>
+                  <path
+                    d="M343.863 715.014c-4.905 0-9.88-1.131-14.546-3.518l-136.431-69.784c-15.734-8.048-21.965-27.327-13.917-43.062 8.048-15.735 27.328-21.965 43.062-13.917l136.431 69.784c15.734 8.048 21.965 27.327 13.917 43.062-5.662 11.068-16.883 17.435-28.516 17.435z"
+                    fill=""
+                    p-id="8806"
+                  ></path>
+                  <path
+                    d="M159.304 791.391c-3.27 0-6.593-0.505-9.872-1.567-16.812-5.448-26.024-23.494-20.576-40.307l47.242-145.779c5.448-16.813 23.494-26.025 40.307-20.576 16.812 5.448 26.024 23.494 20.576 40.307l-47.242 145.779c-4.386 13.532-16.937 22.143-30.435 22.143zM190.328 515.136c-17.395 0-31.655-13.936-31.982-31.402-2.71-144.82 106.771-281.824 266.241-333.168 92.403-29.751 189.333-27.268 272.929 6.993 41.295 16.923 77.161 40.7 106.603 70.669 30.84 31.393 53.187 68.149 66.419 109.249a274.835 274.835 0 0 1 5.817 20.854c4.07 17.198-6.57 34.439-23.769 38.511-17.2 4.069-34.439-6.571-38.511-23.769a210.987 210.987 0 0 0-4.458-15.981c-42.349-131.526-206.271-196.845-365.416-145.605-132.818 42.763-224.053 154.222-221.867 271.05 0.331 17.67-13.725 32.262-31.396 32.593-0.203 0.004-0.407 0.006-0.61 0.006z"
+                    fill=""
+                    p-id="8807"
+                  ></path>
+                  <path
+                    d="M859.469 441.917c-4.904 0-9.88-1.13-14.546-3.517l-136.432-69.784c-15.734-8.048-21.965-27.327-13.917-43.062 8.048-15.733 27.327-21.966 43.062-13.917l136.432 69.784c15.734 8.048 21.965 27.327 13.917 43.062-5.662 11.068-16.882 17.434-28.516 17.434z"
+                    fill=""
+                    p-id="8808"
+                  ></path>
+                  <path
+                    d="M860.421 441.539c-3.27 0-6.594-0.505-9.872-1.567-16.813-5.448-26.024-23.494-20.576-40.307l47.242-145.779c5.448-16.812 23.496-26.023 40.307-20.576 16.813 5.448 26.024 23.494 20.576 40.307l-47.242 145.779c-4.386 13.533-16.938 22.143-30.435 22.143z"
+                    fill=""
+                    p-id="8809"
+                  ></path>
+                </svg>
+              </template>
+              同步歌单
             </t-button>
           </div>
         </div>
@@ -827,7 +1030,8 @@ onMounted(() => {
       }
 
       .play-btn,
-      .shuffle-btn {
+      .shuffle-btn,
+      .sync-btn {
         min-width: 120px;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -881,7 +1085,8 @@ onMounted(() => {
         gap: 0.5rem;
 
         .play-btn,
-        .shuffle-btn {
+        .shuffle-btn,
+        .sync-btn {
           width: 100%;
           min-width: auto;
         }
@@ -895,9 +1100,11 @@ onMounted(() => {
     .playlist-details {
       .playlist-actions {
         .play-btn,
-        .shuffle-btn {
+        .shuffle-btn,
+        .sync-btn {
           .play-icon,
-          .shuffle-icon {
+          .shuffle-icon,
+          .sync-btn {
             width: 14px;
             height: 14px;
           }

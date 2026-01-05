@@ -82,7 +82,10 @@ export default {
     const info = {
       name: infoRes.data.name,
       img: infoRes.data.pic,
-      desc: infoRes.data.description
+      desc: infoRes.data.description,
+      meta: {
+        playlistId: id
+      }
     }
     const list = this.filterBDListDetail(listRes.data.list)
 

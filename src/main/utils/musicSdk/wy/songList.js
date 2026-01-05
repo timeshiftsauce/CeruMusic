@@ -107,11 +107,14 @@ export default {
       total: body.playlist.trackIds.length,
       source: 'wy',
       info: {
-        play_count: formatPlayCount(body.playlist.playCount),
         name: body.playlist.name,
         img: body.playlist.coverImgUrl,
         desc: body.playlist.description,
-        author: body.playlist.creator.nickname
+        meta: {
+          playlistId: id
+        },
+        author: body.playlist.creator.nickname,
+        play_count: formatPlayCount(body.playlist.playCount),
       }
     }
   },

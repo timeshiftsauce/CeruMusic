@@ -103,12 +103,14 @@ export default class ManageSongList extends PlayListSongs {
    * @param name 歌单名称
    * @param description 歌单描述
    * @param source 歌单来源
+   * @param meta 歌单元数据
    * @returns 包含hashId的对象 (id字段就是hashId)
    */
   static createPlaylist(
     name: string,
     description: string = '',
-    source: SongList['source']
+    source: SongList['source'],
+    meta?: Record<string, any>
   ): { id: string } {
     // 参数验证
     if (!name?.trim()) {
@@ -130,7 +132,8 @@ export default class ManageSongList extends PlayListSongs {
         updateTime: now,
         description: description?.trim() || '',
         coverImgUrl: SongListUtils.getDefaultCoverUrl(),
-        source
+        source,
+        meta: meta || {}
       }
 
       // 创建歌单文件

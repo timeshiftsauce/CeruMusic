@@ -32,10 +32,11 @@ class SongListService implements SongListAPI {
   async create(
     name: string,
     description: string = '',
-    source: SongList['source'] = 'local'
+    source: SongList['source'] = 'local',
+    meta: Record<string, any> = {}
   ): Promise<IPCResponse<{ id: string }>> {
     try {
-      return await this.songListAPI.create(name, description, source)
+      return await this.songListAPI.create(name, description, source, meta)
     } catch (error) {
       return {
         success: false,
