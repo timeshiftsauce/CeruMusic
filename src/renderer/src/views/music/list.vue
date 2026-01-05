@@ -470,13 +470,8 @@ const handleSyncPlaylist = async () => {
   // 获取歌单详情
   const load1 = MessagePlugin.loading('正在获取歌单信息,请不要离开页面...', 0)
   const id = playlistInfo.value.id
-  const total = playlistInfo.value.total
   const source = playlistInfo.value.source
   const playlistId = (playlistInfo.value.meta as { playlistId: string }).playlistId
-
-  console.log("lemon:", total)
-  console.log("lemon1:", source)
-  console.log("lemon2:", playlistId)
 
   const getListDetail = async (page: number) => {
     let detailResult: any
@@ -504,22 +499,22 @@ const handleSyncPlaylist = async () => {
 
   let page: number = 1
   const detailResult = await getListDetail(page)
-  let songs: Array<any> = detailResult.list || []
+  let new_songs: Array<any> = detailResult.list || []
 
-  if (songs.length === 0) {
+  if (new_songs.length === 0) {
     MessagePlugin.warning('该歌单没有歌曲')
     load1.then((res) => res.close())
     return
   }
 
   while (true) {
-    if (detailResult.total < songs.length) break
+    if (detailResult.total < new_songs.length) break
     page++
     const { list: songsList } = await getListDetail(page)
     if (!(songsList && songsList.length)) {
       break
     }
-    songs = songs.concat(songsList)
+    new_songs = new_songs.concat(songsList)
   }
 
   // 处理导入结果
@@ -530,10 +525,10 @@ const handleSyncPlaylist = async () => {
   if (source === 'kg') {
     load1.then((res) => res.close())
     const load2 = MessagePlugin.loading('正在获取歌曲封面...')
-    if (songs.length > 100) MessagePlugin.info('歌曲较多，封面获取可能较慢')
+    if (new_songs.length > 100) MessagePlugin.info('歌曲较多，封面获取可能较慢')
 
     try {
-      await setPicForPlaylist(songs, source)
+      await setPicForPlaylist(new_songs, source)
     } catch (error) {
       console.warn('获取封面失败，但继续导入:', error)
     }
@@ -542,33 +537,35 @@ const handleSyncPlaylist = async () => {
 
     await songListAPI.updateCover(id, detailResult.info.img)
 
-    const addResult = await songListAPI.addSongs(id, songs)
+    const addResult = await songListAPI.addSongs(id, new_songs)
 
     if (addResult.success) {
-      const added = (addResult.data && (addResult.data as any).added) ?? songs.length
+      const added = (addResult.data && (addResult.data as any).added) ?? new_songs.length
       successCount = added
-      failCount = Math.max(0, songs.length - added)
+      failCount = Math.max(0, new_songs.length - added)
     } else {
       successCount = 0
-      failCount = songs.length
+      failCount = new_songs.length
       console.error('批量添加歌曲失败:', addResult.error)
     }
   } else {
     await songListAPI.updateCover(id, detailResult.info.img)
 
-    const addResult = await songListAPI.addSongs(id, songs)
+    const addResult = await songListAPI.addSongs(id, new_songs)
     load1.then((res) => res.close())
 
     if (addResult.success) {
-      const added = (addResult.data && (addResult.data as any).added) ?? songs.length
+      const added = (addResult.data && (addResult.data as any).added) ?? new_songs.length
       successCount = added
-      failCount = Math.max(0, songs.length - added)
+      failCount = Math.max(0, new_songs.length - added)
     } else {
       successCount = 0
-      failCount = songs.length
+      failCount = new_songs.length
       console.error('批量添加歌曲失败:', addResult.error)
     }
   }
+
+  songs.value = new_songs
 
   // 显示导入结果
   if (successCount > 0) {
