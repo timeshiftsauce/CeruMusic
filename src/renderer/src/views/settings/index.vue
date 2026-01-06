@@ -885,6 +885,14 @@ const getTagOptionsStatus = () => {
                   <div
                     class="tech-item link"
                     style="cursor: pointer"
+                    @click="openLink('https://github.com/Steve-xmh/applemusic-like-lyrics')"
+                  >
+                    <span class="tech-name">AMLL</span>
+                    <span class="tech-desc"> 歌词组件 </span>
+                  </div>
+                  <div
+                    class="tech-item link"
+                    style="cursor: pointer"
                     @click="openLink('https://sadidc.com/aff/VQAXGBZT')"
                   >
                     <span class="tech-name">伤心的云</span>
@@ -944,35 +952,6 @@ const getTagOptionsStatus = () => {
                       <h4>lemon</h4>
                       <p>修复部分bug & 新增部分功能（简称：打杂）</p>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 开源许可 -->
-              <div class="setting-group">
-                <h3>开源许可</h3>
-                <div class="license-info">
-                  <p>
-                    本项目源代码遵循 <strong>Apache License 2.0</strong> 开源协议，
-                    仅授权用户对项目框架进行学习、修改与二次开发，不包含任何音乐数据相关授权。
-                  </p>
-                  <div class="license-actions">
-                    <t-button
-                      theme="default"
-                      @click="openLink('https://github.com/timeshiftsauce/CeruMusic')"
-                    >
-                      <i class="iconfont icon-github"></i>
-                      查看源码
-                    </t-button>
-                    <t-button
-                      theme="default"
-                      @click="
-                        openLink('https://github.com/timeshiftsauce/CeruMusic/blob/main/LICENSE')
-                      "
-                    >
-                      <i class="iconfont icon-license"></i>
-                      许可协议
-                    </t-button>
                   </div>
                 </div>
               </div>

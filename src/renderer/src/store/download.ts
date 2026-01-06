@@ -145,5 +145,6 @@ export const useDownloadStore = defineStore('download', {
     async clearTasks(type: 'queue' | 'completed' | 'failed' | 'all') {
       await window.api.download.clearTasks(type)
     }
-  }
+  },
+  persist: false
 })

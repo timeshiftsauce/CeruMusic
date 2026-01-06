@@ -571,7 +571,7 @@ const handleSyncPlaylist = async () => {
   if (successCount > 0) {
     MessagePlugin.success(
       `同步完成！成功新增 ${successCount} 首歌曲` +
-      (failCount > 0 ? `，${failCount} 首歌曲重复` : '')
+        (failCount > 0 ? `，${failCount} 首歌曲重复` : '')
     )
   } else {
     MessagePlugin.error('所有歌曲都已存在，未添加任何歌曲')
