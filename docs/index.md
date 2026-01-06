@@ -128,7 +128,11 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
 ## 开源许可
 
-本项目源代码遵循 **Apache License 2.0**，仅授权用户对项目框架进行学习、修改与二次开发，不包含任何音乐数据相关授权。详情请参阅 [LICENSE](https://github.com/timeshiftsauce/CeruMusic/blob/main/LICENSE) 文件，使用前请务必阅读许可条款。
+本项目源代码遵循 **GNU AGPL v3.0**，仅授权用户对项目框架进行学习、修改与二次开发，不包含任何音乐数据相关授权。详情请参阅 [LICENSE](https://github.com/timeshiftsauce/CeruMusic/blob/main/LICENSE) 文件，使用前请务必阅读许可条款。
+
+## 第三方组件与致谢
+
+- 歌词组件基于 [applemusic-like-lyrics](https://github.com/Steve-xmh/applemusic-like-lyrics) 项目，感谢上游作者及贡献者。该组件遵循其上游许可（AGPL-3.0），相关使用与分发需符合其许可要求。
 
 ## 贡献指南
 
@@ -178,7 +182,7 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
 ### 一、定义约定
 
-- “Apache License 2.0”：指 Ceru Music（澜音）桌面播放器框架及源代码，不包含任何第三方插件或音乐数据。
+- “GNU AGPL v3.0”：指 Ceru Music（澜音）桌面播放器框架及源代码，不包含任何第三方插件或音乐数据。
 - “**用户**”：指下载、安装、使用本项目的个人或组织。
 - “**合规插件**”：指符合数据来源平台用户协议、不侵犯第三方版权、不获取非公开数据的插件。
 - “**版权内容**”：指包括但不限于音乐文件、歌词、专辑封面、艺人信息等受著作权法保护的内容。

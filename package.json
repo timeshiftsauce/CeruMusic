@@ -4,7 +4,7 @@
   "description": "一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "sqj,wldss,star",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-only",
   "homepage": "https://ceru.docs.shiqianjiang.cn",
   "scripts": {
     "format": "prettier --write .",
