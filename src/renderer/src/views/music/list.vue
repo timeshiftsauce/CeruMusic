@@ -59,7 +59,7 @@ const fetchPlaylistSongs = async () => {
       total: Number(route.query.total) || 0,
       source: (route.query.source as string) || (LocalUserDetail.userSource.source as any),
       desc: (route.query.desc as string) || '',
-      meta: JSON.parse(<string>route.query.meta)
+      meta: JSON.parse(<string>route.query.meta || '{}')
     }
 
     // 检查是否是本地歌单
@@ -653,6 +653,26 @@ const handleScroll = (event?: Event) => {
 onMounted(() => {
   fetchPlaylistSongs()
 })
+
+import { NIcon } from 'naive-ui'
+import { h, type Component } from 'vue'
+import { RefreshIcon, EllipsisIcon } from 'tdesign-icons-vue-next'
+const renderIcon = (icon: Component) => {
+  return () => h(NIcon, null, { default: () => h(icon) })
+}
+const moreActions = reactive([
+  {
+    label: '同步歌单',
+    key: 'syncPlaylist',
+    disabled: computed(() => !('playlistId' in playlistInfo.value.meta)),
+    icon: renderIcon(RefreshIcon)
+  }
+])
+function handleMoreAction(key: string) {
+  if (key === 'syncPlaylist') {
+    handleSyncPlaylist()
+  }
+}
 </script>
 
 <template>
@@ -727,7 +747,7 @@ onMounted(() => {
               随机播放
             </t-button>
 
-            <t-button
+            <!-- <t-button
               variant="outline"
               size="medium"
               :disabled="!('playlistId' in playlistInfo.meta)"
@@ -773,7 +793,20 @@ onMounted(() => {
                 </svg>
               </template>
               同步歌单
-            </t-button>
+            </t-button> -->
+
+            <n-dropdown
+              trigger="hover"
+              :options="moreActions"
+              placement="bottom-start"
+              @select="handleMoreAction"
+            >
+              <t-button theme="default" class="local-btn more">
+                <template #icon>
+                  <ellipsis-icon :stroke-width="1.5" />
+                </template>
+              </t-button>
+            </n-dropdown>
           </div>
         </div>
       </div>
@@ -812,6 +845,14 @@ onMounted(() => {
 </template>
 
 <style lang="scss" scoped>
+.local-btn,
+.t-button {
+  padding: 6px 9px;
+
+  border-radius: 8px;
+  height: 36px;
+  // width: 32px;
+}
 .list-container {
   box-sizing: border-box;
   // background: var(--list-bg-primary);
