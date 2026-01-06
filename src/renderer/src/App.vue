@@ -364,7 +364,8 @@ function syncNaiveTheme() {
     common: {
       primaryColor: mainColor,
       primaryColorHover: mainColor,
-      primaryColorPressed: mainColor
+      primaryColorPressed: mainColor,
+      borderRadius: '8px'
     }
   }
 }
