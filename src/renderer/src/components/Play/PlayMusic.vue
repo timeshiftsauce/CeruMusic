@@ -33,7 +33,7 @@ import {
   playSong,
   playMode
 } from '@renderer/utils/audio/globaPlayList'
-import defaultCoverImg from '/default-cover.png'
+import songCover from '@renderer/assets/images/song.jpg'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
 import { HeartIcon, DownloadIcon, CheckIcon, LockOnIcon } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
@@ -535,8 +535,7 @@ watch(showFullPlay, (val) => {
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
         <div v-if="songInfo.songmid" class="album-cover">
-          <img v-if="songInfo.img" :src="songInfo.img" alt="专辑封面" />
-          <img :src="defaultCoverImg" alt="默认封面" />
+          <img :src="songInfo.img" alt="专辑封面" @error="songInfo.img = songCover" />
         </div>
 
         <div class="song-info">
