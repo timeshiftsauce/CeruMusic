@@ -12,6 +12,7 @@ import {
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
 import { createMenuItem, calculateMenuPosition } from '@renderer/components/ContextMenu/utils'
+import songCover from '@renderer/assets/images/song.jpg'
 
 type MusicItem = {
   hash?: string
@@ -574,7 +575,7 @@ onBeforeUnmount(() => {
           <n-spin size="small" />
         </div>
         <div class="col cover">
-          <img :src="s.img || '/default-cover.png'" alt="cover" />
+          <img :src="s.img" alt="cover" @error="s.img = songCover" />
         </div>
         <div class="col title">{{ matching[s.songmid] ? '匹配中...' : s.name }}</div>
         <div class="col artist">{{ s.singer }}</div>
