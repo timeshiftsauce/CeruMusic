@@ -253,6 +253,24 @@ const handleDownload = (song: any) => {
   downloadSingleSong(song)
 }
 
+const handleDownloadBatch = async (batchSongs: any[]) => {
+  if (!batchSongs || batchSongs.length === 0) {
+    MessagePlugin.warning('未选择歌曲')
+    return
+  }
+  MessagePlugin.success(`开始下载 ${batchSongs.length} 首歌曲`)
+  for (const s of batchSongs) {
+    await downloadSingleSong(s as any)
+  }
+}
+const handlePlayBatchSelected = (batchSongs: any[]) => {
+  if (!batchSongs || batchSongs.length === 0) {
+    MessagePlugin.warning('未选择歌曲')
+    return
+  }
+  replacePlaylist(batchSongs as any[], false)
+}
+
 const handleAddToPlaylist = (song: MusicItem) => {
   console.log('添加到播放列表:', song.name)
   if ((window as any).musicEmitter) {
@@ -282,11 +300,39 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
     MessagePlugin.error('移出歌曲失败')
   }
 }
+const handleRemoveBatchSelected = async (batchSongs: any[]) => {
+  if (!batchSongs || batchSongs.length === 0) {
+    MessagePlugin.warning('未选择歌曲')
+    return
+  }
+  if (!isLocalPlaylist.value) {
+    MessagePlugin.warning('仅本地歌单支持批量移除')
+    return
+  }
+  try {
+    const mids = batchSongs.map((s: any) => s.songmid)
+    const result = await window.api.songList.removeSongs(playlistInfo.value.id, mids)
+    if (result.success) {
+      const set = new Set(mids)
+      songs.value = songs.value.filter((s) => !set.has(s.songmid))
+      playlistInfo.value.total = songs.value.length
+      MessagePlugin.success(`已移除 ${mids.length} 首歌曲`)
+    } else {
+      MessagePlugin.error(result.error || '批量移除失败')
+    }
+  } catch (error) {
+    console.error('批量移除失败:', error)
+    MessagePlugin.error('批量移除失败')
+  }
+}
 
 // 检查是否是本地歌单
 const isLocalPlaylist = computed(() => {
   return route.query.type === 'local' || route.query.source === 'local'
 })
+
+// 多选模式（外部控制）
+const multiSelect = ref(false)
 
 // 文件选择器引用
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -666,11 +712,31 @@ const moreActions = reactive([
     key: 'syncPlaylist',
     disabled: computed(() => !('playlistId' in playlistInfo.value.meta)),
     icon: renderIcon(RefreshIcon)
+  },
+  {
+    label: '批量选择',
+    key: 'toggleMultiSelect'
   }
 ])
 function handleMoreAction(key: string) {
   if (key === 'syncPlaylist') {
     handleSyncPlaylist()
+    return
+  }
+  if (key === 'toggleMultiSelect') {
+    multiSelect.value = !multiSelect.value
+    const idx = moreActions.findIndex((i: any) => i.key === 'toggleMultiSelect')
+    if (idx !== -1) {
+      ;(moreActions[idx] as any).label = multiSelect.value ? '取消批量选择' : '批量选择'
+    }
+  }
+}
+
+function handleExitMultiSelect() {
+  multiSelect.value = false
+  const idx = moreActions.findIndex((i: any) => i.key === 'toggleMultiSelect')
+  if (idx !== -1) {
+    ;(moreActions[idx] as any).label = '批量选择'
   }
 }
 </script>
@@ -832,12 +898,17 @@ function handleMoreAction(key: string) {
           :show-duration="true"
           :is-local-playlist="isLocalPlaylist"
           :playlist-id="playlistInfo.id"
+          :multi-select="multiSelect"
           @play="handlePlay"
           @pause="handlePause"
           @download="handleDownload"
+          @download-batch="handleDownloadBatch"
+          @play-batch="handlePlayBatchSelected"
           @add-to-playlist="handleAddToPlaylist"
           @remove-from-local-playlist="handleRemoveFromLocalPlaylist"
+          @remove-batch="handleRemoveBatchSelected"
           @scroll="handleScroll"
+          @exit-multi-select="handleExitMultiSelect"
         />
       </div>
     </div>

@@ -1,11 +1,21 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
 import LogtoClient from '@logto/browser'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { useAuthStore } from '@renderer/store'
+
+
 
 // 全局唯一的 LogtoClient 实例，需要在使用 request 之前初始化
 let logtoClientInstance: LogtoClient | null = null
 
 // 缓存不同 resource 的 axios 实例
 const axiosInstances: Map<string, AxiosInstance> = new Map()
+
+async function logoutAndNotify() {
+  const userStore = useAuthStore()
+  userStore.outlogin()
+  MessagePlugin.warning('登录已过期，请重新登录')
+}
 
 export class Request {
   private resource: string
@@ -64,8 +74,15 @@ export class Request {
       const response = await this.instance(finalConfig)
       return response.data
     } catch (error: any) {
-      // 简单的错误处理
+      const status = error?.response?.status
       const message = error.response?.data?.message || error.message || 'Request failed'
+      const authError =
+        status === 401 || status === 403 || /token|授权|登录|过期|unauth/i.test(String(message))
+      if (authError) {
+        await logoutAndNotify()
+        throw new Error('登录已过期，请重新登录')
+      }
+      console.log(error)
       throw new Error(message)
     }
   }
@@ -129,7 +146,15 @@ export class Request {
       const response = await this.instance(finalConfig)
       return response.data
     } catch (error: any) {
+      const status = error?.response?.status
       const message = error.response?.data?.message || error.message || 'Upload failed'
+      const authError =
+        status === 401 || status === 403 || /token|授权|登录|过期|unauth/i.test(String(message))
+      if (authError) {
+        await logoutAndNotify()
+        throw new Error('登录已过期，请重新登录')
+      }
+      console.log(error)
       throw new Error(message)
     }
   }

@@ -4,8 +4,11 @@ import LogtoClient, { UserInfoResponse } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { defaultRequest, Request } from '@renderer/utils/request'
 import config from '../config'
+import router from '@renderer/router'
+
 const { redirectUri, postLogoutRedirectUri } = config
 const ceruRequest = new Request('https://api.ceru.shiqianjiang.cn/api')
+
 export const useAuthStore = defineStore(
   'auth',
   () => {
@@ -46,6 +49,15 @@ export const useAuthStore = defineStore(
         console.error('Sign out failed:', error)
       }
       MessagePlugin.success('退出成功')
+    }
+
+    const outlogin = async () => {
+      logtoClient?.clearAccessToken()
+      logtoClient?.clearAllTokens()
+      isAuthenticated.value = false
+      router.push({
+        name: 'home'
+      })
     }
 
     const handleCallback = async (callbackUrl: string) => {
@@ -153,7 +165,8 @@ export const useAuthStore = defineStore(
       handleCallback,
       updateUserInfo,
       updateProfile,
-      uploadAvatar
+      uploadAvatar,
+      outlogin
     }
   },
   {
