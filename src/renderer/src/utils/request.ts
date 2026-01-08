@@ -3,8 +3,6 @@ import LogtoClient from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@renderer/store'
 
-
-
 // 全局唯一的 LogtoClient 实例，需要在使用 request 之前初始化
 let logtoClientInstance: LogtoClient | null = null
 
