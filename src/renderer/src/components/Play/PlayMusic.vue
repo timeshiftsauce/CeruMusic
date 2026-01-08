@@ -490,7 +490,7 @@ watch(
     if (newVal.img) {
       await setColor()
     } else if (songInfo.value.songmid) {
-      songInfo.value.img = defaultCoverImg
+      // songInfo.value.img = defaultCoverImg
       await setColor()
     } else {
       bg.value = 'var(--player-bg-idle)'

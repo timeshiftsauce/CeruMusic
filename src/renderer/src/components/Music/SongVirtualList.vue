@@ -2,12 +2,64 @@
   <div class="song-virtual-list">
     <!-- 表头 -->
     <div class="list-header-container" style="background-color: var(--song-list-header-bg)">
-      <div class="list-header" :style="{ marginRight: hasScroll ? '10px' : '0' }">
+      <div
+        v-if="!isMultiSelect"
+        class="list-header"
+        :style="{ marginRight: hasScroll ? '10px' : '0' }"
+      >
         <div v-if="showIndex" class="col-index">#</div>
         <div class="col-title">标题</div>
         <div v-if="showAlbum" class="col-album">专辑</div>
         <div class="col-like">喜欢</div>
         <div v-if="showDuration" class="col-duration">时长</div>
+      </div>
+      <div v-else class="list-header multi">
+        <div class="multi-left">
+          <div class="select-all">
+            <t-checkbox
+              class="select-all-checkbox"
+              :checked="isAllSelected"
+              @change="toggleSelectAll"
+            >
+              全选
+            </t-checkbox>
+          </div>
+          <t-button
+            class="square-btn"
+            theme="primary"
+            size="small"
+            :disabled="selectedCount === 0"
+            @click="playSelected"
+          >
+            <template #icon>
+              <span class="iconfont icon-bofang"></span>
+            </template>
+          </t-button>
+          <t-button
+            theme="default"
+            size="small"
+            :disabled="selectedCount === 0"
+            @click="downloadSelected"
+          >
+            批量下载
+          </t-button>
+        </div>
+        <div class="multi-right">
+          <span class="selected-info">已选 {{ selectedCount }} 首</span>
+          <t-button
+            theme="danger"
+            size="small"
+            variant="outline"
+            :disabled="!isLocalPlaylist || selectedCount === 0"
+            @click="removeSelected"
+          >
+            <template #icon><DeleteIcon /></template>
+          </t-button>
+
+          <t-button theme="default" size="small" variant="outline" @click="emit('exitMultiSelect')">
+            完成
+          </t-button>
+        </div>
       </div>
     </div>
 
@@ -28,9 +80,22 @@
               <span class="track-number">
                 {{ String(visibleStartIndex + index + 1).padStart(2, '0') }}
               </span>
-              <button class="play-btn" title="播放" @click.stop="handlePlay(song)">
+              <button
+                v-if="!isMultiSelect"
+                class="play-btn"
+                title="播放"
+                @click.stop="handlePlay(song)"
+              >
                 <i class="icon-play"></i>
               </button>
+              <t-checkbox
+                v-if="isMultiSelect"
+                class="select-checkbox always-show"
+                :checked="selectedSet.has(song.songmid)"
+                @change="
+                  (checked, ctx) => onRowCheckboxChange(checked as boolean, ctx as any, song)
+                "
+              />
             </div>
 
             <!-- 歌曲信息 -->
@@ -122,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, toRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, toRaw, watch } from 'vue'
 import {
   DownloadIcon,
   PlayCircleIcon,
@@ -163,6 +228,7 @@ interface Props {
   showDuration?: boolean
   isLocalPlaylist?: boolean
   playlistId?: string
+  multiSelect?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -172,7 +238,8 @@ const props = withDefaults(defineProps<Props>(), {
   showAlbum: true,
   showDuration: true,
   isLocalPlaylist: false,
-  playlistId: ''
+  playlistId: '',
+  multiSelect: false
 })
 
 const emit = defineEmits([
@@ -180,8 +247,12 @@ const emit = defineEmits([
   'pause',
   'addToPlaylist',
   'download',
+  'downloadBatch',
+  'playBatch',
   'scroll',
-  'removeFromLocalPlaylist'
+  'removeFromLocalPlaylist',
+  'removeBatch',
+  'exitMultiSelect'
 ])
 
 // 虚拟滚动相关状态
@@ -252,6 +323,10 @@ const handleAddToPlaylist = (song: Song) => {
 
 // 处理歌曲点击事件
 const handleSongClick = (song: Song) => {
+  if (isMultiSelect.value) {
+    toggleSelect(song)
+    return
+  }
   const currentTime = Date.now()
   const timeDiff = currentTime - lastClickTime
 
@@ -320,6 +395,64 @@ const onScroll = (event: Event) => {
   // 兼容程序触发的假事件，target 可能为 null
   scrollTop.value = target?.scrollTop ?? scrollContainer.value?.scrollTop ?? 0
   emit('scroll', event)
+}
+
+// 多选相关
+const isMultiSelect = computed(() => props.multiSelect)
+const selectedSet = ref<Set<number>>(new Set())
+const selectedSongs = computed(() => {
+  const set = selectedSet.value
+  return props.songs.filter((s) => set.has(s.songmid))
+})
+const selectedCount = computed(() => selectedSongs.value.length)
+const toggleSelect = (song: Song) => {
+  const id = song.songmid
+  if (selectedSet.value.has(id)) {
+    selectedSet.value.delete(id)
+  } else {
+    selectedSet.value.add(id)
+  }
+}
+const onRowCheckboxChange = (checked: boolean, context: { e?: Event } | undefined, song: Song) => {
+  try {
+    if (context?.e && typeof context.e.stopPropagation === 'function') {
+      context.e.stopPropagation()
+    }
+  } catch {}
+  const id = song.songmid
+  if (checked) {
+    selectedSet.value.add(id)
+  } else {
+    selectedSet.value.delete(id)
+  }
+}
+const isAllSelected = computed(
+  () => selectedSet.value.size > 0 && selectedSet.value.size === props.songs.length
+)
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedSet.value.clear()
+  } else {
+    const all = new Set<number>(props.songs.map((s) => s.songmid))
+    selectedSet.value = all
+  }
+}
+const downloadSelected = () => {
+  const list = selectedSongs.value
+  if (list.length === 0) return
+  emit('downloadBatch', list)
+}
+const playSelected = () => {
+  const list = selectedSongs.value
+  if (list.length === 0) return
+  emit('playBatch', list)
+}
+const removeSelected = () => {
+  const list = selectedSongs.value
+  if (list.length === 0) return
+  emit('removeBatch', list)
+  const removeIds = new Set(list.map((s) => s.songmid))
+  selectedSet.value = new Set([...selectedSet.value].filter((id) => !removeIds.has(id)))
 }
 
 // 右键菜单项配置
@@ -556,6 +689,25 @@ onUnmounted(() => {
   // 清理事件监听器
   window.removeEventListener('playlist-updated', loadPlaylists)
 })
+
+// 切换到普通模式时清空选择
+watch(
+  () => props.multiSelect,
+  (val) => {
+    if (!val) {
+      selectedSet.value.clear()
+    }
+  }
+)
+
+watch(
+  () => props.songs,
+  (newSongs) => {
+    const ids = new Set(newSongs.map((s) => s.songmid))
+    selectedSet.value = new Set([...selectedSet.value].filter((id) => ids.has(id)))
+  },
+  { deep: true }
+)
 </script>
 
 <style scoped>
@@ -573,6 +725,51 @@ onUnmounted(() => {
   width: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.list-header.multi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  height: 40px;
+  box-sizing: border-box;
+}
+.multi-left,
+.multi-center,
+.multi-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.select-all {
+  display: inline-flex;
+  align-items: center;
+  /* width: 50px;？ */
+  padding-left: 15px;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--song-list-header-text);
+}
+.select-all-checkbox {
+  height: 18px;
+  line-height: 18px;
+  padding-right: 20px;
+  border-right: 1px solid #ccc;
+}
+.selected-info {
+  font-size: 12px;
+  color: var(--song-list-header-text);
+}
+
+.square-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .list-header {
@@ -743,6 +940,31 @@ onUnmounted(() => {
         transform: translate(-50%, -50%) scale(1);
         pointer-events: auto;
       }
+      .select-checkbox {
+        opacity: 1;
+        filter: blur(0);
+        transform: translate(-50%, -50%) scale(1);
+        pointer-events: auto;
+      }
+    }
+    .select-checkbox {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.9);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 0;
+      filter: blur(4px);
+      pointer-events: none;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .select-checkbox.always-show {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: auto;
     }
 
     .col-title {
