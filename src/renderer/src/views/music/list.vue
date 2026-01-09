@@ -42,6 +42,7 @@ const playlistInfo = ref({
   total: 0,
   source: '',
   desc: '',
+  isLeaderboard: false,
   meta: {}
 })
 
@@ -59,6 +60,7 @@ const fetchPlaylistSongs = async () => {
       total: Number(route.query.total) || 0,
       source: (route.query.source as string) || (LocalUserDetail.userSource.source as any),
       desc: (route.query.desc as string) || '',
+      isLeaderboard: route.query.isLeaderboard === 'true',
       meta: JSON.parse(<string>route.query.meta || '{}')
     }
 
@@ -135,13 +137,16 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
     // 检查是否是排行榜 (ID通常包含 source 前缀且在 leaderboard 列表中)
     // 这里简单通过 ID 格式判断，或者让调用方传入 type
-    const isLeaderboard =
-      playlistInfo.value.id.includes('__') ||
-      ['wy', 'mg', 'kg', 'tx', 'kw'].some((s) => playlistInfo.value.id.startsWith(s + '_'))
+    console.log(
+      '获取网络歌单歌曲:',
+      playlistInfo.value.source,
+      playlistInfo.value.id,
+      currentPage.value
+    )
 
     let method = 'getPlaylistDetail'
     let id = playlistInfo.value.id
-    if (isLeaderboard) {
+    if (playlistInfo.value.isLeaderboard) {
       method = 'getLeaderboardDetail'
       id = id.replace(/^.*__/, '')
       console.log(id)
@@ -619,6 +624,7 @@ const handleSyncPlaylist = async () => {
       `同步完成！成功新增 ${successCount} 首歌曲` +
         (failCount > 0 ? `，${failCount} 首歌曲重复` : '')
     )
+    fetchPlaylistSongs() // 更新歌单歌曲数量
   } else {
     MessagePlugin.error('所有歌曲都已存在，未添加任何歌曲')
   }

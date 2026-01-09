@@ -68,7 +68,8 @@ const handleCardClick = (board: any) => {
     query: {
       title: board.name,
       cover: board.pic || '',
-      source: board.source || currentSource.value
+      source: board.source || currentSource.value,
+      isLeaderboard: 'true'
     }
   })
 }

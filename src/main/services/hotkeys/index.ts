@@ -3,7 +3,8 @@ import {
   defaultHotkeyConfig,
   type HotkeyAction,
   type HotkeyConfig,
-  type HotkeyConfigPayload
+  type HotkeyConfigPayload,
+  type HotkeyStatus
 } from '@common/types/hotkeys'
 import lyricWindow from '../../windows/lyric-window'
 import { configManager } from '../ConfigManager'
@@ -41,6 +42,7 @@ const getStoredHotkeyConfig = (): HotkeyConfig => {
 }
 let currentMainWindow: BrowserWindow | null = null
 let ipcBound = false
+let lastStatus: HotkeyStatus = { failedActions: [], actionErrors: {} }
 
 const actionCallbacks = (mainWindow: BrowserWindow) => {
   const sendCtrl = (name: string, val?: unknown) => {
@@ -94,23 +96,37 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
     else seen.set(key, action)
   }
   if (duplicates.length > 0) {
-    return { success: false, errors: [...new Set(duplicates)].map((a) => `快捷键冲突：${a}`) }
+    const uniq = [...new Set(duplicates)]
+    const failed = new Set<HotkeyAction>()
+    const actionErrors: Partial<Record<HotkeyAction, string[]>> = {}
+    for (const [action, acc] of bindings) {
+      if (uniq.includes(acc)) {
+        failed.add(action)
+        actionErrors[action] = [...(actionErrors[action] || []), `快捷键冲突：${acc}`]
+      }
+    }
+    lastStatus = { failedActions: Array.from(failed), actionErrors }
+    return { success: false, errors: uniq.map((a) => `快捷键冲突：${a}`) }
   }
 
   globalShortcut.unregisterAll()
 
   if (!cfg.enabled) {
     configManager.set('hotkeys', cfg)
+    lastStatus = { failedActions: [], actionErrors: {} }
     return { success: true }
   }
 
   const errors: string[] = []
   const failedActions = new Set<HotkeyAction>()
+  const actionErrors: Partial<Record<HotkeyAction, string[]>> = {}
   const tryRegister = (action: HotkeyAction, acc: string, cb: () => void) => {
     const ok = globalShortcut.register(acc, cb)
     if (!ok) {
       failedActions.add(action)
-      errors.push(`注册失败：${actionLabel[action]}（${acc}）`)
+      const msg = `注册失败：${actionLabel[action]}（${acc}）`
+      errors.push(msg)
+      actionErrors[action] = [...(actionErrors[action] || []), msg]
     }
   }
 
@@ -123,14 +139,12 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
   }
 
   if (errors.length > 0) {
-    for (const a of failedActions) {
-      cfg.bindings[a] = ''
-    }
-    configManager.set('hotkeys', cfg)
+    lastStatus = { failedActions: Array.from(failedActions), actionErrors }
     return { success: false, errors }
   }
 
   configManager.set('hotkeys', cfg)
+  lastStatus = { failedActions: [], actionErrors: {} }
   return { success: true }
 }
 
@@ -138,7 +152,7 @@ export function initHotkeyService(mainWindow: BrowserWindow) {
   currentMainWindow = mainWindow
   if (!ipcBound) {
     ipcMain.handle('hotkeys:get', async () => {
-      return { success: true, data: getStoredHotkeyConfig() }
+      return { success: true, data: getStoredHotkeyConfig(), status: lastStatus }
     })
 
     ipcMain.handle('hotkeys:set', async (_e, payload: HotkeyConfigPayload) => {
@@ -155,10 +169,11 @@ export function initHotkeyService(mainWindow: BrowserWindow) {
           success: false,
           error: '保存失败',
           errors: res.errors,
-          data: getStoredHotkeyConfig()
+          data: getStoredHotkeyConfig(),
+          status: lastStatus
         }
       }
-      return { success: true, data: getStoredHotkeyConfig() }
+      return { success: true, data: getStoredHotkeyConfig(), status: lastStatus }
     })
 
     app.once('will-quit', () => {
@@ -173,6 +188,17 @@ export function initHotkeyService(mainWindow: BrowserWindow) {
   const boot = getStoredHotkeyConfig()
   const res = applyHotkeys(mainWindow, boot)
   if (!res.success) {
-    return
+    let tries = 0
+    const maxTries = 5
+    const delay = 500
+    const run = () => {
+      if (tries >= maxTries) return
+      tries++
+      const r = applyHotkeys(mainWindow, getStoredHotkeyConfig())
+      if (!r.success) {
+        setTimeout(run, delay)
+      }
+    }
+    setTimeout(run, delay)
   }
 }
