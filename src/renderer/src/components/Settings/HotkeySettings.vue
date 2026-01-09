@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import type { HotkeyAction, HotkeyConfig } from '@common/types/hotkeys'
+import type { HotkeyAction, HotkeyConfig, HotkeyStatus } from '@common/types/hotkeys'
+import { defaultHotkeyConfig } from '@common/types/hotkeys'
 import {
   acceleratorToDisplay,
   createHotkeyRecorder,
@@ -42,6 +43,18 @@ const displayBinding = (action: HotkeyAction) => {
   return acceleratorToDisplay(acc)
 }
 
+const failedActions = ref<Set<HotkeyAction>>(new Set())
+const actionErrors = ref<Partial<Record<HotkeyAction, string[]>>>({})
+const isFailed = (action: HotkeyAction) => failedActions.value.has(action)
+const getActionTooltip = (action: HotkeyAction) => {
+  const msgs = actionErrors.value[action] || []
+  return msgs.length > 0 ? msgs.join('；') : '注册失败或冲突'
+}
+const updateStatus = (status?: HotkeyStatus) => {
+  failedActions.value = new Set(status?.failedActions || [])
+  actionErrors.value = { ...(status?.actionErrors || {}) }
+}
+
 const load = async () => {
   loading.value = true
   try {
@@ -50,6 +63,7 @@ const load = async () => {
     if (!cfg) return
     enabled.value = !!cfg.enabled
     bindings.value = { ...(cfg.bindings || {}) }
+    updateStatus((res as any)?.status as HotkeyStatus | undefined)
   } catch {
   } finally {
     loading.value = false
@@ -72,6 +86,7 @@ const save = async () => {
         enabled.value = !!cfg2.enabled
         bindings.value = { ...(cfg2.bindings || {}) }
       }
+      updateStatus((res as any)?.status as HotkeyStatus | undefined)
       return
     }
     const cfg = (res && res.data) as HotkeyConfig | undefined
@@ -79,12 +94,19 @@ const save = async () => {
       enabled.value = !!cfg.enabled
       bindings.value = { ...(cfg.bindings || {}) }
     }
+    updateStatus((res as any)?.status as HotkeyStatus | undefined)
     MessagePlugin.success('已保存')
   } catch {
     MessagePlugin.error('保存失败')
   } finally {
     saving.value = false
   }
+}
+
+const resetToDefault = async () => {
+  enabled.value = !!defaultHotkeyConfig.enabled
+  bindings.value = { ...(defaultHotkeyConfig.bindings || {}) }
+  await save()
 }
 
 const clearHotkey = async (action: HotkeyAction) => {
@@ -199,13 +221,27 @@ const recordCanSave = computed(() => {
       </div>
 
       <div class="hotkey-list" :class="{ disabled: !enabled }">
+        <div class="hotkey-toolbar">
+          <t-button
+            size="small"
+            theme="default"
+            variant="outline"
+            :loading="saving"
+            @click="resetToDefault"
+          >
+            恢复默认
+          </t-button>
+        </div>
         <div v-for="it in hotkeyActions" :key="it.id" class="hotkey-row">
           <div class="hotkey-meta">
             <div class="hotkey-title">{{ it.title }}</div>
             <div class="hotkey-desc">{{ it.desc }}</div>
           </div>
           <div class="hotkey-actions">
-            <t-tag theme="primary" variant="light">{{ displayBinding(it.id) }}</t-tag>
+            <t-tooltip v-if="isFailed(it.id)" :content="getActionTooltip(it.id)">
+              <t-tag theme="danger" variant="light">{{ displayBinding(it.id) }}</t-tag>
+            </t-tooltip>
+            <t-tag v-else theme="primary" variant="light">{{ displayBinding(it.id) }}</t-tag>
             <t-button
               size="small"
               theme="primary"
@@ -328,6 +364,11 @@ const recordCanSave = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.hotkey-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .hotkey-list.disabled {

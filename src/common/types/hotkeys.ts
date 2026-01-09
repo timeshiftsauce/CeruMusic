@@ -18,6 +18,11 @@ export type HotkeyConfig = {
 
 export type HotkeyConfigPayload = Partial<HotkeyConfig>
 
+export type HotkeyStatus = {
+  failedActions: HotkeyAction[]
+  actionErrors: Partial<Record<HotkeyAction, string[]>>
+}
+
 export const defaultHotkeyConfig: HotkeyConfig = {
   enabled: true,
   bindings: {
