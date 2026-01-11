@@ -21,6 +21,7 @@ declare module 'vue' {
     HotkeySettings: typeof import('./src/components/Settings/HotkeySettings.vue')['default']
     LeaderBord: typeof import('./src/components/Find/LeaderBord.vue')['default']
     LeaderBordCard: typeof import('./src/components/Card/LeaderBordCard.vue')['default']
+    LyricFontSettings: typeof import('./src/components/Settings/LyricFontSettings.vue')['default']
     MusicCache: typeof import('./src/components/Settings/MusicCache.vue')['default']
     NBackTop: typeof import('naive-ui')['NBackTop']
     NBadge: typeof import('naive-ui')['NBadge']

@@ -101,71 +101,68 @@ onMounted(() => {
 
 <template>
   <div class="lyric-style">
-    <div class="header">
-      <h3>桌面歌词样式</h3>
-      <p>自定义桌面歌词的字体大小、颜色与阴影效果，并可预览与即时应用。</p>
-    </div>
+    <t-card title="桌面歌词样式" hover-shadow>
+      <div class="controls">
+        <div class="row">
+          <div class="field">
+            <label>字体大小(px)</label>
+            <t-input-number v-model="option.fontSize" :min="12" :max="96" :step="1" />
+          </div>
+          <div class="field">
+            <label>主颜色</label>
+            <t-color-picker
+              v-model="mainHex"
+              :color-modes="['monochrome']"
+              format="HEX"
+              @change="onMainColorChange"
+            />
+          </div>
+          <div class="field">
+            <label>阴影颜色</label>
+            <t-color-picker
+              v-model="shadowColorStr"
+              :color-modes="['monochrome']"
+              format="RGBA"
+              :enable-alpha="true"
+              @change="onShadowColorChange"
+            />
+          </div>
+        </div>
 
-    <div class="controls">
-      <div class="row">
-        <div class="field">
-          <label>字体大小(px)</label>
-          <t-input-number v-model="option.fontSize" :min="12" :max="96" :step="1" />
+        <div class="row">
+          <div class="field">
+            <label>宽度</label>
+            <t-input-number v-model="option.width" :min="300" :max="1600" :step="10" />
+          </div>
+          <div class="field">
+            <label>高度</label>
+            <t-input-number v-model="option.height" :min="100" :max="600" :step="10" />
+          </div>
         </div>
-        <div class="field">
-          <label>主颜色</label>
-          <t-color-picker
-            v-model="mainHex"
-            :color-modes="['monochrome']"
-            format="HEX"
-            @change="onMainColorChange"
-          />
-        </div>
-        <div class="field">
-          <label>阴影颜色</label>
-          <t-color-picker
-            v-model="shadowColorStr"
-            :color-modes="['monochrome']"
-            format="RGBA"
-            :enable-alpha="true"
-            @change="onShadowColorChange"
-          />
+
+        <div class="actions">
+          <t-button :loading="loading" theme="default" variant="outline" @click="loadOption"
+            >刷新</t-button
+          >
+          <t-button :loading="saving" theme="primary" @click="applyOption">应用到桌面歌词</t-button>
+          <t-button theme="default" @click="resetOption">还原</t-button>
+          <t-switch @change="toggleDesktopLyric($event as boolean)">显示桌面歌词</t-switch>
         </div>
       </div>
 
-      <div class="row">
-        <div class="field">
-          <label>宽度</label>
-          <t-input-number v-model="option.width" :min="300" :max="1600" :step="10" />
-        </div>
-        <div class="field">
-          <label>高度</label>
-          <t-input-number v-model="option.height" :min="100" :max="600" :step="10" />
-        </div>
-      </div>
-
-      <div class="actions">
-        <t-button :loading="loading" theme="default" variant="outline" @click="loadOption"
-          >刷新</t-button
+      <div class="preview">
+        <div
+          class="preview-lyric"
+          :style="{
+            fontSize: option.fontSize + 'px',
+            color: mainHex,
+            textShadow: `0 0 6px ${shadowColorStr}`
+          }"
         >
-        <t-button :loading="saving" theme="primary" @click="applyOption">应用到桌面歌词</t-button>
-        <t-button theme="default" @click="resetOption">还原</t-button>
-        <t-switch @change="toggleDesktopLyric($event as boolean)">显示桌面歌词</t-switch>
+          这是桌面歌词预览
+        </div>
       </div>
-    </div>
-
-    <div class="preview">
-      <div
-        class="preview-lyric"
-        :style="{
-          fontSize: option.fontSize + 'px',
-          color: mainHex,
-          textShadow: `0 0 6px ${shadowColorStr}`
-        }"
-      >
-        这是桌面歌词预览
-      </div>
-    </div>
+    </t-card>
   </div>
 </template>
 

@@ -21,6 +21,7 @@ import MusicCache from '@renderer/components/Settings/MusicCache.vue'
 import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
 import DesktopLyricStyle from '@renderer/components/Settings/DesktopLyricStyle.vue'
+import LyricFontSettings from '@renderer/components/Settings/LyricFontSettings.vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { playSetting as usePlaySetting } from '@renderer/store/playSetting'
@@ -436,51 +437,64 @@ const getTagOptionsStatus = () => {
           <transition name="fade-slide" mode="out-in">
             <!-- 外观设置 -->
             <div v-if="activeCategory === 'appearance'" key="appearance" class="settings-section">
-              <div class="setting-group">
-                <h3>标题栏风格</h3>
-                <p>选择您喜欢的标题栏控制按钮风格</p>
+              <!-- 基础外观 -->
+              <t-card title="基础外观" class="setting-card" hover-shadow>
+                <div class="setting-group-item">
+                  <div class="setting-label">
+                    <h4>标题栏风格</h4>
+                    <p>选择您喜欢的标题栏控制按钮风格</p>
+                  </div>
 
-                <div class="style-buttons">
-                  <t-button
-                    :theme="currentStyle === 'windows' ? 'primary' : 'default'"
-                    @click="switchStyle('windows')"
-                  >
-                    Windows 风格
-                  </t-button>
-                  <t-button
-                    :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
-                    @click="switchStyle('traffic-light')"
-                  >
-                    红绿灯风格
-                  </t-button>
-                </div>
+                  <div class="style-buttons">
+                    <t-button
+                      :theme="currentStyle === 'windows' ? 'primary' : 'default'"
+                      @click="switchStyle('windows')"
+                    >
+                      Windows 风格
+                    </t-button>
+                    <t-button
+                      :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
+                      @click="switchStyle('traffic-light')"
+                    >
+                      红绿灯风格
+                    </t-button>
+                  </div>
 
-                <div class="style-preview">
-                  <div class="preview-item">
-                    <h4>Windows 风格</h4>
-                    <div class="mock-titlebar">
-                      <div class="mock-title">Windows 风格标题栏</div>
-                      <TitleBarControls control-style="windows" />
+                  <div class="style-preview">
+                    <div class="preview-item">
+                      <h4>Windows 风格</h4>
+                      <div class="mock-titlebar">
+                        <div class="mock-title">Windows 风格标题栏</div>
+                        <TitleBarControls control-style="windows" />
+                      </div>
+                    </div>
+                    <div class="preview-item">
+                      <h4>红绿灯风格 (macOS)</h4>
+                      <div class="mock-titlebar">
+                        <div class="mock-title">红绿灯风格标题栏</div>
+                        <TitleBarControls control-style="traffic-light" />
+                      </div>
                     </div>
                   </div>
-                  <div class="preview-item">
-                    <h4>红绿灯风格 (macOS)</h4>
-                    <div class="mock-titlebar">
-                      <div class="mock-title">红绿灯风格标题栏</div>
-                      <TitleBarControls control-style="traffic-light" />
-                    </div>
-                  </div>
                 </div>
-              </div>
 
-              <div class="setting-group">
-                <h3>应用主题色</h3>
-                <ThemeSelector />
-              </div>
+                <t-divider />
 
-              <div class="setting-group">
-                <DesktopLyricStyle />
-              </div>
+                <div class="setting-group-item">
+                  <div class="setting-label">
+                    <h4>应用主题色</h4>
+                    <p>选择应用的主题颜色</p>
+                  </div>
+                  <ThemeSelector />
+                </div>
+              </t-card>
+
+              <!-- 歌词设置 -->
+              <div class="setting-spacer"></div>
+              <LyricFontSettings />
+
+              <div class="setting-spacer"></div>
+              <DesktopLyricStyle />
             </div>
 
             <!-- AI 功能设置 -->
@@ -1788,6 +1802,40 @@ const getTagOptionsStatus = () => {
   &:hover {
     transform: translateY(-1px);
   }
+}
+
+.setting-card {
+  // Overriding some t-card default if needed, or just let it be.
+  // t-card comes with padding and border.
+}
+
+.setting-group-item {
+  margin-bottom: 24px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.setting-label {
+  margin-bottom: 16px;
+
+  h4 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+
+  p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--td-text-color-secondary);
+  }
+}
+
+.setting-spacer {
+  height: 24px;
 }
 
 // 功能列表项动画

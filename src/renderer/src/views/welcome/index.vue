@@ -63,7 +63,9 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { initPlayback } from '@renderer/utils/audio/globaPlayList'
+import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 
+const { checkForUpdates } = useAutoUpdate()
 const router = useRouter()
 const version = ref('1.0.0')
 const loadingText = ref('正在初始化核心服务...')
@@ -139,7 +141,11 @@ onMounted(async () => {
         loadingPercent.value = 100
         loadingText.value = '准备就绪...'
         setTimeout(() => {
-          router.replace('/home')
+          router.replace('/home').then(() => {
+            setTimeout(() => {
+              checkForUpdates()
+            }, 2000)
+          })
         }, 200)
       }, waitTime)
     })

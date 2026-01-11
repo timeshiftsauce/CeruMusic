@@ -5571,6 +5571,11 @@ follow-redirects@^1.15.6:
   resolved "https://registry.npmmirror.com/follow-redirects/-/follow-redirects-1.15.11.tgz"
   integrity sha512-deG2P0JfjrTxl50XGCDyfI97ZGVCxIpfKYmfyrQ54n5FO/0gfIES8C/Psl6kWVDolizcaaxZJnTS0QSMxvnsBQ==
 
+font-list@^2.0.1:
+  version "2.0.1"
+  resolved "https://registry.npmmirror.com/font-list/-/font-list-2.0.1.tgz#e9a94bc081a2af0ebd017b2304f1617ed0410dab"
+  integrity sha512-vYOrRyJ6n+/v7lw/EhZXxt+jtd8++OgaaL+B3C8vi0XVw5awCX2WR1crcCtoWg5p+lbmI+hehFwqWo0BYNtofQ==
+
 foreground-child@^3.1.0:
   version "3.3.1"
   resolved "https://registry.npmmirror.com/foreground-child/-/foreground-child-3.3.1.tgz"

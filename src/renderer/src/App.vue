@@ -12,7 +12,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { useAutoUpdate } from './composables/useAutoUpdate'
+
 import { NConfigProvider, darkTheme, NGlobalStyle } from 'naive-ui'
 import { useSettingsStore } from '@renderer/store/Settings'
 import songListAPI from '@renderer/api/songList'
@@ -25,7 +25,7 @@ import router from './router'
 import { useAuthStore } from '@renderer/store'
 
 const userInfo = LocalUserDetailStore()
-const { checkForUpdates } = useAutoUpdate()
+
 const settingsStore = useSettingsStore()
 const { settings } = settingsStore
 const processedPaths = new Set<string>()
@@ -271,11 +271,6 @@ onMounted(() => {
   window.electron?.ipcRenderer?.on?.('setPlayMode', (_: any, val: string) =>
     forward('setPlayMode', val)
   )
-
-  // 应用启动后延迟3秒检查更新，避免影响启动速度
-  setTimeout(() => {
-    checkForUpdates()
-  }, 3000)
 
   // 全局监听打开歌单文件
   window.electron?.ipcRenderer?.on?.('open-playlist-file', (_: any, filePath: string) => {

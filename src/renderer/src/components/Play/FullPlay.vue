@@ -20,12 +20,18 @@ import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics
 import * as _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { NSwitch } from 'naive-ui'
+import { useSettingsStore } from '@renderer/store/Settings'
 
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
 
 const playSetting = usePlaySettingStore()
+const settingsStore = useSettingsStore()
 const showSettings = ref(false)
+
+const lyricFontFamily = computed(
+  () => settingsStore.settings.lyricFontFamily || 'PingFangSC-Semibold'
+)
 
 const showLeftPanel = computed({
   get: () => playSetting.getShowLeftPanel,
@@ -1139,7 +1145,7 @@ onBeforeUnmount(() => {
       mask: linear-gradient(
         rgba(255, 255, 255, 0) 0px,
         rgba(255, 255, 255, 0.6) 5%,
-        rgb(255, 255, 255) 10%,
+        rgb(255, 255, 255) 15%,
         rgb(255, 255, 255) 75%,
         rgba(255, 255, 255, 0.6) 85%,
         rgba(255, 255, 255, 0)
@@ -1147,7 +1153,7 @@ onBeforeUnmount(() => {
 
       :deep(.lyric-player) {
         // --amll-lyric-view-color: v-bind(lightMainColor);
-        font-family: PingFangSC-Semibold;
+        font-family: v-bind(lyricFontFamily);
         --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
 
         // bottom: max(2vw, 29px);

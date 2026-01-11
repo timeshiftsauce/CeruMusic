@@ -97,7 +97,7 @@ export async function addToPlaylistAndPlay(
   localUserStore: any,
   playSongCallback: (song: SongList) => Promise<void>
 ) {
-  if (!localUserStore.userSource.pluginId) {
+  if (!localUserStore.userSource.pluginId && song.source !== 'local') {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
   }
