@@ -7,4 +7,5 @@ export interface lyricConfig {
   y?: number
   width?: number
   height?: number
+  fontFamily?: string
 }
