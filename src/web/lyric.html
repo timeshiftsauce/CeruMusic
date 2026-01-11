@@ -564,7 +564,12 @@
             const defaultOptions = await window.electron.ipcRenderer.invoke(
               'get-desktop-lyric-option'
             )
-            if (defaultOptions) this.changeOptions(defaultOptions)
+            if (defaultOptions) {
+              this.changeOptions(defaultOptions)
+              if (defaultOptions.fontFamily) {
+                this.changeFont(defaultOptions.fontFamily)
+              }
+            }
             return defaultOptions
           } catch (error) {
             console.error('Failed to restore options:', error)
@@ -588,6 +593,18 @@
           }
           if (callback) window.electron.ipcRenderer.send('set-desktop-lyric-option', options)
         }
+
+        changeFont(font) {
+          if (!font) return
+          // 内置字体无法在桌面歌词窗口支持（因为没有加载 CSS/Font 文件），回退到系统字体
+          const builtInFonts = ['PingFangSC-Semibold', 'lyricfont']
+          if (builtInFonts.includes(font)) {
+            document.documentElement.style.fontFamily = 'sans-serif' // 或者保持默认
+          } else {
+            document.documentElement.style.fontFamily = font
+          }
+        }
+
         // 菜单点击事件
         menuClick() {
           const toolsDom = document.getElementById('tools')
@@ -717,6 +734,10 @@
               wrapEl.style.animation = 'lyricEnter 0.35s ease'
               this._pendingUpnext = null
             } catch {}
+          })
+
+          window.electron.ipcRenderer.on('set-desktop-lyric-font', (_, font) => {
+            this.changeFont(font)
           })
 
           // 配置变化

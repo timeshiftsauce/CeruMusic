@@ -60,6 +60,16 @@ const fontOptions = computed(() => {
 const handleFontChange = () => {
   // Automatically saved by the setter of the computed property
   MessagePlugin.success('字体设置已更新')
+
+  // Sync to desktop lyric if needed (but desktop lyric reads options on open/change,
+  // currently desktop lyric doesn't know about font family)
+  // We need to send an IPC message to desktop lyric window to update font family
+
+  // Get current font family
+  const font = settings.value.lyricFontFamily
+
+  // Send IPC to main process, which forwards to lyric window or updates config
+  window.electron.ipcRenderer.send('set-desktop-lyric-font', font)
 }
 
 onMounted(async () => {
@@ -91,6 +101,7 @@ onMounted(async () => {
   border-radius: var(--td-radius-default);
   background-color: var(--td-bg-color-container);
   font-size: 24px;
+  font-weight: bold;
   text-align: center;
   min-height: 80px;
   display: flex;

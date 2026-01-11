@@ -9,11 +9,13 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AIFloatBallSettings: typeof import('./src/components/Settings/AIFloatBallSettings.vue')['default']
+    AudioEffectSettings: typeof import('./src/components/Settings/AudioEffectSettings.vue')['default']
     AudioVisualizer: typeof import('./src/components/Play/AudioVisualizer.vue')['default']
     ContextMenu: typeof import('./src/components/ContextMenu/ContextMenu.vue')['default']
     Demo: typeof import('./src/components/ContextMenu/demo.vue')['default']
     DesktopLyricStyle: typeof import('./src/components/Settings/DesktopLyricStyle.vue')['default']
     DirectorySettings: typeof import('./src/components/Settings/DirectorySettings.vue')['default']
+    EqualizerSettings: typeof import('./src/components/Settings/EqualizerSettings.vue')['default']
     FloatBall: typeof import('./src/components/AI/FloatBall.vue')['default']
     FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']

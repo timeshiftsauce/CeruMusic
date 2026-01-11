@@ -11,7 +11,9 @@ export async function getSystemFonts() {
     const builtInFonts = ['PingFangSC-Semibold', 'lyricfont']
 
     // Filter out built-in fonts from system list if they exist to avoid duplicates
-    const systemFonts = cleanFonts.filter((f) => !builtInFonts.includes(f))
+    const systemFonts = cleanFonts
+      .filter((f) => !builtInFonts.includes(f))
+      .sort((a, b) => a.localeCompare(b))
 
     return [...builtInFonts, ...systemFonts]
   } catch (error) {

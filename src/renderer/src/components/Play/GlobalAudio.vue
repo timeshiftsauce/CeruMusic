@@ -10,11 +10,44 @@ import {
   nextTick
 } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import { useEqualizerStore } from '@renderer/store/Equalizer'
+import { useAudioEffectsStore } from '@renderer/store/AudioEffects'
+import { storeToRefs } from 'pinia'
+import AudioManager from '@renderer/utils/audio/audioManager'
 
 const audioStore = ControlAudioStore()
+const eqStore = useEqualizerStore()
+const effectStore = useAudioEffectsStore()
 const audioMeta = ref<HTMLAudioElement>()
 // 提供订阅方法给子组件使用
 provide('audioSubscribe', audioStore.subscribe)
+
+// 应用均衡器设置
+const applyGlobalEQ = (el: HTMLAudioElement) => {
+  AudioManager.getOrCreateAudioSource(el)
+  const { enabled, gains } = storeToRefs(eqStore)
+  const targetGains = enabled.value ? gains.value : new Array(10).fill(0)
+  targetGains.forEach((gain, index) => {
+    AudioManager.setEqualizerBand(el, index, gain)
+  })
+}
+
+// Apply Audio Effects
+const applyGlobalEffects = (el: HTMLAudioElement) => {
+  const { bassBoost, surround, balance } = storeToRefs(effectStore)
+
+  // Bass Boost
+  const targetBass = bassBoost.value.enabled ? bassBoost.value.gain : 0
+  AudioManager.setBassBoost(el, targetBass)
+
+  // Surround
+  const targetSurround = surround.value.enabled ? surround.value.mode : 'off'
+  AudioManager.setSurroundMode(el, targetSurround)
+
+  // Balance
+  const targetBalance = balance.value.enabled ? balance.value.value : 0
+  AudioManager.setBalance(el, targetBalance)
+}
 
 // 记录组件被停用前的播放状态
 let wasPlaying = false
@@ -22,9 +55,33 @@ let playbackPosition = 0
 
 onMounted(() => {
   audioStore.init(audioMeta.value)
+  if (audioMeta.value) {
+    applyGlobalEQ(audioMeta.value)
+    applyGlobalEffects(audioMeta.value)
+  }
   console.log('音频组件初始化完成')
   // window.api.ping(handleEnded)
 })
+
+watch(
+  [() => eqStore.enabled, () => eqStore.gains],
+  () => {
+    if (audioMeta.value) {
+      applyGlobalEQ(audioMeta.value)
+    }
+  },
+  { deep: true }
+)
+
+watch(
+  [() => effectStore.bassBoost, () => effectStore.surround, () => effectStore.balance],
+  () => {
+    if (audioMeta.value) {
+      applyGlobalEffects(audioMeta.value)
+    }
+  },
+  { deep: true }
+)
 
 /**
  * 监听 URL 变化，先重置旧音频再加载新音频，避免旧解码/缓冲滞留

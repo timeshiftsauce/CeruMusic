@@ -22,6 +22,8 @@ import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettin
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
 import DesktopLyricStyle from '@renderer/components/Settings/DesktopLyricStyle.vue'
 import LyricFontSettings from '@renderer/components/Settings/LyricFontSettings.vue'
+import EqualizerSettings from '@renderer/components/Settings/EqualizerSettings.vue'
+import AudioEffectSettings from '@renderer/components/Settings/AudioEffectSettings.vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { playSetting as usePlaySetting } from '@renderer/store/playSetting'
@@ -570,6 +572,16 @@ const getTagOptionsStatus = () => {
               <div class="setting-group">
                 <h3>播放列表管理</h3>
                 <PlaylistSettings />
+              </div>
+
+              <div class="setting-group">
+                <h3>音频均衡器</h3>
+                <EqualizerSettings />
+              </div>
+
+              <div class="setting-group">
+                <h3>高级音效处理</h3>
+                <AudioEffectSettings />
               </div>
 
               <!-- 播放显示 -->

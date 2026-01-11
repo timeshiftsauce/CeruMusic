@@ -14,7 +14,8 @@ const lyricStore = {
       x: screen.getPrimaryDisplay().workAreaSize.width / 2 - 400,
       y: screen.getPrimaryDisplay().workAreaSize.height - 90,
       width: 800,
-      height: 180
+      height: 180,
+      fontFamily: 'PingFangSC-Semibold'
     }),
   set: (value: lyricConfig) => configManager.set<lyricConfig>('lyric', value)
 }
@@ -134,6 +135,19 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
       lyricWin.webContents.send('desktop-lyric-option-change', option)
     }
     mainWin?.webContents.send('desktop-lyric-option-change', option)
+  })
+
+  // 接收字体设置并转发给歌词窗口
+  ipcMain.on('set-desktop-lyric-font', (_, font: string) => {
+    // Save font setting
+    lyricStore.set({
+      ...lyricStore.get(),
+      fontFamily: font
+    })
+
+    if (lyricWin && !lyricWin.isDestroyed()) {
+      lyricWin.webContents.send('set-desktop-lyric-font', font)
+    }
   })
 
   // 发送主程序事件
