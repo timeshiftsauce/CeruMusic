@@ -586,6 +586,12 @@ const lightMainColor = computed(() => {
   // 如果解析失败，返回默认的偏白色
   return 'rgba(255, 255, 255, 0.9)'
 })
+
+// 计算歌词颜色
+const lyricViewColor = computed(() => {
+  return playSetting.getIsImmersiveLyricColor ? lightMainColor.value : 'rgba(255, 255, 255, 1)'
+})
+
 const lyricHeight = computed(() => {
   return playSetting.getisJumpLyric ? '100%' : '200%'
 })
@@ -832,6 +838,13 @@ onBeforeUnmount(() => {
           <div class="control-row">
             <span>显示左侧面板</span>
             <n-switch v-model:value="showLeftPanel" />
+          </div>
+          <div class="control-row">
+            <span>沉浸色歌词</span>
+            <n-switch
+              v-model:value="playSetting.getIsImmersiveLyricColor"
+              @update:value="playSetting.setIsImmersiveLyricColor"
+            />
           </div>
         </div>
       </Transition>
@@ -1152,7 +1165,8 @@ onBeforeUnmount(() => {
       );
 
       :deep(.lyric-player) {
-        // --amll-lyric-view-color: v-bind(lightMainColor);
+        --amll-lyric-view-color: v-bind(lyricViewColor);
+        transition: color 0.2s;
         font-family: v-bind(lyricFontFamily);
         --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
 

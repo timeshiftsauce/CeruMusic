@@ -6,14 +6,16 @@ export const playSetting = defineStore('playSetting', {
     bgPlaying: true, // 是否播放背景动画 布朗运动
     isAudioVisualizer: true, // 音频可视化
     layoutMode: 'cd', // 播放页布局模式: 'cd' | 'cover'
-    showLeftPanel: true // 是否显示左侧面板
+    showLeftPanel: true, // 是否显示左侧面板
+    isImmersiveLyricColor: true // 是否开启沉浸色歌词
   }),
   getters: {
     getisJumpLyric: (state) => state.isJumpLyric,
     getBgPlaying: (state) => state.bgPlaying,
     getIsAudioVisualizer: (state) => state.isAudioVisualizer,
     getLayoutMode: (state) => state.layoutMode,
-    getShowLeftPanel: (state) => state.showLeftPanel
+    getShowLeftPanel: (state) => state.showLeftPanel,
+    getIsImmersiveLyricColor: (state) => state.isImmersiveLyricColor
   },
   actions: {
     setIsDumpLyric(isDumpLyric: boolean) {
@@ -30,6 +32,9 @@ export const playSetting = defineStore('playSetting', {
     },
     setShowLeftPanel(show: boolean) {
       this.showLeftPanel = show
+    },
+    setIsImmersiveLyricColor(isImmersiveLyricColor: boolean) {
+      this.isImmersiveLyricColor = isImmersiveLyricColor
     }
   },
   persist: true
