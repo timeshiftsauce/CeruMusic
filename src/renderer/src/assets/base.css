@@ -6,6 +6,11 @@
   font-family: 'lyricfont';
   src: url('./lyricfont.ttf');
 }
+/* 苹方-简 中粗体 */
+@font-face {
+  font-family: 'PingFangSC-Semibold';
+  src: url('./PingFangSC-Semibold.woff2') format('woff2');
+}
 *,
 *::before,
 *::after {

@@ -1146,9 +1146,9 @@ onBeforeUnmount(() => {
       );
 
       :deep(.lyric-player) {
-        --amll-lyric-view-color: v-bind(lightMainColor);
-        font-family: lyricfont;
-        --amll-lyric-player-font-size: min(2.6vw, 39px);
+        // --amll-lyric-view-color: v-bind(lightMainColor);
+        font-family: PingFangSC-Semibold;
+        --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
 
         // bottom: max(2vw, 29px);
 
