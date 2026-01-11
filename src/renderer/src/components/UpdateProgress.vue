@@ -1,5 +1,5 @@
 <template>
-  <div v-if="downloadState.isDownloading" class="update-progress-overlay">
+  <div v-if="downloadState.isDownloading && !isHidden" class="update-progress-overlay">
     <div class="update-progress-modal">
       <div class="progress-header">
         <h3>正在下载更新</h3>
@@ -26,6 +26,9 @@
             下载速度: {{ formatBytes(downloadSpeed) }}/s
           </div>
         </div>
+        <div class="progress-footer">
+          <t-button @click="hideOverlay">后台下载</t-button>
+        </div>
       </div>
     </div>
   </div>
@@ -36,9 +39,14 @@ import { ref, watch, onUnmounted } from 'vue'
 import { downloadState } from '../services/autoUpdateService'
 
 const downloadSpeed = ref(0)
+const isHidden = ref(false)
 let lastTransferred = 0
 let lastTime = 0
 let speedInterval: NodeJS.Timeout | null = null
+
+const hideOverlay = () => {
+  isHidden.value = true
+}
 
 // 计算下载速度
 const calculateSpeed = () => {
@@ -82,6 +90,7 @@ watch(
         }
       }, 1000)
     } else {
+      isHidden.value = false
       if (speedInterval) {
         clearInterval(speedInterval)
         speedInterval = null
@@ -130,11 +139,32 @@ const formatBytes = (bytes: number): string => {
   min-width: 400px;
   max-width: 500px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  position: relative;
 }
 
 .progress-header {
   text-align: center;
   margin-bottom: 24px;
+}
+
+.progress-footer {
+  display: flex;
+  padding: 10px 0 0 0;
+  justify-content: center;
+}
+
+.bg-download-btn {
+  border: 1px solid var(--td-brand-color-5);
+  background: transparent;
+  color: var(--td-brand-color-6);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bg-download-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .progress-header h3 {

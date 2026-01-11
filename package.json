@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.7.8",
+  "version": "1.7.7",
   "description": "一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "sqj,wldss,star",
@@ -58,6 +58,7 @@
     "dompurify": "^3.2.6",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.3.9",
+    "font-list": "^2.0.1",
     "hpagent": "^1.2.0",
     "iconv-lite": "^0.7.0",
     "jss": "^10.10.0",

@@ -61,9 +61,6 @@ const handlePlay = async () => {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
     }
     return
-  } else if (!localUserStore.userSource.pluginId) {
-    MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
-    return
   }
   try {
     if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
@@ -111,7 +108,7 @@ const togglePlayPause = async () => {
 }
 
 const playSong = async (song: SongList) => {
-  if (!localUserStore.userSource.pluginId) {
+  if (!localUserStore.userSource.pluginId && song.source !== 'local') {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
   }

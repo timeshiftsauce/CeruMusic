@@ -19,6 +19,7 @@ export interface SettingsState {
   tagWriteOptions?: TagWriteOptions
   autoImportPlaylistOnOpen?: boolean
   suppressImportPrompt?: boolean
+  lyricFontFamily?: string
 }
 
 export const useSettingsStore = defineStore(
@@ -36,7 +37,8 @@ export const useSettingsStore = defineStore(
         lyricFormat: 'word-by-word'
       },
       autoImportPlaylistOnOpen: false,
-      suppressImportPrompt: false
+      suppressImportPrompt: false,
+      lyricFontFamily: 'PingFangSC-Semibold'
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -80,6 +82,9 @@ export const useSettingsStore = defineStore(
       // 兜底确保关键字段不会丢失
       if (typeof settings.value.autoCacheMusic === 'undefined') {
         settings.value.autoCacheMusic = true
+      }
+      if (!settings.value.lyricFontFamily) {
+        settings.value.lyricFontFamily = 'PingFangSC-Semibold'
       }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {

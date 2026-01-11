@@ -1,6 +1,6 @@
 import { NotifyPlugin, DialogPlugin } from 'tdesign-vue-next'
 
-import { reactive } from 'vue'
+import { reactive, h } from 'vue'
 
 export interface DownloadProgress {
   percent: number
@@ -132,11 +132,13 @@ export class AutoUpdateService {
 
   // 显示检查更新通知
   private showCheckingNotification() {
-    NotifyPlugin.info({
-      title: '检查更新',
-      content: '正在检查是否有新版本...',
-      duration: 2000
-    })
+    return
+    // NotifyPlugin.info({
+    //   title: '检查更新',
+    //   content: '正在检查是否有新版本...',
+    //   duration: 2000,
+    //   offset: [0, '4.25rem']
+    // })
   }
 
   // 显示有更新可用对话框
@@ -148,7 +150,14 @@ export class AutoUpdateService {
 
     const dialog = DialogPlugin.confirm({
       header: `发现新版本 ${updateInfo.name}`,
-      body: `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否立即下载此更新？`,
+      body: () => {
+        const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否立即下载此更新？`
+        return h(
+          'div',
+          { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
+          content
+        )
+      },
       confirmBtn: '立即下载',
       cancelBtn: '稍后提醒',
       onConfirm: () => {
@@ -166,7 +175,7 @@ export class AutoUpdateService {
     NotifyPlugin.info({
       title: '已是最新版本',
       content: '当前已是最新版本，无需更新',
-      duration: 3000
+      duration: 1500
     })
   }
 
