@@ -2,9 +2,9 @@
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
 import { SearchIcon } from 'tdesign-icons-vue-next'
-import { onMounted, onUnmounted, ref, watchEffect, computed } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useSearchStore } from '@renderer/store'
 
 let stopWatchEffect: (() => void) | null = null
@@ -66,7 +66,18 @@ const menuList: MenuItem[] = [
 ]
 const menuActive = ref(0)
 const router = useRouter()
+const route = useRoute()
 const source_list_show = ref(false)
+
+// 监听路由变化，更新激活的菜单项
+watch(
+  () => route.path,
+  (newPath) => {
+    const index = menuList.findIndex((item) => newPath.startsWith(item.path))
+    menuActive.value = index
+  },
+  { immediate: true }
+)
 
 // 检查是否有插件数据
 const hasPluginData = computed(() => {

@@ -157,6 +157,11 @@ const handleSeeked = (): void => {
 }
 
 const handlePlay = (): void => {
+  // 确保 AudioContext 处于运行状态（解决 Win11 等系统下的自动挂起问题）
+  if (audioMeta.value) {
+    AudioManager.resumeContext(audioMeta.value)
+  }
+
   audioStore.Audio.isPlay = true
   startSetupInterval()
   audioStore.Audio.duration = audioMeta.value?.duration || 0
@@ -237,6 +242,7 @@ onUnmounted(() => {
     <audio
       id="globaAudio"
       ref="audioMeta"
+      crossorigin="anonymous"
       preload="auto"
       :src="audioStore.Audio.url"
       @seeked="handleSeeked"

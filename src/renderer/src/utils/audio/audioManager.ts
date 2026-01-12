@@ -25,6 +25,35 @@ class AudioManager {
     return AudioManager.instance
   }
 
+  // 尝试恢复上下文
+  async resumeContext(audioElement: HTMLAudioElement): Promise<void> {
+    const context = this.audioContexts.get(audioElement)
+    if (context) {
+      // 1. 尝试标准的 resume
+      if (context.state === 'suspended') {
+        try {
+          await context.resume()
+          console.log('AudioManager: 手动恢复 Context 成功')
+        } catch (error) {
+          console.warn('AudioManager: 手动恢复 Context 失败:', error)
+        }
+      }
+
+      // 2. 强力唤醒：播放一个瞬间的静音 buffer
+      // 这可以解决部分声卡驱动在 resume 后仍然不输出信号的问题
+      try {
+        const buffer = context.createBuffer(1, 1, 22050)
+        const source = context.createBufferSource()
+        source.buffer = buffer
+        source.connect(context.destination)
+        source.start(0)
+        console.log('AudioManager: 发送静音帧唤醒音频驱动')
+      } catch (e) {
+        console.warn('AudioManager: 静音唤醒失败', e)
+      }
+    }
+  }
+
   // 获取或创建音频源
   getOrCreateAudioSource(
     audioElement: HTMLAudioElement
@@ -34,9 +63,32 @@ class AudioManager {
       let source = this.audioSources.get(audioElement)
       let context = this.audioContexts.get(audioElement)
 
+      // 确保 Context 处于运行状态
+      if (context && context.state === 'suspended') {
+        context.resume().catch((err) => console.warn('AudioManager: 恢复挂起的 Context 失败:', err))
+      }
+
       if (!source || !context || context.state === 'closed') {
         // 创建新的音频上下文和源
-        context = new (window.AudioContext || (window as any).webkitAudioContext)()
+        // 使用 latencyHint: 'playback' 优化播放流畅度，减少断音风险
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+        context = new AudioContextClass({ latencyHint: 'playback' })
+
+        // 尝试恢复上下文状态（解决部分 Win11 系统或其他环境下自动挂起导致无声的问题）
+        if (context.state === 'suspended') {
+          context.resume().catch(err => console.warn('AudioManager: 自动恢复 Context 失败:', err))
+        }
+
+        // 检查 crossOrigin 设置，防止跨域导致静音
+        if (!audioElement.crossOrigin && audioElement.src && !audioElement.src.startsWith(window.location.origin) && !audioElement.src.startsWith('data:') && !audioElement.src.startsWith('blob:')) {
+          console.warn('AudioManager: 检测到跨域音频且未设置 crossOrigin，可能导致分析器无声。建议设置 audio.crossOrigin = "anonymous"')
+          try {
+            audioElement.crossOrigin = 'anonymous'
+          } catch (e) {
+            console.warn('AudioManager: 尝试设置 crossOrigin 失败', e)
+          }
+        }
+
         source = context.createMediaElementSource(audioElement)
 
         const ctx = context
@@ -142,11 +194,14 @@ class AudioManager {
       analyser.smoothingTimeConstant = 0.6
 
       // 复用每个 audioElement 的分流器：source -> splitter -> destination
+      // getOrCreateAudioSource 应该已经创建并连接了 splitter
       let splitter = this.splitters.get(audioElement)
+
+      // 容错处理：如果 splitter 意外丢失，则重建（但这是非预期路径，可能会绕过 EQ）
       if (!splitter) {
+        console.warn('AudioManager: Splitter not found in createAnalyser, attempting to recreate (EQ may be bypassed)')
         splitter = context.createGain()
         splitter.gain.value = 1.0
-        // 仅第一次建立主链路，不要断开已有连接，避免累积
         source.connect(splitter)
         splitter.connect(context.destination)
         this.splitters.set(audioElement, splitter)
@@ -193,7 +248,7 @@ class AudioManager {
       if (splitter) {
         try {
           splitter.disconnect()
-        } catch {}
+        } catch { }
         this.splitters.delete(audioElement)
       }
 
@@ -203,7 +258,7 @@ class AudioManager {
         filters.forEach((f) => {
           try {
             f.disconnect()
-          } catch {}
+          } catch { }
         })
         this.equalizers.delete(audioElement)
       }
