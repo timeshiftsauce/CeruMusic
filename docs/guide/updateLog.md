@@ -3,47 +3,41 @@
 ## 日志
 
 - ###### 2026-01-09（[v1.7.8](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.8)）
-  
+
   本次更新主要新增以下功能：
-  
-  ​	✨ 批量操作 - 音乐列表支持批量操作
-  ​	🔄歌单同步 - 新增歌单同步功能和元数据支持
-  ​	🖼️封面优化 - 改进本地音乐封面处理逻辑
-  ​	🎯界面优化 - 优化图标和组件显示效果
-  ​	📚文档完善 - 更新指南和社区支持文档
-  
+
+  ​ ✨ 批量操作 - 音乐列表支持批量操作
+  ​ 🔄歌单同步 - 新增歌单同步功能和元数据支持
+  ​ 🖼️封面优化 - 改进本地音乐封面处理逻辑
+  ​ 🎯界面优化 - 优化图标和组件显示效果
+  ​ 📚文档完善 - 更新指南和社区支持文档
+
 - ###### 2026-01-03（[v1.7.7](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.7)）
-  
   1. fix: 修复排行榜播放无限加载问题
-  
+
 - ###### 2026-01-03（[v1.7.6.2](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.6.2)）
-  
   1. chore: 修复排行榜加载播放问题
-  
+
 - ###### 2026-01-03（[v1.7.6.1](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.6.1)）
-  
   1. fix: 修复重复歌曲和分页状态问题
      - 过滤已存在的歌曲避免重复显示
      - 修正分页逻辑，使用API返回的总数进行判断
-  
+
 - ###### 2026-01-03（[v1.7.6](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.6)）
-  
   1. chore: 新增下载管理，流程更清晰
      - 播放器优化并修复插件检测
      - 设置页新增开发者信息展示
      - 新增 bd 音乐源支持
      - 适配酷我新版手机歌单链接
-  
+
 - ###### 2026-01-03（[v1.7.5](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.5)）
-  
   1. chore: 新增下载管理，流程更清晰
      - 播放器优化并修复插件检测
      - 设置页新增开发者信息展示
      - 新增 bd 音乐源支持
      - 适配酷我新版手机歌单链接
-  
+
 - ###### 2026-01-02（[v1.7.1](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.1)）
-  
   1. feat: 新增排行榜功能及优化本地音乐扫描
      - feat(leaderboard): 添加排行榜组件及卡片样式
      - feat(musicSdk): 实现各平台排行榜API支持
@@ -54,7 +48,7 @@
      - refactor(utils): 优化数字格式化工具函数
      - style(LeaderBoard): 为排行榜容器添加底部内边距
      - style: 调整页面布局及样式细节
-  
+
 - ###### 2026-01-01（[v1.7.0](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.7.0)）
   1. 全新的背景渲染效果过度
   2. 歌词间奏点过度

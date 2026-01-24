@@ -4,7 +4,7 @@ import { formatPlayTime } from '../../index'
 export default {
   getReqId() {
     function t() {
-      return (65536 * (1 + Math.random()) | 0).toString(16).substring(1)
+      return ((65536 * (1 + Math.random())) | 0).toString(16).substring(1)
     }
     return t() + t() + t() + t() + t() + t() + t() + t()
   },
@@ -65,16 +65,23 @@ export default {
   async getListDetail(id, page, retryNum = 0) {
     const config = {
       headers: {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
-        "plat": "h5"
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1',
+        plat: 'h5'
       }
     }
 
-    const { data: infoRes } = await axios.get(`https://bd-api.kuwo.cn/api/service/playlist/info/${id}?reqId=${this.getReqId()}&source=5`, config)
+    const { data: infoRes } = await axios.get(
+      `https://bd-api.kuwo.cn/api/service/playlist/info/${id}?reqId=${this.getReqId()}&source=5`,
+      config
+    )
 
-    const { data: listRes } = await axios.get(`https://bd-api.kuwo.cn/api/service/playlist/${id}/musicList?reqId=${this.getReqId()}&source=5&pn=${page}&rn=100`, config)
+    const { data: listRes } = await axios.get(
+      `https://bd-api.kuwo.cn/api/service/playlist/${id}/musicList?reqId=${this.getReqId()}&source=5&pn=${page}&rn=100`,
+      config
+    )
 
-    if(infoRes.code !== 200 || listRes.code !== 200) {
+    if (infoRes.code !== 200 || listRes.code !== 200) {
       // 获取失败
       return
     }
@@ -94,7 +101,7 @@ export default {
       page: listRes.data.pageNum,
       limit: 100,
       total: listRes.data.total,
-      source: "kw",
+      source: 'kw',
       info
     }
   }

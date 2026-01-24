@@ -114,7 +114,7 @@ export default {
           playlistId: id
         },
         author: body.playlist.creator.nickname,
-        play_count: formatPlayCount(body.playlist.playCount),
+        play_count: formatPlayCount(body.playlist.playCount)
       }
     }
   },

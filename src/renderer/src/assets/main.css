@@ -393,7 +393,7 @@
   /* Player 组件专用变量 - 亮色主题 */
   --player-bg-default: #ffffff46;
   --player-bg-idle: #ffffff;
-  --player-text-idle: rgba(0, 0, 0, .8);
+  --player-text-idle: rgba(0, 0, 0, 0.8);
   --player-text-hover-idle: var(--td-brand-color-5);
   --player-btn-bg-idle: var(--td-brand-color-2);
   --player-btn-bg-hover-idle: var(--td-brand-color-3);

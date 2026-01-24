@@ -1,6 +1,11 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import { MainApi, MethodParams } from '../main/services/musicSdk/index'
-import type { HotkeyAction, HotkeyConfig, HotkeyConfigPayload, HotkeyStatus } from '../common/types/hotkeys'
+import type {
+  HotkeyAction,
+  HotkeyConfig,
+  HotkeyConfigPayload,
+  HotkeyStatus
+} from '../common/types/hotkeys'
 // 自定义 API 接口
 interface CustomAPI {
   autoUpdater: any
@@ -54,7 +59,12 @@ interface CustomAPI {
   // 歌单管理 API
   songList: {
     // === 歌单管理 ===
-    create: (name: string, description?: string, source?: string, meta?: Record<string, any>) => Promise<any>
+    create: (
+      name: string,
+      description?: string,
+      source?: string,
+      meta?: Record<string, any>
+    ) => Promise<any>
     getAll: () => Promise<any>
     getById: (hashId: string) => Promise<any>
     delete: (hashId: string) => Promise<any>
@@ -150,10 +160,22 @@ interface CustomAPI {
   getUserConfig: () => Promise<any>
 
   hotkeys: {
-    get: () => Promise<{ success: boolean; data?: HotkeyConfig; status?: HotkeyStatus; error?: string; errors?: string[] }>
+    get: () => Promise<{
+      success: boolean
+      data?: HotkeyConfig
+      status?: HotkeyStatus
+      error?: string
+      errors?: string[]
+    }>
     set: (
       payload: HotkeyConfigPayload
-    ) => Promise<{ success: boolean; data?: HotkeyConfig; status?: HotkeyStatus; error?: string; errors?: string[] }>
+    ) => Promise<{
+      success: boolean
+      data?: HotkeyConfig
+      status?: HotkeyStatus
+      error?: string
+      errors?: string[]
+    }>
   }
 
   pluginNotice: {

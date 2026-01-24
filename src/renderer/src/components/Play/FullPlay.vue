@@ -53,10 +53,82 @@ const props = withDefaults(defineProps<Props>(), {
   mainColor: '#rgb(0,0,0)'
 })
 // 定义事件
-const emit = defineEmits(['toggle-fullscreen'])
+const emit = defineEmits(['toggle-fullscreen', 'idle-change'])
 
 // 跟踪全屏状态
 const isFullscreen = ref(false)
+
+// 自动隐藏相关逻辑
+const isIdle = ref(false)
+let idleTimer: any = null
+
+const resetIdleTimer = () => {
+  if (!playSetting.getAutoHideBottom) {
+    isIdle.value = false
+    emit('idle-change', false)
+    return
+  }
+
+  // 恢复显示时
+  if (isIdle.value) {
+    isIdle.value = false
+    emit('idle-change', false)
+  }
+
+  if (idleTimer) clearTimeout(idleTimer)
+
+  if (props.show) {
+    idleTimer = setTimeout(() => {
+      if (props.show && playSetting.getAutoHideBottom && !showSettings.value) {
+        isIdle.value = true
+        emit('idle-change', true)
+      }
+    }, 3000)
+  }
+}
+
+watch(
+  () => props.show,
+  (val) => {
+    if (val) {
+      resetIdleTimer()
+      window.addEventListener('mousemove', resetIdleTimer)
+    } else {
+      window.removeEventListener('mousemove', resetIdleTimer)
+      if (idleTimer) clearTimeout(idleTimer)
+      isIdle.value = false
+      emit('idle-change', false)
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => playSetting.getAutoHideBottom,
+  (val) => {
+    if (!val) {
+      if (idleTimer) clearTimeout(idleTimer)
+      isIdle.value = false
+      emit('idle-change', false)
+    } else {
+      resetIdleTimer()
+    }
+  }
+)
+
+watch(
+  () => showSettings.value,
+  (val) => {
+    if (val) {
+      // 打开设置时，取消自动隐藏
+      if (idleTimer) clearTimeout(idleTimer)
+      isIdle.value = false
+      emit('idle-change', false)
+    } else {
+      resetIdleTimer()
+    }
+  }
+)
 
 // 切换全屏模式
 const toggleFullscreen = () => {
@@ -659,7 +731,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="full-play" :class="{ active: props.show, 'use-black-text': useBlackText }">
+  <div
+    class="full-play"
+    :class="{ active: props.show, 'use-black-text': useBlackText, idle: isIdle }"
+  >
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
     <div
       ref="backgroundContainer"
@@ -770,7 +845,7 @@ onBeforeUnmount(() => {
           :align-position="
             playSetting.getLayoutMode === 'cd' ? 0.5 : playSetting.getisJumpLyric ? 0.3 : 0.38
           "
-          :enableBlur="playSetting.getIsBlurLyric"
+          :enable-blur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
           @line-click="jumpTime"
@@ -782,6 +857,7 @@ onBeforeUnmount(() => {
     <div
       v-if="props.show && coverImage && playSetting.getIsAudioVisualizer"
       class="audio-visualizer-container"
+      :class="{ idle: isIdle }"
     >
       <AudioVisualizer
         :show="Audio.isPlay"
@@ -792,7 +868,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <div ref="floatActionRef" class="float-action">
+    <div ref="floatActionRef" class="float-action" :class="{ idle: isIdle }">
       <t-Tooltip content="播放器主题" placement="bottom">
         <button class="skin-btn" @click="showSettings = !showSettings">
           <pen-ball-icon
@@ -860,6 +936,13 @@ onBeforeUnmount(() => {
             <n-switch
               v-model:value="playSetting.getIsAudioVisualizer"
               @update:value="playSetting.setIsAudioVisualizer"
+            />
+          </div>
+          <div class="control-row">
+            <span>自动隐藏控制栏</span>
+            <n-switch
+              v-model:value="playSetting.autoHideBottom"
+              @update:value="playSetting.setAutoHideBottom"
             />
           </div>
         </div>
@@ -955,6 +1038,25 @@ onBeforeUnmount(() => {
     top: 0;
   }
 
+  &.idle {
+    .playbox {
+      .left {
+        margin-bottom: 0;
+      }
+      .right {
+        margin-bottom: 20px;
+      }
+    }
+
+    .fullscreen-btn,
+    .putawayscreen-btn,
+    .top {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-100%);
+    }
+  }
+
   .top {
     position: absolute;
     width: calc(100% - 200px);
@@ -962,6 +1064,7 @@ onBeforeUnmount(() => {
     right: 0;
     padding: 30px 30px;
     padding-bottom: 10px;
+    transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .playbox {
@@ -1393,12 +1496,24 @@ onBeforeUnmount(() => {
     // padding: 0 20px;
     display: flex;
     align-items: center;
+    transition: bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    &.idle {
+      bottom: 0 !important;
+    }
   }
 }
 
 .float-action {
   position: absolute;
   z-index: 5;
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+  &.idle {
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+  }
   --bottom-height: 60px;
   right: 20px;
   bottom: calc(var(--bottom-height) + var(--play-bottom-height));
