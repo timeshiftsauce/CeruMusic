@@ -370,6 +370,25 @@ function createWindow(): void {
 
   initHotkeyService(mainWindow)
 
+  // 注册生产环境调试快捷键 Ctrl+S+F11
+  let isSPressed = false
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.code === 'KeyS') {
+      isSPressed = input.type === 'keyDown'
+    }
+    if (input.key === 'F12' && input.type === 'keyDown' && input.control && isSPressed) {
+      event.preventDefault()
+      if (mainWindow?.webContents.isDevToolsOpened()) {
+        mainWindow?.webContents.closeDevTools()
+      } else {
+        mainWindow?.webContents.openDevTools()
+      }
+    }
+  })
+  mainWindow.on('blur', () => {
+    isSPressed = false
+  })
+
   // ⚠️ 关键修改 2: 监听 'moved' 事件，动态更新最大尺寸
   mainWindow.on('moved', () => {
     // 当窗口移动时，确保最大尺寸限制随屏幕变化
