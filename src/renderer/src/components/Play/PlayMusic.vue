@@ -295,6 +295,12 @@ const toggleFullPlay = () => {
   showFullPlay.value = !showFullPlay.value
 }
 
+// 全屏闲置状态
+const isFullPlayIdle = ref(false)
+const handleIdleChange = (idle: boolean) => {
+  isFullPlayIdle.value = idle
+}
+
 // 左侧操作：喜欢/取消喜欢（支持切换）
 const onToggleLike = async () => {
   try {
@@ -515,6 +521,7 @@ watch(showFullPlay, (val) => {
   <div
     class="player-container"
     :style="!showFullPlay && 'box-shadow: none'"
+    :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay }"
     @click.stop="toggleFullPlay"
   >
     <!-- 进度条 -->
@@ -691,6 +698,7 @@ watch(showFullPlay, (val) => {
       :song-info="songInfo"
       :main-color="maincolor"
       @toggle-fullscreen="toggleFullPlay"
+      @idle-change="handleIdleChange"
     />
   </div>
 
@@ -779,7 +787,9 @@ watch(showFullPlay, (val) => {
   bottom: 0;
   left: 0;
   right: 0;
-  transition: background 0.3s;
+  transition:
+    transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.3s;
   background: v-bind(bg);
   // border-top: 1px solid #e5e7eb;
   backdrop-filter: blur(1000px);
@@ -787,6 +797,10 @@ watch(showFullPlay, (val) => {
   height: var(--play-bottom-height);
   display: flex;
   flex-direction: column;
+
+  &.full-play-idle {
+    transform: translateY(100%);
+  }
 }
 
 /* 进度条样式 */

@@ -43,8 +43,9 @@ export default {
   },
   getListDetailUrl(id, page) {
     // http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=2858093057&pn=0&rn=100&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1
-    return `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}&rn=${this.limit_song
-      }&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1`
+    return `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}&rn=${
+      this.limit_song
+    }&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1`
     // http://mobileinterfaces.kuwo.cn/er.s?type=get_pc_qz_data&f=web&id=140&prod=pc
   },
 
@@ -211,7 +212,8 @@ export default {
   getListDetailDigest5Music(id, page, tryNum = 0) {
     if (tryNum > 2) return Promise.reject(new Error('try max num'))
     const requestObj = httpFetch(
-      `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}}&rn=${this.limit_song
+      `http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${id}&pn=${page - 1}}&rn=${
+        this.limit_song
       }&encode=utf-8&keyset=pl2012&identity=kuwo&pcmp4=1`
     )
     return requestObj.promise.then(({ body }) => {
@@ -344,7 +346,8 @@ export default {
   },
   async getListDetailMusicListByBDList(id, source, page, tryNum = 0) {
     const { body: listData } = await httpFetch(
-      `https://bd-api.kuwo.cn/api/service/playlist/${id}/musicList?reqId=${this.getReqId()}&source=${source}&pn=${page}&rn=${this.limit_song
+      `https://bd-api.kuwo.cn/api/service/playlist/${id}/musicList?reqId=${this.getReqId()}&source=${source}&pn=${page}&rn=${
+        this.limit_song
       }`,
       {
         headers: {
@@ -510,7 +513,8 @@ export default {
 
   search(text, page, limit = 20) {
     return httpFetch(
-      `http://search.kuwo.cn/r.s?all=${encodeURIComponent(text)}&pn=${page - 1
+      `http://search.kuwo.cn/r.s?all=${encodeURIComponent(text)}&pn=${
+        page - 1
       }&rn=${limit}&rformat=json&encoding=utf8&ver=mbox&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist&pay=0&needliveshow=0`
     ).promise.then(({ body }) => {
       body = objStr2JSON(body)
