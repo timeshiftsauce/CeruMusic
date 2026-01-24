@@ -343,7 +343,6 @@ const multiSelect = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 // 滚动相关状态
-const scrollY = ref(0)
 const isHeaderCompact = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
 
@@ -685,10 +684,6 @@ const handleScroll = (event?: Event) => {
     clientHeight = scrollContainer.value.clientHeight
   }
 
-  scrollY.value = scrollTop
-  // 当滚动超过100px时，启用紧凑模式
-  isHeaderCompact.value = scrollY.value > 100 && scrollHeight > clientHeight + 100
-
   // 触底加载（参考 search.vue）
   if (
     scrollHeight > 0 &&
@@ -699,6 +694,10 @@ const handleScroll = (event?: Event) => {
   ) {
     fetchNetworkPlaylistSongs(false)
   }
+
+  // 当滚动超过100px时，启用紧凑模式
+  if (scrollHeight <= clientHeight + 100) return
+  isHeaderCompact.value = scrollTop > 100
 }
 
 // 组件挂载时获取数据
