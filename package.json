@@ -1,9 +1,9 @@
 {
   "name": "ceru-music",
-  "version": "1.7.10",
+  "version": "1.7.11",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
-  "author": "sqj,wldss,star",
+  "author": "澜音团队",
   "license": "AGPL-3.0-only",
   "homepage": "https://ceru.docs.shiqianjiang.cn",
   "scripts": {
