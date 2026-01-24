@@ -76,12 +76,20 @@ class AudioManager {
 
         // 尝试恢复上下文状态（解决部分 Win11 系统或其他环境下自动挂起导致无声的问题）
         if (context.state === 'suspended') {
-          context.resume().catch(err => console.warn('AudioManager: 自动恢复 Context 失败:', err))
+          context.resume().catch((err) => console.warn('AudioManager: 自动恢复 Context 失败:', err))
         }
 
         // 检查 crossOrigin 设置，防止跨域导致静音
-        if (!audioElement.crossOrigin && audioElement.src && !audioElement.src.startsWith(window.location.origin) && !audioElement.src.startsWith('data:') && !audioElement.src.startsWith('blob:')) {
-          console.warn('AudioManager: 检测到跨域音频且未设置 crossOrigin，可能导致分析器无声。建议设置 audio.crossOrigin = "anonymous"')
+        if (
+          !audioElement.crossOrigin &&
+          audioElement.src &&
+          !audioElement.src.startsWith(window.location.origin) &&
+          !audioElement.src.startsWith('data:') &&
+          !audioElement.src.startsWith('blob:')
+        ) {
+          console.warn(
+            'AudioManager: 检测到跨域音频且未设置 crossOrigin，可能导致分析器无声。建议设置 audio.crossOrigin = "anonymous"'
+          )
           try {
             audioElement.crossOrigin = 'anonymous'
           } catch (e) {
@@ -199,7 +207,9 @@ class AudioManager {
 
       // 容错处理：如果 splitter 意外丢失，则重建（但这是非预期路径，可能会绕过 EQ）
       if (!splitter) {
-        console.warn('AudioManager: Splitter not found in createAnalyser, attempting to recreate (EQ may be bypassed)')
+        console.warn(
+          'AudioManager: Splitter not found in createAnalyser, attempting to recreate (EQ may be bypassed)'
+        )
         splitter = context.createGain()
         splitter.gain.value = 1.0
         source.connect(splitter)
@@ -248,7 +258,7 @@ class AudioManager {
       if (splitter) {
         try {
           splitter.disconnect()
-        } catch { }
+        } catch {}
         this.splitters.delete(audioElement)
       }
 
@@ -258,7 +268,7 @@ class AudioManager {
         filters.forEach((f) => {
           try {
             f.disconnect()
-          } catch { }
+          } catch {}
         })
         this.equalizers.delete(audioElement)
       }

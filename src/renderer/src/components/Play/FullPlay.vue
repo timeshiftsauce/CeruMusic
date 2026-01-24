@@ -564,6 +564,7 @@ watch(
 // 处理低频音量更新
 const handleLowFreqUpdate = (volume: number) => {
   state.lowFreqVolume = volume
+  console.log('lowFreqVolume', volume)
 }
 
 // 计算偏白的主题色
@@ -731,7 +732,7 @@ onBeforeUnmount(() => {
 
         <template v-else-if="playSetting.getLayoutMode === 'cover'">
           <div class="cover-layout-container">
-            <div class="cover-wrapper-square">
+            <div class="cover-wrapper-square" :class="{ playing: controlAudio.Audio.isPlay }">
               <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
             </div>
             <div class="song-info-area">
@@ -769,6 +770,7 @@ onBeforeUnmount(() => {
           :align-position="
             playSetting.getLayoutMode === 'cd' ? 0.5 : playSetting.getisJumpLyric ? 0.3 : 0.38
           "
+          :enableBlur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
           @line-click="jumpTime"
@@ -844,6 +846,20 @@ onBeforeUnmount(() => {
             <n-switch
               v-model:value="playSetting.getIsImmersiveLyricColor"
               @update:value="playSetting.setIsImmersiveLyricColor"
+            />
+          </div>
+          <div class="control-row">
+            <span>歌词模糊效果</span>
+            <n-switch
+              v-model:value="playSetting.getIsBlurLyric"
+              @update:value="playSetting.setIsBlurLyric"
+            />
+          </div>
+          <div class="control-row">
+            <span>音频可视化</span>
+            <n-switch
+              v-model:value="playSetting.getIsAudioVisualizer"
+              @update:value="playSetting.setIsAudioVisualizer"
             />
           </div>
         </div>
@@ -1177,7 +1193,7 @@ onBeforeUnmount(() => {
 
         * [class^='lyricMainLine'] {
           font-weight: 600 !important;
-
+          // text-align: center;
           * {
             font-weight: 600 !important;
           }
@@ -1253,11 +1269,21 @@ onBeforeUnmount(() => {
         box-shadow:
           0 25px 50px -12px rgba(0, 0, 0, 0.5),
           0 0 0 1px rgba(255, 255, 255, 0.1);
-        transition: transform 0.4s ease;
+        transition: transform 0.44s cubic-bezier(0.44, 2, 0.64, 1);
         margin: 0 auto;
+        transform: scale(0.8);
+
+        &.playing {
+          transform: scale(1);
+
+          &:hover {
+            transition: transform 0.2s;
+            transform: scale(1.02);
+          }
+        }
 
         &:hover {
-          transform: scale(1.02);
+          transform: scale(0.82);
         }
 
         :deep(.cover-img-square) {
@@ -1421,6 +1447,11 @@ onBeforeUnmount(() => {
   }
 
   .settings-panel {
+    max-height: calc(
+      100vh - 40px - 2.25rem - 70px - calc(var(--bottom-height) + var(--play-bottom-height))
+    );
+    overflow: auto;
+    scrollbar-width: none;
     position: absolute;
     bottom: 70px;
     right: 0;
@@ -1507,7 +1538,7 @@ onBeforeUnmount(() => {
       padding: 4px 8px;
 
       span {
-        color: rgba(255, 255, 255, 0.8);
+        color: rgba(241, 241, 241, 0.8);
         font-size: 14px;
         font-weight: 500;
       }

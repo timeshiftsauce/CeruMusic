@@ -21,6 +21,8 @@ import {
   importPlaylistFromPath,
   validateImportedPlaylist
 } from '@renderer/utils/playlist/playlistExportImport'
+import { installGlobalMusicControls } from '@renderer/utils/audio/globalControls'
+import { installDesktopLyricBridge } from '@renderer/utils/lyrics/desktopLyricBridge'
 import router from './router'
 import { useAuthStore } from '@renderer/store'
 
@@ -244,14 +246,8 @@ onMounted(() => {
   })
 
   // 全局键盘/托盘播放控制安装（解耦出组件）
-  import('@renderer/utils/audio/globalControls')
-    .then((m) => m.installGlobalMusicControls())
-    .catch(() => {})
-  // import('@renderer/utils/audio/globaPlayList').then((m) => m.initPlayback?.()).catch(() => {})
-  import('@renderer/utils/lyrics/desktopLyricBridge')
-    .then((m) => m.installDesktopLyricBridge())
-    .catch(() => {})
-
+  installGlobalMusicControls()
+  installDesktopLyricBridge()
   // 全局监听来自主进程的播放控制事件，确保路由切换也可响应
   const forward = (name: string, val?: any) => {
     console.log('forward', name, val)

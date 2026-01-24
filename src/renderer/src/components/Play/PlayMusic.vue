@@ -1006,13 +1006,14 @@ watch(showFullPlay, (val) => {
 /* 右侧：时间和其他控制 */
 .right-section {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
   flex: 1;
   justify-content: flex-end;
 
   .time-display {
     font-size: 12px;
+    line-height: 12px;
     color: v-bind(contrastTextColor);
     white-space: nowrap;
   }
