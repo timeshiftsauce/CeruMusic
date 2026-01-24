@@ -506,6 +506,7 @@ const seekTo = (time: number) => {
   }
 }
 
+let playbackInstalled = false
 let savePositionInterval: number | null = null
 const onGlobalCtrl = (e: any) => {
   const name = e?.detail?.name
@@ -562,6 +563,9 @@ const onGlobalCtrl = (e: any) => {
 }
 
 const initPlayback = async () => {
+  if (playbackInstalled) return
+  playbackInstalled = true
+
   initPlaylistEventListeners(localUserStore, playSong)
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
     const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
@@ -603,15 +607,18 @@ const initPlayback = async () => {
       userInfo.value.currentTime = Audio.value.currentTime
     }
   }, 1000)
-  window.addEventListener('global-music-control', onGlobalCtrl)
   // controlAudio.subscribe('ended', () => {
   //   window.requestAnimationFrame(() => {
   //     void playNext()
   //   })
   // })
 }
+window.addEventListener('global-music-control', onGlobalCtrl)
 
-const destroyPlayback = () => {
+const uninstallPlayback = () => {
+  if (!playbackInstalled) return
+  playbackInstalled = false
+
   destroyPlaylistEventListeners()
   window.removeEventListener('global-music-control', onGlobalCtrl)
   if (savePositionInterval !== null) {
@@ -625,7 +632,7 @@ export {
   playMode,
   isLoadingSong,
   initPlayback,
-  destroyPlayback,
+  uninstallPlayback,
   playSong,
   playNext,
   playPrevious,
@@ -634,5 +641,6 @@ export {
   handlePlay,
   handlePause,
   setVolume,
-  seekTo
+  seekTo,
+  onGlobalCtrl
 }
