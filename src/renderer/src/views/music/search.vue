@@ -6,6 +6,7 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
 import { useRouter } from 'vue-router'
+import songCover from '@assets/images/song.jpg'
 
 interface MusicItem {
   id: number
@@ -284,6 +285,8 @@ const onPlaylistScroll = (event: Event) => {
     fetchPlaylists(false)
   }
 }
+
+const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
 </script>
 
 <template>
@@ -356,10 +359,14 @@ const onPlaylistScroll = (event: Event) => {
               @click="routerToPlaylist(playlist)"
             >
               <div class="playlist-cover">
-                <img :src="playlist.cover" :alt="playlist.title" />
+                <img
+                  :src="playlist.cover"
+                  :alt="playlist.title"
+                  @error="playlist.cover = songCover"
+                />
               </div>
               <div class="playlist-info">
-                <h4 class="playlist-title">{{ playlist.title }}</h4>
+                <h4 class="playlist-title">{{ unescape(playlist.title) }}</h4>
                 <p class="playlist-desc">{{ playlist.description || '精选歌单' }}</p>
                 <div class="playlist-meta">
                   <span class="play-count">
