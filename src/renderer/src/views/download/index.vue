@@ -12,7 +12,6 @@ import {
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 
-
 const store = useDownloadStore()
 const maxConcurrent = ref(3)
 

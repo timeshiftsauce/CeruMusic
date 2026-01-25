@@ -222,16 +222,21 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     console.log(`使用音质下载: ${quality} - ${getQualityDisplayName(quality)}`)
     const tip = MessagePlugin.success('开始下载歌曲：' + songInfo.name)
 
+    const songInfoWithTemplate = {
+      ...toRaw(songInfo),
+      template: settingsStore.settings.filenameTemplate || '%t - %s'
+    }
+
     const result = await window.api.music.requestSdk('downloadSingleSong', {
       pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
       source: songInfo.source,
       quality,
-      songInfo: toRaw(songInfo) as any,
+      songInfo: songInfoWithTemplate as any,
       tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
       isCache: true
     })
 
-    ;(await tip).close()
+      ; (await tip).close()
 
     // 兼容 DownloadManager 返回的 Task 对象 (包含 filePath) 和旧版返回对象 (包含 path)
     const savePath = result.filePath || result.path
