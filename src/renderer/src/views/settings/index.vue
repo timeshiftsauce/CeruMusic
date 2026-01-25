@@ -384,32 +384,12 @@ const previewSongInfo: any = {
   platform: 'tx',
   date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-const formatMusicInfo = (template: string, data: any) => {
-  // 定义占位符映射
-  const patterns = {
-    '%t': 'name',
-    '%s': 'singer',
-    '%a': 'albumName',
-    '%u': 'source',
-    '%d': 'date'
-  }
-
-  // 一次性替换所有占位符
-  let result = template
-
-  // 使用正则匹配所有占位符
-  result = result.replace(/%[tsaud]/g, (match: string) => {
-    const key = patterns[match]
-    return data[key] !== undefined ? data[key] : match
-  })
-
-  return result
-}
+import { formatMusicInfo } from '@common/utils/format'
 
 // 更新下载文件名模板
 const updateFilenameTemplate = () => {
   settingsStore.updateSettings({
-    filenameTemplate: filenameTemplate.value
+    filenameTemplate: filenameTemplate.value || '%t - %s'
   })
 }
 
@@ -860,7 +840,7 @@ const getTagOptionsStatus = () => {
 
                 <div class="preview-container">
                   <div>预览：</div>
-                  <div>{{ formatMusicInfo(filenameTemplate, previewSongInfo) }}</div>
+                  <div>{{ formatMusicInfo(filenameTemplate || '%t - %s', previewSongInfo) }}</div>
                 </div>
               </div>
 
