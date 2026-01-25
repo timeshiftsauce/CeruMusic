@@ -1040,6 +1040,7 @@ onBeforeUnmount(() => {
 
   &.idle {
     .playbox {
+      cursor: none;
       .left {
         margin-bottom: 0;
       }
