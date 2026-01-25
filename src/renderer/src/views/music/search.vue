@@ -7,6 +7,8 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
 import { useRouter } from 'vue-router'
 import songCover from '@assets/images/song.jpg'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { storeToRefs } from 'pinia'
 
 interface MusicItem {
   id: number
@@ -23,6 +25,10 @@ interface MusicItem {
   _types: Record<string, any>
   typeUrl: Record<string, any>
 }
+
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
+const filenameTemplate = ref(settings.value.filenameTemplate)
 
 const keyword = ref('')
 const searchResults = ref<MusicItem[]>([])
@@ -191,6 +197,9 @@ const handlePause = () => {
 }
 
 const handleDownload = (song: any) => {
+  const d = new Date()
+  song.template = filenameTemplate.value
+  song.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   downloadSingleSong(song)
 }
 

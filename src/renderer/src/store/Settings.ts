@@ -16,6 +16,7 @@ export interface SettingsState {
     cacheDir: string
     downloadDir: string
   }
+  filenameTemplate?: string
   tagWriteOptions?: TagWriteOptions
   autoImportPlaylistOnOpen?: boolean
   suppressImportPrompt?: boolean
@@ -29,6 +30,7 @@ export const useSettingsStore = defineStore(
     const defaultSettings: SettingsState = {
       showFloatBall: true,
       autoCacheMusic: true,
+      filenameTemplate: '%t - %s',
       tagWriteOptions: {
         basicInfo: true,
         cover: true,
