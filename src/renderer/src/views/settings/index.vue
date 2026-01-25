@@ -374,6 +374,45 @@ const openLink = (url: string) => {
   window.open(url, '_blank')
 }
 
+// 下载文件名模板
+const filenameTemplate = ref(settings.value.filenameTemplate || '%t - %s')
+const d = new Date()
+const previewSongInfo: any = {
+  name: '半岛铁盒',
+  singer: '周杰伦',
+  albumName: '八度空间',
+  platform: 'tx',
+  date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const formatMusicInfo = (template: string, data: any) => {
+  // 定义占位符映射
+  const patterns = {
+    '%t': 'name',
+    '%s': 'singer',
+    '%a': 'albumName',
+    '%u': 'source',
+    '%d': 'date'
+  }
+
+  // 一次性替换所有占位符
+  let result = template
+
+  // 使用正则匹配所有占位符
+  result = result.replace(/%[tsaud]/g, (match: string) => {
+    const key = patterns[match]
+    return data[key] !== undefined ? data[key] : match
+  })
+
+  return result
+}
+
+// 更新下载文件名模板
+const updateFilenameTemplate = () => {
+  settingsStore.updateSettings({
+    filenameTemplate: filenameTemplate.value
+  })
+}
+
 // 标签写入选项
 const tagWriteOptions = ref({
   basicInfo: settings.value.tagWriteOptions?.basicInfo ?? true,
@@ -780,6 +819,48 @@ const getTagOptionsStatus = () => {
                       settingsStore.updateSettings({ autoCacheMusic: settings.autoCacheMusic })
                     "
                   />
+                </div>
+              </div>
+
+              <!-- 下载文件名格式设置 -->
+              <div class="setting-group">
+                <h3>下载文件名格式设置</h3>
+                <p>选择下载歌曲时要保存的文件名格式</p>
+
+                <div class="template-tip">
+                  <div class="template-tip-item">
+                    <t-tag>%t</t-tag>
+                    <span>歌曲名称</span>
+                  </div>
+                  <div class="template-tip-item">
+                    <t-tag>%s</t-tag>
+                    <span>歌手</span>
+                  </div>
+                  <div class="template-tip-item">
+                    <t-tag>%a</t-tag>
+                    <span>专辑</span>
+                  </div>
+                  <div class="template-tip-item">
+                    <t-tag>%u</t-tag>
+                    <span>平台</span>
+                  </div>
+                  <div class="template-tip-item">
+                    <t-tag>%d</t-tag>
+                    <span>日期</span>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <t-input
+                    v-model="filenameTemplate"
+                    placeholder="文件名格式"
+                    @change="updateFilenameTemplate"
+                  />
+                </div>
+
+                <div class="preview-container">
+                  <div>预览：</div>
+                  <div>{{ formatMusicInfo(filenameTemplate, previewSongInfo) }}</div>
                 </div>
               </div>
 
@@ -2072,6 +2153,25 @@ const getTagOptionsStatus = () => {
     display: flex;
     gap: 0.75rem;
   }
+}
+
+// 文件名模板样式
+.template-tip {
+  display: flex;
+  align-items: center;
+  gap: 2em;
+}
+
+.template-tip-item {
+  display: flex;
+  gap: 0.5em;
+}
+
+.preview-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.5em 0 0 0;
 }
 
 // 标签写入设置样式

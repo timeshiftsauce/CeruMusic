@@ -9,9 +9,16 @@ import {
   FolderOpenIcon,
   DeleteIcon
 } from 'tdesign-icons-vue-next'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { storeToRefs } from 'pinia'
+
 
 const store = useDownloadStore()
 const maxConcurrent = ref(3)
+
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
+const filenameTemplate = ref(settings.value.filenameTemplate || '%t - %s')
 
 const updateConcurrent = (val: number) => {
   window.api.download.setMaxConcurrent(val)
@@ -83,6 +90,29 @@ const completedTasks = computed(() =>
 const failedTasks = computed(() =>
   store.tasks.filter((t) => [DownloadStatus.Error, DownloadStatus.Cancelled].includes(t.status))
 )
+
+const formatMusicInfo = (template: string, data: any) => {
+  // 定义占位符映射
+  const patterns = {
+    '%t': 'name',
+    '%s': 'singer',
+    '%a': 'albumName',
+    '%u': 'source',
+    '%d': 'date'
+  }
+
+  // 一次性替换所有占位符
+  let result = template
+
+  // 使用正则匹配所有占位符
+  result = result.replace(/%[tsaud]/g, (match: string) => {
+    const key = patterns[match]
+    return data[key] !== undefined ? data[key] : match
+  })
+
+  return result
+}
+
 const formatSpeed = (speed: number) => {
   if (speed === 0) return '0 B/s'
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
@@ -213,7 +243,7 @@ const getStatusText = (status: DownloadStatus) => {
       <div v-else class="tasks">
         <div v-for="task in filteredTasks" :key="task.id" class="task-item">
           <div class="task-info">
-            <div class="task-name">{{ task.songInfo.name }} - {{ task.songInfo.singer }}</div>
+            <div class="task-name">{{ formatMusicInfo(filenameTemplate, task.songInfo) }}</div>
             <div class="task-meta">
               <t-tag :theme="getStatusColor(task.status)" variant="light" size="small">
                 {{ getStatusText(task.status) }}

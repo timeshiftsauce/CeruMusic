@@ -7,6 +7,28 @@ const getDownloadDirectory = (): string => {
   return directories.downloadDir
 }
 
+const formatMusicInfo = (template: string, data: any) => {
+  // 定义占位符映射
+  const patterns = {
+    '%t': 'name',
+    '%s': 'singer',
+    '%a': 'albumName',
+    '%u': 'source',
+    '%d': 'date'
+  }
+
+  // 一次性替换所有占位符
+  let result = template
+
+  // 使用正则匹配所有占位符
+  result = result.replace(/%[tsaud]/g, (match: string) => {
+    const key = patterns[match]
+    return data[key] !== undefined ? data[key] : match
+  })
+
+  return result
+}
+
 export default function download(
   songInfo: any,
   url: string,
@@ -16,13 +38,12 @@ export default function download(
 ): any {
   const downloadDir = getDownloadDirectory()
   const fileExtension = getFileExtension(url, quality)
-  const fileName = `${songInfo.name}-${songInfo.singer}-${songInfo.source}.${fileExtension}`
+  const fileName = `${formatMusicInfo(songInfo.template, songInfo)}.${fileExtension}`
     .replace(/[/\\:*?"<>|]/g, '')
     .replace(/^\.+/, '')
     .replace(/\.+$/, '')
     .trim()
   const filePath = path.join(downloadDir, fileName)
-
   const priority = tagWriteOptions.priority || 0
 
   return downloadManager.addTask(

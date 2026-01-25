@@ -21,6 +21,10 @@ interface MusicItem {
   typeUrl: Record<string, any>
 }
 
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
+const filenameTemplate = ref(settings.value.filenameTemplate)
+
 // 路由实例
 const route = useRoute()
 const LocalUserDetail = LocalUserDetailStore()
@@ -255,6 +259,9 @@ const handlePause = () => {
 }
 
 const handleDownload = (song: any) => {
+  const d = new Date()
+  song.template = filenameTemplate.value
+  song.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   downloadSingleSong(song)
 }
 
@@ -708,6 +715,8 @@ onMounted(() => {
 import { NIcon } from 'naive-ui'
 import { h, type Component } from 'vue'
 import { RefreshIcon, EllipsisIcon } from 'tdesign-icons-vue-next'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { storeToRefs } from 'pinia'
 const renderIcon = (icon: Component) => {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
