@@ -17,7 +17,7 @@ import {
 } from 'tdesign-icons-vue-next'
 // 直接从包路径导入，避免 WebAssembly 导入问题
 import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
-import * as _ from 'lodash'
+import _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { NSwitch } from 'naive-ui'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -58,6 +58,10 @@ const emit = defineEmits(['toggle-fullscreen', 'idle-change'])
 // 跟踪全屏状态
 const isFullscreen = ref(false)
 
+// 动画状态
+const isAnimating = ref(false)
+let animatingTimer: any = null
+
 // 自动隐藏相关逻辑
 const isIdle = ref(false)
 let idleTimer: any = null
@@ -90,6 +94,13 @@ const resetIdleTimer = () => {
 watch(
   () => props.show,
   (val) => {
+    // 触发动画状态
+    isAnimating.value = true
+    if (animatingTimer) clearTimeout(animatingTimer)
+    animatingTimer = setTimeout(() => {
+      isAnimating.value = false
+    }, 350)
+
     if (val) {
       resetIdleTimer()
       window.addEventListener('mousemove', resetIdleTimer)
@@ -636,7 +647,7 @@ watch(
 // 处理低频音量更新
 const handleLowFreqUpdate = (volume: number) => {
   state.lowFreqVolume = volume
-  console.log('lowFreqVolume', volume)
+  // console.log('lowFreqVolume', volume)
 }
 
 // 计算偏白的主题色
@@ -733,7 +744,12 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="full-play"
-    :class="{ active: props.show, 'use-black-text': useBlackText, idle: isIdle }"
+    :class="{
+      active: props.show,
+      'use-black-text': useBlackText,
+      idle: isIdle,
+      animating: isAnimating
+    }"
   >
     <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
     <div
@@ -881,69 +897,71 @@ onBeforeUnmount(() => {
       </t-Tooltip>
       <Transition name="fade-up">
         <div v-if="showSettings" class="settings-panel">
-          <div class="panel-header">播放器样式</div>
-          <div class="style-cards">
-            <div
-              class="style-card"
-              :class="{ active: playSetting.getLayoutMode === 'cd' }"
-              @click="playSetting.setLayoutMode('cd')"
-            >
-              <div class="card-preview cd-preview">
-                <!-- <div class="preview-circle"></div> -->
-                <img src="../../assets/images/cd.png" shape="circle" class="cover" width="100%" />
+          <div class="container">
+            <div class="panel-header">播放器样式</div>
+            <div class="style-cards">
+              <div
+                class="style-card"
+                :class="{ active: playSetting.getLayoutMode === 'cd' }"
+                @click="playSetting.setLayoutMode('cd')"
+              >
+                <div class="card-preview cd-preview">
+                  <!-- <div class="preview-circle"></div> -->
+                  <img src="../../assets/images/cd.png" shape="circle" class="cover" width="100%" />
+                </div>
+                <span>经典黑胶</span>
               </div>
-              <span>经典黑胶</span>
-            </div>
-            <div
-              class="style-card"
-              :class="{ active: playSetting.getLayoutMode === 'cover' }"
-              @click="playSetting.setLayoutMode('cover')"
-            >
-              <div class="card-preview cover-preview">
-                <img
-                  src="../../assets/images/cover-play.png"
-                  shape="circle"
-                  class="cover"
-                  width="100%"
-                />
+              <div
+                class="style-card"
+                :class="{ active: playSetting.getLayoutMode === 'cover' }"
+                @click="playSetting.setLayoutMode('cover')"
+              >
+                <div class="card-preview cover-preview">
+                  <img
+                    src="../../assets/images/cover-play.png"
+                    shape="circle"
+                    class="cover"
+                    width="100%"
+                  />
+                </div>
+
+                <span>沉浸封面</span>
               </div>
-
-              <span>沉浸封面</span>
             </div>
-          </div>
 
-          <div class="panel-header" style="margin-top: 24px">界面设置</div>
-          <div class="control-row">
-            <span>显示左侧面板</span>
-            <n-switch v-model:value="showLeftPanel" />
-          </div>
-          <div class="control-row">
-            <span>沉浸色歌词</span>
-            <n-switch
-              v-model:value="playSetting.getIsImmersiveLyricColor"
-              @update:value="playSetting.setIsImmersiveLyricColor"
-            />
-          </div>
-          <div class="control-row">
-            <span>歌词模糊效果</span>
-            <n-switch
-              v-model:value="playSetting.getIsBlurLyric"
-              @update:value="playSetting.setIsBlurLyric"
-            />
-          </div>
-          <div class="control-row">
-            <span>音频可视化</span>
-            <n-switch
-              v-model:value="playSetting.getIsAudioVisualizer"
-              @update:value="playSetting.setIsAudioVisualizer"
-            />
-          </div>
-          <div class="control-row">
-            <span>自动隐藏控制栏</span>
-            <n-switch
-              v-model:value="playSetting.autoHideBottom"
-              @update:value="playSetting.setAutoHideBottom"
-            />
+            <div class="panel-header" style="margin-top: 24px">界面设置</div>
+            <div class="control-row">
+              <span>显示左侧面板</span>
+              <n-switch v-model:value="showLeftPanel" />
+            </div>
+            <div class="control-row">
+              <span>沉浸色歌词</span>
+              <n-switch
+                v-model:value="playSetting.getIsImmersiveLyricColor"
+                @update:value="playSetting.setIsImmersiveLyricColor"
+              />
+            </div>
+            <div class="control-row">
+              <span>歌词模糊效果</span>
+              <n-switch
+                v-model:value="playSetting.getIsBlurLyric"
+                @update:value="playSetting.setIsBlurLyric"
+              />
+            </div>
+            <div class="control-row">
+              <span>音频可视化</span>
+              <n-switch
+                v-model:value="playSetting.getIsAudioVisualizer"
+                @update:value="playSetting.setIsAudioVisualizer"
+              />
+            </div>
+            <div class="control-row">
+              <span>自动隐藏控制栏</span>
+              <n-switch
+                v-model:value="playSetting.autoHideBottom"
+                @update:value="playSetting.setAutoHideBottom"
+              />
+            </div>
           </div>
         </div>
       </Transition>
@@ -1021,14 +1039,18 @@ onBeforeUnmount(() => {
 .full-play {
   --height: calc(100vh - var(--play-bottom-height));
   --text-color: rgba(255, 255, 255, 0.9);
-  z-index: 100;
+  z-index: 120;
   position: fixed;
+  // transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
   top: var(--height);
-  transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
   left: 0;
   width: 100vw;
   height: 100vh;
   color: var(--text-color);
+
+  &.animating {
+    transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
+  }
 
   &.use-black-text {
     --text-color: rgba(255, 255, 255, 0.9);
@@ -1566,8 +1588,8 @@ onBeforeUnmount(() => {
     max-height: calc(
       100vh - 40px - 2.25rem - 70px - calc(var(--bottom-height) + var(--play-bottom-height))
     );
-    overflow: auto;
-    scrollbar-width: none;
+    display: flex;
+    flex-direction: column;
     position: absolute;
     bottom: 70px;
     right: 0;
@@ -1576,13 +1598,20 @@ onBeforeUnmount(() => {
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     border-radius: 24px;
-    padding: 24px;
+    padding: 20px;
     box-shadow:
       0 20px 50px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(255, 255, 255, 0.1);
     transform-origin: bottom right;
     z-index: 100;
-
+    .container {
+      border-radius: 4px; //R inn er ​ = 24 p x − 20 p x = 4 p x
+      flex: 1;
+      height: 100%;
+      box-sizing: border-box;
+      overflow: auto;
+      scrollbar-width: none;
+    }
     .panel-header {
       color: rgba(255, 255, 255, 0.95);
       font-size: 18px;
