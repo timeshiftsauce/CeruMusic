@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import { transitionVolume } from '@renderer/utils/audio/volume'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { usePlaySettingStore } from '@renderer/store'
 
 import type {
   AudioEventCallback,
@@ -182,8 +183,23 @@ export const ControlAudioStore = defineStore(
       console.log('音频URL已设置:', Audio.url)
     }
     const start = async () => {
+      const playSetting = usePlaySettingStore()
       const volume = Audio.volume
       if (Audio.audio) {
+        // 如果关闭了暂停播放过渡，直接播放
+        if (!playSetting.getIsPauseTransition) {
+          try {
+            Audio.audio.volume = volume / 100
+            await Audio.audio.play()
+            Audio.isPlay = true
+            return Promise.resolve()
+          } catch (error) {
+            console.error('音频播放失败:', error)
+            Audio.isPlay = false
+            throw new Error('音频播放失败，请检查音频URL是否有效')
+          }
+        }
+
         Audio.audio.volume = 0
         try {
           await Audio.audio.play()
@@ -199,8 +215,14 @@ export const ControlAudioStore = defineStore(
       return false
     }
     const stop = () => {
+      const playSetting = usePlaySettingStore()
       if (Audio.audio) {
         Audio.isPlay = false
+        // 如果关闭了暂停播放过渡，直接暂停
+        if (!playSetting.getIsPauseTransition) {
+          Audio.audio.pause()
+          return Promise.resolve()
+        }
         return transitionVolume(Audio.audio, Audio.volume / 100, false, true).then(() => {
           Audio.audio?.pause()
         })
