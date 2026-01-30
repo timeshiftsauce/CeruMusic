@@ -15,7 +15,6 @@ import {
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { storeToRefs } from 'pinia'
-import { NSwitch } from 'naive-ui'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 

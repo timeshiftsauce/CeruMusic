@@ -145,13 +145,13 @@ function setupTray() {
   if (g.__ceru_tray__) {
     try {
       g.__ceru_tray__.destroy()
-    } catch { }
+    } catch {}
     g.__ceru_tray__ = null
   }
   if (tray) {
     try {
       tray.destroy()
-    } catch { }
+    } catch {}
     tray = null
   }
 
@@ -189,7 +189,7 @@ function setupTray() {
   app.once('before-quit', () => {
     try {
       tray?.destroy()
-    } catch { }
+    } catch {}
     tray = null
     g.__ceru_tray__ = null
   })
