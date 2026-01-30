@@ -1904,11 +1904,6 @@ const getTagOptionsStatus = () => {
   }
 }
 
-.setting-card {
-  // Overriding some t-card default if needed, or just let it be.
-  // t-card comes with padding and border.
-}
-
 .setting-group-item {
   margin-bottom: 24px;
 

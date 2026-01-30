@@ -204,7 +204,8 @@ onMounted(() => {
   gap: 8px;
 }
 .preview {
-  padding: 16px;
+  margin-top: 16px;
+  padding: 30px;
   border: 1px dashed var(--td-border-level-1-color);
   border-radius: var(--td-radius-medium);
   background: var(--settings-preview-bg);

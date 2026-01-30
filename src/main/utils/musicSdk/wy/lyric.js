@@ -262,32 +262,55 @@ const fixTimeLabel = (lrc, tlrc, romalrc) => {
 
 // https://github.com/Binaryify/NeteaseCloudMusicApi/blob/master/module/lyric_new.js
 export default (songmid) => {
-  const requestObj = eapiRequest('/api/song/lyric/v1', {
-    id: songmid,
-    cp: false,
-    tv: 0,
-    lv: 0,
-    rv: 0,
-    kv: 0,
-    yv: 0,
-    ytv: 0,
-    yrv: 0
-  })
-  requestObj.promise = requestObj.promise.then(({ body }) => {
-    // console.log(body)
-    if (body.code !== 200 || !body?.lrc?.lyric) return Promise.reject(new Error('Get lyric failed'))
-    const fixTimeLabelLrc = fixTimeLabel(body.lrc.lyric, body.tlyric?.lyric, body.romalrc?.lyric)
-    const info = parseTools.parse(
-      body.yrc?.lyric,
-      body.ytlrc?.lyric,
-      body.yromalrc?.lyric,
-      fixTimeLabelLrc.lrc,
-      fixTimeLabelLrc.tlrc,
-      fixTimeLabelLrc.romalrc
-    )
-    // console.log(info)
-    if (!info.lyric) return Promise.reject(new Error('Get lyric failed'))
-    return info
-  })
-  return requestObj
+  let requestObj
+  let isCanceled = false
+  const retryLimit = 3
+
+  const tryGetLyric = async (retryCount = 0) => {
+    if (isCanceled) throw new Error('Request canceled')
+    console.log('第', retryCount + 1, '次尝试获取歌词')
+    requestObj = eapiRequest('/api/song/lyric/v1', {
+      id: songmid,
+      cp: false,
+      tv: 0,
+      lv: 0,
+      rv: 0,
+      kv: 0,
+      yv: 0,
+      ytv: 0,
+      yrv: 0
+    })
+
+    try {
+      const { body } = await requestObj.promise
+      // console.log(body)
+      if (body.code !== 200 || !body?.lrc?.lyric) throw new Error('Get lyric failed')
+      const fixTimeLabelLrc = fixTimeLabel(body.lrc.lyric, body.tlyric?.lyric, body.romalrc?.lyric)
+      const info = parseTools.parse(
+        body.yrc?.lyric,
+        body.ytlrc?.lyric,
+        body.yromalrc?.lyric,
+        fixTimeLabelLrc.lrc,
+        fixTimeLabelLrc.tlrc,
+        fixTimeLabelLrc.romalrc
+      )
+      // console.log(info)
+      if (!info.lyric) throw new Error('Get lyric failed')
+      return info
+    } catch (err) {
+      if (isCanceled) throw err
+      if (retryCount < retryLimit) {
+        return tryGetLyric(retryCount + 1)
+      }
+      throw err
+    }
+  }
+
+  return {
+    promise: tryGetLyric(),
+    cancelHttp: () => {
+      isCanceled = true
+      if (requestObj && requestObj.cancelHttp) requestObj.cancelHttp()
+    }
+  }
 }
