@@ -12,17 +12,15 @@ import {
 } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import icons from '../../assets/icon_font/icons'
 const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
-import { extractDominantColor } from '@renderer/utils/color/colorExtractor'
-import { getBestContrastTextColorWithOpacity } from '@renderer/utils/color/contrastColor'
 import { PlayMode } from '@renderer/types/audio'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
-  songInfo,
   playNext,
   playPrevious,
   updatePlayMode,
@@ -41,8 +39,12 @@ import { songListAPI } from '@renderer/api/songList'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
+const globalPlayStatus = useGlobalPlayStatusStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
+const { player } = storeToRefs(globalPlayStatus)
+const songInfo = computed(() => player.value.songInfo || ({} as any))
+
 const {} = controlAudio
 
 // 当前歌曲是否已在“我的喜欢”
@@ -460,32 +462,22 @@ const handleProgressDragStart = (event: MouseEvent) => {
 }
 
 // 歌曲信息由全局播放管理器提供
-const maincolor = ref('var(--td-brand-color-5)')
-const startmaincolor = ref('rgba(0, 0, 0, 1)')
-const contrastTextColor = ref('var(--player-text-idle)')
-const hoverColor = ref('var(--player-text-hover-idle)')
-const playbg = ref('var(--player-btn-bg-idle)')
-const playbghover = ref('var(--player-btn-bg-hover-idle)')
-async function setColor() {
-  console.log('主题色刷新')
-  const color = await extractDominantColor(songInfo.value.img)
-  console.log(color)
-  maincolor.value = `rgba(${color.r},${color.g},${color.b},1)`
-  startmaincolor.value = `rgba(${color.r},${color.g},${color.b},.2)`
-  contrastTextColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.img, 0.6)
-  hoverColor.value = await getBestContrastTextColorWithOpacity(songInfo.value.img, 1)
-  playbg.value = 'rgba(255,255,255,0.2)'
-  playbghover.value = 'rgba(255,255,255,0.33)'
-}
-
-function resetColor() {
-  maincolor.value = 'var(--td-brand-color-5)'
-  startmaincolor.value = 'rgba(0, 0, 0, 1)'
-  contrastTextColor.value = 'var(--player-text-idle)'
-  hoverColor.value = 'var(--player-text-hover-idle)'
-  playbg.value = 'var(--player-btn-bg-idle)'
-  playbghover.value = 'var(--player-btn-bg-hover-idle)'
-}
+const maincolor = computed(() => player.value.coverDetail.mainColor || 'var(--td-brand-color-5)')
+const startmaincolor = computed(() => {
+  const c = player.value.coverDetail.ColorObject
+  if (c) return `rgba(${c.r},${c.g},${c.b},.2)`
+  return 'rgba(0, 0, 0, 1)'
+})
+const contrastTextColor = computed(
+  () => player.value.coverDetail.textColor || 'var(--player-text-idle)'
+)
+const hoverColor = computed(
+  () => player.value.coverDetail.hoverColor || 'var(--player-text-hover-idle)'
+)
+const playbg = computed(() => player.value.coverDetail.playBg || 'var(--player-btn-bg-idle)')
+const playbghover = computed(
+  () => player.value.coverDetail.playBgHover || 'var(--player-btn-bg-hover-idle)'
+)
 
 const bg = ref('var(--player-bg-default)')
 
@@ -493,14 +485,8 @@ watch(
   songInfo,
   async (newVal) => {
     bg.value = bg.value === 'var(--player-bg-idle)' ? 'var(--player-bg-default)' : toRaw(bg.value)
-    if (newVal.img) {
-      await setColor()
-    } else if (songInfo.value.songmid) {
-      // songInfo.value.img = defaultCoverImg
-      await setColor()
-    } else {
+    if (!newVal.songmid) {
       bg.value = 'var(--player-bg-idle)'
-      resetColor()
     }
   },
   { deep: true, immediate: true }
@@ -514,7 +500,6 @@ watch(showFullPlay, (val) => {
     bg.value = 'var(--player-bg-default)'
   }
 })
-// onMounted(setColor)
 </script>
 
 <template>
@@ -542,7 +527,7 @@ watch(showFullPlay, (val) => {
       <!-- 左侧：封面和歌曲信息 -->
       <div class="left-section">
         <div v-if="songInfo.songmid" class="album-cover">
-          <img :src="songInfo.img" alt="专辑封面" @error="songInfo.img = songCover" />
+          <img :src="player.cover || songCover" alt="专辑封面" />
         </div>
 
         <div class="song-info">
@@ -694,7 +679,7 @@ watch(showFullPlay, (val) => {
     <FullPlay
       :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
       :show="showFullPlay"
-      :cover-image="songInfo.img"
+      :cover-image="player.cover"
       :song-info="songInfo"
       :main-color="maincolor"
       @toggle-fullscreen="toggleFullPlay"

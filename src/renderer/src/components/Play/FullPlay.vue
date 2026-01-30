@@ -5,9 +5,7 @@ import {
 } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
-import type { LyricLine } from '@applemusic-like-lyrics/core'
-import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, toRaw } from 'vue'
-import { shouldUseBlackText } from '@renderer/utils/color/contrastColor'
+import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import {
   Fullscreen1Icon,
@@ -15,18 +13,19 @@ import {
   ChevronDownIcon,
   PenBallIcon
 } from 'tdesign-icons-vue-next'
-// 直接从包路径导入，避免 WebAssembly 导入问题
-import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
 import _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { NSwitch } from 'naive-ui'
 import { useSettingsStore } from '@renderer/store/Settings'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
+const globalPlayStatus = useGlobalPlayStatusStore()
+const { player } = storeToRefs(globalPlayStatus)
 const showSettings = ref(false)
 
 const lyricFontFamily = computed(
@@ -220,279 +219,8 @@ const state = reactive({
   albumUrl: props.coverImage,
   albumIsVideo: false,
   currentTime: 0,
-  lyricLines: [] as LyricLine[],
   lowFreqVolume: 1.0
 })
-
-const sanitizeLyricLines = (lines: LyricLine[]): LyricLine[] => {
-  const defaultLineDuration = 3000
-  const toFiniteNumber = (v: any, fallback: number) => {
-    const n = typeof v === 'number' ? v : Number(v)
-    return Number.isFinite(n) ? n : fallback
-  }
-  const cleaned: LyricLine[] = []
-  for (const rawLine of lines || []) {
-    const rawWords = Array.isArray((rawLine as any).words) ? (rawLine as any).words : []
-    const fixedWords: any[] = []
-    let prevEnd = -1
-    for (const rawWord of rawWords) {
-      const rawStart = toFiniteNumber(rawWord?.startTime, Number.NaN)
-      const rawEnd = toFiniteNumber(rawWord?.endTime, Number.NaN)
-      if (!Number.isFinite(rawStart)) continue
-      let startTime = Math.max(0, rawStart)
-      if (startTime < prevEnd) startTime = prevEnd
-      let endTime = Number.isFinite(rawEnd) ? rawEnd : startTime + 1
-      if (endTime <= startTime) endTime = startTime + 1
-      prevEnd = endTime
-      fixedWords.push({ ...rawWord, startTime, endTime })
-    }
-    if (fixedWords.length === 0) continue
-
-    const firstWordStart = fixedWords[0].startTime
-    const lastWordEnd = fixedWords[fixedWords.length - 1].endTime
-    let startTime = toFiniteNumber((rawLine as any).startTime, firstWordStart)
-    startTime = Math.max(0, startTime)
-    let endTime = toFiniteNumber((rawLine as any).endTime, lastWordEnd)
-    if (!Number.isFinite(endTime) || endTime <= startTime) endTime = startTime + defaultLineDuration
-    if (endTime < lastWordEnd) endTime = lastWordEnd
-
-    cleaned.push({ ...(rawLine as any), startTime, endTime, words: fixedWords })
-  }
-  cleaned.sort((a: any, b: any) => (a?.startTime ?? 0) - (b?.startTime ?? 0))
-  return cleaned
-}
-
-// 监听歌曲ID变化，获取歌词
-watch(
-  () => props.songId,
-  async (newId, _oldId, onCleanup) => {
-    if (!newId || !props.songInfo) return
-    // 竞态与取消控制，防止内存泄漏与过期结果覆盖
-    let active = true
-    const abort = new AbortController()
-    onCleanup(() => {
-      active = false
-      abort.abort()
-    })
-    // 工具函数：清洗响应式对象，避免序列化问题
-    const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(props.songInfo)))
-
-    // 工具函数：按来源解析逐字歌词
-    const parseCrLyricBySource = (source: string, text: string): LyricLine[] => {
-      return source === 'tx' ? parseQrc(text) : parseYrc(text)
-    }
-
-    // 工具函数：合并翻译到主歌词
-    const mergeTranslation = (base: LyricLine[], tlyric?: string): LyricLine[] => {
-      if (!tlyric || base.length === 0) return base
-
-      const translated = parseLrc(tlyric)
-      if (!translated || translated.length === 0) return base
-
-      // 将译文按 startTime-endTime 建立索引，便于精确匹配
-      const keyOf = (s: number, e: number) => `${s}-${e}`
-      const joinWords = (line: LyricLine) => (line.words || []).map((w) => w.word).join('')
-
-      const tMap = new Map<string, LyricLine>()
-      for (const tl of translated) {
-        tMap.set(keyOf(tl.startTime, tl.endTime), tl)
-      }
-
-      // 动态容差：与行时长相关，避免长/短行同一阈值导致误配
-      const baseTolerance = 300 // 上限
-      const ratioTolerance = 0.4 // 与行时长的比例
-
-      // 锚点对齐 + 顺序映射：以第一行为锚点，后续按索引顺序插入译文
-      const translatedSorted = translated.slice().sort((a, b) => a.startTime - b.startTime)
-
-      if (base.length > 0) {
-        const firstBase = base[0]
-        const firstDuration = Math.max(1, firstBase.endTime - firstBase.startTime)
-        const firstTol = Math.min(baseTolerance, firstDuration * ratioTolerance)
-
-        // 在容差内寻找与第一行起始时间最接近的译文行作为锚点
-        let anchorIndex: number | null = null
-        let bestDiff = Number.POSITIVE_INFINITY
-        for (let i = 0; i < translatedSorted.length; i++) {
-          const diff = Math.abs(translatedSorted[i].startTime - firstBase.startTime)
-          if (diff <= firstTol && diff < bestDiff) {
-            bestDiff = diff
-            anchorIndex = i
-          }
-        }
-
-        if (anchorIndex !== null) {
-          // 从锚点开始顺序映射
-          let j = anchorIndex
-          for (let i = 0; i < base.length && j < translatedSorted.length; i++, j++) {
-            const bl = base[i]
-            const tl = translatedSorted[j]
-            if (tl.words[0].word === '//' || !bl.words[0].word) continue
-            const text = joinWords(tl)
-            if (text) bl.translatedLyric = text
-          }
-          return base
-        }
-      }
-
-      // 未找到锚点：保持原样
-      return base
-    }
-
-    try {
-      const source =
-        props.songInfo && 'source' in props.songInfo ? (props.songInfo as any).source : 'kg'
-      let parsedLyrics: LyricLine[] = []
-
-      if (source === 'wy' || source === 'tx') {
-        // 网易云 / QQ 音乐：优先尝试 TTML，同时准备备用方案
-        // 1. 立即启动 SDK (回退) 请求，但不 await
-        // 将其 Promise 存储在 sdkPromise 变量中
-        const sdkPromise = (async () => {
-          try {
-            const lyricData = await window.api.music.requestSdk('getLyric', {
-              source,
-              songInfo: _.cloneDeep(toRaw(props.songInfo)) as any
-              // 注意：这里的 abort.signal 是用于 TTML 的
-              // 如果 requestSdk 也支持 signal，你可以考虑也传入
-            })
-            console.log('sdkPromise', lyricData)
-            // 依赖外部的 active 检查
-            if (!active) return null
-
-            let lyrics: null | LyricLine[] = null
-            if (lyricData?.crlyric) {
-              console.log('crlyric', lyricData.crlyric)
-              lyrics = parseCrLyricBySource(source, lyricData.crlyric)
-            } else if (lyricData?.lyric) {
-              lyrics = parseLrc(lyricData.lyric)
-            }
-            lyrics = mergeTranslation(lyrics as any, lyricData?.tlyric)
-
-            // 如果 SDK 也拿不到歌词，返回 null
-            if (!lyrics || lyrics.length === 0) {
-              return null
-            }
-            return lyrics
-          } catch (err: any) {
-            // 如果 SDK 请求失败，抛出错误
-            // 这样当 TTML 也失败时，可以捕获到这个 SDK 错误
-            throw new Error(`SDK request failed: ${err.message}`)
-          }
-        })()
-
-        // 2. 尝试 TTML (主要) 请求
-        try {
-          const res = await (
-            await fetch(
-              `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
-              {
-                signal: abort.signal // TTML 请求使用 abort signal
-              }
-            )
-          ).text()
-
-          if (!active) return
-
-          if (!res || res.length < 100) {
-            throw new Error('ttml 无歌词') // 抛出错误以触发 catch
-          }
-
-          const ttmlLyrics = parseTTML(res).lines
-
-          if (!ttmlLyrics || ttmlLyrics.length === 0) {
-            throw new Error('TTML 解析为空') // 抛出错误以触发 catch
-          }
-
-          // --- TTML 成功 ---
-          parsedLyrics = ttmlLyrics
-
-          // 此时我们不再关心 SDK 的结果
-          // 为防止 sdkPromise 失败时出现 "unhandled rejection"，
-          // 我们给它加一个空的 catch 来“静音”它的潜在错误。
-          sdkPromise.catch(() => {
-            /* TTML 优先，忽略 SDK 的错误 */
-          })
-        } catch (ttmlError: any) {
-          // --- TTML 失败，回退到 SDK ---
-          // 检查是否是因为中止操作
-          if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
-            return
-          }
-
-          // console.log('TTML failed, falling back to SDK:', ttmlError.message);
-
-          try {
-            // 现在等待已经启动的 SDK 请求
-            const sdkLyrics = await sdkPromise
-
-            if (sdkLyrics) {
-              parsedLyrics = sdkLyrics
-            } else {
-              // SDK 也失败了或没有返回歌词
-              // console.log('SDK fallback also provided no lyrics.');
-              parsedLyrics = [] // 或者保持原样
-            }
-          } catch (sdkError) {
-            // TTML 和 SDK 都失败了
-            // console.error('Both TTML and SDK failed:', { ttmlError, sdkError });
-            parsedLyrics = [] // 最终回退
-          }
-        }
-      } else if (source !== 'local') {
-        // 其他来源：直接统一歌词 API
-        const lyricData = await window.api.music.requestSdk('getLyric', {
-          source,
-          songInfo: getCleanSongInfo()
-        })
-        if (!active) return
-
-        if (lyricData?.crlyric) {
-          parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
-        } else if (lyricData?.lyric) {
-          parsedLyrics = parseLrc(lyricData.lyric)
-        }
-
-        parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
-      } else {
-        let text = (props.songInfo as any).lrc as string | null
-        // 如果是本地音乐且没有歌词，则从主进程获取
-        if (!text) {
-          text = await window.api.music.invoke(
-            'local-music:get-lyric',
-            (props.songInfo as any).songmid
-          )
-        }
-
-        if (text && (/^\[(\d+),\d+\]/.test(text) || /\(\d+,\d+,\d+\)/.test(text))) {
-          parsedLyrics = text ? (parseYrc(text) as any) : []
-        } else {
-          parsedLyrics = text ? (parseLrc(text) as any) : []
-        }
-      }
-      if (!active) return
-      const oldHasLyric = state.lyricLines.length > 10
-      state.lyricLines = parsedLyrics.length > 0 ? sanitizeLyricLines(parsedLyrics) : []
-      const newHasLyric = state.lyricLines.length > 10
-      // 如果hasLyric条件改变，更新背景渲染器的hasLyric参数
-      if (oldHasLyric !== newHasLyric && bgRef.value) {
-        bgRef.value.setHasLyric(newHasLyric)
-      }
-    } catch (error) {
-      console.error('获取歌词失败:', error)
-      // 若已无效或已清理，避免写入与持有引用
-      if (!active) return
-      const oldHasLyric = state.lyricLines.length > 10
-      state.lyricLines = []
-      const newHasLyric = false
-      // 如果hasLyric条件改变，更新背景渲染器的hasLyric参数
-      if (oldHasLyric !== newHasLyric && bgRef.value) {
-        bgRef.value.setHasLyric(newHasLyric)
-      }
-    }
-  },
-  { immediate: true }
-)
 
 const bgRef = ref<CoreBackgroundRender<PixiRenderer> | undefined>(undefined)
 const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
@@ -504,22 +232,9 @@ const unsubscribePlay = ref<(() => void) | undefined>(undefined)
 
 // 计算实际的封面图片路径
 const actualCoverImage = computed(() => {
-  // 如果是相对路径，保持原样，否则使用默认图片
-  return props.coverImage || '@assets/images/Default.jpg'
+  return player.value.cover || props.coverImage || '@assets/images/Default.jpg'
 })
 
-// 文本颜色状态
-const useBlackText = ref(false)
-
-// 更新文本颜色
-async function updateTextColor() {
-  try {
-    useBlackText.value = await shouldUseBlackText(actualCoverImage.value)
-  } catch (error) {
-    console.error('获取对比色失败:', error)
-    useBlackText.value = false // 默认使用白色文本
-  }
-}
 const jumpTime = (e) => {
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
@@ -527,7 +242,6 @@ const jumpTime = (e) => {
 watch(
   () => actualCoverImage.value,
   async (newImage) => {
-    updateTextColor()
     // 更新背景图片
     if (bgRef.value) {
       await bgRef.value.setAlbum(newImage, false)
@@ -585,7 +299,7 @@ const initBackgroundRender = async () => {
     bgRef.value.setRenderScale(0.5)
     bgRef.value.setFlowSpeed(1)
     bgRef.value.setFPS(60)
-    bgRef.value.setHasLyric(state.lyricLines.length > 10)
+    bgRef.value.setHasLyric(player.value.lyrics.lines.length > 10)
 
     // 设置专辑图片
     await bgRef.value.setAlbum(actualCoverImage.value, false)
@@ -597,7 +311,6 @@ const initBackgroundRender = async () => {
 
 // 组件挂载时初始化
 onMounted(async () => {
-  updateTextColor()
   await initBackgroundRender()
 })
 
@@ -652,23 +365,17 @@ const handleLowFreqUpdate = (volume: number) => {
 
 // 计算偏白的主题色
 const lightMainColor = computed(() => {
-  const color = props.mainColor
-  // 解析rgb颜色值
-  const rgbMatch = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*\d+\)/)
-  if (rgbMatch) {
-    let r = parseInt(rgbMatch[1])
-    let g = parseInt(rgbMatch[2])
-    let b = parseInt(rgbMatch[3])
+  return player.value.coverDetail.lightMainColor || 'rgba(255, 255, 255, 0.9)'
+})
 
-    // 适度向白色偏移，保持主题色特征
-    r = Math.min(255, r + (255 - r) * 0.8)
-    g = Math.min(255, g + (255 - g) * 0.8)
-    b = Math.min(255, b + (255 - b) * 0.8)
-
-    return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, 0.9)`
+const useBlackText = computed(() => {
+  const c = player.value.coverDetail.ColorObject
+  if (c) {
+    // Calculate brightness
+    const yiq = (c.r * 299 + c.g * 587 + c.b * 114) / 1000
+    return yiq >= 128
   }
-  // 如果解析失败，返回默认的偏白色
-  return 'rgba(255, 255, 255, 0.9)'
+  return false
 })
 
 // 计算歌词颜色
@@ -689,7 +396,7 @@ const shouldScrollTitle = ref(false)
 const titleContentRef = ref<HTMLElement | null>(null)
 
 const songName = computed(() => {
-  const info = props.songInfo
+  const info = player.value.songInfo
   if (info && 'name' in info && typeof info.name === 'string') {
     return info.name
   }
@@ -789,7 +496,10 @@ onBeforeUnmount(() => {
         'single-column': !showLeftPanel
       }"
     >
-      <div class="left" :style="state.lyricLines.length <= 0 && showLeftPanel ? 'width:100vw' : ''">
+      <div
+        class="left"
+        :style="player.lyrics.lines.length <= 0 && showLeftPanel ? 'width:100vw' : ''"
+      >
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <img
             class="pointer"
@@ -804,7 +514,7 @@ onBeforeUnmount(() => {
               !isAudioPlaying
                 ? 'animation-play-state: paused;'
                 : '' +
-                  (state.lyricLines.length <= 0
+                  (player.lyrics.lines.length <= 0
                     ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
                     : '')
             "
@@ -838,23 +548,23 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="song-meta-large">
-                <span class="artist">{{ (props.songInfo as any)?.singer }}</span>
+                <span class="artist">{{ (player.songInfo as any)?.singer }}</span>
                 <span
-                  v-if="(props.songInfo as any)?.singer && (props.songInfo as any)?.albumName"
+                  v-if="(player.songInfo as any)?.singer && (player.songInfo as any)?.albumName"
                   class="divider"
                 >
                   /
                 </span>
-                <span class="album">{{ (props.songInfo as any)?.albumName }}</span>
+                <span class="album">{{ (player.songInfo as any)?.albumName }}</span>
               </div>
             </div>
           </div>
         </template>
       </div>
-      <div v-if="state.lyricLines.length > 0" class="right">
+      <div v-if="player.lyrics.lines.length > 0" class="right">
         <LyricPlayer
           ref="lyricPlayerRef"
-          :lyric-lines="state.lyricLines || []"
+          :lyric-lines="player.lyrics.lines || []"
           :current-time="state.currentTime"
           :playing="isAudioPlaying"
           class="lyric-player"
