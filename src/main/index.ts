@@ -464,6 +464,9 @@ function createWindow(): void {
 
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
 
+// 注册自动更新事件 - 尽早注册以避免时序问题
+registerAutoUpdateEvents()
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -546,8 +549,6 @@ app.whenReady().then(async () => {
     console.log('Auth server listening on http://127.0.0.1:43110')
   })
 
-  // 注册自动更新事件
-  registerAutoUpdateEvents()
   ipcMain.on('startPing', () => {
     if (ping) clearInterval(ping)
     console.log('start-----开始')
