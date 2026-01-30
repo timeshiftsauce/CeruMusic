@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { extractDominantColor, Color } from '@renderer/utils/color/colorExtractor'
-import { getBestContrastTextColorWithOpacity } from '@renderer/utils/color/contrastColor'
+import {
+  getBestContrastTextColorWithOpacity,
+  shouldUseBlackText
+} from '@renderer/utils/color/contrastColor'
 import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -26,6 +29,7 @@ interface Player {
     hoverColor?: string
     playBg?: string
     playBgHover?: string
+    useBlackText?: boolean
   }
   // 歌曲名
   songName: ComputedRef<string>
@@ -129,7 +133,8 @@ export const useGlobalPlayStatusStore = defineStore(
         textColor: 'var(--player-text-idle)',
         hoverColor: 'var(--player-text-hover-idle)',
         playBg: 'var(--player-btn-bg-idle)',
-        playBgHover: 'var(--player-btn-bg-hover-idle)'
+        playBgHover: 'var(--player-btn-bg-hover-idle)',
+        useBlackText: false
       },
       songName: computed(() => player.songInfo?.name || ''),
       singer: computed(() => player.songInfo?.singer || ''),
@@ -161,7 +166,7 @@ export const useGlobalPlayStatusStore = defineStore(
         if (!newVal) return
 
         // 处理封面 Base64
-        let coverUrl = newVal.img || defaultCover
+        const coverUrl = newVal.img || defaultCover
         if (coverUrl.startsWith('http')) {
           const base64 = await getBase64FromUrl(coverUrl)
           if (base64) {
@@ -203,7 +208,8 @@ export const useGlobalPlayStatusStore = defineStore(
           g = Math.min(255, g + (255 - g) * 0.8)
           b = Math.min(255, b + (255 - b) * 0.8)
           player.coverDetail.lightMainColor = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, 0.9)`
-
+          player.coverDetail.useBlackText = await shouldUseBlackText(player.cover)
+          console.log('useBlackText', player.coverDetail.useBlackText)
         } catch (e) {
           console.error('颜色提取失败', e)
           // 恢复默认
@@ -344,7 +350,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics
 
-              sdkPromise.catch(() => { })
+              sdkPromise.catch(() => {})
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return

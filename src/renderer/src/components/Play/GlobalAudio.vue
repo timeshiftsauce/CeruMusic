@@ -12,12 +12,14 @@ import {
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { useEqualizerStore } from '@renderer/store/Equalizer'
 import { useAudioEffectsStore } from '@renderer/store/AudioEffects'
+import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
 
 const audioStore = ControlAudioStore()
 const eqStore = useEqualizerStore()
 const effectStore = useAudioEffectsStore()
+const audioOutputStore = useAudioOutputStore()
 const audioMeta = ref<HTMLAudioElement>()
 // 提供订阅方法给子组件使用
 provide('audioSubscribe', audioStore.subscribe)
@@ -55,13 +57,47 @@ let playbackPosition = 0
 
 onMounted(() => {
   audioStore.init(audioMeta.value)
+  audioOutputStore.init()
   if (audioMeta.value) {
     applyGlobalEQ(audioMeta.value)
     applyGlobalEffects(audioMeta.value)
+
+    // Apply saved audio output device
+    if (audioOutputStore.currentDeviceId !== 'default') {
+      AudioManager.setAudioOutputDevice(audioMeta.value, audioOutputStore.currentDeviceId)
+    }
+
+    // Initial stats update
+    const stats = AudioManager.getAudioContextStats(audioMeta.value)
+    if (stats) {
+      audioOutputStore.deviceStats = {
+        sampleRate: stats.sampleRate,
+        channelCount: stats.channels,
+        latency: stats.latency
+      }
+    }
   }
   console.log('音频组件初始化完成')
   // window.api.ping(handleEnded)
 })
+
+watch(
+  () => audioOutputStore.currentDeviceId,
+  async (newId) => {
+    if (audioMeta.value) {
+      await AudioManager.setAudioOutputDevice(audioMeta.value, newId)
+      // Update device stats
+      const stats = AudioManager.getAudioContextStats(audioMeta.value)
+      if (stats) {
+        audioOutputStore.deviceStats = {
+          sampleRate: stats.sampleRate,
+          channelCount: stats.channels,
+          latency: stats.latency
+        }
+      }
+    }
+  }
+)
 
 watch(
   [() => eqStore.enabled, () => eqStore.gains],
@@ -109,6 +145,11 @@ onActivated(() => {
   if (audioMeta.value) {
     // 重新初始化音频元素
     audioStore.init(audioMeta.value)
+
+    // Re-apply output device
+    if (audioOutputStore.currentDeviceId !== 'default') {
+      AudioManager.setAudioOutputDevice(audioMeta.value, audioOutputStore.currentDeviceId)
+    }
 
     // 如果之前正在播放，恢复播放
     if (wasPlaying && audioStore.Audio.url) {

@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AIFloatBallSettings: typeof import('./src/components/Settings/AIFloatBallSettings.vue')['default']
     AudioEffectSettings: typeof import('./src/components/Settings/AudioEffectSettings.vue')['default']
+    AudioOutputSettings: typeof import('./src/components/Settings/AudioOutputSettings.vue')['default']
     AudioVisualizer: typeof import('./src/components/Play/AudioVisualizer.vue')['default']
     ContextMenu: typeof import('./src/components/ContextMenu/ContextMenu.vue')['default']
     Demo: typeof import('./src/components/ContextMenu/demo.vue')['default']

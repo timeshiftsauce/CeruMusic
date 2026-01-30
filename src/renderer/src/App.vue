@@ -25,13 +25,17 @@ import { installGlobalMusicControls } from '@renderer/utils/audio/globalControls
 import { installDesktopLyricBridge } from '@renderer/utils/lyrics/desktopLyricBridge'
 import router from './router'
 import { useAuthStore } from '@renderer/store'
+import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
+import { useAudioOutputStore } from '@renderer/store/audioOutput'
 
 const userInfo = LocalUserDetailStore()
 
 const settingsStore = useSettingsStore()
+const audioOutputStore = useAudioOutputStore()
 const { settings } = settingsStore
 const processedPaths = new Set<string>()
 const authStore = useAuthStore()
+const audioSelectorVisible = ref(false)
 
 // 保存事件监听器清理函数
 let themeChangeHandler: (() => void) | null = null
@@ -268,6 +272,24 @@ onMounted(() => {
     forward('setPlayMode', val)
   )
 
+  // Audio Output Selector Shortcut
+  // Remove existing listeners to prevent duplicates/HMR issues
+  window.electron?.ipcRenderer?.removeAllListeners?.('hotkeys:toggle-audio-output-selector')
+  window.electron?.ipcRenderer?.on?.('hotkeys:toggle-audio-output-selector', () => {
+    // If device B is set and different from A, we prioritize toggling directly
+    // This allows "Quick Comparison" as requested.
+    if (
+      audioOutputStore.secondaryDeviceId &&
+      audioOutputStore.primaryDeviceId &&
+      audioOutputStore.secondaryDeviceId !== audioOutputStore.primaryDeviceId
+    ) {
+      audioOutputStore.toggleAB()
+    } else {
+      // Otherwise, open the selector modal so user can choose
+      audioSelectorVisible.value = !audioSelectorVisible.value
+    }
+  })
+
   // 全局监听打开歌单文件
   window.electron?.ipcRenderer?.on?.('open-playlist-file', (_: any, filePath: string) => {
     const fileName = filePath.replace(/^.*[\\/]/, '')
@@ -497,6 +519,17 @@ onUnmounted(() => {
             <t-button theme="primary" @click="openSponsor">支持！必须加鸡腿</t-button>
           </div>
         </div>
+      </t-dialog>
+
+      <!-- Audio Output Selector Modal -->
+      <t-dialog
+        v-model:visible="audioSelectorVisible"
+        header="音频输出选择"
+        :footer="false"
+        width="80vw"
+        placement="center"
+      >
+        <AudioOutputSettings :embedded="true" />
       </t-dialog>
       <GlobalAudio />
       <FloatBall />

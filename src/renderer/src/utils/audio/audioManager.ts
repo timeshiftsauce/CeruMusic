@@ -184,6 +184,48 @@ class AudioManager {
     }
   }
 
+  // 设置音频输出设备
+  async setAudioOutputDevice(audioElement: HTMLAudioElement, deviceId: string): Promise<void> {
+    try {
+      // 1. 尝试设置 AudioContext 的输出设备 (针对 Web Audio API 链路)
+      const context = this.audioContexts.get(audioElement)
+      if (context && (context as any).setSinkId) {
+        try {
+          await (context as any).setSinkId(deviceId)
+          console.log(`AudioManager: AudioContext output device set to ${deviceId}`)
+        } catch (ctxError) {
+          console.warn('AudioManager: Failed to set AudioContext sinkId:', ctxError)
+        }
+      }
+
+      // 2. 同时设置 Audio Element 的输出设备 (兼容性/直通)
+      if ((audioElement as any).setSinkId) {
+        await (audioElement as any).setSinkId(deviceId)
+        console.log(`AudioManager: Audio element output device set to ${deviceId}`)
+      } else {
+        console.warn('AudioManager: setSinkId not supported')
+      }
+    } catch (error) {
+      console.error('AudioManager: Failed to set audio output device:', error)
+      throw error
+    }
+  }
+
+  // 获取当前音频上下文的统计信息
+  getAudioContextStats(
+    audioElement: HTMLAudioElement
+  ): { sampleRate: number; channels: number; latency: number } | null {
+    const context = this.audioContexts.get(audioElement)
+    if (context) {
+      return {
+        sampleRate: context.sampleRate,
+        channels: context.destination.maxChannelCount || 2,
+        latency: (context.baseLatency || 0) + (context.outputLatency || 0)
+      }
+    }
+    return null
+  }
+
   // 创建分析器
   createAnalyser(
     audioElement: HTMLAudioElement,

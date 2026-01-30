@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 
 const props = withDefaults(defineProps<Props>(), {
@@ -10,10 +11,13 @@ const props = withDefaults(defineProps<Props>(), {
   showBack: false,
   showAccount: false,
   title: '',
-  color: 'var(--titlebar-btn-text-color)'
+  color: ''
 })
 const Store = LocalUserDetailStore()
 const { userInfo } = storeToRefs(Store)
+
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
 
 type ControlStyle = 'traffic-light' | 'windows'
 
@@ -48,7 +52,34 @@ const handleMaximize = (): void => {
 }
 
 const handleClose = (): void => {
-  window.api?.close()
+  if (!settings.value.hasConfiguredCloseBehavior) {
+    showCloseDialog.value = true
+    return
+  }
+
+  if (settings.value.closeToTray) {
+    handleMiniMode()
+  } else {
+    window.api?.close()
+  }
+}
+
+const showCloseDialog = ref(false)
+const rememberChoice = ref(true)
+
+const handleCloseChoice = (toTray: boolean): void => {
+  if (rememberChoice.value) {
+    settingsStore.updateSettings({
+      closeToTray: toTray,
+      hasConfiguredCloseBehavior: true
+    })
+  }
+  showCloseDialog.value = false
+  if (toTray) {
+    handleMiniMode()
+  } else {
+    window.api?.close()
+  }
 }
 
 const handleMiniMode = (): void => {
@@ -118,6 +149,7 @@ const handleBack = (): void => {
 
       <!-- Mini 模式按钮 -->
       <t-button
+        v-if="!settings.closeToTray"
         shape="circle"
         theme="default"
         variant="text"
@@ -127,7 +159,17 @@ const handleBack = (): void => {
       >
         <i class="iconfont icon-dibu"></i>
       </t-button>
-
+      <div
+        v-if="userInfo.topBarStyle === false"
+        style="
+          width: 1px;
+          height: 1rem;
+          background: var(--td-border-level-1-color);
+          margin: 0 3px;
+          border-radius: 2px;
+        "
+        :style="color ? 'background: ' + color : ''"
+      ></div>
       <!-- 最小化按钮 -->
       <t-button
         shape="circle"
@@ -182,6 +224,30 @@ const handleBack = (): void => {
         <div v-else class="traffic-light close"></div>
       </t-button>
     </div>
+
+    <t-dialog v-model:visible="showCloseDialog" header="关闭提示" :close-btn="true" placement="top">
+      <div>您希望如何处理关闭操作？</div>
+      <div style="margin-top: 10px">
+        <t-checkbox v-model="rememberChoice">记住我的选择，下次不再询问</t-checkbox>
+      </div>
+      <template #footer>
+        <t-button theme="default" @click="handleCloseChoice(false)">
+          <template #icon>
+            <i
+              class="iconfont icon-a-quxiaoguanbi"
+              style="font-size: 0.8em; margin-right: 0.5em"
+            ></i>
+          </template>
+          直接退出</t-button
+        >
+        <t-button theme="primary" @click="handleCloseChoice(true)">
+          <template #icon>
+            <i class="iconfont icon-dibu" style="font-size: 0.8em; margin-right: 0.5em"></i>
+          </template>
+          最小化到托盘</t-button
+        >
+      </template>
+    </t-dialog>
   </div>
 </template>
 

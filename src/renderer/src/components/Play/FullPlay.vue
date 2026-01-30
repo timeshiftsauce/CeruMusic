@@ -369,13 +369,7 @@ const lightMainColor = computed(() => {
 })
 
 const useBlackText = computed(() => {
-  const c = player.value.coverDetail.ColorObject
-  if (c) {
-    // Calculate brightness
-    const yiq = (c.r * 299 + c.g * 587 + c.b * 114) / 1000
-    return yiq >= 128
-  }
-  return false
+  return player.value.coverDetail.useBlackText
 })
 
 // 计算歌词颜色

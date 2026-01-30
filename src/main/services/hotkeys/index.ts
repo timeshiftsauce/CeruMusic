@@ -27,7 +27,8 @@ const actionLabel: Record<HotkeyAction, string> = {
   toggleDesktopLyric: '桌面歌词',
   setPlayModeSequence: '顺序播放',
   setPlayModeRandom: '随机播放',
-  togglePlayModeSingle: '单曲循环切换'
+  togglePlayModeSingle: '单曲循环切换',
+  toggleAudioOutputSelector: '切换音频输出设备'
 }
 
 const getStoredHotkeyConfig = (): HotkeyConfig => {
@@ -71,7 +72,8 @@ const actionCallbacks = (mainWindow: BrowserWindow) => {
     toggleDesktopLyric: () => toggleDesktopLyric(),
     setPlayModeSequence: () => sendCtrl('setPlayMode', 'sequence'),
     setPlayModeRandom: () => sendCtrl('setPlayMode', 'random'),
-    togglePlayModeSingle: () => sendCtrl('setPlayMode', 'toggleSingle')
+    togglePlayModeSingle: () => sendCtrl('setPlayMode', 'toggleSingle'),
+    toggleAudioOutputSelector: () => sendCtrl('hotkeys:toggle-audio-output-selector')
   }
 
   return callbacks

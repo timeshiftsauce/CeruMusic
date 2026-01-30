@@ -23,6 +23,7 @@ import ThemeSelector from '@renderer/components/ThemeSelector.vue'
 import DesktopLyricStyle from '@renderer/components/Settings/DesktopLyricStyle.vue'
 import LyricFontSettings from '@renderer/components/Settings/LyricFontSettings.vue'
 import EqualizerSettings from '@renderer/components/Settings/EqualizerSettings.vue'
+import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import AudioEffectSettings from '@renderer/components/Settings/AudioEffectSettings.vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
@@ -503,6 +504,27 @@ const getTagOptionsStatus = () => {
 
                 <div class="setting-group-item">
                   <div class="setting-label">
+                    <h4>关闭按钮行为</h4>
+                    <p>设置点击窗口关闭按钮时的行为</p>
+                  </div>
+                  <div
+                    class="setting-control"
+                    style="display: flex; align-items: center; gap: 10px"
+                  >
+                    <t-switch
+                      :value="settings.closeToTray"
+                      @change="(val) => settingsStore.updateSettings({ closeToTray: Boolean(val) })"
+                    />
+                    <span class="setting-text">{{
+                      settings.closeToTray ? '最小化到托盘' : '直接退出应用'
+                    }}</span>
+                  </div>
+                </div>
+
+                <t-divider />
+
+                <div class="setting-group-item">
+                  <div class="setting-label">
                     <h4>应用主题色</h4>
                     <p>选择应用的主题颜色</p>
                   </div>
@@ -591,6 +613,11 @@ const getTagOptionsStatus = () => {
               <div class="setting-group">
                 <h3>播放列表管理</h3>
                 <PlaylistSettings />
+              </div>
+
+              <div id="audio-output-settings" class="setting-group">
+                <h3>音频输出</h3>
+                <AudioOutputSettings />
               </div>
 
               <div class="setting-group">

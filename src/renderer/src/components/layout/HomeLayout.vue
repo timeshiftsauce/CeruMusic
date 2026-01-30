@@ -14,6 +14,16 @@ onMounted(() => {
   stopWatchEffect = watchEffect(() => {
     source.value = sourceicon[LocalUserDetail.userSource.source || 'wy']
   })
+
+  // Listen for global hotkey to open audio output selector
+  // Note: Logic moved to App.vue to support global toggle and prevent duplicate listeners.
+  // This listener is removed to avoid conflict.
+  // window.electron.ipcRenderer.on('hotkeys:toggle-audio-output-selector', () => {
+  //   router.push({
+  //     path: '/settings',
+  //     query: { category: 'playlist', section: 'audio-output', t: Date.now() }
+  //   })
+  // })
 })
 
 onUnmounted(() => {

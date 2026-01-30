@@ -21,6 +21,8 @@ export interface SettingsState {
   autoImportPlaylistOnOpen?: boolean
   suppressImportPrompt?: boolean
   lyricFontFamily?: string
+  closeToTray?: boolean
+  hasConfiguredCloseBehavior?: boolean
 }
 
 export const useSettingsStore = defineStore(
@@ -40,7 +42,9 @@ export const useSettingsStore = defineStore(
       },
       autoImportPlaylistOnOpen: false,
       suppressImportPrompt: false,
-      lyricFontFamily: 'PingFangSC-Semibold'
+      lyricFontFamily: 'PingFangSC-Semibold',
+      closeToTray: true,
+      hasConfiguredCloseBehavior: false
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -88,6 +92,12 @@ export const useSettingsStore = defineStore(
       if (!settings.value.lyricFontFamily) {
         settings.value.lyricFontFamily = 'PingFangSC-Semibold'
       }
+      if (typeof settings.value.closeToTray === 'undefined') {
+        settings.value.closeToTray = true
+      }
+      if (typeof settings.value.hasConfiguredCloseBehavior === 'undefined') {
+        settings.value.hasConfiguredCloseBehavior = false
+      }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {
           basicInfo: true,
@@ -119,6 +129,7 @@ export const useSettingsStore = defineStore(
     }
   },
   {
+    // @ts-ignore
     persist: true
   }
 )
