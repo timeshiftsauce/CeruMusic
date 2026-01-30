@@ -279,4 +279,4 @@ export type {
 }
 export type { SongResponse, SongDetailResponse, SongUrlResponse }
 
-export { mobileHeaders, axiosClient }
+export { mobileHeaders, axiosClient, type DownloadBatchSongsArgs }
