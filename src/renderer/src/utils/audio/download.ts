@@ -236,7 +236,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       isCache: true
     })
 
-      ; (await tip).close()
+    ;(await tip).close()
 
     // 兼容 DownloadManager 返回的 Task 对象 (包含 filePath) 和旧版返回对象 (包含 path)
     const savePath = result.filePath || result.path

@@ -80,12 +80,7 @@ const settingSections = computed(() => [
         @click="playSetting.setLayoutMode('cover')"
       >
         <div class="card-preview cover-preview">
-          <img
-            src="../../assets/images/cover-play.png"
-            shape="circle"
-            class="cover"
-            width="100%"
-          />
+          <img src="../../assets/images/cover-play.png" shape="circle" class="cover" width="100%" />
         </div>
 
         <span>沉浸封面</span>

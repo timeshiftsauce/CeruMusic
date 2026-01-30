@@ -260,8 +260,8 @@ interface MusicServiceBase {
   getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse>
   getSongUrl({ id }: GetSongUrlArgs): Promise<SongUrlResponse>
   getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
-  getToplist({ }: GetToplistArgs): Promise<any>
-  getToplistDetail({ }: GetToplistDetailArgs): Promise<any>
+  getToplist({}: GetToplistArgs): Promise<any>
+  getToplistDetail({}: GetToplistDetailArgs): Promise<any>
   getListSongs({ id, limit, offset }: GetListSongsArgs): Promise<any>
   downloadSingleSong({ id }: DownloadSingleSongArgs): Promise<any>
 }

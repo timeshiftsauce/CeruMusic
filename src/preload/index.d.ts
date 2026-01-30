@@ -167,9 +167,7 @@ interface CustomAPI {
       error?: string
       errors?: string[]
     }>
-    set: (
-      payload: HotkeyConfigPayload
-    ) => Promise<{
+    set: (payload: HotkeyConfigPayload) => Promise<{
       success: boolean
       data?: HotkeyConfig
       status?: HotkeyStatus
