@@ -9,7 +9,6 @@ import {
   Tray,
   Menu
 } from 'electron'
-import http from 'node:http'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -28,6 +27,11 @@ import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
 import fs from 'node:fs'
 import { initHotkeyService } from './services/hotkeys'
+import { deepLinkRouter } from './router'
+import { setupDeepLinks } from './router/routes'
+
+// Initialize deep link routes
+setupDeepLinks()
 
 let pendingPlaylistFiles: string[] = []
 const queueOpenPlaylist = (filePath: string) => {
@@ -48,6 +52,15 @@ process.on('uncaughtException', (error: any) => {
   console.error('Uncaught Exception:', error?.message || error)
 })
 
+// 注册自定义协议
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('cerumusic', process.execPath, [path.resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient('cerumusic')
+}
+
 // 获取单实例锁
 const gotTheLock = app.requestSingleInstanceLock()
 
@@ -65,6 +78,12 @@ if (!gotTheLock) {
     }
     const argPath = argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
     if (argPath) queueOpenPlaylist(argPath)
+
+    // 处理 Deep Link (Windows/Linux)
+    const protocolUrl = argv?.find((arg) => arg.startsWith('cerumusic://'))
+    if (protocolUrl && mainWindow) {
+      deepLinkRouter.match(mainWindow, protocolUrl)
+    }
   })
 }
 
@@ -126,13 +145,13 @@ function setupTray() {
   if (g.__ceru_tray__) {
     try {
       g.__ceru_tray__.destroy()
-    } catch {}
+    } catch { }
     g.__ceru_tray__ = null
   }
   if (tray) {
     try {
       tray.destroy()
-    } catch {}
+    } catch { }
     tray = null
   }
 
@@ -170,7 +189,7 @@ function setupTray() {
   app.once('before-quit', () => {
     try {
       tray?.destroy()
-    } catch {}
+    } catch { }
     tray = null
     g.__ceru_tray__ = null
   })
@@ -503,51 +522,6 @@ app.whenReady().then(async () => {
 
   // 仅在主进程初始化一次托盘
   setupTray()
-  function setTop(mainWindow: BrowserWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    if (!mainWindow.isVisible()) mainWindow.show()
-    // 窗口置顶逻辑
-    if (process.platform === 'win32') {
-      mainWindow.setAlwaysOnTop(true)
-      mainWindow.focus()
-      mainWindow.setAlwaysOnTop(false)
-    } else if (process.platform === 'darwin') {
-      mainWindow.show()
-      mainWindow.focus()
-    } else {
-      mainWindow.setAlwaysOnTop(true)
-      mainWindow.focus()
-      mainWindow.setAlwaysOnTop(false)
-    }
-  }
-  // 启动本地 HTTP 服务器处理 Logto 回调
-  const authServer = http.createServer((req, res) => {
-    if (req.url && req.url.startsWith('/callback')) {
-      const fullUrl = `http://127.0.0.1:43110${req.url}`
-      if (mainWindow) {
-        setTop(mainWindow)
-        mainWindow.webContents.send('logto-callback', fullUrl)
-      }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(
-        '<html><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1>登录成功</h1><p>您可以关闭此窗口并返回应用。</p><script>window.close()</script></body></html>'
-      )
-    } else if (req.url && req.url.startsWith('/logout-callback')) {
-      if (mainWindow) setTop(mainWindow)
-
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(
-        '<html><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1>已退出登录</h1><p>您可以关闭此窗口并返回应用。</p><script>window.close()</script></body></html>'
-      )
-    } else {
-      res.writeHead(404)
-      res.end('Not Found')
-    }
-  })
-
-  authServer.listen(43110, '127.0.0.1', () => {
-    console.log('Auth server listening on http://127.0.0.1:43110')
-  })
 
   ipcMain.on('startPing', () => {
     if (ping) clearInterval(ping)
@@ -582,6 +556,14 @@ app.whenReady().then(async () => {
 app.on('open-file', (event, filePath) => {
   event.preventDefault()
   queueOpenPlaylist(filePath)
+})
+
+// macOS Deep Link
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  if (mainWindow) {
+    deepLinkRouter.match(mainWindow, url)
+  }
 })
 
 // 读取文件内容供渲染层解析

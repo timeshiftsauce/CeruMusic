@@ -38,6 +38,10 @@ win:
       name: 澜音播放器旧版（播放列表/歌单）文件
       description: 澜音播放器旧版（加密播放列表/歌单）文件
       icon: resources/cmpl.ico
+  protocols:
+    - name: Ceru Music Protocol
+      schemes:
+        - cerumusic
 nsis:
   artifactName: ${name}-${version}-win-${arch}-setup.${ext}
   shortcutName: ${productName}
