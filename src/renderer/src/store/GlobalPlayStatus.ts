@@ -230,8 +230,8 @@ export const useGlobalPlayStatusStore = defineStore(
 
     // 监听歌曲ID变化，获取歌词
     watch(
-      () => player.songId,
-      async (newId, _oldId, onCleanup) => {
+      [() => player.songId, () => player.songInfo?.songmid],
+      async ([newId], _oldArgs, onCleanup) => {
         if (!newId || !player.songInfo) {
           player.lyrics.lines = []
           return
@@ -307,6 +307,8 @@ export const useGlobalPlayStatusStore = defineStore(
                   source,
                   songInfo: getCleanSongInfo()
                 })
+                console.log('平台 Lyrics 获取成功')
+
                 if (!active) return null
 
                 let lyrics: null | LyricLine[] = null
@@ -327,16 +329,20 @@ export const useGlobalPlayStatusStore = defineStore(
             })()
 
             try {
-              const res = await (
-                await fetch(
-                  `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
-                  {
-                    signal: abort.signal
-                  }
-                )
-              ).text()
+              const response = await fetch(
+                `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
+                {
+                  signal: abort.signal
+                }
+              )
 
               if (!active) return
+
+              if (!response.ok) {
+                throw new Error(`TTML request failed with status ${response.status}`)
+              }
+
+              const res = await response.text()
 
               if (!res || res.length < 100) {
                 throw new Error('ttml 无歌词')
@@ -350,7 +356,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics
 
-              sdkPromise.catch(() => {})
+              sdkPromise.catch(() => { })
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return
