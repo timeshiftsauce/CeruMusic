@@ -9,7 +9,8 @@ export const playSetting = defineStore('playSetting', {
     showLeftPanel: true, // 是否显示左侧面板
     isImmersiveLyricColor: true, // 是否开启沉浸色歌词
     isBlurLyric: false, // 是否开启模糊歌词
-    autoHideBottom: true // 是否自动隐藏底部控制栏
+    autoHideBottom: true, // 是否自动隐藏底部控制栏
+    isPauseTransition: true // 是否开启暂停播放过渡
   }),
   getters: {
     getisJumpLyric: (state) => state.isJumpLyric,
@@ -19,7 +20,8 @@ export const playSetting = defineStore('playSetting', {
     getShowLeftPanel: (state) => state.showLeftPanel,
     getIsImmersiveLyricColor: (state) => state.isImmersiveLyricColor,
     getIsBlurLyric: (state) => state.isBlurLyric,
-    getAutoHideBottom: (state) => state.autoHideBottom
+    getAutoHideBottom: (state) => state.autoHideBottom,
+    getIsPauseTransition: (state) => state.isPauseTransition
   },
   actions: {
     setIsDumpLyric(isDumpLyric: boolean) {
@@ -45,6 +47,9 @@ export const playSetting = defineStore('playSetting', {
     },
     setAutoHideBottom(autoHideBottom: boolean) {
       this.autoHideBottom = autoHideBottom
+    },
+    setIsPauseTransition(isPauseTransition: boolean) {
+      this.isPauseTransition = isPauseTransition
     }
   },
   persist: true
