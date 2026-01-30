@@ -35,8 +35,9 @@ function main(source: string = 'wy') {
         const usePlugin = pluginService.getPluginById(pluginId)
         if (!pluginId || !usePlugin) return { error: '请配置音源来播放歌曲' }
 
+        const currentSource = songInfo.source || source
         // 生成歌曲唯一标识
-        const songId = `${songInfo.name}-${songInfo.singer}-${source}-${quality}`
+        const songId = `${songInfo.name}-${songInfo.singer}-${currentSource}-${quality}`
 
         // 先检查缓存（isCache !== false 时）
         if (isCache !== false) {
@@ -47,7 +48,7 @@ function main(source: string = 'wy') {
         }
 
         // 没有缓存时才发起网络请求
-        const originalUrl = await usePlugin.getMusicUrl(source, songInfo, quality)
+        const originalUrl = await usePlugin.getMusicUrl(currentSource, songInfo, quality)
         // 按需异步缓存，不阻塞返回
         if (isCache !== false) {
           musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
@@ -135,6 +136,23 @@ function main(source: string = 'wy') {
         url = result
       }
       return await download(songInfo, url, tagWriteOptions, pluginId, quality)
+    },
+
+    async downloadBatchSongs({ tasks }: { tasks: DownloadSingleSongArgs[] }) {
+      const results: any[] = []
+      for (const task of tasks) {
+        try {
+          const res = await this.downloadSingleSong(task)
+          results.push({ success: true, songmid: task.songInfo.songmid, ...res })
+        } catch (e: any) {
+          results.push({
+            success: false,
+            songmid: task.songInfo.songmid,
+            error: e.message || String(e)
+          })
+        }
+      }
+      return results
     },
 
     async parsePlaylistId({ url }: { url: string }) {

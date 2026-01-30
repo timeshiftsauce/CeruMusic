@@ -3,7 +3,8 @@ import { ref, onMounted, toRaw, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { downloadSingleSong } from '@renderer/utils/audio/download'
+import { downloadSingleSong, createQualityDialog } from '@renderer/utils/audio/download'
+import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
 import songListAPI from '@renderer/api/songList'
 
 interface MusicItem {
@@ -270,9 +271,52 @@ const handleDownloadBatch = async (batchSongs: any[]) => {
     MessagePlugin.warning('未选择歌曲')
     return
   }
-  MessagePlugin.success(`开始下载 ${batchSongs.length} 首歌曲`)
+
+  // 1. 收集所有可能的音质选项
+  const allPossibleTypes = QUALITY_ORDER.map((t) => ({ type: t, size: '' }))
+
+  // 2. 弹出音质选择框
+  const userQuality = await createQualityDialog(
+    allPossibleTypes,
+    LocalUserDetail.userSource.quality || '128k',
+    '选择批量下载音质(自动降级)'
+  )
+
+  if (!userQuality) return
+
+  const tasks: any[] = []
+
   for (const s of batchSongs) {
-    await downloadSingleSong(s as any)
+    // 3. 计算每首歌的最佳匹配音质
+    let qualityToUse = userQuality
+    if (s.types && s.types.length > 0) {
+      const best = calculateBestQuality(s.types, userQuality)
+      if (best) qualityToUse = best
+    }
+
+    const d = new Date()
+    s.template = filenameTemplate.value
+    s.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+    tasks.push({
+      pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
+      source: s.source,
+      quality: qualityToUse,
+      songInfo: toRaw(s),
+      tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
+      lazy: true
+    })
+  }
+
+  try {
+    await window.api.music.requestSdk('downloadBatchSongs', {
+      source: batchSongs[0]?.source || 'wy',
+      tasks
+    })
+    MessagePlugin.success(`已添加 ${tasks.length} 首歌曲到下载队列`)
+  } catch (err) {
+    console.error('Batch download failed:', err)
+    MessagePlugin.error('批量添加下载任务失败')
   }
 }
 const handlePlayBatchSelected = (batchSongs: any[]) => {

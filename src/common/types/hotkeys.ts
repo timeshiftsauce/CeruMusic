@@ -10,6 +10,7 @@ export type HotkeyAction =
   | 'setPlayModeSequence'
   | 'setPlayModeRandom'
   | 'togglePlayModeSingle'
+  | 'toggleAudioOutputSelector'
 
 export type HotkeyConfig = {
   enabled: boolean
@@ -36,6 +37,7 @@ export const defaultHotkeyConfig: HotkeyConfig = {
     toggleDesktopLyric: 'CommandOrControl+Alt+D',
     setPlayModeSequence: 'CommandOrControl+Alt+4',
     setPlayModeRandom: 'CommandOrControl+Alt+5',
-    togglePlayModeSingle: 'CommandOrControl+Alt+6'
+    togglePlayModeSingle: 'CommandOrControl+Alt+6',
+    toggleAudioOutputSelector: 'Alt+O'
   }
 }

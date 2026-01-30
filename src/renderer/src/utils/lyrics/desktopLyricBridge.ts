@@ -51,12 +51,12 @@ export function installDesktopLyricBridge() {
     () => player.value.lyrics.lines,
     (lines) => {
       lastIndex = -1
-        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
-          index: -1,
-          lyric: buildLyricPayload(lines)
-        })
-        // 提示前端进入准备态
-        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
+        index: -1,
+        lyric: buildLyricPayload(lines)
+      })
+      // 提示前端进入准备态
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
     },
     { immediate: true }
   )
@@ -70,7 +70,7 @@ export function installDesktopLyricBridge() {
         const artist = (song as any)?.singer || ''
         const title = [name, artist].filter(Boolean).join(' - ')
         if (title) (window as any)?.electron?.ipcRenderer?.send?.('play-song-change', title)
-      } catch { }
+      } catch {}
     },
     { immediate: true }
   )
@@ -80,7 +80,7 @@ export function installDesktopLyricBridge() {
   playStateInterval = window.setInterval(() => {
     if (controlAudio.Audio.isPlay !== lastPlayState) {
       lastPlayState = controlAudio.Audio.isPlay
-        ; (window as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
     }
   }, 300)
 
@@ -100,7 +100,7 @@ export function installDesktopLyricBridge() {
     }
 
     // 首先推送进度，便于前端做 30% 判定（避免 setTimeout 带来的抖动）
-    ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
+    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
       index: idx,
       progress
     })
@@ -108,11 +108,11 @@ export function installDesktopLyricBridge() {
     // 当行变化时，推送 index（立即切换高亮），并附带完整歌词集合（仅在变化时下发，减少开销）
     if (idx !== lastIndex) {
       lastIndex = idx
-        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
-        ; (window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
-          index: idx,
-          lyric: buildLyricPayload(currentLines)
-        })
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
+        index: idx,
+        lyric: buildLyricPayload(currentLines)
+      })
     }
   }, 100)
 }

@@ -55,6 +55,11 @@ type DownloadSingleSongArgs = {
   source?: string
 }
 
+type DownloadBatchSongsArgs = {
+  tasks: DownloadSingleSongArgs[]
+  source?: string
+}
+
 type ServiceNamesType =
   | 'search'
   | 'getSongDetail'
@@ -64,6 +69,7 @@ type ServiceNamesType =
   | 'getToplistDetail'
   | 'getListSongs'
   | 'downloadSingleSong'
+  | 'downloadBatchSongs'
 
 type ServiceArgsType =
   | SearchArgs
@@ -74,6 +80,7 @@ type ServiceArgsType =
   | GetToplistDetailArgs
   | GetListSongsArgs
   | DownloadSingleSongArgs
+  | DownloadBatchSongsArgs
 
 interface Artist {
   id: number
@@ -253,8 +260,8 @@ interface MusicServiceBase {
   getSongDetail({ ids }: GetSongDetailArgs): Promise<SongDetailResponse>
   getSongUrl({ id }: GetSongUrlArgs): Promise<SongUrlResponse>
   getLyric({ id, lv, yv, tv }: GetLyricArgs): Promise<any>
-  getToplist({}: GetToplistArgs): Promise<any>
-  getToplistDetail({}: GetToplistDetailArgs): Promise<any>
+  getToplist({ }: GetToplistArgs): Promise<any>
+  getToplistDetail({ }: GetToplistDetailArgs): Promise<any>
   getListSongs({ id, limit, offset }: GetListSongsArgs): Promise<any>
   downloadSingleSong({ id }: DownloadSingleSongArgs): Promise<any>
 }
