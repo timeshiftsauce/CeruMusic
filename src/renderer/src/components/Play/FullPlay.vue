@@ -155,10 +155,7 @@ onMounted(async () => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
 })
 
-onBeforeUnmount(() => {
-  // 移除事件监听器
-  document.removeEventListener('fullscreenchange', handleFullscreenChange)
-})
+// removed redundant onBeforeUnmount
 
 // 处理全屏状态变化
 const handleFullscreenChange = () => {
@@ -206,13 +203,7 @@ watch(
   { immediate: true }
 )
 
-// 清理事件监听器
-onBeforeUnmount(() => {
-  if (Audio.value.audio) {
-    Audio.value.audio.removeEventListener('play', updatePlayState)
-    Audio.value.audio.removeEventListener('pause', updatePlayState)
-  }
-})
+// removed redundant onBeforeUnmount
 // 组件内部状态
 const state = reactive({
   audioUrl: Audio.value.url,
@@ -244,7 +235,29 @@ watch(
   async (newImage) => {
     // 更新背景图片
     if (bgRef.value) {
+      // 尝试获取旧的纹理引用，以便在过渡后手动销毁以防止内存泄漏
+      // 注意：bgRef.value 是 CoreBackgroundRender 实例，需要访问内部属性
+      const renderer = bgRef.value as any
+      // 获取当前容器中的第一个子元素（Sprite）的纹理
+      const oldTexture = renderer.curContainer?.children?.[0]?.texture
+
       await bgRef.value.setAlbum(newImage, false)
+
+      // 延迟销毁旧纹理，确保过渡动画（约1秒）完成
+      // 这里给予2秒的缓冲时间
+      if (oldTexture) {
+        setTimeout(() => {
+          // 检查纹理是否有效且未被销毁
+          // destroy(true) 会同时销毁 baseTexture，释放 WebGL 纹理内存
+          if (oldTexture.baseTexture && !oldTexture.baseTexture.destroyed) {
+            try {
+              oldTexture.destroy(true)
+            } catch (e) {
+              console.warn('Failed to clean up old album texture:', e)
+            }
+          }
+        }, 2000)
+      }
     }
   },
   { immediate: true }
@@ -316,6 +329,15 @@ onMounted(async () => {
 
 // 组件卸载前清理订阅
 onBeforeUnmount(async () => {
+  // 移除事件监听器
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  window.removeEventListener('mousemove', resetIdleTimer)
+  window.removeEventListener('resize', debouncedCheckOverflow)
+  document.removeEventListener('click', handleClickOutside)
+
+  if (idleTimer) clearTimeout(idleTimer)
+  if (animatingTimer) clearTimeout(animatingTimer)
+
   // 组件卸载时确保恢复系统息屏
   if (blockerActive.value) {
     try {
@@ -329,6 +351,10 @@ onBeforeUnmount(async () => {
   }
   if (unsubscribePlay.value) {
     unsubscribePlay.value()
+  }
+  if (Audio.value.audio) {
+    Audio.value.audio.removeEventListener('play', updatePlayState)
+    Audio.value.audio.removeEventListener('pause', updatePlayState)
   }
   // 清理背景渲染器资源
   if (bgRef.value) {
@@ -435,10 +461,7 @@ onMounted(() => {
   setTimeout(checkOverflow, 500)
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', debouncedCheckOverflow)
-  document.removeEventListener('click', handleClickOutside)
-})
+// removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---
 </script>
 

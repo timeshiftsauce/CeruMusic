@@ -262,6 +262,12 @@ onUnmounted(() => {
   window.electron?.ipcRenderer?.removeAllListeners?.('desktopLyricVisibility')
   window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
   window.removeEventListener('global-music-control', globalControls)
+  
+  // 清理可能存在的拖动监听器
+  window.removeEventListener('mousemove', handleVolumeDragMove)
+  window.removeEventListener('mouseup', handleVolumeDragEnd)
+  window.removeEventListener('mousemove', handleProgressDragMove)
+  window.removeEventListener('mouseup', handleProgressDragEnd)
 })
 
 // 组件被激活时（从缓存中恢复）

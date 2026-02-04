@@ -175,6 +175,23 @@ const handleTouchStart = (event: TouchEvent, index: number, song: any) => {
   handlePointerStart(event, index, song, true)
 }
 
+// 拖拽事件处理引用，用于卸载时清理
+let activeDragMoveHandler: ((e: MouseEvent | TouchEvent) => void) | null = null
+let activeDragEndHandler: ((e: MouseEvent | TouchEvent) => void) | null = null
+
+const cleanupDragListeners = () => {
+  if (activeDragMoveHandler) {
+    document.removeEventListener('mousemove', activeDragMoveHandler as any)
+    document.removeEventListener('touchmove', activeDragMoveHandler as any)
+    activeDragMoveHandler = null
+  }
+  if (activeDragEndHandler) {
+    document.removeEventListener('mouseup', activeDragEndHandler as any)
+    document.removeEventListener('touchend', activeDragEndHandler as any)
+    activeDragEndHandler = null
+  }
+}
+
 // 拖拽排序相关方法
 const handlePointerStart = (
   event: MouseEvent | TouchEvent,
@@ -184,6 +201,9 @@ const handlePointerStart = (
 ) => {
   event.preventDefault()
   event.stopPropagation()
+
+  // 确保之前的监听器已清理
+  cleanupDragListeners()
 
   // 重置标记
   isDragStarted.value = false
@@ -209,7 +229,8 @@ const handlePointerStart = (
 
   // 添加移动和结束事件监听
   const handleMove = (e: MouseEvent | TouchEvent) => {
-    const currentY = 'touches' in e ? e.touches[0].clientY : e.clientY
+    const currentY =
+      'touches' in e ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY
     const deltaY = Math.abs(currentY - dragStartY.value)
 
     // 如果移动距离超过阈值，取消长按
@@ -262,16 +283,17 @@ const handlePointerStart = (
     }
 
     // 移除事件监听
-    document.removeEventListener('mousemove', handleMove)
-    document.removeEventListener('mouseup', handleEnd)
-    document.removeEventListener('touchmove', handleMove)
-    document.removeEventListener('touchend', handleEnd)
+    cleanupDragListeners()
   }
+
+  // 保存引用
+  activeDragMoveHandler = handleMove
+  activeDragEndHandler = handleEnd
 
   // 添加事件监听
   document.addEventListener('mousemove', handleMove)
   document.addEventListener('mouseup', handleEnd)
-  document.addEventListener('touchmove', handleMove)
+  document.addEventListener('touchmove', handleMove, { passive: false })
   document.addEventListener('touchend', handleEnd)
 }
 
@@ -446,6 +468,9 @@ onUnmounted(() => {
   if (longPressTimer.value) {
     clearTimeout(longPressTimer.value)
   }
+
+  // 清理可能残留的拖拽事件监听器
+  cleanupDragListeners()
 
   // 清理自动滚动定时器
   stopAutoScroll()

@@ -4,7 +4,7 @@ class AudioManager {
   private static instance: AudioManager
   private audioSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>()
   private audioContexts = new WeakMap<HTMLAudioElement, AudioContext>()
-  private analysers = new Map<string, AnalyserNode>()
+  private analysers = new Map<string, { node: AnalyserNode; element: HTMLAudioElement }>()
   // 为每个 audioElement 复用一个分流器，避免重复断开重连主链路
   private splitters = new WeakMap<HTMLAudioElement, GainNode>()
   private equalizers = new WeakMap<HTMLAudioElement, BiquadFilterNode[]>()
@@ -259,11 +259,17 @@ class AudioManager {
         this.splitters.set(audioElement, splitter)
       }
 
+      // 检查是否存在同名分析器，如果存在则先移除，防止重复连接导致内存泄漏
+      if (this.analysers.has(id)) {
+        console.warn(`AudioManager: 分析器 ${id} 已存在，正在移除旧实例以防止泄漏`)
+        this.removeAnalyser(id)
+      }
+
       // 将分析器挂到分流器上，不影响主链路
       splitter.connect(analyser)
 
       // 存储分析器引用
-      this.analysers.set(id, analyser)
+      this.analysers.set(id, { node: analyser, element: audioElement })
 
       console.log('AudioManager: 创建分析器成功')
       return analyser
@@ -275,10 +281,22 @@ class AudioManager {
 
   // 移除分析器
   removeAnalyser(id: string): void {
-    const analyser = this.analysers.get(id)
-    if (analyser) {
+    const entry = this.analysers.get(id)
+    if (entry) {
+      const { node: analyser, element: audioElement } = entry
       try {
         analyser.disconnect()
+
+        // 关键：断开 splitter 到 analyser 的连接 (Input)
+        const splitter = this.splitters.get(audioElement)
+        if (splitter) {
+          try {
+            splitter.disconnect(analyser)
+          } catch (e) {
+            console.warn('AudioManager: 断开 splitter -> analyser 连接失败', e)
+          }
+        }
+
         this.analysers.delete(id)
         console.log('AudioManager: 移除分析器成功')
       } catch (error) {
@@ -300,7 +318,7 @@ class AudioManager {
       if (splitter) {
         try {
           splitter.disconnect()
-        } catch {}
+        } catch { }
         this.splitters.delete(audioElement)
       }
 
@@ -310,9 +328,42 @@ class AudioManager {
         filters.forEach((f) => {
           try {
             f.disconnect()
-          } catch {}
+          } catch { }
         })
         this.equalizers.delete(audioElement)
+      }
+
+      // 清理其他音效节点
+      const bassBoost = this.bassBoostFilters.get(audioElement)
+      if (bassBoost) {
+        try {
+          bassBoost.disconnect()
+        } catch { }
+        this.bassBoostFilters.delete(audioElement)
+      }
+
+      const convolver = this.convolverNodes.get(audioElement)
+      if (convolver) {
+        try {
+          convolver.disconnect()
+        } catch { }
+        this.convolverNodes.delete(audioElement)
+      }
+
+      const surroundGain = this.surroundGainNodes.get(audioElement)
+      if (surroundGain) {
+        try {
+          surroundGain.disconnect()
+        } catch { }
+        this.surroundGainNodes.delete(audioElement)
+      }
+
+      const balance = this.balanceNodes.get(audioElement)
+      if (balance) {
+        try {
+          balance.disconnect()
+        } catch { }
+        this.balanceNodes.delete(audioElement)
       }
 
       this.audioSources.delete(audioElement)
@@ -326,7 +377,7 @@ class AudioManager {
 
   // 获取分析器
   getAnalyser(id: string): AnalyserNode | undefined {
-    return this.analysers.get(id)
+    return this.analysers.get(id)?.node
   }
 
   // 设置均衡器频段增益

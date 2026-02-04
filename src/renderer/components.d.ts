@@ -50,6 +50,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SearchSuggest: typeof import('./src/components/search/searchSuggest.vue')['default']
+    SettingsSearch: typeof import('./src/components/SettingsSearch.vue')['default']
     ShaderBackground: typeof import('./src/components/Play/ShaderBackground.vue')['default']
     SImage: typeof import('./src/components/sImage.vue')['default']
     SongVirtualList: typeof import('./src/components/Music/SongVirtualList.vue')['default']

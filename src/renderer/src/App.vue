@@ -21,8 +21,14 @@ import {
   importPlaylistFromPath,
   validateImportedPlaylist
 } from '@renderer/utils/playlist/playlistExportImport'
-import { installGlobalMusicControls } from '@renderer/utils/audio/globalControls'
-import { installDesktopLyricBridge } from '@renderer/utils/lyrics/desktopLyricBridge'
+import {
+  installGlobalMusicControls,
+  uninstallGlobalMusicControls
+} from '@renderer/utils/audio/globalControls'
+import {
+  installDesktopLyricBridge,
+  uninstallDesktopLyricBridge
+} from '@renderer/utils/lyrics/desktopLyricBridge'
 import router from './router'
 import { useAuthStore } from '@renderer/store'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
@@ -460,6 +466,9 @@ const setupSystemThemeListener = () => {
 // 清理事件监听器
 onUnmounted(() => {
   stopUsageTracking()
+
+  uninstallGlobalMusicControls()
+  uninstallDesktopLyricBridge()
 
   if (themeChangeHandler) {
     themeChangeHandler()

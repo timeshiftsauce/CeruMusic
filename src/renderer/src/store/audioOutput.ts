@@ -141,13 +141,17 @@ export const useAudioOutputStore = defineStore(
       }
     }
 
+    const handleDeviceChange = () => {
+      console.log('Audio devices changed, rescanning...')
+      scanDevices()
+    }
+
     // Initialize listener for device changes (hot-plugging)
     const init = () => {
       scanDevices()
-      navigator.mediaDevices.ondevicechange = () => {
-        console.log('Audio devices changed, rescanning...')
-        scanDevices()
-      }
+      // Ensure we don't duplicate listeners
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange)
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange)
     }
 
     const playTestSound = (deviceId: string) => {

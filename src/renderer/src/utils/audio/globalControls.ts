@@ -2,6 +2,9 @@ import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
 
 let installed = false
+let smtcTimer: any = null
+let globalKeyDownHandler: ((e: KeyboardEvent) => void) | null = null
+let removeMusicCtrlListener: (() => void) | null = null
 
 function dispatch(name: string, val?: any) {
   window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
@@ -30,15 +33,22 @@ export function installGlobalMusicControls() {
   tryInitSmtc()
   // 若 URL 变化或 audio 初始化稍后完成，由组件/Store 负责赋值；这里轮询几次兜底初始化
   let smtcTries = 0
-  const smtcTimer = setInterval(() => {
+  if (smtcTimer) clearInterval(smtcTimer)
+  smtcTimer = setInterval(() => {
     if (smtcTries > 20) {
-      clearInterval(smtcTimer)
+      if (smtcTimer) {
+        clearInterval(smtcTimer)
+        smtcTimer = null
+      }
       return
     }
     smtcTries++
     if (controlAudio.Audio.audio) {
       tryInitSmtc()
-      clearInterval(smtcTimer)
+      if (smtcTimer) {
+        clearInterval(smtcTimer)
+        smtcTimer = null
+      }
     }
   }, 150)
 
@@ -55,7 +65,7 @@ export function installGlobalMusicControls() {
     }, delay)
   }
 
-  const onKeyDown = (e: KeyboardEvent) => {
+  globalKeyDownHandler = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null
     const tag = (target?.tagName || '').toLowerCase()
     const isEditable =
@@ -91,22 +101,36 @@ export function installGlobalMusicControls() {
     }, 100)
   }
 
-  document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('keydown', globalKeyDownHandler)
 
-  // // 监听音频结束事件，根据播放模式播放下一首
-  // controlAudio.subscribe('ended', () => {
-  //   window.requestAnimationFrame(() => {
-  //     console.log('播放结束')
-  //     dispatch('playNext')
-  //   })
-  // })
   // 托盘或系统快捷键回调（若存在）
   try {
-    const removeMusicCtrlListener = (window as any).api?.onMusicCtrl?.(() => {
+    removeMusicCtrlListener = (window as any).api?.onMusicCtrl?.(() => {
       dispatch('toggle')
     })
-    void removeMusicCtrlListener
   } catch {
     // ignore
   }
+}
+
+export function uninstallGlobalMusicControls() {
+  if (!installed) return
+  installed = false
+
+  if (smtcTimer) {
+    clearInterval(smtcTimer)
+    smtcTimer = null
+  }
+
+  if (globalKeyDownHandler) {
+    document.removeEventListener('keydown', globalKeyDownHandler)
+    globalKeyDownHandler = null
+  }
+
+  if (removeMusicCtrlListener) {
+    removeMusicCtrlListener()
+    removeMusicCtrlListener = null
+  }
+
+  mediaSessionController.cleanup()
 }

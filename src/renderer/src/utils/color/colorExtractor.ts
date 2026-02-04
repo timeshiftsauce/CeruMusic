@@ -10,6 +10,135 @@ export interface Color {
   b: number
 }
 
+export interface ImageAnalysisResult {
+  dominantColor: Color
+  useBlackText: boolean
+}
+
+/**
+ * 综合分析图片颜色（主色调与文本颜色）
+ * @param imageSrc 图片路径
+ */
+export async function analyzeImageColors(imageSrc: string): Promise<ImageAnalysisResult> {
+  return new Promise((resolve, reject) => {
+    // 处理相对路径
+    let actualSrc = imageSrc
+    if (
+      imageSrc.includes('@assets/images/Default.jpg') ||
+      imageSrc.includes('@renderer/assets/images/Default.jpg')
+    ) {
+      actualSrc = DefaultCover
+    } else if (
+      imageSrc.includes('@assets/images/cover.png') ||
+      imageSrc.includes('@renderer/assets/images/cover.png')
+    ) {
+      actualSrc = CoverImage
+    }
+
+    // 如果仍然是相对路径，使用默认
+    if (actualSrc.startsWith('@')) {
+      console.warn('无法解析相对路径，使用默认颜色')
+      resolve({
+        dominantColor: { r: 76, g: 116, b: 206 },
+        useBlackText: false
+      })
+      return
+    }
+
+    const img = new Image()
+    img.crossOrigin = 'Anonymous'
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('无法创建canvas上下文'))
+          return
+        }
+
+        const size = 100
+        canvas.width = size
+        canvas.height = size
+
+        ctx.drawImage(img, 0, 0, size, size)
+        const imageData = ctx.getImageData(0, 0, size, size).data
+
+        // 1. 颜色收集 & 亮度计算
+        const colors: Color[] = []
+        let totalLuminance = 0
+        let pixelCount = 0
+
+        for (let i = 0; i < imageData.length; i += 4) {
+          if (imageData[i + 3] < 128) continue
+
+          const r = imageData[i]
+          const g = imageData[i + 1]
+          const b = imageData[i + 2]
+
+          colors.push({ r, g, b })
+
+          // 亮度计算 (WCAG 2.0)
+          const rs = r / 255
+          const gs = g / 255
+          const bs = b / 255
+          const R = rs <= 0.03928 ? rs / 12.92 : Math.pow((rs + 0.055) / 1.055, 2.4)
+          const G = gs <= 0.03928 ? gs / 12.92 : Math.pow((gs + 0.055) / 1.055, 2.4)
+          const B = bs <= 0.03928 ? bs / 12.92 : Math.pow((bs + 0.055) / 1.055, 2.4)
+          totalLuminance += 0.2126 * R + 0.7152 * G + 0.0722 * B
+          pixelCount++
+        }
+
+        // 2. 计算主色调
+        const k = 5
+        const dominantColors = kMeansCluster(colors, k)
+        const filteredColors = dominantColors.filter((color) => {
+          if (color.r < 30 && color.g < 30 && color.b < 30) return false
+          if (color.r > 225 && color.g > 225 && color.b > 225) return false
+          return true
+        })
+
+        let dominantColor: Color
+        if (filteredColors.length > 0) {
+          dominantColor = getMostSaturatedColor(filteredColors)
+        } else {
+          dominantColor = dominantColors.length > 0 ? dominantColors[0] : { r: 76, g: 116, b: 206 }
+        }
+        dominantColor = enhanceColor(dominantColor)
+
+        // 3. 计算文本颜色决策
+        const averageLuminance = pixelCount > 0 ? totalLuminance / pixelCount : 0.5
+        // 阈值 >= 0.6 使用黑色文本 (与 contrastColor.ts 保持一致)
+        const useBlackText = averageLuminance >= 0.6
+
+        resolve({
+          dominantColor,
+          useBlackText
+        })
+      } catch (error) {
+        console.error('分析图片颜色失败:', error)
+        resolve({
+          dominantColor: { r: 76, g: 116, b: 206 },
+          useBlackText: false
+        })
+      }
+    }
+
+    img.onerror = () => {
+      console.error('图片加载失败:', actualSrc)
+      resolve({
+        dominantColor: { r: 76, g: 116, b: 206 },
+        useBlackText: false
+      })
+    }
+
+    img.src = actualSrc
+    if (img.complete) {
+      img.onload!(new Event('load'))
+    }
+  })
+}
+
 /**
  * 从图片中提取多个颜色
  * @param imageSrc 图片路径
@@ -118,8 +247,8 @@ export async function extractSecondaryColors(
           for (const existingColor of secondaryColors) {
             const distance = Math.sqrt(
               Math.pow(existingColor.r - sortedColors[i].r, 2) +
-                Math.pow(existingColor.g - sortedColors[i].g, 2) +
-                Math.pow(existingColor.b - sortedColors[i].b, 2)
+              Math.pow(existingColor.g - sortedColors[i].g, 2) +
+              Math.pow(existingColor.b - sortedColors[i].b, 2)
             )
 
             if (distance < 60) {
@@ -462,8 +591,8 @@ function kMeansCluster(colors: Color[], k: number): Color[] {
 function colorDistance(color1: Color, color2: Color): number {
   return Math.sqrt(
     Math.pow(color1.r - color2.r, 2) +
-      Math.pow(color1.g - color2.g, 2) +
-      Math.pow(color1.b - color2.b, 2)
+    Math.pow(color1.g - color2.g, 2) +
+    Math.pow(color1.b - color2.b, 2)
   )
 }
 

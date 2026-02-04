@@ -12,6 +12,7 @@
           <t-dialog
             :visible="plugTypeDialog"
             :close-btn="true"
+            attach="body"
             confirm-btn="下一步"
             cancel-btn="取消"
             :on-confirm="showImportMethodDialog"
@@ -33,6 +34,7 @@
           <t-dialog
             :visible="importMethodDialog"
             :close-btn="true"
+            attach="body"
             confirm-btn="确定"
             cancel-btn="返回"
             :on-confirm="handleImport"
@@ -152,6 +154,7 @@
         top="10vh"
         :close-btn="false"
         :footer="false"
+        attach="body"
         width="80%"
         :style="{ maxWidth: '900px', maxHeight: '80vh' }"
         class="log-dialog"
@@ -888,36 +891,7 @@ onMounted(async () => {
   min-width: 120px;
 }
 
-/* 日志弹窗样式 */
-:deep(.log-dialog) {
-  height: 80vh;
-
-  .t-dialog {
-    background: var(--plugins-console-bg);
-    border-radius: 12px;
-    box-shadow: var(--plugins-dialog-shadow, 0 20px 60px rgba(0, 0, 0, 0.4));
-    overflow: hidden;
-    border: 1px solid var(--plugins-console-border);
-  }
-
-  .t-dialog__header {
-    background: var(--plugins-console-header-bg);
-    border-bottom: 1px solid var(--plugins-console-border);
-    padding: 0;
-    border-radius: 12px 12px 0 0;
-    overflow: hidden;
-  }
-
-  .t-dialog__body {
-    padding: 0;
-    background: var(--plugins-console-bg);
-    border-left: 2px solid var(--plugins-console-border);
-    border-right: 2px solid var(--plugins-console-border);
-    border-bottom: 2px solid var(--plugins-console-border);
-    border-radius: 0 0 12px 12px;
-    overflow: hidden;
-  }
-}
+/* Moved to global style */
 
 .log-dialog-header {
   display: flex;
@@ -1311,6 +1285,39 @@ onMounted(async () => {
       width: 60px;
       font-size: 10px;
     }
+  }
+}
+</style>
+
+<style lang="scss">
+/* 日志弹窗样式 - 全局样式以支持 attach="body" */
+.log-dialog {
+  height: 80vh;
+
+  .t-dialog {
+    background: var(--plugins-console-bg);
+    border-radius: 12px;
+    box-shadow: var(--plugins-dialog-shadow, 0 20px 60px rgba(0, 0, 0, 0.4));
+    overflow: hidden;
+    border: 1px solid var(--plugins-console-border);
+  }
+
+  .t-dialog__header {
+    background: var(--plugins-console-header-bg);
+    border-bottom: 1px solid var(--plugins-console-border);
+    padding: 0;
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
+  }
+
+  .t-dialog__body {
+    padding: 0;
+    background: var(--plugins-console-bg);
+    border-left: 2px solid var(--plugins-console-border);
+    border-right: 2px solid var(--plugins-console-border);
+    border-bottom: 2px solid var(--plugins-console-border);
+    border-radius: 0 0 12px 12px;
+    overflow: hidden;
   }
 }
 </style>
