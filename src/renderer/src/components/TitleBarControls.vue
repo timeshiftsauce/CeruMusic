@@ -130,6 +130,7 @@ const handleBack = (): void => {
     </div>
 
     <div class="window-controls">
+      <slot name="extra" />
       <!-- 账号模块 -->
       <div v-if="showAccount" class="account-module">
         <UserCapsule :color="color" />
@@ -328,6 +329,7 @@ const handleBack = (): void => {
     display: flex;
     align-items: center;
     gap: 0.125rem;
+    flex-shrink: 0;
   }
 
   .account-module {

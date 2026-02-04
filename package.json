@@ -93,7 +93,7 @@
     "@types/uuid": "^11.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vueuse/core": "^13.9.0",
-    "electron": "^38.1.0",
+    "electron": "^40.1.0",
     "electron-builder": "^25.1.8",
     "electron-icon-builder": "^2.0.1",
     "electron-vite": "^5.0.0",

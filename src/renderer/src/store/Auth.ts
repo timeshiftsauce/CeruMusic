@@ -22,8 +22,14 @@ export const useAuthStore = defineStore(
       try {
         loading.value = true
         await updateUserInfo()
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to init auth:', error)
+        if (error.cause.status >= 400 && error.cause.status < 500) {
+          MessagePlugin.error('登录过期，请重新登录')
+          outlogin()
+        } else {
+          MessagePlugin.error('初始化认证失败')
+        }
       } finally {
         loading.value = false
       }
@@ -55,9 +61,14 @@ export const useAuthStore = defineStore(
       logtoClient?.clearAccessToken()
       logtoClient?.clearAllTokens()
       isAuthenticated.value = false
-      router.push({
-        name: 'home'
-      })
+      if (
+        router.currentRoute.value.name !== 'home' &&
+        router.currentRoute.value.name !== 'welcome'
+      ) {
+        router.push({
+          name: 'home'
+        })
+      }
     }
 
     const handleCallback = async (callbackUrl: string) => {

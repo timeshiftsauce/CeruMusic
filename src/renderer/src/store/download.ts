@@ -29,7 +29,8 @@ export interface DownloadTask {
 
 export const useDownloadStore = defineStore('download', {
   state: () => ({
-    tasks: [] as DownloadTask[]
+    tasks: [] as DownloadTask[],
+    isInitialized: false
   }),
   getters: {
     activeTasks: (state) => state.tasks.filter((t) => t.status === DownloadStatus.Downloading),
@@ -39,6 +40,9 @@ export const useDownloadStore = defineStore('download', {
   },
   actions: {
     async init() {
+      if (this.isInitialized) return
+      this.isInitialized = true
+
       // Load initial tasks
       try {
         const tasks = await window.api.download.getTasks()

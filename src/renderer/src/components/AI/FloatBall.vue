@@ -417,6 +417,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
   window.removeEventListener('resize', handleResize)
+  window.api.ai.removeStreamListeners()
   saveBallPosition() // 保存位置
 })
 </script>

@@ -1,10 +1,6 @@
 import { defineStore } from 'pinia'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
-import { extractDominantColor, Color } from '@renderer/utils/color/colorExtractor'
-import {
-  getBestContrastTextColorWithOpacity,
-  shouldUseBlackText
-} from '@renderer/utils/color/contrastColor'
+import { analyzeImageColors, Color } from '@renderer/utils/color/colorExtractor'
 import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -44,19 +40,14 @@ interface Player {
   isLoading: boolean
 }
 
-// 辅助函数：将URL转换为Base64
-async function getBase64FromUrl(url: string): Promise<string> {
+// 辅助函数：将URL转换为 Blob URL
+async function getBlobUrlFromUrl(url: string): Promise<string> {
   try {
     const response = await fetch(url)
     const blob = await response.blob()
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+    return URL.createObjectURL(blob)
   } catch (e) {
-    console.error('封面转Base64失败:', e)
+    console.error('封面转Blob失败:', e)
     return ''
   }
 }
@@ -159,18 +150,29 @@ export const useGlobalPlayStatusStore = defineStore(
       { immediate: true }
     )
 
+    // 记录当前的 Blob URL 以便清理
+    let currentBlobUrl: string | null = null
+
     // 监听 songInfo 变化，处理封面
     watch(
       () => player.songInfo,
       async (newVal) => {
+        // 清理旧的 Blob URL
+        if (currentBlobUrl) {
+          URL.revokeObjectURL(currentBlobUrl)
+          currentBlobUrl = null
+        }
+
         if (!newVal) return
 
-        // 处理封面 Base64
+        // 处理封面 Blob URL
         const coverUrl = newVal.img || defaultCover
+
         if (coverUrl.startsWith('http')) {
-          const base64 = await getBase64FromUrl(coverUrl)
-          if (base64) {
-            player.cover = base64
+          const blobUrl = await getBlobUrlFromUrl(coverUrl)
+          if (blobUrl) {
+            currentBlobUrl = blobUrl
+            player.cover = blobUrl
           } else {
             player.cover = coverUrl
           }
@@ -187,28 +189,29 @@ export const useGlobalPlayStatusStore = defineStore(
       async (newCover) => {
         if (!newCover) return
         try {
-          const color = await extractDominantColor(newCover)
-          player.coverDetail.ColorObject = color
-          player.coverDetail.mainColor = `rgba(${color.r},${color.g},${color.b},1)`
+          const { dominantColor, useBlackText } = await analyzeImageColors(newCover)
+          player.coverDetail.ColorObject = dominantColor
+          player.coverDetail.mainColor = `rgba(${dominantColor.r},${dominantColor.g},${dominantColor.b},1)`
 
           // 计算文字对比色
-          player.coverDetail.textColor = await getBestContrastTextColorWithOpacity(newCover, 0.6)
-          player.coverDetail.hoverColor = await getBestContrastTextColorWithOpacity(newCover, 1)
+          const baseTextColor = useBlackText ? '0, 0, 0' : '255, 255, 255'
+          player.coverDetail.textColor = `rgba(${baseTextColor}, 0.6)`
+          player.coverDetail.hoverColor = `rgba(${baseTextColor}, 1)`
           player.coverDetail.contrastColor = player.coverDetail.textColor // 复用
 
           player.coverDetail.playBg = 'rgba(255,255,255,0.2)'
           player.coverDetail.playBgHover = 'rgba(255,255,255,0.33)'
 
           // 计算 lightMainColor (偏白主题色)
-          let r = color.r
-          let g = color.g
-          let b = color.b
+          let r = dominantColor.r
+          let g = dominantColor.g
+          let b = dominantColor.b
           // 适度向白色偏移
           r = Math.min(255, r + (255 - r) * 0.8)
           g = Math.min(255, g + (255 - g) * 0.8)
           b = Math.min(255, b + (255 - b) * 0.8)
           player.coverDetail.lightMainColor = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, 0.9)`
-          player.coverDetail.useBlackText = await shouldUseBlackText(player.cover)
+          player.coverDetail.useBlackText = useBlackText
           console.log('useBlackText', player.coverDetail.useBlackText)
         } catch (e) {
           console.error('颜色提取失败', e)
@@ -356,7 +359,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics
 
-              sdkPromise.catch(() => {})
+              sdkPromise.catch(() => { })
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return
