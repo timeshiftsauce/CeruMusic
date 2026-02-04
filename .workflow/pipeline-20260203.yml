@@ -1,0 +1,72 @@
+version: '1.0'
+name: pipeline-20260203
+displayName: pipeline-20260203
+triggers:
+  trigger: auto
+  push:
+    branches:
+      prefix:
+        - ''
+stages:
+  - name: stage-069ca11e
+    displayName: init
+    strategy: naturally
+    trigger: manual
+    executor:
+      - sqjcode
+    steps:
+      - step: build@nodejs
+        name: build_nodejs
+        displayName: Nodejs 构建
+        nodeVersion: 22.22.0
+        commands:
+          - '# 设置NPM源，提升安装速度'
+          - npm config set registry https://registry.npmmirror.com
+          - ''
+          - '# 执行编译命令'
+          - npm install -g yarn && yarn
+          - yarn build:win
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./dist
+        caches:
+          - ~/.npm
+          - ~/.yarn
+        notify: []
+        strategy:
+          retry: '0'
+  - name: stage-46fbdc1e
+    displayName: up
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: publish@general_artifacts
+        name: publish_general_artifacts
+        displayName: 上传制品
+        dependArtifact: BUILD_ARTIFACT
+        artifactName: output
+        notify: []
+        strategy:
+          retry: '0'
+  - name: stage-ac14eff0
+    displayName: 未命名
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: release@gitee
+        name: release_gitee
+        displayName: Gitee Release
+        releaseName: new
+        description: new
+        tagName: v1
+        upstreamArtifact:
+          - BUILD_ARTIFACT
+        assertFiles: null
+        prerelease: false
+        allowUpdate: true
+        notify: []
+        strategy:
+          retry: '0'
