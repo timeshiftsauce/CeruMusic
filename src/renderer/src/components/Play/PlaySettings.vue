@@ -53,6 +53,11 @@ const settingSections = computed(() => [
         label: '暂停播放过渡',
         value: playSetting.getIsPauseTransition,
         update: (val: boolean) => playSetting.setIsPauseTransition(val)
+      },
+      {
+        label: '使用 Apple 风格歌词',
+        value: playSetting.getUseAmlLyricRenderer,
+        update: (val: boolean) => playSetting.setUseAmlLyricRenderer(val)
       }
     ]
   }

@@ -10,7 +10,8 @@ export const playSetting = defineStore('playSetting', {
     isImmersiveLyricColor: true, // 是否开启沉浸色歌词
     isBlurLyric: false, // 是否开启模糊歌词
     autoHideBottom: true, // 是否自动隐藏底部控制栏
-    isPauseTransition: true // 是否开启暂停播放过渡
+    isPauseTransition: true, // 是否开启暂停播放过渡
+    useAmlLyricRenderer: true // 使用 AppleMusicLike 的歌词组件渲染
   }),
   getters: {
     getisJumpLyric: (state) => state.isJumpLyric,
@@ -21,7 +22,8 @@ export const playSetting = defineStore('playSetting', {
     getIsImmersiveLyricColor: (state) => state.isImmersiveLyricColor,
     getIsBlurLyric: (state) => state.isBlurLyric,
     getAutoHideBottom: (state) => state.autoHideBottom,
-    getIsPauseTransition: (state) => state.isPauseTransition
+    getIsPauseTransition: (state) => state.isPauseTransition,
+    getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer
   },
   actions: {
     setIsDumpLyric(isDumpLyric: boolean) {
@@ -50,6 +52,9 @@ export const playSetting = defineStore('playSetting', {
     },
     setIsPauseTransition(isPauseTransition: boolean) {
       this.isPauseTransition = isPauseTransition
+    },
+    setUseAmlLyricRenderer(use: boolean) {
+      this.useAmlLyricRenderer = use
     }
   },
   persist: true
