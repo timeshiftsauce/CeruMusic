@@ -21,6 +21,7 @@ import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
 import PlaySettings from './PlaySettings.vue'
+import LyricAdapter from './Lyric/LyricAdapter.vue'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
@@ -579,7 +580,8 @@ onMounted(() => {
         </template>
       </div>
       <div v-if="player.lyrics.lines.length > 0" class="right">
-        <LyricPlayer
+        <component
+          :is="playSetting.getUseAmlLyricRenderer ? LyricPlayer : LyricAdapter"
           ref="lyricPlayerRef"
           :lyric-lines="player.lyrics.lines || []"
           :current-time="state.currentTime"
@@ -591,9 +593,9 @@ onMounted(() => {
           :enable-blur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
+          :text-align="!playSetting.getShowLeftPanel ? 'center' : 'left'"
           @line-click="jumpTime"
-        >
-        </LyricPlayer>
+        />
       </div>
     </div>
     <!-- 音频可视化组件 -->

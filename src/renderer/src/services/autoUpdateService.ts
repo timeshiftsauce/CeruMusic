@@ -25,6 +25,13 @@ export const downloadState = reactive({
   } as DownloadProgress,
   updateInfo: null as UpdateInfo | null
 })
+let isElectron = true
+
+try {
+  if (process && process.env.IS_ELECTRON) {
+    isElectron = false
+  }
+} catch { }
 
 export class AutoUpdateService {
   private static instance: AutoUpdateService
@@ -42,9 +49,10 @@ export class AutoUpdateService {
     return AutoUpdateService.instance
   }
 
+
   // 开始监听更新消息
   startListening() {
-    if (this.isListening) return
+    if (this.isListening || isElectron) return
 
     this.isListening = true
 
@@ -90,6 +98,9 @@ export class AutoUpdateService {
 
   // 检查更新
   async checkForUpdates() {
+    if (isElectron) {
+      return
+    }
     try {
       await window.api.autoUpdater.checkForUpdates()
     } catch (error) {
