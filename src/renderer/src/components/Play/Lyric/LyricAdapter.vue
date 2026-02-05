@@ -10,8 +10,8 @@
         <div id="lrc-placeholder" class="placeholder" />
         <div
           v-for="(line, index) in lyricLines"
-          :key="index"
           :id="`lrc-${index}`"
+          :key="index"
           :class="getLyricLineClass(line, index)"
           :style="getLyricLineStyle(index)"
           @click="emitLineClick(line)"
