@@ -7,7 +7,7 @@ body:
       label: 提需求之前，请先确认
       description: '请检查以下确认项'
       options:
-        - label: '已经阅读过Q&A (https://github.com/timeshiftsauce/CeruMusic/discussions)'
+        - label: '已经阅读过Q&A (https://ceru.docs.shiqianjiang.cn/guide/source/qa.html)'
           required: true
         - label: '新需求不是仅仅满足个人口味的需求'
           required: true
