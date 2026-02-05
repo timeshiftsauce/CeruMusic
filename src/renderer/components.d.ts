@@ -26,7 +26,6 @@ declare module 'vue' {
     LeaderBordCard: typeof import('./src/components/Card/LeaderBordCard.vue')['default']
     LyricAdapter: typeof import('./src/components/Play/Lyric/LyricAdapter.vue')['default']
     LyricFontSettings: typeof import('./src/components/Settings/LyricFontSettings.vue')['default']
-    LyricPlay: typeof import('./src/components/Play/Lyric/LyricPlay.vue')['default']
     MusicCache: typeof import('./src/components/Settings/MusicCache.vue')['default']
     NBackTop: typeof import('naive-ui')['NBackTop']
     NBadge: typeof import('naive-ui')['NBadge']
