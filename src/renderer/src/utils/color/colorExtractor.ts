@@ -247,8 +247,8 @@ export async function extractSecondaryColors(
           for (const existingColor of secondaryColors) {
             const distance = Math.sqrt(
               Math.pow(existingColor.r - sortedColors[i].r, 2) +
-              Math.pow(existingColor.g - sortedColors[i].g, 2) +
-              Math.pow(existingColor.b - sortedColors[i].b, 2)
+                Math.pow(existingColor.g - sortedColors[i].g, 2) +
+                Math.pow(existingColor.b - sortedColors[i].b, 2)
             )
 
             if (distance < 60) {
@@ -591,8 +591,8 @@ function kMeansCluster(colors: Color[], k: number): Color[] {
 function colorDistance(color1: Color, color2: Color): number {
   return Math.sqrt(
     Math.pow(color1.r - color2.r, 2) +
-    Math.pow(color1.g - color2.g, 2) +
-    Math.pow(color1.b - color2.b, 2)
+      Math.pow(color1.g - color2.g, 2) +
+      Math.pow(color1.b - color2.b, 2)
   )
 }
 

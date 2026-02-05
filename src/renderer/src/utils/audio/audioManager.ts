@@ -318,7 +318,7 @@ class AudioManager {
       if (splitter) {
         try {
           splitter.disconnect()
-        } catch { }
+        } catch {}
         this.splitters.delete(audioElement)
       }
 
@@ -328,7 +328,7 @@ class AudioManager {
         filters.forEach((f) => {
           try {
             f.disconnect()
-          } catch { }
+          } catch {}
         })
         this.equalizers.delete(audioElement)
       }
@@ -338,7 +338,7 @@ class AudioManager {
       if (bassBoost) {
         try {
           bassBoost.disconnect()
-        } catch { }
+        } catch {}
         this.bassBoostFilters.delete(audioElement)
       }
 
@@ -346,7 +346,7 @@ class AudioManager {
       if (convolver) {
         try {
           convolver.disconnect()
-        } catch { }
+        } catch {}
         this.convolverNodes.delete(audioElement)
       }
 
@@ -354,7 +354,7 @@ class AudioManager {
       if (surroundGain) {
         try {
           surroundGain.disconnect()
-        } catch { }
+        } catch {}
         this.surroundGainNodes.delete(audioElement)
       }
 
@@ -362,7 +362,7 @@ class AudioManager {
       if (balance) {
         try {
           balance.disconnect()
-        } catch { }
+        } catch {}
         this.balanceNodes.delete(audioElement)
       }
 

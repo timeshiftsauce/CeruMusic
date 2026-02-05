@@ -31,7 +31,7 @@ try {
   if (process && process.env.IS_ELECTRON) {
     isElectron = false
   }
-} catch { }
+} catch {}
 
 export class AutoUpdateService {
   private static instance: AutoUpdateService
@@ -48,7 +48,6 @@ export class AutoUpdateService {
     }
     return AutoUpdateService.instance
   }
-
 
   // 开始监听更新消息
   startListening() {
