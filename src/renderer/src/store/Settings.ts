@@ -23,6 +23,8 @@ export interface SettingsState {
   lyricFontFamily?: string
   closeToTray?: boolean
   hasConfiguredCloseBehavior?: boolean
+  theme?: string // 主题
+  isDarkMode?: boolean // 暗色模式
 }
 
 export const useSettingsStore = defineStore(
@@ -44,7 +46,9 @@ export const useSettingsStore = defineStore(
       suppressImportPrompt: false,
       lyricFontFamily: 'PingFangSC-Semibold',
       closeToTray: true,
-      hasConfiguredCloseBehavior: false
+      hasConfiguredCloseBehavior: false,
+      theme: 'default',
+      isDarkMode: false
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -97,6 +101,12 @@ export const useSettingsStore = defineStore(
       }
       if (typeof settings.value.hasConfiguredCloseBehavior === 'undefined') {
         settings.value.hasConfiguredCloseBehavior = false
+      }
+      if (!settings.value.theme) {
+        settings.value.theme = 'default'
+      }
+      if (typeof settings.value.isDarkMode === 'undefined') {
+        settings.value.isDarkMode = false
       }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {

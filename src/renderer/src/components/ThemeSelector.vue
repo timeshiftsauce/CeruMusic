@@ -27,7 +27,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useSettingsStore } from '@renderer/store/Settings'
+
+const settingsStore = useSettingsStore()
 
 // 主题配置
 const themes = [
@@ -64,6 +67,12 @@ const applyTheme = (themeName: string, darkMode: boolean = false) => {
   // 保存到本地存储
   localStorage.setItem('selected-theme', themeName)
   localStorage.setItem('dark-mode', darkMode.toString())
+
+  // 同步到 Store
+  settingsStore.updateSettings({
+    theme: themeName,
+    isDarkMode: darkMode
+  })
 
   // 通知全局（App.vue）同步 Naive UI 主题
   window.dispatchEvent(new CustomEvent('theme-changed'))
@@ -105,8 +114,31 @@ const loadSavedSettings = () => {
     isDarkMode.value = detectSystemTheme()
   }
 
+  // 优先从 Store 读取（如果已同步）
+  if (settingsStore.settings.theme) {
+    currentTheme.value = settingsStore.settings.theme
+  }
+  if (typeof settingsStore.settings.isDarkMode !== 'undefined') {
+    isDarkMode.value = settingsStore.settings.isDarkMode
+  }
+
   applyTheme(currentTheme.value, isDarkMode.value)
 }
+
+// 监听 Store 变化（云同步）
+watch(
+  () => [settingsStore.settings.theme, settingsStore.settings.isDarkMode],
+  ([newTheme, newMode]) => {
+    if (newTheme && newTheme !== currentTheme.value) {
+      currentTheme.value = newTheme as string
+      applyTheme(newTheme as string, isDarkMode.value)
+    }
+    if (typeof newMode !== 'undefined' && newMode !== isDarkMode.value) {
+      isDarkMode.value = newMode as boolean
+      applyTheme(currentTheme.value, newMode as boolean)
+    }
+  }
+)
 
 // 监听系统主题变化
 const setupSystemThemeListener = () => {

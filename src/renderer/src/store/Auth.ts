@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import LogtoClient, { UserInfoResponse } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { defaultRequest, Request } from '@renderer/utils/request'
+import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import config from '../config'
 import router from '@renderer/router'
 
@@ -22,6 +23,9 @@ export const useAuthStore = defineStore(
       try {
         loading.value = true
         await updateUserInfo()
+        if (isAuthenticated.value) {
+          settingsSyncService.checkSync()
+        }
       } catch (error: any) {
         console.error('Failed to init auth:', error)
         if (error.cause.status >= 400 && error.cause.status < 500) {
@@ -83,6 +87,7 @@ export const useAuthStore = defineStore(
         await updateUserInfo()
         if (isAuthenticated.value) {
           MessagePlugin.success('登录成功')
+          settingsSyncService.checkSync()
         } else {
           MessagePlugin.error('登录失败')
         }

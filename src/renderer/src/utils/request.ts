@@ -5,7 +5,7 @@ import { useAuthStore } from '@renderer/store'
 
 // 常量定义
 const DEFAULT_AUTH_URL = 'https://auth.shiqianjiang.cn'
-const REQUEST_TIMEOUT = 10000
+const REQUEST_TIMEOUT = 30000
 const ERROR_MESSAGES = {
   NOT_INITIALIZED: 'LogtoClient not initialized. Call Request.setLogtoClient() first.',
   LOGIN_EXPIRED: '登录已过期，请重新登录',
@@ -78,6 +78,14 @@ export class Request {
     const status = error?.response?.status
     const message = error.response?.data?.message || error.message || ERROR_MESSAGES.REQUEST_FAILED
 
+    // Allow 304 to pass through if caught by axios (though axios usually treats 304 as success if body is empty, sometimes it might be configured otherwise)
+    // Actually, if we want to handle 304 manually in the caller, we should rethrow it or return it.
+    // But Request class is designed to return T.
+    // Let's just rethrow 304 so caller can catch it.
+    if (status === 304) {
+      throw error
+    }
+
     // 检查是否为认证相关错误
     const isAuthError =
       status === 401 || status === 403 || /token|授权|登录|过期|unauth/i.test(String(message))
@@ -92,7 +100,7 @@ export class Request {
   }
 
   // 核心请求方法
-  async request<T = any>(config: AxiosRequestConfig): Promise<T> {
+  async request<T = any>(config: AxiosRequestConfig, returnRaw = false): Promise<T | any> {
     // 1. 获取 Token
     const token = await this.getAccessToken()
 
@@ -117,7 +125,7 @@ export class Request {
 
       // 3. 发送请求
       const response = await this.instance(finalConfig)
-      return response.data
+      return returnRaw ? response : response.data
     } catch (error: any) {
       // 4. 错误处理
       return this.handleResponseError(error)
@@ -125,8 +133,8 @@ export class Request {
   }
 
   // 便捷方法：GET
-  async get<T = any>(url: string, config?: AxiosRequestConfig) {
-    return this.request<T>({ ...config, method: 'GET', url })
+  async get<T = any>(url: string, config?: AxiosRequestConfig, returnRaw = false) {
+    return this.request<T>({ ...config, method: 'GET', url }, returnRaw)
   }
 
   // 便捷方法：POST
