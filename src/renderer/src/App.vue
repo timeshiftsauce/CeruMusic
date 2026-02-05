@@ -31,6 +31,7 @@ import {
 } from '@renderer/utils/lyrics/desktopLyricBridge'
 import router from './router'
 import { useAuthStore } from '@renderer/store'
+import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
 
@@ -229,6 +230,7 @@ const cancelImportPrompt = () => {
 onMounted(() => {
   userInfo.init()
   authStore.init()
+  settingsSyncService.init()
   setupSystemThemeListener()
   loadSavedTheme()
   syncNaiveTheme()
@@ -249,6 +251,24 @@ onMounted(() => {
   const handleThemeChange = () => syncNaiveTheme()
   window.addEventListener('theme-changed', handleThemeChange)
   themeChangeHandler = () => window.removeEventListener('theme-changed', handleThemeChange)
+
+  // 监听 Store 变化，响应云同步
+  watch(
+    () => [settingsStore.settings.theme, settingsStore.settings.isDarkMode],
+    ([newTheme, newMode]) => {
+      // 只有当 Store 中的值与当前应用的值不同时才应用，避免死循环
+      // applyTheme 会更新 localStorage 并触发 theme-changed
+      const currentTheme = localStorage.getItem('selected-theme') || 'default'
+      const currentMode = localStorage.getItem('dark-mode') === 'true'
+
+      const targetTheme = (newTheme as string) || 'default'
+      const targetMode = (newMode as boolean) ?? false
+
+      if (targetTheme !== currentTheme || targetMode !== currentMode) {
+        applyTheme(targetTheme, targetMode)
+      }
+    }
+  )
 
   // 监听 Logto 回调
   window.electron?.ipcRenderer?.on?.('logto-callback', (_: any, url: string) => {
@@ -390,6 +410,14 @@ function syncNaiveTheme() {
 }
 
 const loadSavedTheme = () => {
+  // 优先尝试从 Store 读取（支持云同步）
+  if (settingsStore.settings.theme || typeof settingsStore.settings.isDarkMode !== 'undefined') {
+    const themeName = settingsStore.settings.theme || 'default'
+    const isDarkMode = settingsStore.settings.isDarkMode ?? false
+    applyTheme(themeName, isDarkMode)
+    return
+  }
+
   const savedTheme = localStorage.getItem('selected-theme')
   const savedDarkMode = localStorage.getItem('dark-mode')
 
