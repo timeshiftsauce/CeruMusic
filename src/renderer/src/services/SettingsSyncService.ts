@@ -149,7 +149,8 @@ class SettingsSyncService {
       // Update last sync time from response header or current time
       // Backend sets 'Last-Updated' header, so we prioritize that.
       // Fallback to standard 'Last-Modified' or current time.
-      const lastModified = res.headers['last-updated'] || res.headers['last-modified'] || new Date().toUTCString()
+      const lastModified =
+        res.headers['last-updated'] || res.headers['last-modified'] || new Date().toUTCString()
       localStorage.setItem('settings_last-updated', lastModified)
       if (res.status === 200 && !res.data.data.appSettings && !res.data.data.playSettings) {
         console.log('SettingsSync: Cloud settings not modified (200 with empty data)')
