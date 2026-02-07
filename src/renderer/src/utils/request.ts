@@ -114,7 +114,7 @@ export class Request {
           Authorization: `Bearer ${token}`
         }
       }
-      const isDev = process.env.NODE_ENV === 'development'
+      const isDev = process.env.NODE_ENV === 'development' && false
       if (isDev && this.resource === 'https://api.ceru.shiqianjiang.cn/api') {
         finalConfig.baseURL = 'http://localhost:8000/api'
       }
