@@ -108,12 +108,16 @@ export class Request {
       // 2. 组装配置
       const finalConfig: AxiosRequestConfig = {
         ...config,
+
         headers: {
           ...config.headers,
           Authorization: `Bearer ${token}`
         }
       }
-
+      const isDev = process.env.NODE_ENV === 'development'
+      if (isDev && this.resource === 'https://api.ceru.shiqianjiang.cn/api') {
+        finalConfig.baseURL = 'http://localhost:8000/api'
+      }
       // 设置默认 Content-Type (非 FormData 时)
       if (
         (!finalConfig.headers || !finalConfig.headers['Content-Type']) &&
