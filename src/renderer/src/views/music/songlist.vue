@@ -28,6 +28,13 @@ import {
   validateImportedPlaylist,
   exportPlaylistToFile
 } from '@renderer/utils/playlist/playlistExportImport'
+import {
+  cloudSongListAPI,
+  type CloudSongList,
+  type CloudSongDto
+} from '@renderer/api/cloudSongList'
+import { CloudIcon, CloudUploadIcon, CloudDownloadIcon } from 'tdesign-icons-vue-next'
+import { base64ToFile, isBase64 } from '@renderer/utils/file'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -264,24 +271,83 @@ const stats = computed(() => {
 const loadPlaylists = async () => {
   loading.value = true
   try {
-    const result = await songListAPI.getAll()
-    if (result.success) {
-      playlists.value = result.data || []
-      // 读取“我的喜欢”ID并置顶与标记
-      try {
-        const favRes = await (window as any).api?.songList?.getFavoritesId?.()
-        favoritesId.value = (favRes && favRes.data) || null
-        if (favoritesId.value) {
-          const idx = playlists.value.findIndex((p) => p.id === favoritesId.value)
-          if (idx > 0) {
-            const fav = playlists.value.splice(idx, 1)[0]
-            playlists.value.unshift(fav)
+    const [localRes, cloudRes] = await Promise.all([
+      songListAPI.getAll(),
+      cloudSongListAPI.getUserSongLists().catch((e) => {
+        console.error('Failed to fetch cloud lists', e)
+        return []
+      }) // Fail safe
+    ])
+
+    const localLists = (localRes.success ? localRes.data : []) || []
+    const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
+
+    console.log('Local Lists:', localLists)
+    console.log('Cloud Lists:', cloudLists)
+
+    // Merge Logic
+    const mergedLists: SongList[] = []
+    const localMap = new Map<string, SongList>()
+
+    // 1. Process Local Lists
+    localLists.forEach((l) => {
+      // Ensure meta exists
+      if (!l.meta) l.meta = {}
+      localMap.set(l.id, l)
+      mergedLists.push(l)
+    })
+
+    // 2. Process Cloud Lists
+    cloudLists.forEach((c) => {
+      // Try to find matching local list
+      // Match by localId (if cloud knows about it) OR by meta.cloudId (if local knows about it)
+      let match = localMap.get(c.localId)
+
+      if (!match) {
+        // Try reverse lookup
+        match = mergedLists.find((l) => l.meta && l.meta.cloudId === c.id)
+      }
+
+      if (match) {
+        console.log('Matched:', c.name, match.name)
+        // Mark as synced
+        match.meta.cloudId = c.id
+        match.meta.isSynced = true
+        match.meta.cloudUpdatedAt = c.updatedAt
+      } else {
+        console.log('Not Matched (Cloud Only):', c.name)
+        // Cloud only list
+        mergedLists.push({
+          id: c.id, // Use cloud ID temporarily (or handle distinction)
+          name: c.name,
+          description: c.describe,
+          coverImgUrl: c.cover,
+          createTime: '',
+          updateTime: c.updatedAt,
+          source: 'local', // Or 'cloud'? But SongList source enum is specific. Let's keep 'local' but mark meta.
+          meta: {
+            isCloudOnly: true,
+            cloudId: c.id,
+            cloudUpdatedAt: c.updatedAt
           }
+        })
+      }
+    })
+
+    playlists.value = mergedLists
+
+    // 读取“我的喜欢”ID并置顶与标记
+    try {
+      const favRes = await (window as any).api?.songList?.getFavoritesId?.()
+      favoritesId.value = (favRes && favRes.data) || null
+      if (favoritesId.value) {
+        const idx = playlists.value.findIndex((p) => p.id === favoritesId.value)
+        if (idx > 0) {
+          const fav = playlists.value.splice(idx, 1)[0]
+          playlists.value.unshift(fav)
         }
-      } catch {}
-    } else {
-      MessagePlugin.error(result.error || '加载歌单失败')
-    }
+      }
+    } catch {}
   } catch (error) {
     console.error('加载歌单失败:', error)
     MessagePlugin.error('加载歌单失败')
@@ -343,12 +409,31 @@ const savePlaylistEdit = async () => {
   }
 
   try {
-    const result = await songListAPI.edit(currentEditingPlaylist.value.id, {
-      name: editPlaylistForm.value.name.trim(),
-      description: editPlaylistForm.value.description.trim()
-    })
+    let success = false
+    let errorMsg = ''
 
-    if (result.success) {
+    if (currentEditingPlaylist.value.meta?.isCloudOnly) {
+      try {
+        await cloudSongListAPI.updateUserSongList({
+          listId: currentEditingPlaylist.value.id,
+          name: editPlaylistForm.value.name.trim(),
+          describe: editPlaylistForm.value.description.trim()
+        })
+        success = true
+      } catch (e) {
+        success = false
+        errorMsg = (e as Error).message
+      }
+    } else {
+      const result = await songListAPI.edit(currentEditingPlaylist.value.id, {
+        name: editPlaylistForm.value.name.trim(),
+        description: editPlaylistForm.value.description.trim()
+      })
+      success = result.success
+      errorMsg = result.error || '更新歌单信息失败'
+    }
+
+    if (success) {
       MessagePlugin.success('歌单信息更新成功')
       showEditPlaylistDialog.value = false
       currentEditingPlaylist.value = null
@@ -356,7 +441,7 @@ const savePlaylistEdit = async () => {
       // 触发歌单更新事件
       window.dispatchEvent(new Event('playlist-updated'))
     } else {
-      MessagePlugin.error(result.error || '更新歌单信息失败')
+      MessagePlugin.error(errorMsg || '更新歌单信息失败')
     }
   } catch (error) {
     console.error('更新歌单信息失败:', error)
@@ -384,14 +469,30 @@ const deletePlaylist = async (playlist: SongList) => {
     theme: 'danger',
     onConfirm: async () => {
       try {
-        const result = await songListAPI.delete(playlist.id)
-        if (result.success) {
+        let success = false
+        let errorMsg = ''
+
+        if (playlist.meta?.isCloudOnly) {
+          try {
+            await cloudSongListAPI.deleteUserSongList(playlist.id)
+            success = true
+          } catch (e) {
+            success = false
+            errorMsg = (e as Error).message
+          }
+        } else {
+          const result = await songListAPI.delete(playlist.id)
+          success = result.success
+          errorMsg = result.error || '删除歌单失败'
+        }
+
+        if (success) {
           MessagePlugin.success('歌单删除成功')
           await loadPlaylists()
           // 触发歌单更新事件
           window.dispatchEvent(new Event('playlist-updated'))
         } else {
-          MessagePlugin.error(result.error || '删除歌单失败')
+          MessagePlugin.error(errorMsg || '删除歌单失败')
         }
       } catch (error) {
         console.error('删除歌单失败:', error)
@@ -410,6 +511,23 @@ const router = useRouter()
 
 // 查看歌单详情
 const viewPlaylist = (playlist: SongList) => {
+  if (playlist.meta?.isCloudOnly) {
+    router.push({
+      name: 'list',
+      params: { id: playlist.id },
+      query: {
+        title: playlist.name,
+        author: 'cloud',
+        cover: playlist.coverImgUrl || '',
+        total: '0',
+        source: 'cloud',
+        type: 'cloud_user',
+        meta: JSON.stringify(playlist.meta)
+      }
+    })
+    return
+  }
+
   // 跳转到 list 页面，传递歌单信息作为查询参数
   router.push({
     name: 'list',
@@ -421,7 +539,8 @@ const viewPlaylist = (playlist: SongList) => {
       total: '0', // 这里可以后续优化为实际歌曲数量
       source: playlist.source,
       type: 'local', // 标识这是本地歌单
-      meta: JSON.stringify(playlist.meta) // 歌单元数据
+      meta: JSON.stringify(playlist.meta), // 歌单元数据
+      cloudId: playlist.meta?.cloudId // 显式传递 cloudId，防止 meta 被覆盖后丢失
     }
   })
 }
@@ -429,26 +548,53 @@ const viewPlaylist = (playlist: SongList) => {
 // 播放歌单
 const playPlaylist = async (playlist: SongList) => {
   try {
-    const result = await songListAPI.getSongs(playlist.id)
-    if (result.success) {
-      const songs = result.data || []
-      if (songs.length === 0) {
-        MessagePlugin.warning('歌单中没有歌曲')
+    let songs: Songs[] = []
+
+    if (playlist.meta?.isCloudOnly) {
+      try {
+        const cloudSongs = await cloudSongListAPI.getSongListDetail(playlist.id)
+        songs = cloudSongs.list.map((s) => ({
+          songmid: s.songmid,
+          name: s.name,
+          singer: s.singer,
+          albumName: s.albumName,
+          albumId: s.albumId,
+          source: s.source,
+          interval: s.interval,
+          img: s.img,
+          lrc: null,
+          types: s.types.map((t) => t.type),
+          _types: {},
+          typeUrl: {}
+        }))
+      } catch (e) {
+        MessagePlugin.error((e as Error).message || '获取歌单歌曲失败')
         return
       }
-
-      // 调用播放器的方法替换播放列表
-      if ((window as any).musicEmitter) {
-        ;(window as any).musicEmitter.emit(
-          'replacePlaylist',
-          songs.map((song) => toRaw(song))
-        )
-      }
-      console.log('播放歌单:', playlist.name, '共', songs.length, '首歌曲')
-      MessagePlugin.success(`已将播放列表替换为歌单"${playlist.name}"`)
     } else {
-      MessagePlugin.error(result.error || '获取歌单歌曲失败')
+      const result = await songListAPI.getSongs(playlist.id)
+      if (result.success) {
+        songs = [...(result.data || [])]
+      } else {
+        MessagePlugin.error(result.error || '获取歌单歌曲失败')
+        return
+      }
     }
+
+    if (songs.length === 0) {
+      MessagePlugin.warning('歌单中没有歌曲')
+      return
+    }
+
+    // 调用播放器的方法替换播放列表
+    if ((window as any).musicEmitter) {
+      ;(window as any).musicEmitter.emit(
+        'replacePlaylist',
+        songs.map((song) => toRaw(song))
+      )
+    }
+    console.log('播放歌单:', playlist.name, '共', songs.length, '首歌曲')
+    MessagePlugin.success(`已将播放列表替换为歌单"${playlist.name}"`)
   } catch (error) {
     console.error('播放歌单失败:', error)
     MessagePlugin.error('播放歌单失败')
@@ -1031,11 +1177,274 @@ const downloadPlaylist = async (playlist: SongList) => {
   }
 }
 
+// --- Cloud Operations ---
+
+const mapSongsToCloud = (songs: readonly any[]): any[] => {
+  return songs.map((s) => ({
+    songmid: String(s.songmid),
+    name: s.name,
+    singer: s.singer,
+    albumName: s.albumName,
+    albumId: String(s.albumId),
+    source: s.source,
+    interval: s.interval,
+    img: s.img,
+    types: (s.types || []).map((t) => ({ type: t, size: s._types?.[t]?.size || '' }))
+  }))
+}
+
+const mapCloudSongToLocal = (s: any): any => {
+  return {
+    songmid: s.songmid,
+    name: s.name,
+    singer: s.singer,
+    albumName: s.albumName,
+    albumId: s.albumId,
+    source: s.source,
+    interval: s.interval,
+    img: s.img,
+    lrc: null,
+    types: s.types.map((t) => t.type),
+    _types: s.types.reduce((acc, cur) => ({ ...acc, [cur.type]: { size: cur.size } }), {}),
+    typeUrl: {}
+  }
+}
+
+const handleUploadToCloud = async (pl: SongList) => {
+  const loadingMsg = MessagePlugin.loading('正在上传到云端...', 0)
+  try {
+    const res = await songListAPI.getSongs(pl.id)
+    if (!res.success) throw new Error(res.error || '获取歌曲失败')
+    const songs = res.data || []
+
+    const cover = isBase64(pl.coverImgUrl)
+      ? base64ToFile(pl.coverImgUrl, 'cover.png')
+      : pl.coverImgUrl
+
+    const createRes: any = await cloudSongListAPI.createUserSongList({
+      localId: pl.id,
+      name: pl.name,
+      describe: pl.description,
+      cover: cover,
+      songlist: mapSongsToCloud(songs)
+    })
+
+    // Update local meta
+    const cloudId = createRes.id
+    const newTimestamp = createRes.updatedAt || new Date().toISOString()
+    const newMeta = {
+      ...pl.meta,
+      cloudId,
+      isSynced: true,
+      cloudUpdatedAt: newTimestamp
+    }
+    await songListAPI.edit(pl.id, { meta: newMeta })
+
+    loadingMsg.then((inst) => inst.close())
+    MessagePlugin.success('上传成功')
+    loadPlaylists()
+  } catch (e: any) {
+    loadingMsg.then((inst) => inst.close())
+    console.error(e)
+    MessagePlugin.error('上传失败: ' + (e.message || '未知错误'))
+  }
+}
+
+const handleSyncToCloud = async (pl: SongList) => {
+  const loadingMsg = MessagePlugin.loading('正在同步到云端...', 0)
+  try {
+    const res = await songListAPI.getSongs(pl.id)
+    if (!res.success) throw new Error(res.error || '获取歌曲失败')
+    const songs = res.data || []
+
+    const cover = isBase64(pl.coverImgUrl)
+      ? base64ToFile(pl.coverImgUrl, 'cover.png')
+      : pl.coverImgUrl
+
+    const updateRes: any = await cloudSongListAPI.updateUserSongList({
+      listId: pl.meta.cloudId,
+      name: pl.name,
+      describe: pl.description,
+      cover: cover,
+      songlist: mapSongsToCloud(songs)
+    })
+
+    loadingMsg.then((inst) => inst.close())
+    MessagePlugin.success('同步成功')
+
+    // Update local meta with server timestamp if available, else fallback to local time
+    const newTimestamp = updateRes?.updatedAt || new Date().toISOString()
+    const newMeta = { ...pl.meta, cloudUpdatedAt: newTimestamp }
+    await songListAPI.edit(pl.id, { meta: newMeta })
+
+    loadPlaylists()
+  } catch (e: any) {
+    loadingMsg.then((inst) => inst.close())
+    console.error(e)
+    MessagePlugin.error('同步失败: ' + (e.message || '未知错误'))
+  }
+}
+
+const handleDownloadCloudPlaylist = async (pl: SongList) => {
+  const loadingMsg = MessagePlugin.loading('正在下载到本地...', 0)
+  try {
+    // 循环分页拉取所有歌曲
+    let allCloudSongs: CloudSongDto[] = []
+    let pos: number | undefined = undefined
+    const limit = 100
+
+    while (true) {
+      const { list: batch, total } = await cloudSongListAPI.getSongListDetail(
+        pl.id,
+        'asc',
+        limit,
+        pos
+      )
+      if (!batch || batch.length === 0) break
+
+      allCloudSongs = [...allCloudSongs, ...batch]
+
+      if (allCloudSongs.length >= total || batch.length < limit) break
+      pos = batch[batch.length - 1].pos
+    }
+
+    const localSongs = allCloudSongs.map(mapCloudSongToLocal)
+
+    // Create local playlist
+    const createRes = await songListAPI.create(pl.name, pl.description, 'local')
+    if (!createRes.success || !createRes.data) throw new Error(createRes.error || '创建歌单失败')
+
+    const localId = createRes.data.id
+
+    // Add songs
+    await songListAPI.addSongs(localId, localSongs)
+
+    // Update meta
+    const newMeta = { cloudId: pl.id, isSynced: true, cloudUpdatedAt: pl.meta.cloudUpdatedAt }
+    await songListAPI.edit(localId, { meta: newMeta })
+
+    // If cover is URL, update it
+    if (pl.coverImgUrl) {
+      await songListAPI.updateCover(localId, pl.coverImgUrl)
+    }
+
+    // 重要：通知云端更新 localId，建立双向绑定
+    await cloudSongListAPI.updateUserSongList({
+      listId: pl.id,
+      localId: localId
+    })
+
+    loadingMsg.then((inst) => inst.close())
+    MessagePlugin.success('下载成功')
+    await loadPlaylists()
+  } catch (e: any) {
+    loadingMsg.then((inst) => inst.close())
+    console.error(e)
+    MessagePlugin.error('下载失败: ' + (e.message || '未知错误'))
+  }
+}
+
+const handleDeleteCloudPlaylist = async (pl: SongList) => {
+  const confirm = DialogPlugin.confirm({
+    header: '删除云端歌单',
+    body: `确定要删除云端歌单 "${pl.name}" 吗？此操作不可恢复。`,
+    onConfirm: async () => {
+      confirm.destroy()
+      try {
+        await cloudSongListAPI.deleteUserSongList(pl.id)
+        MessagePlugin.success('删除成功')
+        loadPlaylists()
+      } catch (e: any) {
+        MessagePlugin.error('删除失败: ' + e.message)
+      }
+    },
+    onCancel: () => confirm.destroy()
+  })
+}
+
+const handleDeletePlaylist = async (pl: SongList) => {
+  const isSynced = pl.meta?.isSynced && pl.meta?.cloudId
+
+  const dialog = DialogPlugin.confirm({
+    header: '删除歌单',
+    body: `确定要删除歌单 "${pl.name}" 吗？` + (isSynced ? ' (云端副本将保留)' : ''),
+    onConfirm: async () => {
+      dialog.destroy()
+      try {
+        const result = await songListAPI.delete(pl.id)
+        if (result.success) {
+          MessagePlugin.success('歌单删除成功')
+          await loadPlaylists()
+        } else {
+          MessagePlugin.error(result.error || '删除歌单失败')
+        }
+      } catch (error) {
+        console.error('删除歌单失败:', error)
+        MessagePlugin.error('删除歌单失败')
+      }
+    },
+    onCancel: () => dialog.destroy()
+  })
+}
+
+const handleDeleteBoth = async (pl: SongList) => {
+  const dialog = DialogPlugin.confirm({
+    header: '删除歌单',
+    body: `确定要删除歌单 "${pl.name}" (本地和云端) 吗？`,
+    onConfirm: async () => {
+      dialog.destroy()
+      try {
+        // Delete cloud
+        if (pl.meta?.cloudId) {
+          await cloudSongListAPI
+            .deleteUserSongList(pl.meta.cloudId)
+            .catch((e) => console.error('Cloud delete failed', e))
+        }
+
+        // Delete local
+        const result = await songListAPI.delete(pl.id)
+        if (result.success) {
+          MessagePlugin.success('删除成功')
+          await loadPlaylists()
+        } else {
+          MessagePlugin.error(result.error || '删除本地歌单失败')
+        }
+      } catch (error) {
+        MessagePlugin.error('删除失败')
+      }
+    },
+    onCancel: () => dialog.destroy()
+  })
+}
+
 // 右键菜单项配置
 const contextMenuItems = computed((): ContextMenuItem[] => {
   if (!contextMenuPlaylist.value) return []
+  const pl = contextMenuPlaylist.value
+  const isCloudOnly = pl.meta?.isCloudOnly
+  const isSynced = pl.meta?.isSynced
 
-  return [
+  const items: ContextMenuItem[] = []
+
+  // Cloud Actions
+  if (isCloudOnly) {
+    items.push(
+      createMenuItem('download-cloud', '下载到本地', {
+        icon: CloudDownloadIcon,
+        onClick: () => handleDownloadCloudPlaylist(pl)
+      })
+    )
+    items.push(
+      createMenuItem('delete-cloud', '删除云端歌单', {
+        icon: DeleteIcon,
+        onClick: () => handleDeleteCloudPlaylist(pl)
+      })
+    )
+    return items // Cloud only lists have limited options
+  }
+
+  // Standard items for local/synced
+  items.push(
     createMenuItem('play', '播放歌单', {
       icon: PlayCircleIcon,
       onClick: () => {
@@ -1043,7 +1452,10 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
           playPlaylist(contextMenuPlaylist.value)
         }
       }
-    }),
+    })
+  )
+
+  items.push(
     createMenuItem('view', '查看详情', {
       icon: ViewListIcon,
       onClick: () => {
@@ -1051,7 +1463,10 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
           viewPlaylist(contextMenuPlaylist.value)
         }
       }
-    }),
+    })
+  )
+
+  items.push(
     createMenuItem('download-all', '全部下载', {
       icon: DownloadIcon,
       onClick: () => {
@@ -1059,10 +1474,38 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
           downloadPlaylist(contextMenuPlaylist.value)
         }
       }
-    }),
-    createSeparator(),
+    })
+  )
+
+  items.push(createSeparator())
+
+  // Sync Actions
+  if (isSynced) {
+    items.push(
+      createMenuItem('sync-cloud', '同步到云端', {
+        icon: CloudUploadIcon,
+        onClick: () => handleSyncToCloud(pl)
+      })
+    )
+    items.push(
+      createMenuItem('delete-both', '删除(双端)', {
+        icon: DeleteIcon,
+        onClick: () => handleDeleteBoth(pl)
+      })
+    )
+  } else {
+    items.push(
+      createMenuItem('upload-cloud', '上传到云端', {
+        icon: CloudUploadIcon,
+        onClick: () => handleUploadToCloud(pl)
+      })
+    )
+  }
+
+  items.push(
     createMenuItem('export', '导出歌单', {
       onClick: async () => {
+        // ... export logic ...
         if (!contextMenuPlaylist.value) return
         const pl = contextMenuPlaylist.value
         try {
@@ -1087,7 +1530,10 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
           MessagePlugin.error(`导出失败: ${(e as Error).message}`)
         }
       }
-    }),
+    })
+  )
+
+  items.push(
     createMenuItem('edit', '编辑歌单', {
       icon: Edit2Icon,
       onClick: () => {
@@ -1095,27 +1541,17 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
           editPlaylist(contextMenuPlaylist.value)
         }
       }
-    }),
-    createMenuItem('delete', '删除歌单', {
-      icon: DeleteIcon,
-      onClick: async () => {
-        if (contextMenuPlaylist.value) {
-          try {
-            const result = await songListAPI.delete(contextMenuPlaylist.value.id)
-            if (result.success) {
-              MessagePlugin.success('歌单删除成功')
-              await loadPlaylists()
-            } else {
-              MessagePlugin.error(result.error || '删除歌单失败')
-            }
-          } catch (error) {
-            console.error('删除歌单失败:', error)
-            MessagePlugin.error('删除歌单失败')
-          }
-        }
-      }
     })
-  ]
+  )
+
+  items.push(
+    createMenuItem('delete', '删除歌单(本地)', {
+      icon: DeleteIcon,
+      onClick: () => handleDeletePlaylist(pl)
+    })
+  )
+
+  return items
 })
 
 // 处理歌单右键菜单
@@ -1241,6 +1677,18 @@ onMounted(() => {
                   variant="light-outline"
                   >我的喜欢</t-tag
                 >
+                <t-tooltip
+                  v-if="playlist.meta?.isSynced || playlist.meta?.isCloudOnly"
+                  :content="playlist.meta?.isSynced ? '已同步' : '仅云端'"
+                >
+                  <span style="display: inline-flex; vertical-align: middle; margin-left: 6px">
+                    <CloudIcon
+                      v-if="playlist.meta?.isSynced"
+                      style="color: var(--td-brand-color); font-size: 16px"
+                    />
+                    <CloudIcon v-else style="color: #999; font-size: 16px" />
+                  </span>
+                </t-tooltip>
               </div>
               <div :title="playlist.description" class="playlist-description">
                 {{ playlist.description || '这个人很懒并没有留下任何描述...' }}

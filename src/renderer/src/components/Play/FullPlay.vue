@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+// import '@applemusic-like-lyrics/core/style.css'
 import {
   BackgroundRender as CoreBackgroundRender,
   PixiRenderer

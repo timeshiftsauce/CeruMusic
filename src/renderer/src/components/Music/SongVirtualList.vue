@@ -202,6 +202,11 @@ import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
 import songListAPI from '@renderer/api/songList'
 import type { SongList } from '@common/types/songList'
 import { MessagePlugin } from 'tdesign-vue-next'
+import {
+  cloudSongListAPI,
+  type CloudSongDto,
+  type CloudSongList
+} from '@renderer/api/cloudSongList'
 
 interface Song {
   id?: number
@@ -554,12 +559,64 @@ const closeContextMenu = () => {
 // 加载歌单列表
 const loadPlaylists = async () => {
   try {
-    const result = await songListAPI.getAll()
-    if (result.success) {
-      playlists.value = result.data || []
-    } else {
-      console.error('加载歌单失败:', result.error)
-    }
+    const [localRes, cloudRes] = await Promise.all([
+      songListAPI.getAll(),
+      cloudSongListAPI.getUserSongLists().catch((e) => {
+        console.error('Failed to fetch cloud lists', e)
+        return []
+      })
+    ])
+
+    const localLists = (localRes.success ? localRes.data : []) || []
+    const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
+
+    // Merge Logic
+    const mergedLists: SongList[] = []
+    const localMap = new Map<string, SongList>()
+
+    // 1. Process Local Lists
+    localLists.forEach((l) => {
+      // Ensure meta exists
+      if (!l.meta) l.meta = {}
+      localMap.set(l.id, l)
+      mergedLists.push(l)
+    })
+
+    // 2. Process Cloud Lists
+    cloudLists.forEach((c) => {
+      // Try to find matching local list
+      let match = localMap.get(c.localId)
+
+      if (!match) {
+        // Try reverse lookup
+        match = mergedLists.find((l) => l.meta && l.meta.cloudId === c.id)
+      }
+
+      if (match) {
+        // Mark as synced
+        match.meta.cloudId = c.id
+        match.meta.isSynced = true
+        match.meta.cloudUpdatedAt = c.updatedAt
+      } else {
+        // Cloud only list
+        mergedLists.push({
+          id: c.id,
+          name: c.name + '[云端]',
+          description: c.describe,
+          coverImgUrl: c.cover,
+          createTime: '',
+          updateTime: c.updatedAt,
+          source: 'local',
+          meta: {
+            isCloudOnly: true,
+            cloudId: c.id,
+            cloudUpdatedAt: c.updatedAt
+          }
+        })
+      }
+    })
+
+    playlists.value = mergedLists
   } catch (error) {
     console.error('加载歌单失败:', error)
   }
@@ -651,15 +708,48 @@ const onToggleLike = async (song: Song) => {
 // 添加歌曲到歌单
 const handleAddToSongList = async (song: Song, playlist: SongList) => {
   try {
+    const cloudSong: CloudSongDto = {
+      songmid: String(song.songmid),
+      name: song.name,
+      singer: song.singer,
+      albumName: song.albumName,
+      albumId: String(song.albumId),
+      source: song.source,
+      interval: String(song.interval),
+      img: song.img,
+      types: (song.types || []).map((t: any) => ({
+        type: typeof t === 'string' ? t : t.type,
+        size: song._types?.[typeof t === 'string' ? t : t.type]?.size || ''
+      }))
+    }
+
+    // Cloud Only Playlist
+    if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
+      await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
+      MessagePlugin.success(`已将"${song.name}"添加到云端歌单"${playlist.name}"`)
+      return
+    }
+
+    // Local / Synced Playlist
     const result = await songListAPI.addSongs(playlist.id, [toRaw(song) as any])
     if (result.success) {
       MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
+
+      // 如果是已同步的本地歌单，尝试同步到云端
+      if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
+        try {
+          await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
+        } catch (e: any) {
+          console.error('同步添加到云端失败:', e)
+          MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))
+        }
+      }
     } else {
       MessagePlugin.error(result.error || '添加到歌单失败')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('添加到歌单失败:', error)
-    MessagePlugin.error('添加到歌单失败')
+    MessagePlugin.error('添加到歌单失败: ' + (error.message || '未知错误'))
   }
 }
 
