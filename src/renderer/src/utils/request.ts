@@ -1,7 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
 import LogtoClient, { LogtoClientError } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { useAuthStore } from '@renderer/store'
 
 // 常量定义
 const DEFAULT_AUTH_URL = 'https://auth.shiqianjiang.cn'
@@ -18,6 +17,7 @@ const axiosInstances: Map<string, AxiosInstance> = new Map()
 
 // 辅助函数：登出并通知
 async function logoutAndNotify() {
+  const { useAuthStore } = await import('@renderer/store')
   const userStore = useAuthStore()
   userStore.outlogin()
   MessagePlugin.warning(ERROR_MESSAGES.LOGIN_EXPIRED)

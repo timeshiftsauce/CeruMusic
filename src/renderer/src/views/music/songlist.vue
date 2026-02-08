@@ -524,6 +524,7 @@ const viewPlaylist = (playlist: SongList) => {
         title: playlist.name,
         author: 'cloud',
         cover: playlist.coverImgUrl || '',
+        description: playlist.description || '',
         total: '0',
         source: 'cloud',
         type: 'cloud_user',
@@ -545,6 +546,7 @@ const viewPlaylist = (playlist: SongList) => {
       source: playlist.source,
       type: 'local', // 标识这是本地歌单
       meta: JSON.stringify(playlist.meta), // 歌单元数据
+      description: playlist.description || '',
       cloudId: playlist.meta?.cloudId // 显式传递 cloudId，防止 meta 被覆盖后丢失
     }
   })
@@ -1526,10 +1528,26 @@ const closeContextMenu = () => {
 onMounted(() => {
   loadPlaylists()
 })
+
+// 滚动位置保持
+const scrollRef = ref<HTMLElement>()
+const scrollTop = ref(0)
+
+onActivated(() => {
+  if (scrollRef.value) {
+    scrollRef.value.scrollTop = scrollTop.value
+  }
+})
+
+onDeactivated(() => {
+  if (scrollRef.value) {
+    scrollTop.value = scrollRef.value.scrollTop
+  }
+})
 </script>
 
 <template>
-  <div class="page">
+  <div ref="scrollRef" class="page">
     <input
       ref="songlistFileInputRef"
       accept=".cmpl,.cpl"
@@ -1651,7 +1669,26 @@ onMounted(() => {
               </div>
               <div class="playlist-meta">
                 <span>{{ playlist.source }}</span>
-                <span>创建于 {{ new Date(playlist.createTime).toLocaleDateString() }}</span>
+                <span v-if="playlist.meta?.cloudUpdatedAt"
+                  >更新于
+                  {{
+                    new Date(playlist.meta.cloudUpdatedAt)
+                      .toJSON()
+                      .replaceAll(/[TZ]/g, ' ')
+                      .replace('+08:00', '')
+                      .replaceAll(/\.\d{3}/g, '')
+                  }}</span
+                >
+                <span v-else-if="playlist.createTime"
+                  >创建于
+                  {{
+                    new Date(playlist.createTime)
+                      .toJSON()
+                      .replaceAll(/[TZ]/g, ' ')
+                      .replace('+08:00', '')
+                      .replaceAll(/\.\d{3}/g, '')
+                  }}</span
+                >
               </div>
             </div>
             <div class="playlist-actions">
@@ -1996,7 +2033,7 @@ onMounted(() => {
   overflow-y: auto;
 }
 .local-container {
-  padding: 2rem;
+  padding: 0 2rem;
   padding-top: 1rem;
   margin: 0 auto;
   width: 100%;

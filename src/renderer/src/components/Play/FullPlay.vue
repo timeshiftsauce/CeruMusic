@@ -509,7 +509,7 @@ onMounted(() => {
     </Transition>
     <div
       class="playbox"
-      :style="{ padding: playSetting.getLayoutMode === 'cover' ? '0 8vw' : '0 10vw' }"
+      :style="{ padding: playSetting.getLayoutMode === 'cover' ? '0 min(4.5vw, 100px)' : '0 10vw' }"
       :class="{
         'mode-cover': playSetting.getLayoutMode === 'cover',
         'single-column': !showLeftPanel
@@ -589,11 +589,14 @@ onMounted(() => {
           :word-fade-width="0.5"
           :playing="isAudioPlaying"
           class="lyric-player"
-          :align-position="playSetting.getLayoutMode === 'cd' ? 0.5 : 0.34"
+          :align-position="
+            playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34
+          "
           :enable-blur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
           :text-align="!playSetting.getShowLeftPanel ? 'center' : 'left'"
+          :style="playSetting.getShowLeftPanel ? '' : 'text-align: center;'"
           @line-click="jumpTime"
         />
       </div>
@@ -988,8 +991,8 @@ onMounted(() => {
         * [class^='_lyricMainLine'] {
           font-weight: 600 !important;
           // text-align: center;
-          margin: -0.8em;
-          padding: min(1.05em, 38px);
+          margin: -0.8em -1 -0.8em -1;
+          padding: min(1.05em, 38px) 1em min(1.05em, 38px) 1em;
           * {
             font-weight: 600 !important;
           }
@@ -1016,15 +1019,16 @@ onMounted(() => {
 
     &.mode-cover {
       .left {
-        width: 50%;
-        padding: 0 6vw;
+        width: 35%;
+        padding: 0 3vw;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: flex-start;
       }
       .right {
-        width: 50%;
+        padding-left: 3vw;
+        width: 65%;
       }
     }
 
