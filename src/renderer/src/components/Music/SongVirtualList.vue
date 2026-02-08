@@ -207,6 +207,7 @@ import {
   type CloudSongDto,
   type CloudSongList
 } from '@renderer/api/cloudSongList'
+import { getPersistentMeta } from '@renderer/utils/playlist/meta'
 
 interface Song {
   id?: number
@@ -596,7 +597,7 @@ const loadPlaylists = async () => {
         // Mark as synced
         match.meta.cloudId = c.id
         match.meta.isSynced = true
-        match.meta.cloudUpdatedAt = c.updatedAt
+        match.meta.localUpdatedAt = c.updatedAt
       } else {
         // Cloud only list
         mergedLists.push({
@@ -610,7 +611,7 @@ const loadPlaylists = async () => {
           meta: {
             isCloudOnly: true,
             cloudId: c.id,
-            cloudUpdatedAt: c.updatedAt
+            localUpdatedAt: c.updatedAt
           }
         })
       }
@@ -738,7 +739,19 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
       // 如果是已同步的本地歌单，尝试同步到云端
       if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
         try {
-          await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
+          const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
+          if (res && res.updatedAt) {
+            // Update local meta with new localUpdatedAt
+            const meta = getPersistentMeta({
+              ...playlist.meta,
+              localUpdatedAt: res.updatedAt
+            })
+            await window.api.songList.edit(playlist.id, {
+              meta
+            })
+            // Update in-memory playlist object to reflect change immediately
+            playlist.meta = { ...playlist.meta, localUpdatedAt: res.updatedAt }
+          }
         } catch (e: any) {
           console.error('同步添加到云端失败:', e)
           MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))

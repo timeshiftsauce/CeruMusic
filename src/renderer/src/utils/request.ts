@@ -87,8 +87,7 @@ export class Request {
     }
 
     // 检查是否为认证相关错误
-    const isAuthError =
-      status === 401 || status === 403 || /token|授权|登录|过期|unauth/i.test(String(message))
+    const isAuthError = status === 401 || /token|授权|登录|过期|unauth/i.test(String(message))
 
     if (isAuthError) {
       await logoutAndNotify()
