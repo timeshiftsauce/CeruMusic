@@ -33,8 +33,8 @@ import {
   type CloudSongList,
   type CloudSongDto
 } from '@renderer/api/cloudSongList'
+import { getPersistentMeta } from '@renderer/utils/playlist/meta'
 import { CloudIcon, CloudUploadIcon, CloudDownloadIcon } from 'tdesign-icons-vue-next'
-import { base64ToFile, isBase64 } from '@renderer/utils/file'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -1216,29 +1216,26 @@ const handleUploadToCloud = async (pl: SongList) => {
     const res = await songListAPI.getSongs(pl.id)
     if (!res.success) throw new Error(res.error || '获取歌曲失败')
     const songs = res.data || []
-
-    const cover = isBase64(pl.coverImgUrl)
-      ? base64ToFile(pl.coverImgUrl, 'cover.png')
-      : pl.coverImgUrl
+    console.log(pl.coverImgUrl)
 
     const createRes: any = await cloudSongListAPI.createUserSongList({
       localId: pl.id,
       name: pl.name,
       describe: pl.description,
-      cover: cover,
+      cover: pl.coverImgUrl,
       songlist: mapSongsToCloud(songs)
     })
-
-    // Update local meta
-    const cloudId = createRes.id
     const newTimestamp = createRes.updatedAt || new Date().toISOString()
-    const newMeta = {
+    const meta = getPersistentMeta({
       ...pl.meta,
-      cloudId,
-      isSynced: true,
-      cloudUpdatedAt: newTimestamp
+      localUpdatedAt: newTimestamp
+    })
+    if (pl.meta && pl.meta.playlistId) {
+      meta.playlistId = pl.meta.playlistId
     }
-    await songListAPI.edit(pl.id, { meta: newMeta })
+    await window.api.songList.edit(pl.id, {
+      meta
+    })
 
     loadingMsg.then((inst) => inst.close())
     MessagePlugin.success('上传成功')
@@ -1250,22 +1247,18 @@ const handleUploadToCloud = async (pl: SongList) => {
   }
 }
 
-const handleSyncToCloud = async (pl: SongList) => {
+const handleSyncToCloud = async (pl: any) => {
   const loadingMsg = MessagePlugin.loading('正在同步到云端...', 0)
   try {
     const res = await songListAPI.getSongs(pl.id)
     if (!res.success) throw new Error(res.error || '获取歌曲失败')
     const songs = res.data || []
 
-    const cover = isBase64(pl.coverImgUrl)
-      ? base64ToFile(pl.coverImgUrl, 'cover.png')
-      : pl.coverImgUrl
-
     const updateRes: any = await cloudSongListAPI.updateUserSongList({
       listId: pl.meta.cloudId,
       name: pl.name,
       describe: pl.description,
-      cover: cover,
+      cover: pl.coverImgUrl,
       songlist: mapSongsToCloud(songs)
     })
 
@@ -1274,7 +1267,10 @@ const handleSyncToCloud = async (pl: SongList) => {
 
     // Update local meta with server timestamp if available, else fallback to local time
     const newTimestamp = updateRes?.updatedAt || new Date().toISOString()
-    const newMeta = { ...pl.meta, cloudUpdatedAt: newTimestamp }
+    const newMeta = getPersistentMeta({
+      ...pl.meta,
+      cloudUpdatedAt: newTimestamp
+    })
     await songListAPI.edit(pl.id, { meta: newMeta })
 
     loadPlaylists()
@@ -1285,7 +1281,7 @@ const handleSyncToCloud = async (pl: SongList) => {
   }
 }
 
-const handleDownloadCloudPlaylist = async (pl: SongList) => {
+const handleDownloadCloudPlaylist = async (pl: any) => {
   const loadingMsg = MessagePlugin.loading('正在下载到本地...', 0)
   try {
     // 循环分页拉取所有歌曲
@@ -1320,7 +1316,10 @@ const handleDownloadCloudPlaylist = async (pl: SongList) => {
     await songListAPI.addSongs(localId, localSongs)
 
     // Update meta
-    const newMeta = { cloudId: pl.id, isSynced: true, cloudUpdatedAt: pl.meta.cloudUpdatedAt }
+    const newMeta = getPersistentMeta({
+      ...pl.meta,
+      cloudUpdatedAt: pl.meta.cloudUpdatedAt
+    })
     await songListAPI.edit(localId, { meta: newMeta })
 
     // If cover is URL, update it
@@ -1667,28 +1666,38 @@ onMounted(() => {
               </div>
             </div>
             <div class="playlist-info">
-              <div :title="playlist.name" class="playlist-name" @click="viewPlaylist(playlist)">
-                {{ playlist.name }}
-                <t-tag
-                  v-if="playlist.id === favoritesId"
-                  size="small"
-                  style="margin-left: 6px"
-                  theme="danger"
-                  variant="light-outline"
-                  >我的喜欢</t-tag
+              <div class="playlist-name-row" @click="viewPlaylist(playlist)">
+                <div :title="playlist.name" class="playlist-name-text">
+                  {{ playlist.name }}
+                </div>
+                <div
+                  v-if="
+                    playlist.id === favoritesId ||
+                    playlist.meta?.isSynced ||
+                    playlist.meta?.isCloudOnly
+                  "
+                  class="playlist-tags"
                 >
-                <t-tooltip
-                  v-if="playlist.meta?.isSynced || playlist.meta?.isCloudOnly"
-                  :content="playlist.meta?.isSynced ? '已同步' : '仅云端'"
-                >
-                  <span style="display: inline-flex; vertical-align: middle; margin-left: 6px">
-                    <CloudIcon
-                      v-if="playlist.meta?.isSynced"
-                      style="color: var(--td-brand-color); font-size: 16px"
-                    />
-                    <CloudIcon v-else style="color: #999; font-size: 16px" />
-                  </span>
-                </t-tooltip>
+                  <t-tag
+                    v-if="playlist.id === favoritesId"
+                    size="small"
+                    theme="danger"
+                    variant="light-outline"
+                    >我的喜欢</t-tag
+                  >
+                  <t-tooltip
+                    v-if="playlist.meta?.isSynced || playlist.meta?.isCloudOnly"
+                    :content="playlist.meta?.isSynced ? '已同步' : '仅云端'"
+                  >
+                    <span style="display: inline-flex; vertical-align: middle">
+                      <CloudIcon
+                        v-if="playlist.meta?.isSynced"
+                        style="color: var(--td-brand-color); font-size: 16px"
+                      />
+                      <CloudIcon v-else style="color: #999; font-size: 16px" />
+                    </span>
+                  </t-tooltip>
+                </div>
               </div>
               <div :title="playlist.description" class="playlist-description">
                 {{ playlist.description || '这个人很懒并没有留下任何描述...' }}
@@ -2418,18 +2427,38 @@ onMounted(() => {
     flex: 1;
     display: flex;
     flex-direction: column;
-    .playlist-name {
-      font-weight: 600;
-      color: var(--local-text-primary);
+    .playlist-name-row {
+      display: flex;
+      align-items: flex-start;
       margin-bottom: 0.5rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
       cursor: pointer;
-      font-size: 1rem;
+      gap: 6px;
 
-      &:hover {
+      &:hover .playlist-name-text {
         color: var(--td-brand-color);
+      }
+
+      .playlist-name-text {
+        font-weight: 600;
+        color: var(--local-text-primary);
+        font-size: 1rem;
+
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break: break-all;
+        line-height: 1.4;
+      }
+
+      .playlist-tags {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        height: 1.4em;
+        margin-top: 1px;
       }
     }
 

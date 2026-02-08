@@ -5,6 +5,7 @@ import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { downloadSingleSong, createQualityDialog } from '@renderer/utils/audio/download'
 import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
+import { getPersistentMeta } from '@renderer/utils/playlist/meta'
 import songListAPI from '@renderer/api/songList'
 
 interface MusicItem {
@@ -216,86 +217,99 @@ const fetchCloudUserPlaylist = async (reset = false) => {
 }
 
 const checkCloudSync = async () => {
-  console.log(
-    'checkCloudSync',
-    playlistInfo.value.meta?.cloudId,
-    'lastUpdatedAt',
-    playlistInfo.value.meta?.cloudUpdatedAt
-  )
+  console.log(playlistInfo.value.meta)
+  console.log(isLocalPlaylist.value)
   // 仅在显示本地歌单且已关联云端ID时执行同步检查
   if (!isLocalPlaylist.value || !playlistInfo.value.meta?.cloudId) return
 
   try {
-    // 优化：仅获取单个歌单的元数据
-    const cloudList = await cloudSongListAPI.getSongListMeta(playlistInfo.value.meta.cloudId)
-
-    if (cloudList) {
-      const localUpdatedAt = playlistInfo.value.meta.cloudUpdatedAt
-      const cloudUpdatedAt = cloudList.updatedAt
-      console.log('matchCloudSync', {
-        localUpdatedAt,
-        cloudUpdatedAt
+    const localUpdatedAt = playlistInfo.value.meta?.localUpdatedAt
+    const cloudUpdatedAt = playlistInfo.value.meta?.cloudUpdatedAt
+    if ((!localUpdatedAt || !cloudUpdatedAt) && !playlistInfo.value.meta?.isSynced) return
+    if (localUpdatedAt === cloudUpdatedAt) return
+    if (!localUpdatedAt) {
+      const meta = getPersistentMeta({
+        ...playlistInfo.value.meta,
+        localUpdatedAt: cloudUpdatedAt
       })
-      // 比较更新时间 (转换为时间戳比较更准确)
-      const localTime = localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0
-      const cloudTime = new Date(cloudUpdatedAt).getTime()
+      // 不保存 cloudId 和 cloudUpdatedAt，仅在内存中维护
+      await window.api.songList.edit(playlistInfo.value.id, {
+        meta
+      })
+    }
+    console.log('matchCloudSync', {
+      localUpdatedAt,
+      cloudUpdatedAt
+    })
+    // 比较更新时间 (转换为时间戳比较更准确)
+    const localTime = localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0
+    const cloudTime = new Date(cloudUpdatedAt).getTime()
+    console.log(localTime, cloudTime)
 
-      if (cloudTime > localTime) {
-        console.log('检测到云端更新，开始静默同步...', {
-          cloud: cloudUpdatedAt,
-          local: localUpdatedAt
+    if (cloudTime > localTime) {
+      console.log('检测到云端更新，开始静默同步...', {
+        cloud: cloudUpdatedAt,
+        local: localUpdatedAt
+      })
+
+      // 显示轻量级提示，不阻塞用户操作
+      const syncMsg = MessagePlugin.info('正在后台同步云端歌单更新...', 0)
+
+      try {
+        // 获取云端完整列表 (使用循环分页获取所有歌曲)
+        let allCloudSongs: CloudSongDto[] = []
+        let pos: number | undefined = undefined
+        const limit = 100 // 增加每次获取的数量以减少请求次数
+
+        while (true) {
+          const { list: batch, total } = await cloudSongListAPI.getSongListDetail(
+            playlistInfo.value.meta?.cloudId || '',
+            'asc',
+            limit,
+            pos
+          )
+          if (!batch || batch.length === 0) break
+
+          allCloudSongs = [...allCloudSongs, ...batch]
+
+          // 使用 total 或 batch.length 判断是否结束
+          if (allCloudSongs.length >= total || batch.length < limit) break
+
+          pos = batch[batch.length - 1].pos
+        }
+
+        const localMappedSongs = allCloudSongs.map(mapCloudSongToLocal)
+
+        // 原子化更新本地数据库（先清空再添加，确保一致性）
+        // 注意：对于超大歌单（如8000首），这可能会有短暂的IO耗时
+        await window.api.songList.clearSongs(playlistInfo.value.id)
+        await window.api.songList.addSongs(playlistInfo.value.id, localMappedSongs)
+
+        const meta = getPersistentMeta({
+          ...playlistInfo.value.meta,
+          localUpdatedAt: cloudUpdatedAt
+        })
+        await window.api.songList.edit(playlistInfo.value.id, {
+          meta
         })
 
-        // 显示轻量级提示，不阻塞用户操作
-        const syncMsg = MessagePlugin.info('正在后台同步云端歌单更新...', 0)
+        // 更新内存状态
+        playlistInfo.value.meta = { ...playlistInfo.value.meta, ...meta }
+        songs.value = localMappedSongs
+        playlistInfo.value.total = localMappedSongs.length
 
-        try {
-          // 获取云端完整列表 (使用循环分页获取所有歌曲)
-          let allCloudSongs: CloudSongDto[] = []
-          let pos: number | undefined = undefined
-          const limit = 100 // 增加每次获取的数量以减少请求次数
-
-          while (true) {
-            const { list: batch, total } = await cloudSongListAPI.getSongListDetail(
-              cloudList.id,
-              'asc',
-              limit,
-              pos
-            )
-            if (!batch || batch.length === 0) break
-
-            allCloudSongs = [...allCloudSongs, ...batch]
-
-            // 使用 total 或 batch.length 判断是否结束
-            if (allCloudSongs.length >= total || batch.length < limit) break
-
-            pos = batch[batch.length - 1].pos
-          }
-
-          const localMappedSongs = allCloudSongs.map(mapCloudSongToLocal)
-
-          // 原子化更新本地数据库（先清空再添加，确保一致性）
-          // 注意：对于超大歌单（如8000首），这可能会有短暂的IO耗时
-          await window.api.songList.clearSongs(playlistInfo.value.id)
-          await window.api.songList.addSongs(playlistInfo.value.id, localMappedSongs)
-
-          // 更新元数据
-          const newMeta = { ...playlistInfo.value.meta, cloudUpdatedAt: cloudUpdatedAt }
-          await window.api.songList.edit(playlistInfo.value.id, { meta: newMeta })
-
-          // 更新内存状态
-          playlistInfo.value.meta = newMeta
-          songs.value = localMappedSongs
-          playlistInfo.value.total = localMappedSongs.length
-
-          syncMsg.then((inst) => inst.close())
-          MessagePlugin.success('歌单已同步至最新')
-        } catch (e) {
-          syncMsg.then((inst) => inst.close())
-          console.error('静默同步失败', e)
-          // 失败不打扰用户，下次进入会自动重试
-        }
+        syncMsg.then((inst) => inst.close())
+        MessagePlugin.success('歌单已同步至最新')
+      } catch (e) {
+        syncMsg.then((inst) => inst.close())
+        console.error('静默同步失败', e)
+        // 失败不打扰用户，下次进入会自动重试
       }
+    } else if (localTime > cloudTime) {
+      console.log('检测到本地更新，开始静默同步...', {
+        cloud: cloudUpdatedAt,
+        local: localUpdatedAt
+      })
     }
   } catch (error) {
     console.error('同步检查失败', error)
@@ -557,13 +571,20 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
         console.log('Syncing delete to cloud:', playlistInfo.value.meta.cloudId)
         cloudSongListAPI
           .removeSongsFromList(playlistInfo.value.meta.cloudId, [String(song.songmid)])
-          .then(() => {
-            const newMeta = {
-              ...playlistInfo.value.meta,
-              cloudUpdatedAt: new Date().toISOString()
+          .then((res) => {
+            if (res && res.updatedAt) {
+              const meta = getPersistentMeta({
+                ...playlistInfo.value.meta,
+                localUpdatedAt: res.updatedAt
+              })
+              window.api.songList.edit(playlistInfo.value.id, {
+                meta
+              })
+              playlistInfo.value.meta = {
+                ...playlistInfo.value.meta,
+                localUpdatedAt: res.updatedAt
+              }
             }
-            window.api.songList.edit(playlistInfo.value.id, { meta: newMeta })
-            playlistInfo.value.meta = newMeta
           })
           .catch((e) => {
             console.error('Cloud sync delete failed', e)
@@ -631,6 +652,18 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
         if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
           cloudSongListAPI
             .removeSongsFromList(playlistInfo.value.meta.cloudId, mids.map(String))
+            .then((res) => {
+              if (res && res.updatedAt) {
+                const newMeta = getPersistentMeta({
+                  ...playlistInfo.value.meta,
+                  localUpdatedAt: res.updatedAt
+                })
+                window.api.songList.edit(playlistInfo.value.id, {
+                  meta: newMeta
+                })
+                playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
+              }
+            })
             .catch((e) => {
               console.error('Cloud sync batch delete failed', e)
               MessagePlugin.error('云端同步批量删除失败: ' + (e.message || '未知错误'))
@@ -740,10 +773,20 @@ const handleFileSelect = async (event: Event) => {
           // 如果已关联云端歌单，同步更新云端封面
           if (playlistInfo.value.meta?.cloudId) {
             try {
-              await cloudSongListAPI.updateUserSongList({
+              const res = await cloudSongListAPI.updateUserSongList({
                 listId: playlistInfo.value.meta.cloudId,
                 cover: file
               })
+              if (res && res.updatedAt) {
+                const meta = getPersistentMeta({
+                  ...playlistInfo.value.meta,
+                  localUpdatedAt: res.updatedAt
+                })
+                await window.api.songList.edit(playlistInfo.value.id, {
+                  meta
+                })
+                playlistInfo.value.meta = { ...meta, ...playlistInfo.value.meta }
+              }
               MessagePlugin.success('已同步封面到云端')
             } catch (e: any) {
               console.error('同步封面到云端失败:', e)
@@ -1135,7 +1178,7 @@ const handleUploadToCloud = async () => {
       ? base64ToFile(playlistInfo.value.cover, 'cover.png')
       : playlistInfo.value.cover
 
-    const { id: cloudId } = await cloudSongListAPI.createUserSongList({
+    const { updatedAt } = await cloudSongListAPI.createUserSongList({
       localId: playlistInfo.value.id,
       name: playlistInfo.value.title,
       describe: playlistInfo.value.desc,
@@ -1143,10 +1186,12 @@ const handleUploadToCloud = async () => {
       songlist: mapSongsToCloud(songs.value)
     })
 
-    // Update local meta
-    const newMeta = { ...playlistInfo.value.meta, cloudId }
-    await window.api.songList.edit(playlistInfo.value.id, { meta: newMeta })
-    playlistInfo.value.meta = newMeta
+    const meta = { localUpdatedAt: updatedAt } as any
+    if (playlistInfo.value.meta?.playlistId) meta.playlistId = playlistInfo.value.meta?.playlistId
+    await window.api.songList.edit(playlistInfo.value.id, {
+      meta
+    })
+    playlistInfo.value.meta = { ...playlistInfo.value.meta, cloudUpdatedAt: updatedAt }
     loadingMsg.then((inst) => inst.close())
     MessagePlugin.success('上传成功')
   } catch (e: any) {
