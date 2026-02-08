@@ -202,11 +202,7 @@ import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
 import songListAPI from '@renderer/api/songList'
 import type { SongList } from '@common/types/songList'
 import { MessagePlugin } from 'tdesign-vue-next'
-import {
-  cloudSongListAPI,
-  type CloudSongDto,
-  type CloudSongList
-} from '@renderer/api/cloudSongList'
+import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
 import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 

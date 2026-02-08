@@ -75,7 +75,7 @@ const fetchPlaylistSongs = async () => {
       cover: (route.query.cover as string) || '',
       total: Number(route.query.total) || 0,
       source: (route.query.source as string) || (LocalUserDetail.userSource.source as any),
-      desc: (route.query.desc as string) || '',
+      desc: (route.query.desc as string) || (route.query.description as string) || '',
       isLeaderboard: route.query.isLeaderboard === 'true',
       meta: parsedMeta
     }
@@ -1129,7 +1129,6 @@ import {
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
-import { base64ToFile, isBase64 } from '@renderer/utils/file'
 
 const renderIcon = (icon: Component) => {
   return () => h(NIcon, null, { default: () => h(icon) })

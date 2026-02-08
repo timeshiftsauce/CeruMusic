@@ -253,7 +253,7 @@ export const useGlobalPlayStatusStore = defineStore(
         const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(player.songInfo)))
 
         const parseCrLyricBySource = (source: string, text: string): LyricLine[] => {
-          return source === 'tx' ? parseQrc(text) : parseYrc(text)
+          return source === 'tx' ? (parseQrc(text) as any) : (parseYrc(text) as any)
         }
 
         const mergeTranslation = (base: LyricLine[], tlyric?: string): LyricLine[] => {
@@ -288,7 +288,7 @@ export const useGlobalPlayStatusStore = defineStore(
               let j = anchorIndex
               for (let i = 0; i < base.length && j < translatedSorted.length; i++, j++) {
                 const bl = base[i]
-                const tl = translatedSorted[j]
+                const tl = translatedSorted[j] as LyricLine
                 if (tl.words[0].word === '//' || !bl.words[0].word) continue
                 const text = joinWords(tl)
                 if (text) bl.translatedLyric = text
@@ -318,7 +318,7 @@ export const useGlobalPlayStatusStore = defineStore(
                 if (lyricData?.crlyric) {
                   lyrics = parseCrLyricBySource(source, lyricData.crlyric)
                 } else if (lyricData?.lyric) {
-                  lyrics = parseLrc(lyricData.lyric)
+                  lyrics = parseLrc(lyricData.lyric) as any
                 }
                 lyrics = mergeTranslation(lyrics as any, lyricData?.tlyric)
 
@@ -357,7 +357,7 @@ export const useGlobalPlayStatusStore = defineStore(
                 throw new Error('TTML 解析为空')
               }
 
-              parsedLyrics = ttmlLyrics
+              parsedLyrics = ttmlLyrics as LyricLine[]
 
               sdkPromise.catch(() => {})
             } catch (ttmlError: any) {
@@ -386,7 +386,7 @@ export const useGlobalPlayStatusStore = defineStore(
             if (lyricData?.crlyric) {
               parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
             } else if (lyricData?.lyric) {
-              parsedLyrics = parseLrc(lyricData.lyric)
+              parsedLyrics = parseLrc(lyricData.lyric) as LyricLine[]
             }
 
             parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)

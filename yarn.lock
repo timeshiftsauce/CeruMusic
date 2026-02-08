@@ -2271,7 +2271,7 @@
 
 "@pixi/app@^7.4.3":
   version "7.4.3"
-  resolved "https://registry.npmmirror.com/@pixi/app/-/app-7.4.3.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/app/-/app-7.4.3.tgz#2e8b700c1467542136fa2d0836f1075469aae5ae"
   integrity sha512-opyWMuO0Ir8pf1DYUR++wAA6ZfNU+nIX2z95R2OD172HbcdhB4/HD7leLIIAny/LciEdMqlWEBhXK7N93YWbdg==
 
 "@pixi/color@7.4.3":
@@ -2293,7 +2293,7 @@
 
 "@pixi/core@^7.4.3":
   version "7.4.3"
-  resolved "https://registry.npmmirror.com/@pixi/core/-/core-7.4.3.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/core/-/core-7.4.3.tgz#8230fa92e0036ec0fb5c1eea27dc140c78247edc"
   integrity sha512-5YDs11faWgVVTL8VZtLU05/Fl47vaP5Tnsbf+y/WRR0VSW3KhRRGTBU1J3Gdc2xEWbJhUK07KGP7eSZpvtPVgA==
   dependencies:
     "@pixi/color" "7.4.3"
@@ -2307,7 +2307,7 @@
 
 "@pixi/display@^7.4.3":
   version "7.4.3"
-  resolved "https://registry.npmmirror.com/@pixi/display/-/display-7.4.3.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/display/-/display-7.4.3.tgz#af8cfa169d1a78c2470679419707384b07512365"
   integrity sha512-b5m2dAaoNAVdxz1oDaxl3XZ059NEOcNtGkxTOZ4EYCw/jcp9sZXkgSROHRzsGn4k+NugH7+9MP4Id2Z0kkdUhw==
 
 "@pixi/extensions@7.4.3":
@@ -2317,17 +2317,17 @@
 
 "@pixi/filter-blur@^7.4.3":
   version "7.4.3"
-  resolved "https://registry.npmmirror.com/@pixi/filter-blur/-/filter-blur-7.4.3.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/filter-blur/-/filter-blur-7.4.3.tgz#94311e0d44946f1aa2df102d538fcc77c94011ea"
   integrity sha512-ZFzS9L/whdRbs5A/EUgF3yQaBcxNarmbuwaMgrfnpQ84mRczkGByqDLGToadiufyals07ufTrXBGRle9lbtEDA==
 
 "@pixi/filter-bulge-pinch@^5.1.1":
   version "5.1.1"
-  resolved "https://registry.npmmirror.com/@pixi/filter-bulge-pinch/-/filter-bulge-pinch-5.1.1.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/filter-bulge-pinch/-/filter-bulge-pinch-5.1.1.tgz#b0c821b07902acf7c6ccb9046ae0dfc16c847107"
   integrity sha512-80I3g813td7Fnzi7IJSiR3z8gZlKblk6WN+5z6WnscQROcNEpck6lgWS/Lf/IdeHB/FtUKJCbx7RzxkUhiRTvA==
 
 "@pixi/filter-color-matrix@^7.4.3":
   version "7.4.3"
-  resolved "https://registry.npmmirror.com/@pixi/filter-color-matrix/-/filter-color-matrix-7.4.3.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/filter-color-matrix/-/filter-color-matrix-7.4.3.tgz#dba366262dc5fa850c2dec8feb5b9da60e491bfa"
   integrity sha512-TNu0h20SrzjUWIb5v19dAp1vPpqtG0w2XF9kIHN91bMNaf3R1jzhpWG6TtaVO9eo1IolWcEJLw38jIohyC+KNw==
 
 "@pixi/math@7.4.3":
@@ -2351,7 +2351,7 @@
 
 "@pixi/sprite@^7.4.3":
   version "7.4.3"
-  resolved "https://registry.npmmirror.com/@pixi/sprite/-/sprite-7.4.3.tgz"
+  resolved "https://registry.npmmirror.com/@pixi/sprite/-/sprite-7.4.3.tgz#edd9739f87c3eaa427a15ebdd58418a58a973888"
   integrity sha512-iNBrpOFF9nXDT6m2jcyYy6l/sRzklLDDck1eFHprHZwvNquY2nzRfh+RGBCecxhBcijiLJ3fsZN33fP0LDXkvw==
 
 "@pixi/ticker@7.4.3":
@@ -7120,7 +7120,7 @@ jss-plugin-vendor-prefixer@10.10.0:
 
 jss-preset-default@^10.10.0:
   version "10.10.0"
-  resolved "https://registry.npmmirror.com/jss-preset-default/-/jss-preset-default-10.10.0.tgz"
+  resolved "https://registry.npmmirror.com/jss-preset-default/-/jss-preset-default-10.10.0.tgz#c8209449a0f6d232526c2ba3a3a6ec69ee97e023"
   integrity sha512-GL175Wt2FGhjE+f+Y3aWh+JioL06/QWFgZp53CbNNq6ZkVU0TDplD8Bxm9KnkotAYn3FlplNqoW5CjyLXcoJ7Q==
   dependencies:
     "@babel/runtime" "^7.3.1"
@@ -7140,7 +7140,7 @@ jss-preset-default@^10.10.0:
 
 jss@10.10.0, jss@^10.10.0:
   version "10.10.0"
-  resolved "https://registry.npmmirror.com/jss/-/jss-10.10.0.tgz"
+  resolved "https://registry.npmmirror.com/jss/-/jss-10.10.0.tgz#a75cc85b0108c7ac8c7b7d296c520a3e4fbc6ccc"
   integrity sha512-cqsOTS7jqPsPMjtKYDUpdFC0AbhYFLTcuGRqymgmdJIeQ8cH7+AgX7YSgQy79wXloZq2VvATYxUOUQEvS1V/Zw==
   dependencies:
     "@babel/runtime" "^7.3.1"
