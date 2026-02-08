@@ -207,7 +207,8 @@ import {
   type CloudSongDto,
   type CloudSongList
 } from '@renderer/api/cloudSongList'
-import { getPersistentMeta } from '@renderer/utils/playlist/meta'
+import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
+import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 
 interface Song {
   id?: number
@@ -709,20 +710,7 @@ const onToggleLike = async (song: Song) => {
 // 添加歌曲到歌单
 const handleAddToSongList = async (song: Song, playlist: SongList) => {
   try {
-    const cloudSong: CloudSongDto = {
-      songmid: String(song.songmid),
-      name: song.name,
-      singer: song.singer,
-      albumName: song.albumName,
-      albumId: String(song.albumId),
-      source: song.source,
-      interval: String(song.interval),
-      img: song.img,
-      types: (song.types || []).map((t: any) => ({
-        type: typeof t === 'string' ? t : t.type,
-        size: song._types?.[typeof t === 'string' ? t : t.type]?.size || ''
-      }))
-    }
+    const cloudSong = mapSongsToCloud([song])[0]
 
     // Cloud Only Playlist
     if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
@@ -742,15 +730,13 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
           const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
           if (res && res.updatedAt) {
             // Update local meta with new localUpdatedAt
-            const meta = getPersistentMeta({
-              ...playlist.meta,
-              localUpdatedAt: res.updatedAt
-            })
-            await window.api.songList.edit(playlist.id, {
-              meta
-            })
+            const newMeta = await syncLocalMetaWithCloudUpdate(
+              playlist.id,
+              playlist.meta,
+              res.updatedAt
+            )
             // Update in-memory playlist object to reflect change immediately
-            playlist.meta = { ...playlist.meta, localUpdatedAt: res.updatedAt }
+            playlist.meta = { ...playlist.meta, ...newMeta, localUpdatedAt: res.updatedAt }
           }
         } catch (e: any) {
           console.error('同步添加到云端失败:', e)
