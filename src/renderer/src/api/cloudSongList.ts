@@ -1,5 +1,6 @@
 import { Request } from '@renderer/utils/request'
 import { base64ToFile, isBase64 } from '@renderer/utils/file'
+import { mapCloudSongToLocal } from '@renderer/utils/playlist/cloudList'
 
 // Define types locally or export them
 export interface CloudSongList {
@@ -19,6 +20,7 @@ export interface SongListTypeDto {
 
 export interface CloudSongDto {
   songmid: string
+  hash?: string
   name: string
   singer: string
   albumName: string
@@ -27,7 +29,6 @@ export interface CloudSongDto {
   interval: string
   img: string
   types: SongListTypeDto[]
-  hash?: string
   pos?: number
 }
 
@@ -67,19 +68,21 @@ export const cloudSongListAPI = {
     return unwrap<CloudSongList[]>(request.get(BASE_URL))
   },
 
-  // 获取单个歌单元数据
-  getSongListMeta: (id: string) => {
-    return unwrap<CloudSongList>(request.get(`${BASE_URL}/${id}`))
-  },
-
   // 获取歌单详情
   getSongListDetail: (id: string, sort: 'asc' | 'desc' = 'asc', limit?: number, pos?: number) => {
     if (!id) throw new Error('List ID is required')
-    return unwrap<{ list: CloudSongDto[]; total: number }>(
+    const result = unwrap<{ list: CloudSongDto[]; total: number }>(
       request.get(`${BASE_URL}/list`, {
         params: { id, sort, limit, pos }
       })
     )
+    return new Promise<{ list: CloudSongDto[]; total: number }>(async (resolve) => {
+      const res = await result
+      resolve({
+        ...res,
+        list: res.list.map(mapCloudSongToLocal)
+      })
+    })
   },
 
   // 创建歌单

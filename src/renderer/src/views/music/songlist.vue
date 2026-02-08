@@ -35,6 +35,11 @@ import {
 } from '@renderer/api/cloudSongList'
 import { getPersistentMeta } from '@renderer/utils/playlist/meta'
 import { CloudIcon, CloudUploadIcon, CloudDownloadIcon } from 'tdesign-icons-vue-next'
+import { mapCloudSongToLocal } from '@renderer/utils/playlist/cloudList'
+import {
+  handleUploadToCloudHelper,
+  handleSyncToCloudHelper
+} from '@renderer/utils/playlist/cloudSyncHelper'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -552,21 +557,9 @@ const playPlaylist = async (playlist: SongList) => {
 
     if (playlist.meta?.isCloudOnly) {
       try {
-        const cloudSongs = await cloudSongListAPI.getSongListDetail(playlist.id)
-        songs = cloudSongs.list.map((s) => ({
-          songmid: s.songmid,
-          name: s.name,
-          singer: s.singer,
-          albumName: s.albumName,
-          albumId: s.albumId,
-          source: s.source,
-          interval: s.interval,
-          img: s.img,
-          lrc: null,
-          types: s.types.map((t) => t.type),
-          _types: {},
-          typeUrl: {}
-        }))
+        songs = (await cloudSongListAPI.getSongListDetail(playlist.id)).list.map(
+          mapCloudSongToLocal
+        )
       } catch (e) {
         MessagePlugin.error((e as Error).message || '获取歌单歌曲失败')
         return
@@ -1177,107 +1170,61 @@ const downloadPlaylist = async (playlist: SongList) => {
   }
 }
 
-// --- Cloud Operations ---
-
-const mapSongsToCloud = (songs: readonly any[]): any[] => {
-  return songs.map((s) => ({
-    songmid: String(s.songmid),
-    name: s.name,
-    singer: s.singer,
-    albumName: s.albumName,
-    albumId: String(s.albumId),
-    source: s.source,
-    interval: s.interval,
-    img: s.img,
-    types: (s.types || []).map((t) => ({ type: t, size: s._types?.[t]?.size || '' }))
-  }))
-}
-
-const mapCloudSongToLocal = (s: any): any => {
-  return {
-    songmid: s.songmid,
-    name: s.name,
-    singer: s.singer,
-    albumName: s.albumName,
-    albumId: s.albumId,
-    source: s.source,
-    interval: s.interval,
-    img: s.img,
-    lrc: null,
-    types: s.types.map((t) => t.type),
-    _types: s.types.reduce((acc, cur) => ({ ...acc, [cur.type]: { size: cur.size } }), {}),
-    typeUrl: {}
-  }
-}
-
 const handleUploadToCloud = async (pl: SongList) => {
-  const loadingMsg = MessagePlugin.loading('正在上传到云端...', 0)
+  let songs: any[] = []
   try {
     const res = await songListAPI.getSongs(pl.id)
     if (!res.success) throw new Error(res.error || '获取歌曲失败')
-    const songs = res.data || []
-    console.log(pl.coverImgUrl)
-
-    const createRes: any = await cloudSongListAPI.createUserSongList({
-      localId: pl.id,
-      name: pl.name,
-      describe: pl.description,
-      cover: pl.coverImgUrl,
-      songlist: mapSongsToCloud(songs)
-    })
-    const newTimestamp = createRes.updatedAt || new Date().toISOString()
-    const meta = getPersistentMeta({
-      ...pl.meta,
-      localUpdatedAt: newTimestamp
-    })
-    if (pl.meta && pl.meta.playlistId) {
-      meta.playlistId = pl.meta.playlistId
-    }
-    await window.api.songList.edit(pl.id, {
-      meta
-    })
-
-    loadingMsg.then((inst) => inst.close())
-    MessagePlugin.success('上传成功')
-    loadPlaylists()
+    songs = [...(res.data || [])]
   } catch (e: any) {
-    loadingMsg.then((inst) => inst.close())
     console.error(e)
-    MessagePlugin.error('上传失败: ' + (e.message || '未知错误'))
+    MessagePlugin.error('获取歌曲失败: ' + (e.message || '未知错误'))
+    return
+  }
+
+  try {
+    await handleUploadToCloudHelper(
+      {
+        id: pl.id,
+        name: pl.name,
+        description: pl.description || '',
+        cover: pl.coverImgUrl,
+        meta: pl.meta
+      },
+      songs,
+      loadPlaylists
+    )
+  } catch (e) {
+    // Error handled in helper
   }
 }
 
 const handleSyncToCloud = async (pl: any) => {
-  const loadingMsg = MessagePlugin.loading('正在同步到云端...', 0)
+  let songs: any[] = []
   try {
     const res = await songListAPI.getSongs(pl.id)
     if (!res.success) throw new Error(res.error || '获取歌曲失败')
-    const songs = res.data || []
-
-    const updateRes: any = await cloudSongListAPI.updateUserSongList({
-      listId: pl.meta.cloudId,
-      name: pl.name,
-      describe: pl.description,
-      cover: pl.coverImgUrl,
-      songlist: mapSongsToCloud(songs)
-    })
-
-    loadingMsg.then((inst) => inst.close())
-    MessagePlugin.success('同步成功')
-
-    // Update local meta with server timestamp if available, else fallback to local time
-    const newTimestamp = updateRes?.updatedAt || new Date().toISOString()
-    const newMeta = getPersistentMeta({
-      ...pl.meta,
-      cloudUpdatedAt: newTimestamp
-    })
-    await songListAPI.edit(pl.id, { meta: newMeta })
-
-    loadPlaylists()
+    songs = [...(res.data || [])]
   } catch (e: any) {
-    loadingMsg.then((inst) => inst.close())
     console.error(e)
-    MessagePlugin.error('同步失败: ' + (e.message || '未知错误'))
+    MessagePlugin.error('获取歌曲失败: ' + (e.message || '未知错误'))
+    return
+  }
+
+  try {
+    await handleSyncToCloudHelper(
+      {
+        id: pl.id,
+        name: pl.name,
+        description: pl.description || '',
+        cover: pl.coverImgUrl,
+        meta: pl.meta
+      },
+      songs,
+      loadPlaylists
+    )
+  } catch (e) {
+    // Error handled in helper
   }
 }
 

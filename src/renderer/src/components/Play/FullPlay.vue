@@ -1,12 +1,12 @@
 <script lang="ts" setup>
-// import '@applemusic-like-lyrics/core/style.css'
+import '@applemusic-like-lyrics/core/style.css'
 import {
   BackgroundRender as CoreBackgroundRender,
   PixiRenderer
 } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
-import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick, toRaw } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import {
   Fullscreen1Icon,
@@ -405,12 +405,12 @@ const lyricViewColor = computed(() => {
   return playSetting.getIsImmersiveLyricColor ? lightMainColor.value : 'rgba(255, 255, 255, 1)'
 })
 
-const lyricHeight = computed(() => {
-  return playSetting.getisJumpLyric ? '100%' : '200%'
-})
-const lyricTranslateY = computed(() => {
-  return playSetting.getisJumpLyric ? '0' : '-25%'
-})
+// const lyricHeight = computed(() => {
+//   return playSetting.getisJumpLyric ? '100%' : '200%'
+// })
+// const lyricTranslateY = computed(() => {
+//   return playSetting.getisJumpLyric ? '0' : '-25%'
+// })
 
 // --- 滚动文字逻辑 Start ---
 const titleRef = ref<HTMLElement | null>(null)
@@ -584,13 +584,12 @@ onMounted(() => {
         <component
           :is="playSetting.getUseAmlLyricRenderer ? LyricPlayer : LyricAdapter"
           ref="lyricPlayerRef"
-          :lyric-lines="player.lyrics.lines || []"
+          :lyric-lines="toRaw(player.lyrics.lines) || []"
           :current-time="state.currentTime"
+          :word-fade-width="0.5"
           :playing="isAudioPlaying"
           class="lyric-player"
-          :align-position="
-            playSetting.getLayoutMode === 'cd' ? 0.5 : playSetting.getisJumpLyric ? 0.3 : 0.38
-          "
+          :align-position="playSetting.getLayoutMode === 'cd' ? 0.5 : 0.34"
           :enable-blur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
@@ -728,11 +727,14 @@ onMounted(() => {
   &.idle {
     .playbox {
       cursor: none;
-      .left {
+      .left,
+      .right {
         margin-bottom: 0;
       }
       .right {
-        margin-bottom: 20px;
+        :deep(.lyric-player) {
+          height: 100vh;
+        }
       }
     }
 
@@ -972,31 +974,38 @@ onMounted(() => {
       );
 
       :deep(.lyric-player) {
+        height: calc(100vh - var(--play-bottom-height));
+        transform: translateY(-80px);
         --amll-lyric-view-color: v-bind(lyricViewColor);
+        --amll-lp-color: v-bind(lyricViewColor);
         transition: color 0.2s;
         font-family: v-bind(lyricFontFamily);
         --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
+        --amll-lp-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
 
         // bottom: max(2vw, 29px);
 
-        height: v-bind(lyricHeight);
-        transform: translateY(v-bind(lyricTranslateY));
-
-        * [class^='lyricMainLine'] {
+        * [class^='_lyricMainLine'] {
           font-weight: 600 !important;
           // text-align: center;
+          margin: -0.8em;
+          padding: min(1.05em, 38px);
           * {
             font-weight: 600 !important;
           }
         }
-        [class^='interludeDots'] {
-          left: 1.2em;
+        [class^='_interludeDots'] {
+          // left: 1.2em;
+          padding: auto;
+          height: calc(var(--amll-lyric-player-font-size) + 1em);
+          justify-content: center;
+          align-items: center;
         }
-        & > div {
-          padding-bottom: 0;
-          overflow: hidden;
-          transform: translateY(-20px);
-        }
+        // & > div {
+        //   padding-bottom: 0;
+        //   overflow: hidden;
+        //   transform: translateY(-20px);
+        // }
       }
 
       padding: 0 20px;

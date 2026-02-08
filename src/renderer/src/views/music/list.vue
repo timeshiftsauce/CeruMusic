@@ -5,8 +5,13 @@ import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { downloadSingleSong, createQualityDialog } from '@renderer/utils/audio/download'
 import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
-import { getPersistentMeta } from '@renderer/utils/playlist/meta'
 import songListAPI from '@renderer/api/songList'
+import { mapCloudSongToLocal } from '@renderer/utils/playlist/cloudList'
+import {
+  handleUploadToCloudHelper,
+  handleSyncToCloudHelper,
+  syncLocalMetaWithCloudUpdate
+} from '@renderer/utils/playlist/cloudSyncHelper'
 
 interface MusicItem {
   singer: string
@@ -228,14 +233,11 @@ const checkCloudSync = async () => {
     if ((!localUpdatedAt || !cloudUpdatedAt) && !playlistInfo.value.meta?.isSynced) return
     if (localUpdatedAt === cloudUpdatedAt) return
     if (!localUpdatedAt) {
-      const meta = getPersistentMeta({
-        ...playlistInfo.value.meta,
-        localUpdatedAt: cloudUpdatedAt
-      })
-      // 不保存 cloudId 和 cloudUpdatedAt，仅在内存中维护
-      await window.api.songList.edit(playlistInfo.value.id, {
-        meta
-      })
+      await syncLocalMetaWithCloudUpdate(
+        playlistInfo.value.id,
+        playlistInfo.value.meta,
+        cloudUpdatedAt
+      )
     }
     console.log('matchCloudSync', {
       localUpdatedAt,
@@ -285,16 +287,14 @@ const checkCloudSync = async () => {
         await window.api.songList.clearSongs(playlistInfo.value.id)
         await window.api.songList.addSongs(playlistInfo.value.id, localMappedSongs)
 
-        const meta = getPersistentMeta({
-          ...playlistInfo.value.meta,
-          localUpdatedAt: cloudUpdatedAt
-        })
-        await window.api.songList.edit(playlistInfo.value.id, {
-          meta
-        })
+        const newMeta = await syncLocalMetaWithCloudUpdate(
+          playlistInfo.value.id,
+          playlistInfo.value.meta,
+          cloudUpdatedAt
+        )
 
         // 更新内存状态
-        playlistInfo.value.meta = { ...playlistInfo.value.meta, ...meta }
+        playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
         songs.value = localMappedSongs
         playlistInfo.value.total = localMappedSongs.length
 
@@ -571,17 +571,16 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
         console.log('Syncing delete to cloud:', playlistInfo.value.meta.cloudId)
         cloudSongListAPI
           .removeSongsFromList(playlistInfo.value.meta.cloudId, [String(song.songmid)])
-          .then((res) => {
+          .then(async (res) => {
             if (res && res.updatedAt) {
-              const meta = getPersistentMeta({
-                ...playlistInfo.value.meta,
-                localUpdatedAt: res.updatedAt
-              })
-              window.api.songList.edit(playlistInfo.value.id, {
-                meta
-              })
+              const newMeta = await syncLocalMetaWithCloudUpdate(
+                playlistInfo.value.id,
+                playlistInfo.value.meta,
+                res.updatedAt
+              )
               playlistInfo.value.meta = {
                 ...playlistInfo.value.meta,
+                ...newMeta,
                 localUpdatedAt: res.updatedAt
               }
             }
@@ -652,15 +651,13 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
         if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
           cloudSongListAPI
             .removeSongsFromList(playlistInfo.value.meta.cloudId, mids.map(String))
-            .then((res) => {
+            .then(async (res) => {
               if (res && res.updatedAt) {
-                const newMeta = getPersistentMeta({
-                  ...playlistInfo.value.meta,
-                  localUpdatedAt: res.updatedAt
-                })
-                window.api.songList.edit(playlistInfo.value.id, {
-                  meta: newMeta
-                })
+                const newMeta = await syncLocalMetaWithCloudUpdate(
+                  playlistInfo.value.id,
+                  playlistInfo.value.meta,
+                  res.updatedAt
+                )
                 playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
               }
             })
@@ -778,14 +775,12 @@ const handleFileSelect = async (event: Event) => {
                 cover: file
               })
               if (res && res.updatedAt) {
-                const meta = getPersistentMeta({
-                  ...playlistInfo.value.meta,
-                  localUpdatedAt: res.updatedAt
-                })
-                await window.api.songList.edit(playlistInfo.value.id, {
-                  meta
-                })
-                playlistInfo.value.meta = { ...meta, ...playlistInfo.value.meta }
+                const newMeta = await syncLocalMetaWithCloudUpdate(
+                  playlistInfo.value.id,
+                  playlistInfo.value.meta,
+                  res.updatedAt
+                )
+                playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
               }
               MessagePlugin.success('已同步封面到云端')
             } catch (e: any) {
@@ -1140,91 +1135,39 @@ const renderIcon = (icon: Component) => {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 
-const mapSongsToCloud = (songs: MusicItem[]): CloudSongDto[] => {
-  return songs.map((s) => ({
-    songmid: String(s.songmid),
-    name: s.name,
-    singer: s.singer,
-    albumName: s.albumName,
-    albumId: String(s.albumId),
-    source: s.source,
-    interval: s.interval,
-    img: s.img,
-    types: (s.types || []).map((t) => ({ type: t, size: s._types?.[t]?.size || '' }))
-  }))
-}
-
-const mapCloudSongToLocal = (s: CloudSongDto): MusicItem => {
-  return {
-    songmid: s.songmid as any,
-    name: s.name,
-    singer: s.singer,
-    albumName: s.albumName,
-    albumId: s.albumId as any,
-    source: s.source,
-    interval: s.interval,
-    img: s.img,
-    lrc: null,
-    types: s.types.map((t) => t.type),
-    _types: s.types.reduce((acc, cur) => ({ ...acc, [cur.type]: { size: cur.size } }), {}),
-    typeUrl: {}
-  }
-}
-
 const handleUploadToCloud = async () => {
-  const loadingMsg = MessagePlugin.loading('正在上传到云端...', 0)
   try {
-    const cover = isBase64(playlistInfo.value.cover)
-      ? base64ToFile(playlistInfo.value.cover, 'cover.png')
-      : playlistInfo.value.cover
-
-    const { updatedAt } = await cloudSongListAPI.createUserSongList({
-      localId: playlistInfo.value.id,
-      name: playlistInfo.value.title,
-      describe: playlistInfo.value.desc,
-      cover: cover,
-      songlist: mapSongsToCloud(songs.value)
-    })
-
-    const meta = { localUpdatedAt: updatedAt } as any
-    if (playlistInfo.value.meta?.playlistId) meta.playlistId = playlistInfo.value.meta?.playlistId
-    await window.api.songList.edit(playlistInfo.value.id, {
-      meta
-    })
-    playlistInfo.value.meta = { ...playlistInfo.value.meta, cloudUpdatedAt: updatedAt }
-    loadingMsg.then((inst) => inst.close())
-    MessagePlugin.success('上传成功')
-  } catch (e: any) {
-    loadingMsg.then((inst) => inst.close())
-    console.error(e)
-    MessagePlugin.error('上传失败: ' + (e.message || '未知错误'))
+    const newMeta = await handleUploadToCloudHelper(
+      {
+        id: playlistInfo.value.id,
+        name: playlistInfo.value.title,
+        description: playlistInfo.value.desc,
+        cover: playlistInfo.value.cover,
+        meta: playlistInfo.value.meta
+      },
+      songs.value
+    )
+    playlistInfo.value.meta = newMeta
+  } catch (e) {
+    // Error already handled in helper
   }
 }
 
 const handleSyncToCloud = async () => {
-  const loadingMsg = MessagePlugin.loading('正在同步到云端...', 0)
   try {
-    if (!playlistInfo.value.meta?.cloudId) {
-      throw new Error('未关联云端歌单')
-    }
-
-    const cover = isBase64(playlistInfo.value.cover)
-      ? base64ToFile(playlistInfo.value.cover, 'cover.png')
-      : playlistInfo.value.cover
-
-    await cloudSongListAPI.updateUserSongList({
-      listId: playlistInfo.value.meta.cloudId,
-      name: playlistInfo.value.title,
-      describe: playlistInfo.value.desc,
-      cover: cover,
-      songlist: mapSongsToCloud(songs.value)
-    })
-    loadingMsg.then((inst) => inst.close())
-    MessagePlugin.success('同步成功')
-  } catch (e: any) {
-    loadingMsg.then((inst) => inst.close())
-    console.error(e)
-    MessagePlugin.error('同步失败: ' + (e.message || '未知错误'))
+    const newMeta = await handleSyncToCloudHelper(
+      {
+        id: playlistInfo.value.id,
+        name: playlistInfo.value.title,
+        description: playlistInfo.value.desc,
+        cover: playlistInfo.value.cover,
+        meta: playlistInfo.value.meta
+      },
+      songs.value
+    )
+    playlistInfo.value.meta = newMeta
+  } catch (e) {
+    // Error already handled in helper
   }
 }
 
