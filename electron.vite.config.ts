@@ -42,36 +42,6 @@ export default defineConfig({
           drop_console: true,
           drop_debugger: true
         }
-      },
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('tdesign-vue-next') || id.includes('tdesign-icons-vue-next')) {
-                return 'tdesign-vendor'
-              }
-              if (id.includes('naive-ui')) {
-                return 'naive-ui-vendor'
-              }
-              if (id.includes('@pixi')) {
-                return 'pixi-vendor'
-              }
-              if (id.includes('lodash')) {
-                return 'lodash-vendor'
-              }
-              if (
-                id.includes('vue') ||
-                id.includes('vue-router') ||
-                id.includes('pinia') ||
-                id.includes('@vue')
-              ) {
-                return 'vue-vendor'
-              }
-              return 'vendor'
-            }
-            return
-          }
-        }
       }
     },
     plugins: [
