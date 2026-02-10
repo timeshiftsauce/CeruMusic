@@ -100,6 +100,11 @@ export class Request {
 
   // 核心请求方法
   async request<T = any>(config: AxiosRequestConfig, returnRaw = false): Promise<T | any> {
+    const authStore = await import('@renderer/store').then((m) => m.useAuthStore())
+    if (!authStore.isAuthenticated) {
+      MessagePlugin.warning('未登录，请先登录')
+      throw new Error('未登录，请先登录')
+    }
     // 1. 获取 Token
     const token = await this.getAccessToken()
 

@@ -509,7 +509,12 @@ onMounted(() => {
     </Transition>
     <div
       class="playbox"
-      :style="{ padding: playSetting.getLayoutMode === 'cover' ? '0 min(4.5vw, 100px)' : '0 10vw' }"
+      :style="{
+        padding:
+          playSetting.getLayoutMode === 'cover' || !playSetting.getShowLeftPanel
+            ? '0 min(4.5vw, 100px)'
+            : '0 10vw'
+      }"
       :class="{
         'mode-cover': playSetting.getLayoutMode === 'cover',
         'single-column': !showLeftPanel
@@ -521,6 +526,7 @@ onMounted(() => {
       >
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <img
+            :key="player!.songInfo!.songmid as string"
             class="pointer"
             :class="{ playing: isAudioPlaying }"
             src="@renderer/assets/pointer.png"
@@ -553,7 +559,13 @@ onMounted(() => {
         <template v-else-if="playSetting.getLayoutMode === 'cover'">
           <div class="cover-layout-container">
             <div class="cover-wrapper-square" :class="{ playing: controlAudio.Audio.isPlay }">
-              <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
+              <s-image
+                :key="player!.songInfo!.songmid as string"
+                :src="actualCoverImage"
+                class="cover-img-square"
+                shape="round"
+                fit="cover"
+              />
             </div>
             <div class="song-info-area">
               <div ref="titleRef" class="song-title-large text-scroll-container">

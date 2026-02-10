@@ -47,7 +47,7 @@ const openLink = (url: string) => {
         </div>
         <div class="app-info">
           <div class="app-title-row">
-            <h2>Cerulearn Music</h2>
+            <h2>Cerulean Music</h2>
             <span class="app-version">v{{ appVersion }}</span>
           </div>
           <p class="app-subtitle">澜音 播放器</p>

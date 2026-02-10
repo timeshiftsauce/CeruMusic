@@ -40,6 +40,7 @@ import {
   handleUploadToCloudHelper,
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
+import { useAuthStore } from '@renderer/store'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -149,6 +150,20 @@ const loading = ref(false)
 // 喜欢歌单ID（用于排序与标记）
 const favoritesId = ref<string | null>(null)
 
+const updatePlaylistState = (id: string, payload: Partial<SongList>) => {
+  const idx = playlists.value.findIndex((p) => p.id === id)
+  if (idx !== -1) {
+    playlists.value[idx] = { ...playlists.value[idx], ...payload }
+  }
+}
+const addPlaylistState = (pl: SongList) => {
+  playlists.value.unshift(pl)
+}
+const removePlaylistState = (id: string) => {
+  const idx = playlists.value.findIndex((p) => p.id === id)
+  if (idx !== -1) playlists.value.splice(idx, 1)
+}
+
 // 对话框状态
 const showCreatePlaylistDialog = ref(false)
 const showImportDialog = ref(false)
@@ -221,7 +236,16 @@ const importSonglistFromFile = async () => {
           ? `成功导入 ${added} 首歌曲到歌单“${finalName}”，跳过 ${skipped} 首重复`
           : `成功导入 ${added} 首歌曲到歌单“${finalName}”`
       )
-      await loadPlaylists()
+      addPlaylistState({
+        id: createRes.data.id,
+        name: finalName,
+        description: '从本地歌单文件导入',
+        coverImgUrl: 'default-cover',
+        createTime: new Date().toISOString(),
+        updateTime: new Date().toISOString(),
+        source: 'local',
+        meta: {}
+      } as SongList)
     } else {
       MessagePlugin.error(addRes.error || '添加歌曲到歌单失败')
     }
@@ -275,14 +299,20 @@ const stats = computed(() => {
 // 加载歌单列表
 const loadPlaylists = async () => {
   loading.value = true
+  const authStore = useAuthStore()
+  console.log('authStore.isAuthenticated', authStore.isAuthenticated)
   try {
-    const [localRes, cloudRes] = await Promise.all([
-      songListAPI.getAll(),
-      cloudSongListAPI.getUserSongLists().catch((e) => {
-        console.error('Failed to fetch cloud lists', e)
+    async function getCloudSongList() {
+      if (!authStore.isAuthenticated) {
+        console.log('未登录跳过云歌单')
         return []
-      }) // Fail safe
-    ])
+      }
+      return await cloudSongListAPI.getUserSongLists().catch((err) => {
+        MessagePlugin.error(err.message || '获取云歌单失败')
+        return []
+      })
+    }
+    const [localRes, cloudRes] = await Promise.all([songListAPI.getAll(), getCloudSongList()])
 
     const localLists = (localRes.success ? localRes.data : []) || []
     const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
@@ -378,11 +408,18 @@ const createPlaylist = async () => {
     if (result.success) {
       MessagePlugin.success('歌单创建成功')
       showCreatePlaylistDialog.value = false
-      newPlaylistForm.value = {
-        name: '我的歌单',
-        description: '这是我创建的歌单'
-      }
-      await loadPlaylists()
+      const created = {
+        id: result.data!.id,
+        name: newPlaylistForm.value.name,
+        description: newPlaylistForm.value.description,
+        coverImgUrl: 'default-cover',
+        createTime: new Date().toISOString(),
+        updateTime: new Date().toISOString(),
+        source: 'local' as const,
+        meta: {}
+      } as SongList
+      addPlaylistState(created)
+      newPlaylistForm.value = { name: '我的歌单', description: '这是我创建的歌单' }
       // 触发歌单更新事件
       window.dispatchEvent(new Event('playlist-updated'))
     } else {
@@ -419,10 +456,18 @@ const savePlaylistEdit = async () => {
 
     if (currentEditingPlaylist.value.meta?.isCloudOnly) {
       try {
-        await cloudSongListAPI.updateUserSongList({
+        const resp = await cloudSongListAPI.updateUserSongList({
           listId: currentEditingPlaylist.value.id,
           name: editPlaylistForm.value.name.trim(),
           describe: editPlaylistForm.value.description.trim()
+        })
+        updatePlaylistState(currentEditingPlaylist.value.id, {
+          name: editPlaylistForm.value.name.trim(),
+          description: editPlaylistForm.value.description.trim(),
+          meta: {
+            ...(currentEditingPlaylist.value.meta || {}),
+            cloudUpdatedAt: resp.updatedAt
+          }
         })
         success = true
       } catch (e) {
@@ -436,13 +481,18 @@ const savePlaylistEdit = async () => {
       })
       success = result.success
       errorMsg = result.error || '更新歌单信息失败'
+      if (result.success) {
+        updatePlaylistState(currentEditingPlaylist.value.id, {
+          name: editPlaylistForm.value.name.trim(),
+          description: editPlaylistForm.value.description.trim()
+        })
+      }
     }
 
     if (success) {
       MessagePlugin.success('歌单信息更新成功')
       showEditPlaylistDialog.value = false
       currentEditingPlaylist.value = null
-      await loadPlaylists()
       // 触发歌单更新事件
       window.dispatchEvent(new Event('playlist-updated'))
     } else {
@@ -493,7 +543,7 @@ const deletePlaylist = async (playlist: SongList) => {
 
         if (success) {
           MessagePlugin.success('歌单删除成功')
-          await loadPlaylists()
+          removePlaylistState(playlist.id)
           // 触发歌单更新事件
           window.dispatchEvent(new Event('playlist-updated'))
         } else {
@@ -647,8 +697,16 @@ const importFromPlaylist = async () => {
           ? `成功从播放列表导入 ${added} 首歌曲到歌单"${playlistName}"，跳过 ${skipped} 首重复`
           : `成功从播放列表导入 ${added} 首歌曲到歌单"${playlistName}"`
       )
-      // 刷新歌单列表
-      await loadPlaylists()
+      addPlaylistState({
+        id: createResult.data!.id,
+        name: playlistName,
+        description: `从播放列表导入，共 ${currentPlaylist.length} 首歌曲`,
+        coverImgUrl: 'default-cover',
+        createTime: new Date().toISOString(),
+        updateTime: new Date().toISOString(),
+        source: 'local',
+        meta: {}
+      } as SongList)
     } else {
       MessagePlugin.error(addResult.error || '添加歌曲到歌单失败')
     }
@@ -1037,6 +1095,18 @@ const handleNetworkPlaylistImport = async (input: string) => {
         failCount = songs.length
         console.error('批量添加歌曲失败:', addResult.error)
       }
+      addPlaylistState({
+        id: newPlaylistId,
+        name: `${playlistInfo.name} (导入)`,
+        description: playlistInfo.desc
+          ? playlistInfo.desc
+          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
+        coverImgUrl: detailResult.info.img || 'default-cover',
+        createTime: new Date().toISOString(),
+        updateTime: new Date().toISOString(),
+        source: importPlatformType.value as any,
+        meta: { playlistId }
+      } as SongList)
     } else {
       const createResult = await songListAPI.create(
         `${playlistInfo.name} (导入)`,
@@ -1070,10 +1140,19 @@ const handleNetworkPlaylistImport = async (input: string) => {
         failCount = songs.length
         console.error('批量添加歌曲失败:', addResult.error)
       }
+      addPlaylistState({
+        id: newPlaylistId,
+        name: `${playlistInfo.name} (导入)`,
+        description: playlistInfo.desc
+          ? playlistInfo.desc
+          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
+        coverImgUrl: detailResult.info.img || 'default-cover',
+        createTime: new Date().toISOString(),
+        updateTime: new Date().toISOString(),
+        source: importPlatformType.value as any,
+        meta: { playlistId }
+      } as SongList)
     }
-
-    // 刷新歌单列表
-    await loadPlaylists()
 
     // 显示导入结果
     if (successCount > 0) {
@@ -1284,7 +1363,7 @@ const handleDownloadCloudPlaylist = async (pl: any) => {
 
     loadingMsg.then((inst) => inst.close())
     MessagePlugin.success('下载成功')
-    await loadPlaylists()
+    removePlaylistState(pl.id)
   } catch (e: any) {
     loadingMsg.then((inst) => inst.close())
     console.error(e)
@@ -1301,7 +1380,7 @@ const handleDeleteCloudPlaylist = async (pl: SongList) => {
       try {
         await cloudSongListAPI.deleteUserSongList(pl.id)
         MessagePlugin.success('删除成功')
-        loadPlaylists()
+        removePlaylistState(pl.id)
       } catch (e: any) {
         MessagePlugin.error('删除失败: ' + e.message)
       }
@@ -1322,7 +1401,7 @@ const handleDeletePlaylist = async (pl: SongList) => {
         const result = await songListAPI.delete(pl.id)
         if (result.success) {
           MessagePlugin.success('歌单删除成功')
-          await loadPlaylists()
+          removePlaylistState(pl.id)
         } else {
           MessagePlugin.error(result.error || '删除歌单失败')
         }
