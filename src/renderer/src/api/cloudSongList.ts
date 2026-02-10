@@ -1,6 +1,5 @@
 import { Request } from '@renderer/utils/request'
 import { base64ToFile, isBase64 } from '@renderer/utils/file'
-import { mapCloudSongToLocal } from '@renderer/utils/playlist/cloudList'
 
 // Define types locally or export them
 export interface CloudSongList {
@@ -71,18 +70,11 @@ export const cloudSongListAPI = {
   // 获取歌单详情
   getSongListDetail: (id: string, sort: 'asc' | 'desc' = 'asc', limit?: number, pos?: number) => {
     if (!id) throw new Error('List ID is required')
-    const result = unwrap<{ list: CloudSongDto[]; total: number }>(
+    return unwrap<{ list: CloudSongDto[]; total: number }>(
       request.get(`${BASE_URL}/list`, {
         params: { id, sort, limit, pos }
       })
     )
-    return new Promise<{ list: CloudSongDto[]; total: number }>(async (resolve) => {
-      const res = await result
-      resolve({
-        ...res,
-        list: res.list.map(mapCloudSongToLocal)
-      })
-    })
   },
 
   // 创建歌单

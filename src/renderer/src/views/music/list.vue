@@ -1,17 +1,30 @@
 <script setup lang="ts">
-import { ref, onMounted, toRaw, computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { downloadSingleSong, createQualityDialog } from '@renderer/utils/audio/download'
 import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
+import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
-import { mapCloudSongToLocal } from '@renderer/utils/playlist/cloudList'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { createQualityDialog, downloadSingleSong } from '@renderer/utils/audio/download'
+import { mapCloudSongToLocal, mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
+import type { SongList } from '@common/types/songList'
 import {
-  handleUploadToCloudHelper,
   handleSyncToCloudHelper,
+  handleUploadToCloudHelper,
   syncLocalMetaWithCloudUpdate
 } from '@renderer/utils/playlist/cloudSyncHelper'
+import { NIcon } from 'naive-ui'
+import { storeToRefs } from 'pinia'
+import {
+  CloudDownloadIcon,
+  CloudIcon,
+  CloudUploadIcon,
+  EllipsisIcon,
+  RefreshIcon,
+  RootListFilledIcon
+} from 'tdesign-icons-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { computed, h, onMounted, ref, toRaw, type Component } from 'vue'
+import { useRoute } from 'vue-router'
 
 interface MusicItem {
   singer: string
@@ -27,6 +40,11 @@ interface MusicItem {
   _types: Record<string, any>
   typeUrl: Record<string, any>
 }
+
+// 组件挂载时获取数据
+onMounted(() => {
+  fetchPlaylistSongs()
+})
 
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
@@ -55,6 +73,15 @@ const playlistInfo = ref({
   desc: '',
   isLeaderboard: false,
   meta: {} as Record<string, any>
+})
+
+// 检查是否是本地歌单
+const isLocalPlaylist = computed(() => {
+  return route.query.type === 'local' || route.query.source === 'local'
+})
+
+const isCloudUserPlaylist = computed(() => {
+  return route.query.type === 'cloud_user'
 })
 
 // 获取歌单歌曲列表
@@ -176,7 +203,7 @@ const fetchCloudUserPlaylist = async (reset = false) => {
       if (!hasMore.value) return
       loadingMore.value = true
     }
-
+    console.log('cloudNextPos.value', cloudNextPos.value)
     const limit = pageSize
     const { list: cloudSongs, total } = await cloudSongListAPI.getSongListDetail(
       cloudId,
@@ -310,6 +337,15 @@ const checkCloudSync = async () => {
         cloud: cloudUpdatedAt,
         local: localUpdatedAt
       })
+      const syncMsg = MessagePlugin.info('正在后台同步本地歌单更新...', 0)
+
+      try {
+        await handleUploadToCloud()
+      } catch {
+        MessagePlugin.error('同步到云端失败')
+      } finally {
+        syncMsg.then((inst) => inst.close())
+      }
     }
   } catch (error) {
     console.error('同步检查失败', error)
@@ -521,6 +557,50 @@ const handlePlayBatchSelected = (batchSongs: any[]) => {
   }
   replacePlaylist(batchSongs as any[], false)
 }
+const handleAddBatchToSongList = async (batchSongs: MusicItem[], playlist: SongList) => {
+  if (!batchSongs || batchSongs.length === 0) {
+    MessagePlugin.warning('未选择歌曲')
+    return
+  }
+  try {
+    const rawSongs = batchSongs.map((song) => toRaw(song) as any)
+    const cloudSongs = mapSongsToCloud(rawSongs as any[])
+
+    if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
+      await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, cloudSongs)
+      MessagePlugin.success(`已将 ${batchSongs.length} 首歌曲添加到云端歌单"${playlist.name}"`)
+      return
+    }
+
+    const result = await songListAPI.addSongs(playlist.id, rawSongs as any)
+    if (result.success) {
+      const added = (result.data && (result.data as any).added) ?? batchSongs.length
+      MessagePlugin.success(`已将 ${added} 首歌曲添加到歌单"${playlist.name}"`)
+
+      if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
+        try {
+          const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, cloudSongs)
+          if (res && res.updatedAt) {
+            const newMeta = await syncLocalMetaWithCloudUpdate(
+              playlist.id,
+              playlist.meta,
+              res.updatedAt
+            )
+            playlist.meta = { ...playlist.meta, ...newMeta, localUpdatedAt: res.updatedAt }
+          }
+        } catch (e: any) {
+          console.error('同步添加到云端失败:', e)
+          MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))
+        }
+      }
+    } else {
+      MessagePlugin.error(result.error || '添加到歌单失败')
+    }
+  } catch (error: any) {
+    console.error('批量添加到歌单失败:', error)
+    MessagePlugin.error('批量添加到歌单失败: ' + (error.message || '未知错误'))
+  }
+}
 
 const handleAddToPlaylist = (song: MusicItem) => {
   console.log('添加到播放列表:', song.name)
@@ -610,22 +690,24 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
     MessagePlugin.warning('仅本地歌单和云歌单支持批量移除')
     return
   }
+  async function removeCloudSongs() {
+    const cloudId = playlistInfo.value.meta?.cloudId || playlistInfo.value.id
+    if (!cloudId) throw new Error('缺少云歌单ID')
 
+    const mids = batchSongs.map((s: any) => String(s.songmid))
+    await cloudSongListAPI.removeSongsFromList(cloudId, mids)
+
+    const set = new Set(mids)
+    songs.value = songs.value.filter((s) => !set.has(String(s.songmid)))
+    playlistInfo.value.total = Math.max(0, (playlistInfo.value.total || 0) - mids.length)
+
+    MessagePlugin.success(`已从云歌单移除 ${mids.length} 首歌曲`)
+    // 退出批量选择模式
+    multiSelect.value = false
+  }
   if (isCloudUserPlaylist.value) {
     try {
-      const cloudId = playlistInfo.value.meta?.cloudId || playlistInfo.value.id
-      if (!cloudId) throw new Error('缺少云歌单ID')
-
-      const mids = batchSongs.map((s: any) => String(s.songmid))
-      await cloudSongListAPI.removeSongsFromList(cloudId, mids)
-
-      const set = new Set(mids)
-      songs.value = songs.value.filter((s) => !set.has(String(s.songmid)))
-      playlistInfo.value.total = Math.max(0, (playlistInfo.value.total || 0) - mids.length)
-
-      MessagePlugin.success(`已从云歌单移除 ${mids.length} 首歌曲`)
-      // 退出批量选择模式
-      multiSelect.value = false
+      await removeCloudSongs()
     } catch (error: any) {
       console.error('批量移除云歌单歌曲失败:', error)
       MessagePlugin.error('批量移除失败: ' + (error.message || '未知错误'))
@@ -649,22 +731,23 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
         playlistInfo.value.total = songs.value.length
 
         if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
-          cloudSongListAPI
-            .removeSongsFromList(playlistInfo.value.meta.cloudId, mids.map(String))
-            .then(async (res) => {
-              if (res && res.updatedAt) {
-                const newMeta = await syncLocalMetaWithCloudUpdate(
-                  playlistInfo.value.id,
-                  playlistInfo.value.meta,
-                  res.updatedAt
-                )
-                playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
-              }
-            })
-            .catch((e) => {
-              console.error('Cloud sync batch delete failed', e)
-              MessagePlugin.error('云端同步批量删除失败: ' + (e.message || '未知错误'))
-            })
+          try {
+            const res = await cloudSongListAPI.removeSongsFromList(
+              playlistInfo.value.meta.cloudId,
+              mids.map(String)
+            )
+            if (res && res.updatedAt) {
+              const newMeta = await syncLocalMetaWithCloudUpdate(
+                playlistInfo.value.id,
+                playlistInfo.value.meta,
+                res.updatedAt
+              )
+              playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
+            }
+          } catch (e: any) {
+            console.error('Cloud sync delete failed', e)
+            MessagePlugin.error('云端同步删除失败: ' + (e.message || '未知错误'))
+          }
         }
 
         MessagePlugin.success(`已移除 ${mids.length} 首歌曲`)
@@ -677,15 +760,6 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
     MessagePlugin.error('批量移除失败')
   }
 }
-
-// 检查是否是本地歌单
-const isLocalPlaylist = computed(() => {
-  return route.query.type === 'local' || route.query.source === 'local'
-})
-
-const isCloudUserPlaylist = computed(() => {
-  return route.query.type === 'cloud_user'
-})
 
 // 多选模式（外部控制）
 const multiSelect = ref(false)
@@ -818,7 +892,7 @@ const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => 
     return
   }
 
-  let finalSongs = [...songsToReplace]
+  let finalSongs = toRaw(songsToReplace)
 
   if (shouldShuffle) {
     // 创建歌曲索引数组并打乱
@@ -831,25 +905,41 @@ const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => 
     // 按打乱的顺序重新排列歌曲
     finalSongs = shuffledIndexes.map((index) => songsToReplace[index])
   }
-
+  const replaceData = finalSongs.map((song) => toRaw(song))
+  console.log('replaceData', replaceData)
   // 使用自定义事件替换整个播放列表
   if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit(
-      'replacePlaylist',
-      finalSongs.map((song) => toRaw(song))
-    )
+    ;(window as any).musicEmitter.emit('replacePlaylist', replaceData)
   }
 
-  // // 更新当前播放状态
-  // if (finalSongs[0]) {
-  //   currentSong.value = finalSongs[0]
-  //   isPlaying.value = true
-  // }
-  // const playerSong = inject('PlaySong',(...args:any)=>args)
-  // nextTick(()=>{
-  //   playerSong(finalSongs[0])
-  // })
   MessagePlugin.success(`请稍等歌曲加载完成播放`)
+}
+
+const playAll = (shouldShuffle = false) => {
+  return async () => {
+    let loadingMsg: Promise<any> | null = null
+    if (!isLocalPlaylist.value && hasMore.value) {
+      loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
+      while (hasMore.value) {
+        if (route.query.type === 'cloud_user') {
+          // 获取服务器歌曲
+          await fetchCloudUserPlaylist(false)
+        } else {
+          // 获取平台的网络歌曲
+          await fetchNetworkPlaylistSongs(false)
+        }
+      }
+      if (loadingMsg) {
+        loadingMsg.then((res) => res.close())
+      }
+    }
+    const paserSongs = toRaw(songs.value.map((song) => toRaw(song)))
+    console.groupCollapsed('playAll:')
+    console.log('songs', paserSongs)
+    console.log('shouldShuffle', shouldShuffle)
+    console.groupEnd()
+    replacePlaylist(paserSongs, shouldShuffle)
+  }
 }
 
 // 播放整个歌单
@@ -866,21 +956,7 @@ const handlePlayPlaylist = () => {
     cancelBtn: '取消',
     onConfirm: async () => {
       dialog.destroy()
-      let loadingMsg: Promise<any> | null = null
-      if (!isLocalPlaylist.value && hasMore.value) {
-        loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
-        while (hasMore.value) {
-          if (route.query.type === 'cloud_user') {
-            await fetchCloudUserPlaylist(false)
-          } else {
-            await fetchNetworkPlaylistSongs(false)
-          }
-        }
-        if (loadingMsg) {
-          loadingMsg.then((res) => res.close())
-        }
-      }
-      replacePlaylist(songs.value, false)
+      await playAll()()
     },
     onCancel: () => {
       dialog.destroy()
@@ -888,12 +964,7 @@ const handlePlayPlaylist = () => {
   })
 }
 // 随机播放歌单
-const handleShufflePlaylist = () => {
-  if (songs.value.length === 0) {
-    MessagePlugin.warning('歌单为空，无法播放')
-    return
-  }
-
+const handleShufflePlaylist = async () => {
   const dialog = DialogPlugin.confirm({
     header: '随机播放歌单',
     body: `确定要用歌单"${playlistInfo.value.title}"中的 ${songs.value.length} 首歌曲随机替换当前播放列表吗？`,
@@ -901,21 +972,7 @@ const handleShufflePlaylist = () => {
     cancelBtn: '取消',
     onConfirm: async () => {
       dialog.destroy()
-      let loadingMsg: Promise<any> | null = null
-      if (!isLocalPlaylist.value && hasMore.value) {
-        loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
-        while (hasMore.value) {
-          if (route.query.type === 'cloud_user') {
-            await fetchCloudUserPlaylist(false)
-          } else {
-            await fetchNetworkPlaylistSongs(false)
-          }
-        }
-        if (loadingMsg) {
-          loadingMsg.then((res) => res.close())
-        }
-      }
-      replacePlaylist(songs.value, true)
+      await playAll(true)()
     },
     onCancel: () => {
       dialog.destroy()
@@ -924,18 +981,22 @@ const handleShufflePlaylist = () => {
 }
 
 const handleSyncPlaylist = async () => {
+  console.log('handleSyncPlaylist', playlistInfo.value)
   // 获取歌单详情
   const load1 = MessagePlugin.loading('正在获取歌单信息,请不要离开页面...', 0)
   const id = playlistInfo.value.id
-  const source = playlistInfo.value.source
+  const source = playlistInfo.value.meta?.source || playlistInfo.value.source
   const playlistId = (playlistInfo.value.meta as { playlistId: string }).playlistId
+  const isLeaderboard = playlistInfo.value.isLeaderboard || playlistInfo.value.meta?.isLeaderboard
 
   const getListDetail = async (page: number) => {
     let detailResult: any
     try {
-      detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
+      const method = isLeaderboard ? 'getLeaderboardDetail' : 'getPlaylistDetail'
+      const requestId = isLeaderboard ? playlistId.replace(/^.*__/, '') : playlistId
+      detailResult = (await window.api.music.requestSdk(method, {
         source,
-        id: playlistId,
+        id: requestId,
         page: page
       })) as any
       console.log('list', detailResult)
@@ -956,6 +1017,9 @@ const handleSyncPlaylist = async () => {
 
   let page: number = 1
   const detailResult = await getListDetail(page)
+  if (!detailResult) {
+    return
+  }
   let new_songs: Array<any> = detailResult.list || []
 
   if (new_songs.length === 0) {
@@ -1036,6 +1100,92 @@ const handleSyncPlaylist = async () => {
   }
 }
 
+const handleSaveToLocal = async () => {
+  if (loading.value) {
+    MessagePlugin.warning('请等待歌单加载完成')
+    return
+  }
+  if (isLocalPlaylist.value || isCloudUserPlaylist.value) {
+    MessagePlugin.warning('当前歌单已是本地/云端歌单')
+    return
+  }
+
+  const playlistId = playlistInfo.value.id
+  if (!playlistId) {
+    MessagePlugin.error('歌单ID为空')
+    return
+  }
+
+  try {
+    const existRes = await songListAPI.search(playlistInfo.value.title || '歌单', 'local')
+    if (existRes.success && Array.isArray(existRes.data)) {
+      const existed = existRes.data.find((item) => item.meta?.playlistId === playlistId)
+      if (existed) {
+        MessagePlugin.warning('已存在同名的本地歌单')
+        return
+      }
+    }
+  } catch (e) {
+    console.error('检查本地歌单失败:', e)
+  }
+
+  const dialog = DialogPlugin.confirm({
+    header: '保存到本地',
+    body: `确定将歌单"${playlistInfo.value.title}"保存到本地吗？`,
+    confirmBtn: '保存',
+    cancelBtn: '取消',
+    onConfirm: async () => {
+      dialog.destroy()
+      const loadingMsg = MessagePlugin.loading('正在保存到本地...', 0)
+      try {
+        if (hasMore.value) {
+          while (hasMore.value) {
+            await fetchNetworkPlaylistSongs(false)
+          }
+        }
+
+        const createRes = await songListAPI.create(
+          playlistInfo.value.title || '歌单',
+          playlistInfo.value.desc || '',
+          (playlistInfo.value.source as any) || 'local',
+          {
+            playlistId,
+            source: playlistInfo.value.source,
+            isLeaderboard: playlistInfo.value.isLeaderboard
+          }
+        )
+        if (!createRes.success || !createRes.data?.id) {
+          throw new Error(createRes.error || '创建歌单失败')
+        }
+        const localId = createRes.data.id
+
+        if (playlistInfo.value.cover) {
+          await songListAPI.updateCover(localId, playlistInfo.value.cover)
+        }
+
+        const addRes = await songListAPI.addSongs(
+          localId,
+          songs.value.map((song) => toRaw(song) as any)
+        )
+        if (!addRes.success) {
+          throw new Error(addRes.error || '保存歌曲失败')
+        }
+
+        loadingMsg.then((inst) => inst.close())
+        MessagePlugin.success(`已保存到本地歌单"${playlistInfo.value.title}"`)
+        window.dispatchEvent(new Event('playlist-updated'))
+      } catch (error: any) {
+        loadingMsg.then((inst) => inst.close())
+        console.error('保存到本地失败:', error)
+        MessagePlugin.error('保存到本地失败: ' + (error.message || '未知错误'))
+      }
+    },
+    onCancel: () => {
+      dialog.destroy()
+    }
+  })
+}
+
 // 为歌单歌曲获取封面图片
 const setPicForPlaylist = async (songs: any[], source: string) => {
   // 筛选出需要获取封面的歌曲
@@ -1112,24 +1262,6 @@ const handleScroll = (event?: Event) => {
   isHeaderCompact.value = scrollTop > 100
 }
 
-// 组件挂载时获取数据
-onMounted(() => {
-  fetchPlaylistSongs()
-})
-
-import { NIcon } from 'naive-ui'
-import { h, type Component } from 'vue'
-import {
-  RefreshIcon,
-  EllipsisIcon,
-  CloudUploadIcon,
-  CloudDownloadIcon,
-  CloudIcon
-} from 'tdesign-icons-vue-next'
-import { useSettingsStore } from '@renderer/store/Settings'
-import { storeToRefs } from 'pinia'
-import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
-
 const renderIcon = (icon: Component) => {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
@@ -1147,8 +1279,8 @@ const handleUploadToCloud = async () => {
       songs.value
     )
     playlistInfo.value.meta = newMeta
-  } catch (e) {
-    // Error already handled in helper
+  } catch (e: any) {
+    MessagePlugin.error('上传失败: ' + (e.message || '未知错误'))
   }
 }
 
@@ -1165,8 +1297,8 @@ const handleSyncToCloud = async () => {
       songs.value
     )
     playlistInfo.value.meta = newMeta
-  } catch (e) {
-    // Error already handled in helper
+  } catch (e: any) {
+    MessagePlugin.error('同步失败: ' + (e.message || '未知错误'))
   }
 }
 
@@ -1206,18 +1338,25 @@ const moreActions = computed(() => [
   {
     label: '同步歌单',
     key: 'syncPlaylist',
-    disabled: !('playlistId' in playlistInfo.value.meta),
+    show: 'playlistId' in playlistInfo.value.meta,
     icon: renderIcon(RefreshIcon)
   },
   {
     label: multiSelect.value ? '取消批量选择' : '批量选择',
-    key: 'toggleMultiSelect'
+    key: 'toggleMultiSelect',
+    icon: renderIcon(RootListFilledIcon)
   },
   {
     label: '上传到云端',
     key: 'uploadToCloud',
     show: isLocalPlaylist.value && !playlistInfo.value.meta?.cloudId,
     icon: renderIcon(CloudUploadIcon)
+  },
+  {
+    label: '保存到本地',
+    key: 'saveToLocal',
+    show: !isLocalPlaylist.value && !isCloudUserPlaylist.value,
+    icon: renderIcon(CloudDownloadIcon)
   },
   {
     label: '同步到云端',
@@ -1235,6 +1374,10 @@ const moreActions = computed(() => [
 function handleMoreAction(key: string) {
   if (key === 'syncPlaylist') {
     handleSyncPlaylist()
+    return
+  }
+  if (key === 'saveToLocal') {
+    handleSaveToLocal()
     return
   }
   if (key === 'uploadToCloud') {
@@ -1343,55 +1486,6 @@ const filteredMoreActions = computed(() =>
               </template>
               随机播放
             </t-button>
-
-            <!-- <t-button
-              variant="outline"
-              size="medium"
-              :disabled="!('playlistId' in playlistInfo.meta)"
-              class="sync-btn"
-              @click="handleSyncPlaylist"
-            >
-              <template #icon>
-                <svg
-                  t="1767633150266"
-                  class="icon"
-                  viewBox="0 0 1024 1024"
-                  version="1.1"
-                  xmlns="http://www.w3.org/2000/svg"
-                  p-id="8804"
-                  width="96"
-                  height="96"
-                >
-                  <path
-                    d="M512.881 893.207c-49.82 0.001-98.547-9.233-143.443-27.632-41.295-16.924-77.161-40.7-106.603-70.67-30.839-31.393-53.186-68.148-66.418-109.248a275.173 275.173 0 0 1-5.817-20.855c-4.07-17.197 6.571-34.439 23.769-38.51 17.198-4.067 34.439 6.571 38.51 23.77a210.575 210.575 0 0 0 4.458 15.981c32.548 101.093 136.931 163.071 255.752 163.075 35.771 0.001 72.84-5.615 109.663-17.471 132.818-42.764 224.054-154.224 221.867-271.051-0.331-17.67 13.726-32.262 31.396-32.593 17.666-0.329 32.263 13.725 32.593 31.396 2.711 144.819-106.771 281.823-266.24 333.168-42.779 13.774-86.541 20.638-129.487 20.64z"
-                    fill=""
-                    p-id="8805"
-                  ></path>
-                  <path
-                    d="M343.863 715.014c-4.905 0-9.88-1.131-14.546-3.518l-136.431-69.784c-15.734-8.048-21.965-27.327-13.917-43.062 8.048-15.735 27.328-21.965 43.062-13.917l136.431 69.784c15.734 8.048 21.965 27.327 13.917 43.062-5.662 11.068-16.883 17.435-28.516 17.435z"
-                    fill=""
-                    p-id="8806"
-                  ></path>
-                  <path
-                    d="M159.304 791.391c-3.27 0-6.593-0.505-9.872-1.567-16.812-5.448-26.024-23.494-20.576-40.307l47.242-145.779c5.448-16.813 23.494-26.025 40.307-20.576 16.812 5.448 26.024 23.494 20.576 40.307l-47.242 145.779c-4.386 13.532-16.937 22.143-30.435 22.143zM190.328 515.136c-17.395 0-31.655-13.936-31.982-31.402-2.71-144.82 106.771-281.824 266.241-333.168 92.403-29.751 189.333-27.268 272.929 6.993 41.295 16.923 77.161 40.7 106.603 70.669 30.84 31.393 53.187 68.149 66.419 109.249a274.835 274.835 0 0 1 5.817 20.854c4.07 17.198-6.57 34.439-23.769 38.511-17.2 4.069-34.439-6.571-38.511-23.769a210.987 210.987 0 0 0-4.458-15.981c-42.349-131.526-206.271-196.845-365.416-145.605-132.818 42.763-224.053 154.222-221.867 271.05 0.331 17.67-13.725 32.262-31.396 32.593-0.203 0.004-0.407 0.006-0.61 0.006z"
-                    fill=""
-                    p-id="8807"
-                  ></path>
-                  <path
-                    d="M859.469 441.917c-4.904 0-9.88-1.13-14.546-3.517l-136.432-69.784c-15.734-8.048-21.965-27.327-13.917-43.062 8.048-15.733 27.327-21.966 43.062-13.917l136.432 69.784c15.734 8.048 21.965 27.327 13.917 43.062-5.662 11.068-16.882 17.434-28.516 17.434z"
-                    fill=""
-                    p-id="8808"
-                  ></path>
-                  <path
-                    d="M860.421 441.539c-3.27 0-6.594-0.505-9.872-1.567-16.813-5.448-26.024-23.494-20.576-40.307l47.242-145.779c5.448-16.812 23.496-26.023 40.307-20.576 16.813 5.448 26.024 23.494 20.576 40.307l-47.242 145.779c-4.386 13.533-16.938 22.143-30.435 22.143z"
-                    fill=""
-                    p-id="8809"
-                  ></path>
-                </svg>
-              </template>
-              同步歌单
-            </t-button> -->
-
             <n-dropdown
               trigger="hover"
               :options="filteredMoreActions"
@@ -1438,6 +1532,7 @@ const filteredMoreActions = computed(() =>
           @add-to-playlist="handleAddToPlaylist"
           @remove-from-local-playlist="handleRemoveFromLocalPlaylist"
           @remove-batch="handleRemoveBatchSelected"
+          @add-to-song-list-batch="handleAddBatchToSongList"
           @scroll="handleScroll"
           @exit-multi-select="handleExitMultiSelect"
         />
