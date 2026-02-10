@@ -33,8 +33,6 @@ declare module 'vue' {
     NCard: typeof import('naive-ui')['NCard']
     NCollapseTransition: typeof import('naive-ui')['NCollapseTransition']
     NDropdown: typeof import('naive-ui')['NDropdown']
-    NDropdownItem: typeof import('naive-ui')['NDropdownItem']
-    NDropdownMenu: typeof import('naive-ui')['NDropdownMenu']
     NIcon: typeof import('naive-ui')['NIcon']
     NModal: typeof import('naive-ui')['NModal']
     NScrollbar: typeof import('naive-ui')['NScrollbar']
