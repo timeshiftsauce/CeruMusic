@@ -248,7 +248,10 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
     songFile.tag.albumArtists = artists
 
     if (tagWriteOptions.lyrics && songInfo?.lrc) {
-      songFile.tag.lyrics = convertLrcFormat(songInfo.lrc)
+      songFile.tag.lyrics =
+        tagWriteOptions.lyricFormat === 'word-by-word'
+          ? convertLrcFormat(songInfo.lrc)
+          : convertToStandardLrc(songInfo.lrc)
     }
 
     if (coverPath && fs.existsSync(coverPath)) {
