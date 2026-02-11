@@ -594,7 +594,8 @@ class CeruMusicPluginHost {
       // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
       //   url,
       //   status: response.status,
-      //   bodyType: typeof body
+      //   body: body,
+      //   spend: Date.now() - date
       // })
 
       return result
