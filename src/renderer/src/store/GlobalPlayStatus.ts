@@ -7,6 +7,7 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
 import _ from 'lodash'
 import defaultCover from '@renderer/assets/images/song.jpg'
+import { playSetting } from './playSetting'
 
 interface Player {
   songId?: string
@@ -111,7 +112,7 @@ export const useGlobalPlayStatusStore = defineStore(
   'globalPlayStatus',
   () => {
     const localUserStore = LocalUserDetailStore()
-
+    const playSettingStore = playSetting()
     const player = reactive<Player>({
       songId: void 0,
       songInfo: DEFAULT_SONG_INFO,
@@ -308,7 +309,9 @@ export const useGlobalPlayStatusStore = defineStore(
               try {
                 const lyricData = await window.api.music.requestSdk('getLyric', {
                   source,
-                  songInfo: getCleanSongInfo()
+                  songInfo: getCleanSongInfo(),
+                  grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
+                  useStrictMode: playSettingStore.getStrictGrep
                 })
                 console.log('平台 Lyrics 获取成功')
 
@@ -359,7 +362,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics as LyricLine[]
 
-              sdkPromise.catch(() => {})
+              sdkPromise.catch(() => { })
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return
@@ -379,7 +382,9 @@ export const useGlobalPlayStatusStore = defineStore(
           } else if (source !== 'local') {
             const lyricData = await window.api.music.requestSdk('getLyric', {
               source,
-              songInfo: getCleanSongInfo()
+              songInfo: getCleanSongInfo(),
+              grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
+              useStrictMode: playSettingStore.getStrictGrep
             })
             if (!active) return
 

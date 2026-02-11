@@ -74,9 +74,51 @@ function main(source: string = 'wy') {
       }
     },
 
-    async getLyric({ songInfo }: GetLyricArg) {
+    async getLyric({ songInfo, grepLyricInfo = false, useStrictMode = true }: GetLyricArg) {
       try {
+        console.log('getLyric', songInfo, grepLyricInfo, useStrictMode)
         const res = await Api.getLyric(songInfo).promise
+        if (res && grepLyricInfo) {
+          const grepKeyRaw = [
+            '作曲',
+            '作词',
+            '编曲',
+            '制作人',
+            '专辑',
+            '时间',
+            '时长',
+            '发行',
+            'OP',
+            'SP',
+            '词',
+            '曲',
+            '吉他',
+            '贝斯',
+            '录音',
+            '混音',
+            '出品',
+            '演唱',
+            '和声',
+            '弦乐',
+            '企划',
+            '录音室'
+          ]
+          const grepKey = grepKeyRaw.map((key) => `.*${key}.*`)
+          const regex = new RegExp(`^.*(${grepKey.join('|')})[:：]\s*(.+)(\n)*$`, 'gm')
+          // 匹配带冒号的行（含时间戳前缀）
+          const pureLyric = (lyric: string[]) =>
+            lyric.filter((line) => !/^\[\d+[:,][\d.]+].+[：:].+$/.test(line))
+
+          const lyric = {}
+          for (const key in res) {
+            if (!useStrictMode) {
+              lyric[key] = res[key]?.replace(regex, '') || ''
+            } else {
+              lyric[key] = pureLyric(res[key]?.split('\n') || []).join('\n') || ''
+            }
+          }
+          return lyric
+        }
         return res
       } catch (e: any) {
         return {

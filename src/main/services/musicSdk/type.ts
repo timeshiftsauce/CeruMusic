@@ -48,6 +48,8 @@ export interface GetMusicPicArg {
 
 export interface GetLyricArg {
   songInfo: MusicItem
+  grepLyricInfo?: boolean
+  useStrictMode?: boolean
 }
 
 interface Playlist {
