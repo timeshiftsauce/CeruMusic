@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.8.1",
+  "version": "1.8.5",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -33,8 +33,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "@applemusic-like-lyrics/lyric": "^0.2.4",
-    "@applemusic-like-lyrics/vue": "^0.1.5",
+    "@applemusic-like-lyrics/lyric": "^0.3.0",
+    "@applemusic-like-lyrics/vue": "^0.2.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@langchain/core": "^0.3.71",

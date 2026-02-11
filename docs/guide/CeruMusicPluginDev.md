@@ -84,7 +84,8 @@ async function musicUrl(source, musicInfo, quality) {
         ...你的其他参数 可以 是密钥或者其他...
       },
       body: JSON.stringify({
-        id: musicInfo.id,
+        id: musicInfo.id, // 兼容1.8.6版本之前最好使用 songmid || hash 否则会报错
+        // id: musicInfo.songmid || musicInfo.hash
         qualitys: quality
       })
     });
@@ -130,7 +131,7 @@ module.exports = {
 };
 ```
 
-> #### PS:
+> #### PS
 >
 > - `sources key` 取值
 >   - wy 网易云音乐 |
@@ -146,7 +147,7 @@ module.exports = {
 >   }
 >   ```
 >
-> - 支持的音质 ` sources.qualitys: ['128k', '320k', 'flac']`
+> - 支持的音质 `sources.qualitys: ['128k', '320k', 'flac']`
 >   - `128k`: 128kbps
 >   - `320k`: 320kbps
 >   - `flac`: FLAC 无损
@@ -154,6 +155,272 @@ module.exports = {
 >   - `hires`: Hi-Res 高解析度
 >   - `atmos`: 杜比全景声
 >   - `master`: 母带音质
+
+### 澜音格式详解与进阶
+
+#### 核心导出约定
+
+- 以 CommonJS 形式导出方法集合：
+- 必需：`pluginInfo`、`sources`、`musicUrl`
+- 可选：`getPic`、`getLyric`
+- `pluginInfo` 与文件头注释一致，用于在插件管理界面展示
+- `sources` 用于声明支持的音源及音质
+
+```javascript
+module.exports = {
+  pluginInfo: {
+    name: '示例音乐源',
+    version: '1.0.0',
+    author: 'you',
+    description: '示例'
+  },
+  sources: {
+    kw: { name: '酷我音乐', qualitys: ['128k', '320k', 'flac', 'flac24bit'] },
+    tx: { name: 'QQ音乐', qualitys: ['128k', '320k', 'flac'] }
+  },
+  async musicUrl(source, musicInfo, quality) { /* ... */ },
+  async getPic(source, musicInfo) { /* ... */ },
+  async getLyric(source, musicInfo) { /* ... */ }
+}
+```
+
+#### 方法签名与数据结构
+
+- `musicUrl(source, musicInfo, quality)`
+  - `source`: 音源 ID（`kw`、`tx`、`kg`、`wy`、`mg`、`local`）
+  - `musicInfo`: 歌曲信息对象，优先使用 `id`；为兼容 ≤1.8.6 可回退 `songmid` 或 `hash`
+  - `quality`: 期望音质字符串（如 `'320k'`、`'flac'`、`'flac24bit'`）
+  - 返回：可播放直链字符串
+- `getPic(source, musicInfo)`
+  - 返回：封面图片 URL 字符串
+- `getLyric(source, musicInfo)`
+  - 返回：歌词字符串
+
+质量映射示例（当第三方 API 使用不同枚举时）：
+
+```javascript
+const qualityMap = {
+  kw: { '128k': '128', '320k': '320', flac: 'flac', flac24bit: 'flac24bit' },
+  tx: { '128k': '128', '320k': '320', flac: 'flac' }
+}
+```
+
+#### 最小可用模板
+
+```javascript
+/**
+ * @name 示例音乐源
+ * @description CeruMusic 原生插件最小模板
+ */
+
+const pluginInfo = {
+  name: '示例音乐源',
+  version: '1.0.0',
+  author: 'you',
+  description: '最小模板'
+}
+
+const sources = {
+  kw: { name: '酷我音乐', qualitys: ['128k', '320k', 'flac'] },
+  tx: { name: 'QQ音乐', qualitys: ['128k', '320k', 'flac'] }
+}
+
+const qualityMap = {
+  kw: { '128k': '128', '320k': '320', flac: 'flac' },
+  tx: { '128k': '128', '320k': '320', flac: 'flac' }
+}
+
+async function musicUrl(source, musicInfo, quality) {
+  const id = musicInfo.id || musicInfo.songmid || musicInfo.hash
+  if (!id) throw new Error('音乐信息不完整')
+  const endpoint = source === 'kw'
+    ? 'https://api.example.com/kw/url'
+    : 'https://api.example.com/tx/url'
+  const resp = await cerumusic.request(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, quality: qualityMap[source]?.[quality] ?? quality }),
+    timeout: 10000
+  })
+  if (resp.statusCode !== 200 || !resp.body?.url) throw new Error('获取音乐链接失败')
+  return resp.body.url
+}
+
+async function getPic(source, musicInfo) {
+  const id = musicInfo.id || musicInfo.songmid || musicInfo.hash
+  const resp = await cerumusic.request(`https://api.example.com/${source}/pic/${id}`, { timeout: 10000 })
+  return resp.body.picUrl
+}
+
+async function getLyric(source, musicInfo) {
+  const id = musicInfo.id || musicInfo.songmid || musicInfo.hash
+  const resp = await cerumusic.request(`https://api.example.com/${source}/lyric/${id}`, { timeout: 10000 })
+  return resp.body.lyric
+}
+
+module.exports = { pluginInfo, sources, musicUrl, getPic, getLyric }
+```
+
+#### 进阶：鉴权、签名、缓存与重试
+
+- 使用加密工具进行签名或生成随机数：
+
+```javascript
+function signPayload(payload, secret) {
+  const base = JSON.stringify(payload) + secret
+  return cerumusic.utils.crypto.md5(base)
+}
+```
+
+- 简易请求缓存与超时控制：
+
+```javascript
+const cache = new Map()
+
+async function cachedMusicUrl(source, musicInfo, quality, ttl = 300000) {
+  const id = musicInfo.id || musicInfo.songmid || musicInfo.hash
+  const key = `${source}:${id}:${quality}`
+  const hit = cache.get(key)
+  if (hit && Date.now() - hit.t < ttl) return hit.url
+  const resp = await cerumusic.request('https://api.example.com/url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, quality }),
+    timeout: 10000
+  })
+  if (resp.statusCode !== 200 || !resp.body?.url) throw new Error('获取音乐链接失败')
+  cache.set(key, { url: resp.body.url, t: Date.now() })
+  return resp.body.url
+}
+```
+
+- 失败重试（指数退避）示例：
+
+```javascript
+async function withRetry(fn, max = 3) {
+  let attempt = 0
+  while (attempt < max) {
+    try {
+      return await fn()
+    } catch (e) {
+      attempt++
+      if (attempt >= max) throw e
+      await new Promise(r => setTimeout(r, 500 * 2 ** (attempt - 1)))
+    }
+  }
+}
+```
+
+#### 安装与调试
+
+- 将插件保存为 UTF-8 编码的 `.js` 文件
+- 在 设置 → 插件管理 中导入插件文件
+- 在 插件管理 → 日志 查看调试输出
+- 使用 `cerumusic.NoticeCenter('update', ...)` 推送更新提示
+
+#### 最佳实践清单
+
+- 优先使用 `musicInfo.id`，并兼容旧字段 `songmid`、`hash`
+- 严格校验返回结构与状态码，抛出明确错误信息
+- 按音源维护质量映射，避免提交无效音质
+- 对热点接口增加缓存与超时，必要时重试
+- 不记录或上传敏感信息；日志中对密钥脱敏
+
+### 插件宿主与运行时
+
+#### 生命周期
+
+- 加载：读取 `.js` 文件代码并在沙箱中执行（Node VM）
+- 校验：必须导出 `pluginInfo`、`sources`、`musicUrl`
+- 初始化：注入 `cerumusic` API、`Buffer`、`JSON`、计时器函数等必要对象
+- 调用：通过宿主统一调用 `musicUrl/getPic/getLyric` 并进行异常捕获与日志记录
+- 卸载：删除插件文件并清理内存中的实例
+
+#### 沙箱环境与安全
+
+- 全局可用对象：`cerumusic`、`console`、`setTimeout/clearTimeout`、`setInterval/clearInterval`、`Buffer`、`JSON`
+- 禁止直接 `require` 外部模块（由宿主注入空实现）
+- `cerumusic.utils.crypto` 支持：
+  - AES 模式：`aes-128-cbc`、`aes-128-ecb`
+  - `md5`、`randomBytes`、`rsaEncrypt(PKCS1, PEM公钥)`
+  - `buffer.from/bufToString` 支持 `utf8/hex/base64` 编码
+
+#### 请求模型与行为
+
+- 默认超时：10 秒（可通过 options.timeout 覆盖）
+- 支持 Promise 和回调两种调用方式
+- 响应解析：
+  - `application/json` 自动解析为对象
+  - `text/*` 解析为字符串
+  - 其他类型先尝试 JSON，失败则返回文本
+- 错误返回统一结构：
+
+```javascript
+{
+  statusCode: 408 | 500,
+  headers: {},
+  body: {
+    error: 'RequestError' | 'AbortError',
+    message: '错误信息',
+    url: '请求的URL'
+  }
+}
+```
+
+#### 插件方法调用契约
+
+- 宿主调用时会：
+  - 对 `musicUrl` 自动兼容旧字段：当 `musicInfo.id` 缺失时回退 `songmid/hash`
+  - 捕获异常并封装为统一错误，记录日志；`musicUrl` 失败时额外记录堆栈
+- 插件返回值：
+  - `musicUrl`：必须返回可播放直链（string）
+  - `getPic`：返回封面 URL（string）
+  - `getLyric`：返回歌词文本（string）
+
+#### 插件信息与 sources 结构
+
+- `pluginInfo` 必须包含 `name/version/author`，可选 `description`
+- `sources` 推荐使用“音源ID到配置”的映射对象：
+
+```javascript
+{
+  kw: { name: '酷我音乐', qualitys: ['128k', '320k', 'flac'] },
+  tx: { name: 'QQ音乐', qualitys: ['128k', '320k', 'flac'] }
+}
+```
+
+- 字段命名：当前 UI/转换器均使用 `qualitys`（注意拼写），请保持一致；如第三方接口要求不同枚举可使用质量映射
+
+#### 通知中心（NoticeCenter）
+
+- 类型：`error`、`info`、`success`、`warn`、`update`
+- 字段：
+  - `title` 必填；`content/url/version/pluginInfo` 可选
+  - `pluginInfo.type` 必须为 `cr` 或 `lx`
+- 用途：版本更新提醒、重要错误或告警提示
+
+#### 日志与观测
+
+- 每个插件拥有独立日志文件，路径：`AppDir/plugins/logs/<pluginId>.txt`
+- 获取日志会返回最近 200 行，并进行文件截断保留
+- 日志级别：`log/info/warn/error/group/groupEnd`
+- 插件调用链路会记录请求耗时和状态，便于定位问题
+
+#### 插件管理与存储
+
+- 安装来源：
+  - 本地选择文件：会进行格式关键字校验（澜音需包含 `cerumusic`，洛雪需包含 `lx`）
+  - URL 下载：30 秒下载超时，空文件拒绝
+  - LX 事件驱动插件将自动转换为澜音方法格式
+- 文件命名：`<pluginId>-<safeFileName>`，`pluginId` 为 UUID（去连字符），名称字符非法将替换为 `_`
+- 重复检查：同名同版本不允许重复安装
+
+#### 错误与异常约定
+
+- 请求级错误：返回 408/500，附带错误信息（见“请求模型与行为”）
+- 方法未实现：抛出 `Action "xxx" is not implemented`，宿主封装为统一错误
+- 业务级错误：插件需抛出明确错误文本，宿主会记录并提示
+- 建议为关键链路实现重试与降级（参考进阶示例）
 
 ### CeruMusic API 参考
 
@@ -221,11 +488,189 @@ cerumusic.NoticeCenter('info', {
 - `'error'`: 错误通知
 - `'update'`: 更新通知
 
+### 插件示例
+
+```javascript
+/*!
+ * @name 澜音源
+ * @description 澜音插件 支持酷我，网易，咪咕平台最高flac
+ * @version v4.0.0
+ * @author 时迁酱
+ * @homepage https://example.com
+ */
+
+// 插件信息
+const pluginInfo = {
+  name: "澜音源",
+  version: "v4.0.0",
+  author: "时迁酱",
+  description: "澜音插件 支持酷我，网易，咪咕平台最高flac",
+  updateMd5: "6cd9d36abc88c641032e483b58c9ec90",
+  apiKey: "",
+  type: "cr",
+};
+
+// 支持的音源配置
+const sources = {
+  kw: {
+    name: "酷我音乐",
+    qualitys: ["128k", "320k", "flac"],
+  },
+  mg: {
+    name: "咪咕音乐",
+    qualitys: ["128k", "320k", "flac"],
+  },
+  wy: {
+    name: "网易云音乐",
+    qualitys: ["128k", "320k", "flac"],
+  },
+};
+// api 地址
+const apiUrl = "";
+// 获取工具函数
+const { request, NoticeCenter } = cerumusic;
+
+// 插件名格式化 修饰
+function pluginName(source) {
+  return `[${pluginInfo.name} <${sources[source].name}>]`;
+}
+
+// 获取音乐链接的主要方法
+async function musicUrl(source, musicInfo, quality) {
+  console.log("收到解析请求", "-------------不优雅的分割线-------------");
+  try {
+    // 检查source是否有效
+    if (!sources[source]) {
+      throw new Error(`无效的音源: ${source}`);
+    }
+
+    // 检查quality是否有效
+    if (!sources[source].qualitys.includes(quality)) {
+      throw new Error(
+        `无效的音质: ${quality}，支持的音质: ${sources[source].qualitys.join(", ")}`,
+      );
+    }
+
+    const songId = musicInfo.hash ?? musicInfo.songmid ?? musicInfo.id;
+
+    if (!songId) {
+      throw new Error("音乐ID不存在");
+    }
+    console.log(
+      `${pluginName(source)} 请求音乐链接: 歌曲ID: ${songId}, 音质: ${quality}`,
+    );
+    // 使用 cerumusic API 发送 HTTP 请求
+    const result = await request(
+      `${apiUrl}/music/url?source=${source}&songId=${songId}&quality=${quality}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": pluginInfo.apiKey,
+          "User-Agent": `CeruMusic-Plugin/${pluginInfo.version}`,
+        },
+        timeout: 15000,
+      },
+    );
+    console.info(`${pluginName(source)} 请求响应数据:`, result.body);
+    console.log(
+      `${pluginName(source)} 请求结束，响应状态码: ${result.statusCode}`,
+    );
+    if (result.statusCode === 200 && result.body && result.body.code === 200) {
+      if (result.body.url) {
+        console.log(
+          `${pluginName(source)} 获取音乐链接成功: ${songId}, 音质: ${quality}, 链接: ${result.body.url}`,
+        );
+        return result.body.url;
+      } else {
+        throw new Error("返回数据中没有音乐链接");
+      }
+    } else if (result.body && result.body.code) {
+      switch (result.body.code) {
+        case 403:
+          // 发送错误通知
+          NoticeCenter("error", {
+            title: "音乐链接获取失败",
+            content: `来源: ${pluginName(source)}, 错误: API Key失效或鉴权失败`,
+          });
+          throw new Error("API Key失效或鉴权失败");
+        case 429:
+          NoticeCenter("error", {
+            title: "音乐链接获取失败",
+            content: `来源: ${pluginName(source)}, 错误: 请求过于频繁，请稍后再试`,
+          });
+          throw new Error("请求过于频繁，请稍后再试");
+        case 500:
+          throw new Error(`服务器错误: ${result.body.message || "未知错误"}`);
+        default:
+          cerumusic.NoticeCenter("error", {
+            title: "音乐链接获取失败",
+            content: `来源: ${pluginName(source)}, 错误: API错误 ${result.body.message || "未知错误"}`,
+          });
+          throw new Error(`API错误: ${result.body.message || "未知错误"}`);
+      }
+    } else {
+      throw new Error(`HTTP请求失败: ${result.statusCode}`);
+    }
+  } catch (error) {
+    console.error(`${pluginName(source)} 获取音乐链接失败:`, error.message);
+    throw new Error(error.message ?? error);
+  }
+}
+
+const checkUpdate = async () => {
+  try {
+    const { body } = await request(
+      `${apiUrl}/script?checkUpdate=${pluginInfo.updateMd5}&key=${pluginInfo.apiKey}&type=${pluginInfo.type}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": `CeruMusic-Plugin/${pluginInfo.version}`,
+        },
+      },
+    );
+    console.log("版本更新检测响应:", body);
+    if (!body || body.code !== 200) {
+      console.error("版本更新检测失败:", body.message || "未知错误");
+    } else {
+      if (body.data != null) {
+        NoticeCenter("update", {
+          title: `${pluginInfo.name} 有新的版本 ${body.data.version}`,
+          content: body.data.updateMsg,
+          url: `${body.data.updateUrl}`, // 可选 当通知为update 版本跟新可传
+          version: body.data.version, // 当通知为update 版本更新可传
+          pluginInfo: {
+            name: pluginInfo.name,
+            type: "cr", // 固定唯一标识
+          }, // 当通知为update 版本跟新可传
+        });
+      } else {
+        console.log(`${pluginInfo.name} 没有新的版本`);
+      }
+    }
+  } catch (error) {
+    console.error("checkUpdate error:", error);
+  }
+};
+checkUpdate().then(() => {
+  console.log("版本更新检测完成");
+});
+
+// 导出插件
+module.exports = {
+  pluginInfo,
+  sources,
+  musicUrl,
+};
+
+```
+
 ---
 
 ## LX 兼容插件开发 引用于落雪官网改编
 
-CeruMusic 完全兼容 LX Music 的插件格式，支持事件驱动的开发模式。
+CeruMusic 可以兼容 LX Music 的插件格式，支持事件驱动的开发模式。
 
 ### 基本结构
 

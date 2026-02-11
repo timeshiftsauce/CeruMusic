@@ -1,12 +1,12 @@
 <script lang="ts" setup>
-// import '@applemusic-like-lyrics/core/style.css'
+import '@applemusic-like-lyrics/core/style.css'
 import {
   BackgroundRender as CoreBackgroundRender,
   PixiRenderer
 } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
-import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick, toRaw } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import {
   Fullscreen1Icon,
@@ -405,12 +405,12 @@ const lyricViewColor = computed(() => {
   return playSetting.getIsImmersiveLyricColor ? lightMainColor.value : 'rgba(255, 255, 255, 1)'
 })
 
-const lyricHeight = computed(() => {
-  return playSetting.getisJumpLyric ? '100%' : '200%'
-})
-const lyricTranslateY = computed(() => {
-  return playSetting.getisJumpLyric ? '0' : '-25%'
-})
+// const lyricHeight = computed(() => {
+//   return playSetting.getisJumpLyric ? '100%' : '200%'
+// })
+// const lyricTranslateY = computed(() => {
+//   return playSetting.getisJumpLyric ? '0' : '-25%'
+// })
 
 // --- 滚动文字逻辑 Start ---
 const titleRef = ref<HTMLElement | null>(null)
@@ -509,7 +509,12 @@ onMounted(() => {
     </Transition>
     <div
       class="playbox"
-      :style="{ padding: playSetting.getLayoutMode === 'cover' ? '0 8vw' : '0 10vw' }"
+      :style="{
+        padding:
+          playSetting.getLayoutMode === 'cover' || !playSetting.getShowLeftPanel
+            ? '0 min(4.5vw, 100px)'
+            : '0 10vw'
+      }"
       :class="{
         'mode-cover': playSetting.getLayoutMode === 'cover',
         'single-column': !showLeftPanel
@@ -521,6 +526,7 @@ onMounted(() => {
       >
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <img
+            :key="player!.songInfo!.songmid as string"
             class="pointer"
             :class="{ playing: isAudioPlaying }"
             src="@renderer/assets/pointer.png"
@@ -553,7 +559,13 @@ onMounted(() => {
         <template v-else-if="playSetting.getLayoutMode === 'cover'">
           <div class="cover-layout-container">
             <div class="cover-wrapper-square" :class="{ playing: controlAudio.Audio.isPlay }">
-              <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
+              <s-image
+                :key="player!.songInfo!.songmid as string"
+                :src="actualCoverImage"
+                class="cover-img-square"
+                shape="round"
+                fit="cover"
+              />
             </div>
             <div class="song-info-area">
               <div ref="titleRef" class="song-title-large text-scroll-container">
@@ -584,17 +596,19 @@ onMounted(() => {
         <component
           :is="playSetting.getUseAmlLyricRenderer ? LyricPlayer : LyricAdapter"
           ref="lyricPlayerRef"
-          :lyric-lines="player.lyrics.lines || []"
+          :lyric-lines="toRaw(player.lyrics.lines) || []"
           :current-time="state.currentTime"
+          :word-fade-width="0.5"
           :playing="isAudioPlaying"
           class="lyric-player"
           :align-position="
-            playSetting.getLayoutMode === 'cd' ? 0.5 : playSetting.getisJumpLyric ? 0.3 : 0.38
+            playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34
           "
           :enable-blur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
           :text-align="!playSetting.getShowLeftPanel ? 'center' : 'left'"
+          :style="playSetting.getShowLeftPanel ? '' : 'text-align: center;'"
           @line-click="jumpTime"
         />
       </div>
@@ -728,11 +742,14 @@ onMounted(() => {
   &.idle {
     .playbox {
       cursor: none;
-      .left {
+      .left,
+      .right {
         margin-bottom: 0;
       }
       .right {
-        margin-bottom: 20px;
+        :deep(.lyric-player) {
+          height: 100vh;
+        }
       }
     }
 
@@ -972,31 +989,38 @@ onMounted(() => {
       );
 
       :deep(.lyric-player) {
+        height: calc(100vh - var(--play-bottom-height));
+        transform: translateY(-80px);
         --amll-lyric-view-color: v-bind(lyricViewColor);
+        --amll-lp-color: v-bind(lyricViewColor);
         transition: color 0.2s;
         font-family: v-bind(lyricFontFamily);
         --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
+        --amll-lp-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
 
         // bottom: max(2vw, 29px);
 
-        height: v-bind(lyricHeight);
-        transform: translateY(v-bind(lyricTranslateY));
-
-        * [class^='lyricMainLine'] {
+        * [class^='_lyricMainLine'] {
           font-weight: 600 !important;
           // text-align: center;
+          margin: -0.8em -1 -0.8em -1;
+          padding: min(1.05em, 38px) 1em min(1.05em, 38px) 1em;
           * {
             font-weight: 600 !important;
           }
         }
-        [class^='interludeDots'] {
-          left: 1.2em;
+        [class^='_interludeDots'] {
+          // left: 1.2em;
+          padding: auto;
+          height: calc(var(--amll-lyric-player-font-size) + 1em);
+          justify-content: center;
+          align-items: center;
         }
-        & > div {
-          padding-bottom: 0;
-          overflow: hidden;
-          transform: translateY(-20px);
-        }
+        // & > div {
+        //   padding-bottom: 0;
+        //   overflow: hidden;
+        //   transform: translateY(-20px);
+        // }
       }
 
       padding: 0 20px;
@@ -1007,15 +1031,16 @@ onMounted(() => {
 
     &.mode-cover {
       .left {
-        width: 50%;
-        padding: 0 6vw;
+        width: 35%;
+        padding: 0 3vw;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: flex-start;
       }
       .right {
-        width: 50%;
+        padding-left: 3vw;
+        width: 65%;
       }
     }
 

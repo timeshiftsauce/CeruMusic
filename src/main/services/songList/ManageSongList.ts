@@ -327,6 +327,11 @@ export default class ManageSongList extends PlayListSongs {
       cleanUpdates.source = updates.source
     }
 
+    // 处理元数据
+    if (updates.meta !== undefined) {
+      cleanUpdates.meta = updates.meta
+    }
+
     return cleanUpdates
   }
 

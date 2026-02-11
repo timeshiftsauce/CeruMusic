@@ -1,7 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
 import LogtoClient, { LogtoClientError } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { useAuthStore } from '@renderer/store'
 
 // 常量定义
 const DEFAULT_AUTH_URL = 'https://auth.shiqianjiang.cn'
@@ -18,6 +17,7 @@ const axiosInstances: Map<string, AxiosInstance> = new Map()
 
 // 辅助函数：登出并通知
 async function logoutAndNotify() {
+  const { useAuthStore } = await import('@renderer/store')
   const userStore = useAuthStore()
   userStore.outlogin()
   MessagePlugin.warning(ERROR_MESSAGES.LOGIN_EXPIRED)
@@ -87,8 +87,7 @@ export class Request {
     }
 
     // 检查是否为认证相关错误
-    const isAuthError =
-      status === 401 || status === 403 || /token|授权|登录|过期|unauth/i.test(String(message))
+    const isAuthError = status === 401 || /token|授权|登录|过期|unauth/i.test(String(message))
 
     if (isAuthError) {
       await logoutAndNotify()
@@ -101,6 +100,11 @@ export class Request {
 
   // 核心请求方法
   async request<T = any>(config: AxiosRequestConfig, returnRaw = false): Promise<T | any> {
+    const authStore = await import('@renderer/store').then((m) => m.useAuthStore())
+    if (!authStore.isAuthenticated) {
+      MessagePlugin.warning('未登录，请先登录')
+      throw new Error('未登录，请先登录')
+    }
     // 1. 获取 Token
     const token = await this.getAccessToken()
 

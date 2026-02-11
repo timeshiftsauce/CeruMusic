@@ -2,65 +2,96 @@
   <div class="song-virtual-list">
     <!-- 表头 -->
     <div class="list-header-container" style="background-color: var(--song-list-header-bg)">
-      <div
-        v-if="!isMultiSelect"
-        class="list-header"
-        :style="{ marginRight: hasScroll ? '10px' : '0' }"
-      >
-        <div v-if="showIndex" class="col-index">#</div>
-        <div class="col-title">标题</div>
-        <div v-if="showAlbum" class="col-album">专辑</div>
-        <div class="col-like">喜欢</div>
-        <div v-if="showDuration" class="col-duration">时长</div>
-      </div>
-      <div v-else class="list-header multi">
-        <div class="multi-left">
-          <div class="select-all">
-            <t-checkbox
-              class="select-all-checkbox"
-              :checked="isAllSelected"
-              @change="toggleSelectAll"
+      <Transition name="header-fade" mode="out-in">
+        <div
+          v-if="!isMultiSelect"
+          class="list-header"
+          :style="{ marginRight: hasScroll ? '10px' : '0' }"
+        >
+          <div v-if="showIndex" class="col-index">#</div>
+          <div class="col-title">标题</div>
+          <div v-if="showAlbum" class="col-album">专辑</div>
+          <div class="col-like">喜欢</div>
+          <div v-if="showDuration" class="col-duration">时长</div>
+        </div>
+        <div v-else class="list-header multi">
+          <div class="multi-left">
+            <div class="select-all">
+              <t-checkbox
+                class="select-all-checkbox"
+                :checked="isAllSelected"
+                @change="toggleSelectAll"
+              >
+                全选
+              </t-checkbox>
+            </div>
+            <t-button
+              class="square-btn"
+              theme="primary"
+              size="small"
+              :disabled="selectedCount === 0"
+              @click="playSelected"
             >
-              全选
-            </t-checkbox>
+              <template #icon>
+                <span class="iconfont icon-bofang"></span>
+              </template>
+            </t-button>
+            <t-button
+              class="action-btn"
+              theme="default"
+              size="small"
+              :disabled="selectedCount === 0"
+              @click="downloadSelected"
+            >
+              批量下载
+            </t-button>
+            <t-dropdown v-if="playlists.length > 0" trigger="click">
+              <t-button
+                class="action-btn"
+                theme="default"
+                size="small"
+                :disabled="selectedCount === 0"
+              >
+                加入歌单
+              </t-button>
+              <t-dropdown-menu>
+                <t-dropdown-item
+                  v-for="playlist in playlists"
+                  :key="playlist.id"
+                  style="max-width: 200px; padding: 5px 10px"
+                  @click="addSelectedToSongList(playlist)"
+                >
+                  {{ playlist.name }}
+                </t-dropdown-item>
+              </t-dropdown-menu>
+            </t-dropdown>
           </div>
-          <t-button
-            class="square-btn"
-            theme="primary"
-            size="small"
-            :disabled="selectedCount === 0"
-            @click="playSelected"
-          >
-            <template #icon>
-              <span class="iconfont icon-bofang"></span>
-            </template>
-          </t-button>
-          <t-button
-            theme="default"
-            size="small"
-            :disabled="selectedCount === 0"
-            @click="downloadSelected"
-          >
-            批量下载
-          </t-button>
-        </div>
-        <div class="multi-right">
-          <span class="selected-info">已选 {{ selectedCount }} 首</span>
-          <t-button
-            theme="danger"
-            size="small"
-            variant="outline"
-            :disabled="!isLocalPlaylist || selectedCount === 0"
-            @click="removeSelected"
-          >
-            <template #icon><DeleteIcon /></template>
-          </t-button>
+          <div class="multi-right">
+            <span class="selected-info">已选 {{ selectedCount }} 首</span>
+            <t-button
+              v-if="isLocalPlaylist"
+              class="action-btn"
+              theme="danger"
+              size="small"
+              variant="outline"
+              :disabled="selectedCount === 0"
+              @click="removeSelected"
+            >
+              <template #icon><DeleteIcon /></template>
+            </t-button>
 
-          <t-button theme="default" size="small" variant="outline" @click="emit('exitMultiSelect')">
-            完成
-          </t-button>
+            <t-button
+              class="action-btn"
+              theme="default"
+              size="small"
+              variant="outline"
+              @click="emit('exitMultiSelect')"
+            >
+              完成
+            </t-button>
+          </div>
         </div>
-      </div>
+      </Transition>
     </div>
 
     <!-- 虚拟滚动容器 -->
@@ -77,7 +108,7 @@
           >
             <!-- 序号或播放状态图标 -->
             <div v-if="showIndex" class="col-index">
-              <span class="track-number">
+              <span v-if="!isMultiSelect" class="track-number">
                 {{ String(visibleStartIndex + index + 1).padStart(2, '0') }}
               </span>
               <button
@@ -202,11 +233,10 @@ import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
 import songListAPI from '@renderer/api/songList'
 import type { SongList } from '@common/types/songList'
 import { MessagePlugin } from 'tdesign-vue-next'
-import {
-  cloudSongListAPI,
-  type CloudSongDto,
-  type CloudSongList
-} from '@renderer/api/cloudSongList'
+import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
+import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
+import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
+import { useAuthStore } from '@renderer/store'
 
 interface Song {
   id?: number
@@ -257,7 +287,8 @@ const emit = defineEmits([
   'scroll',
   'removeFromLocalPlaylist',
   'removeBatch',
-  'exitMultiSelect'
+  'exitMultiSelect',
+  'addToSongListBatch'
 ])
 
 // 虚拟滚动相关状态
@@ -459,6 +490,11 @@ const removeSelected = () => {
   const removeIds = new Set(list.map((s) => s.songmid))
   selectedSet.value = new Set([...selectedSet.value].filter((id) => !removeIds.has(id)))
 }
+const addSelectedToSongList = (playlist: SongList) => {
+  const list = selectedSongs.value
+  if (list.length === 0) return
+  emit('addToSongListBatch', list, playlist)
+}
 
 // 右键菜单项配置
 const contextMenuItems = computed((): ContextMenuItem[] => {
@@ -558,14 +594,16 @@ const closeContextMenu = () => {
 
 // 加载歌单列表
 const loadPlaylists = async () => {
+  const AuthStore = useAuthStore()
   try {
-    const [localRes, cloudRes] = await Promise.all([
-      songListAPI.getAll(),
-      cloudSongListAPI.getUserSongLists().catch((e) => {
-        console.error('Failed to fetch cloud lists', e)
+    async function getCloudSongList() {
+      if (!AuthStore.isAuthenticated) return []
+      return await cloudSongListAPI.getUserSongLists().catch((err) => {
+        MessagePlugin.error(err.message || '获取云歌单失败')
         return []
       })
-    ])
+    }
+    const [localRes, cloudRes] = await Promise.all([songListAPI.getAll(), getCloudSongList()])
 
     const localLists = (localRes.success ? localRes.data : []) || []
     const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
@@ -596,7 +634,7 @@ const loadPlaylists = async () => {
         // Mark as synced
         match.meta.cloudId = c.id
         match.meta.isSynced = true
-        match.meta.cloudUpdatedAt = c.updatedAt
+        match.meta.localUpdatedAt = c.updatedAt
       } else {
         // Cloud only list
         mergedLists.push({
@@ -610,7 +648,7 @@ const loadPlaylists = async () => {
           meta: {
             isCloudOnly: true,
             cloudId: c.id,
-            cloudUpdatedAt: c.updatedAt
+            localUpdatedAt: c.updatedAt
           }
         })
       }
@@ -708,20 +746,7 @@ const onToggleLike = async (song: Song) => {
 // 添加歌曲到歌单
 const handleAddToSongList = async (song: Song, playlist: SongList) => {
   try {
-    const cloudSong: CloudSongDto = {
-      songmid: String(song.songmid),
-      name: song.name,
-      singer: song.singer,
-      albumName: song.albumName,
-      albumId: String(song.albumId),
-      source: song.source,
-      interval: String(song.interval),
-      img: song.img,
-      types: (song.types || []).map((t: any) => ({
-        type: typeof t === 'string' ? t : t.type,
-        size: song._types?.[typeof t === 'string' ? t : t.type]?.size || ''
-      }))
-    }
+    const cloudSong = mapSongsToCloud([song])[0]
 
     // Cloud Only Playlist
     if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
@@ -738,7 +763,17 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
       // 如果是已同步的本地歌单，尝试同步到云端
       if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
         try {
-          await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
+          const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
+          if (res && res.updatedAt) {
+            // Update local meta with new localUpdatedAt
+            const newMeta = await syncLocalMetaWithCloudUpdate(
+              playlist.id,
+              playlist.meta,
+              res.updatedAt
+            )
+            // Update in-memory playlist object to reflect change immediately
+            playlist.meta = { ...playlist.meta, ...newMeta, localUpdatedAt: res.updatedAt }
+          }
         } catch (e: any) {
           console.error('同步添加到云端失败:', e)
           MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))
@@ -821,8 +856,8 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  height: 40px;
+  /* padding: 0 10px; */
+  height: 48px;
   box-sizing: border-box;
 }
 .multi-left,
@@ -861,17 +896,27 @@ watch(
   align-items: center;
   justify-content: center;
 }
+.action-btn {
+  border-radius: 8px;
+  height: 32px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .list-header {
   display: grid;
   grid-template-columns: 50px 1fr 200px 60px 80px;
-  padding: 8px 10px;
+  padding: 0 10px;
   background: var(--song-list-header-bg);
   border-bottom: 1px solid var(--song-list-header-border);
   font-size: 12px;
   color: var(--song-list-header-text);
   flex-shrink: 0;
+  transition: height 0.3s ease;
   height: 40px;
+  overflow: hidden;
   box-sizing: border-box;
   align-items: center;
 
@@ -1307,5 +1352,16 @@ watch(
       }
     }
   }
+}
+
+.header-fade-enter-active,
+.header-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.header-fade-enter-from,
+.header-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

@@ -244,6 +244,7 @@ onMounted(() => {
   })
 })
 const backTop = ref(false)
+const scrollTop = ref(0)
 onUnmounted(() => {
   if (watchSource) {
     watchSource()
@@ -252,9 +253,17 @@ onUnmounted(() => {
 })
 onActivated(() => {
   backTop.value = true
+  // 恢复滚动位置
+  if (songlistScrollRef.value) {
+    songlistScrollRef.value.scrollTop = scrollTop.value
+  }
 })
 onDeactivated(() => {
   backTop.value = false
+  // 记录滚动位置
+  if (songlistScrollRef.value) {
+    scrollTop.value = songlistScrollRef.value.scrollTop
+  }
 })
 const songlistScrollRef = ref<HTMLDivElement>()
 </script>
