@@ -11,7 +11,9 @@ export const playSetting = defineStore('playSetting', {
     isBlurLyric: false, // 是否开启模糊歌词
     autoHideBottom: true, // 是否自动隐藏底部控制栏
     isPauseTransition: true, // 是否开启暂停播放过渡
-    useAmlLyricRenderer: true // 使用 AppleMusicLike 的歌词组件渲染
+    useAmlLyricRenderer: true, // 使用 AppleMusicLike 的歌词组件渲染
+    isGrepLyricInfo: false, // 是否开启歌词信息 grep
+    strictGrep: false // 是否开启严格歌词信息 grep
   }),
   getters: {
     getisJumpLyric: (state) => state.isJumpLyric,
@@ -23,7 +25,9 @@ export const playSetting = defineStore('playSetting', {
     getIsBlurLyric: (state) => state.isBlurLyric,
     getAutoHideBottom: (state) => state.autoHideBottom,
     getIsPauseTransition: (state) => state.isPauseTransition,
-    getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer
+    getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer,
+    getIsGrepLyricInfo: (state) => state.isGrepLyricInfo,
+    getStrictGrep: (state) => state.strictGrep
   },
   actions: {
     setIsDumpLyric(isDumpLyric: boolean) {
@@ -55,6 +59,12 @@ export const playSetting = defineStore('playSetting', {
     },
     setUseAmlLyricRenderer(use: boolean) {
       this.useAmlLyricRenderer = use
+    },
+    setIsGrepLyricInfo(isGrepLyricInfo: boolean) {
+      this.isGrepLyricInfo = isGrepLyricInfo
+    },
+    setStrictGrep(strictGrep: boolean) {
+      this.strictGrep = strictGrep
     }
   },
   persist: true

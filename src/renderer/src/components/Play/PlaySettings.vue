@@ -60,6 +60,21 @@ const settingSections = computed(() => [
         update: (val: boolean) => playSetting.setUseAmlLyricRenderer(val)
       }
     ]
+  },
+  {
+    title: '歌词设置',
+    items: [
+      {
+        label: '过滤歌词歌曲信息(下一首生效)',
+        value: playSetting.getIsGrepLyricInfo,
+        update: (val: boolean) => playSetting.setIsGrepLyricInfo(val)
+      },
+      {
+        label: '严格过滤模式(可能误伤)',
+        value: playSetting.getStrictGrep,
+        update: (val: boolean) => playSetting.setStrictGrep(val)
+      }
+    ]
   }
 ])
 </script>
@@ -96,7 +111,7 @@ const settingSections = computed(() => [
       <div class="panel-header" style="margin-top: 24px">{{ section.title }}</div>
       <div v-for="item in section.items" :key="item.label" class="control-row">
         <span>{{ item.label }}</span>
-        <n-switch :value="item.value" @update:value="item.update" />
+        <t-switch :value="item.value" @update:value="item.update" />
       </div>
     </template>
   </div>
