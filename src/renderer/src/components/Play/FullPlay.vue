@@ -545,7 +545,6 @@ onUnmounted(() => {
       >
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <img
-            :key="player!.songInfo!.songmid as string"
             class="pointer"
             :class="{ playing: isAudioPlaying }"
             src="@renderer/assets/pointer.png"
@@ -578,13 +577,7 @@ onUnmounted(() => {
         <template v-else-if="playSetting.getLayoutMode === 'cover'">
           <div class="cover-layout-container">
             <div class="cover-wrapper-square" :class="{ playing: controlAudio.Audio.isPlay }">
-              <s-image
-                :key="player!.songInfo!.songmid as string"
-                :src="actualCoverImage"
-                class="cover-img-square"
-                shape="round"
-                fit="cover"
-              />
+              <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
             </div>
             <div class="song-info-area">
               <div ref="titleRef" class="song-title-large text-scroll-container">
