@@ -195,7 +195,11 @@ class CeruMusicPluginHost {
    * @param quality 音质
    */
   async getMusicUrl(source: string, musicInfo: MusicInfo, quality: string): Promise<string> {
-    return this._callPluginMethod('musicUrl', source, musicInfo, quality)
+    const songinfo = {
+      ...musicInfo,
+      id: musicInfo.songmid || musicInfo.hash
+    }
+    return this._callPluginMethod('musicUrl', source, songinfo, quality)
   }
 
   /**
@@ -590,7 +594,8 @@ class CeruMusicPluginHost {
       // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
       //   url,
       //   status: response.status,
-      //   bodyType: typeof body
+      //   body: body,
+      //   spend: Date.now() - date
       // })
 
       return result

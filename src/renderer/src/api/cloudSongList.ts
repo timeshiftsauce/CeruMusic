@@ -1,4 +1,5 @@
 import { Request } from '@renderer/utils/request'
+import { base64ToFile, isBase64 } from '@renderer/utils/file'
 
 // Define types locally or export them
 export interface CloudSongList {
@@ -18,6 +19,7 @@ export interface SongListTypeDto {
 
 export interface CloudSongDto {
   songmid: string
+  hash?: string
   name: string
   singer: string
   albumName: string
@@ -26,7 +28,6 @@ export interface CloudSongDto {
   interval: string
   img: string
   types: SongListTypeDto[]
-  hash?: string
   pos?: number
 }
 
@@ -66,11 +67,6 @@ export const cloudSongListAPI = {
     return unwrap<CloudSongList[]>(request.get(BASE_URL))
   },
 
-  // 获取单个歌单元数据
-  getSongListMeta: (id: string) => {
-    return unwrap<CloudSongList>(request.get(`${BASE_URL}/${id}`))
-  },
-
   // 获取歌单详情
   getSongListDetail: (id: string, sort: 'asc' | 'desc' = 'asc', limit?: number, pos?: number) => {
     if (!id) throw new Error('List ID is required')
@@ -82,7 +78,7 @@ export const cloudSongListAPI = {
   },
 
   // 创建歌单
-  createUserSongList: (data: CreateUserSongListDto) => {
+  createUserSongList: async (data: CreateUserSongListDto) => {
     const formData = new FormData()
     formData.append('localId', data.localId)
     formData.append('name', data.name)
@@ -90,7 +86,21 @@ export const cloudSongListAPI = {
 
     if (data.cover) {
       if (typeof data.cover === 'string') {
-        formData.append('cover', data.cover.trim())
+        console.log('data.cover', data.cover, isBase64(data.cover))
+        if (isBase64(data.cover)) {
+          // Convert base64 to file and append
+          formData.append('cover', base64ToFile(data.cover, 'cover.png'))
+        } else if (data.cover.startsWith('blob:')) {
+          try {
+            const res = await fetch(data.cover)
+            const blob = await res.blob()
+            formData.append('cover', blob, 'cover.png')
+          } catch (e) {
+            console.error('Failed to fetch blob cover', e)
+          }
+        } else {
+          formData.append('cover', data.cover.trim())
+        }
       } else {
         formData.append('cover', data.cover)
       }
@@ -103,7 +113,7 @@ export const cloudSongListAPI = {
   },
 
   // 更新歌单
-  updateUserSongList: (data: UpdateUserSongListDto) => {
+  updateUserSongList: async (data: UpdateUserSongListDto) => {
     const formData = new FormData()
     formData.append('listId', data.listId)
     if (data.localId) formData.append('localId', data.localId)
@@ -112,7 +122,20 @@ export const cloudSongListAPI = {
 
     if (data.cover) {
       if (typeof data.cover === 'string') {
-        formData.append('cover', data.cover.trim())
+        if (isBase64(data.cover)) {
+          // Convert base64 to file and append
+          formData.append('cover', base64ToFile(data.cover, 'cover.png'))
+        } else if (data.cover.startsWith('blob:')) {
+          try {
+            const res = await fetch(data.cover)
+            const blob = await res.blob()
+            formData.append('cover', blob, 'cover.png')
+          } catch (e) {
+            console.error('Failed to fetch blob cover', e)
+          }
+        } else {
+          formData.append('cover', data.cover.trim())
+        }
       } else {
         formData.append('cover', data.cover)
       }
@@ -136,7 +159,7 @@ export const cloudSongListAPI = {
 
   // 添加歌曲到歌单
   addSongsToList: (id: string, songs: CloudSongDto[]) => {
-    return unwrap(
+    return unwrap<{ updatedAt: string }>(
       request.patch(`${BASE_URL}/list`, {
         id,
         songs
@@ -146,7 +169,7 @@ export const cloudSongListAPI = {
 
   // 从歌单删除歌曲
   removeSongsFromList: (id: string, songmids: string[]) => {
-    return unwrap(
+    return unwrap<{ updatedAt: string }>(
       request.delete(`${BASE_URL}/list`, {
         data: {
           id,
