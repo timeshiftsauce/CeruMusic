@@ -65,9 +65,13 @@ let animatingTimer: any = null
 
 // 自动隐藏相关逻辑
 const isIdle = ref(false)
+const isHide = ref(false)
 let idleTimer: any = null
 
 const resetIdleTimer = () => {
+  // 如果当前为隐藏模式，则不自动清除
+  if (isHide.value) return
+
   if (!playSetting.getAutoHideBottom) {
     isIdle.value = false
     emit('idle-change', false)
@@ -89,6 +93,17 @@ const resetIdleTimer = () => {
         emit('idle-change', true)
       }
     }, 3000)
+  }
+}
+
+const handleKeyDown = (e: { key: string; preventDefault: () => void }) => {
+  if (e.key === 'F1') {
+    e.preventDefault()
+    // 切换隐藏状态
+    isHide.value = !isHide.value
+    // 隐藏界面
+    isIdle.value = isHide.value
+    emit('idle-change', isHide.value)
   }
 }
 
@@ -459,10 +474,14 @@ const debouncedCheckOverflow = _.debounce(checkOverflow, 200)
 onMounted(() => {
   window.addEventListener('resize', debouncedCheckOverflow)
   document.addEventListener('click', handleClickOutside)
+  window.addEventListener('keydown', handleKeyDown)
   // 初始检查
   setTimeout(checkOverflow, 500)
 })
 
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 // removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---
 </script>
