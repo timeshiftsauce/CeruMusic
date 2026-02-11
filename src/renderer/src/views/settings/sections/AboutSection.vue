@@ -2,6 +2,18 @@
 import { ref } from 'vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { storeToRefs } from 'pinia'
+
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
+
+const autoUpdate = ref(settings.value.autoUpdate)
+const updateAutoUpdate = () => {
+  settingsStore.updateSettings({
+    autoUpdate: autoUpdate.value
+  })
+}
 
 const appVersion = ref('1.0.0')
 const isCheckingUpdate = ref(false)
@@ -64,6 +76,10 @@ const openLink = (url: string) => {
       <div class="version-section">
         <Versions />
         <div class="update-actions">
+          <div class="update-option">
+            <t-switch v-model:value="autoUpdate" @change="updateAutoUpdate"></t-switch>
+            <div>应用启动时检查更新</div>
+          </div>
           <t-button theme="primary" :loading="isCheckingUpdate" @click="handleCheckUpdate">
             {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
           </t-button>
@@ -473,7 +489,15 @@ const openLink = (url: string) => {
   position: relative;
 
   .update-actions {
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .update-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
   }
 }
 

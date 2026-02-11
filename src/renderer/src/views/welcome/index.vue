@@ -64,6 +64,11 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { initPlayback } from '@renderer/utils/audio/globaPlayList'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { storeToRefs } from 'pinia'
+
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
 
 const { checkForUpdates } = useAutoUpdate()
 const router = useRouter()
@@ -142,9 +147,11 @@ onMounted(async () => {
         loadingText.value = '准备就绪...'
         setTimeout(() => {
           router.replace('/home').then(() => {
-            setTimeout(() => {
-              checkForUpdates()
-            }, 2000)
+            if (settings.value.autoUpdate) {
+              setTimeout(() => {
+                checkForUpdates()
+              }, 2000)
+            }
           })
         }, 200)
       }, waitTime)
