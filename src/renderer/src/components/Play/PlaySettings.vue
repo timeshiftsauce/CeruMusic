@@ -1,6 +1,5 @@
 <script lang="ts" setup>
 import { computed } from 'vue'
-import { NSwitch } from 'naive-ui'
 import { usePlaySettingStore } from '@renderer/store'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { storeToRefs } from 'pinia'
