@@ -576,7 +576,7 @@ class CeruMusicPluginHost {
         ...options,
         signal: controller.signal
       }
-
+      // const date = Date.now()
       const response = await fetch(url, fetchOptions)
       clearTimeout(timeoutId)
 
