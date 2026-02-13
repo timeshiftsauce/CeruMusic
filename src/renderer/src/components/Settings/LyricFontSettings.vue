@@ -2,20 +2,22 @@
   <div class="lyric-font-settings">
     <t-card title="歌词字体设置" hover-shadow>
       <div class="setting-item">
-        <div class="label">选择字体</div>
+        <div class="label">选择字体（支持多选）</div>
         <div class="control">
           <t-select
             v-model="lyricFontFamily"
             :options="fontOptions"
             placeholder="请选择字体"
             filterable
+            multiple
+            :min-collapsed-num="3"
             @change="handleFontChange"
           />
         </div>
       </div>
       <div class="setting-item">
         <div class="label">预览</div>
-        <div class="preview-box" :style="{ fontFamily: lyricFontFamily }">
+        <div class="preview-box" :style="{ fontFamily: settings.lyricFontFamily }">
           这是一段歌词预览 Text Preview 123
         </div>
       </div>
@@ -34,9 +36,14 @@ const { settings } = storeToRefs(settingsStore)
 
 // Local state for v-model to sync with settings store
 const lyricFontFamily = computed({
-  get: () => settings.value.lyricFontFamily || 'PingFangSC-Semibold',
-  set: (val) => {
-    settingsStore.updateSettings({ lyricFontFamily: val })
+  get: () => {
+    const font = settings.value.lyricFontFamily || 'PingFangSC-Semibold'
+   // Split by comma and filter empty strings to get array for multi-select
+    return font.split(',').filter(Boolean)
+  },
+  set: (val: string[]) => {
+  // Join by comma to store as string
+    settingsStore.updateSettings({ lyricFontFamily: val.join(',') })
   }
 })
 
