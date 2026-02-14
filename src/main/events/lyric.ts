@@ -217,7 +217,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
           }, 1000)
         }
       }
-    } catch { }
+    } catch {}
     mainWin?.webContents.send('lyric-window-ready')
   })
 

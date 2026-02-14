@@ -27,7 +27,7 @@
           <p class="brand-subtitle">
             {{
               showNewYear
-                ? '澜音伴你，每一声波澜，都是新生；愿岁月长青，欢乐满盈。'
+                ? '每一次播放都是出发，愿你的2026如旋律般自由奔腾，心有所向，皆是坦途。'
                 : '纯净 · 极致 · 自由'
             }}
           </p>
@@ -79,17 +79,14 @@ const loadingPercent = ref(0)
 // 保存定时器ID以便清理
 let timer: number | null = null
 
-const features = ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
-
 const progressWidth = computed(() => `${loadingPercent.value}%`)
 
-const showNewYear = computed(() => {
-  const preview = localStorage.getItem('ceru_welcome_newyear_preview')
-  if (preview === '1') return true
-  const now = new Date()
-  const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
-  return today >= 20260101 && today <= 20260103
-})
+const showNewYear = computed(
+  () => settingsStore.shouldUseSpringFestivalTheme() && !settings.value.springFestivalDisabled
+)
+const features = showNewYear.value
+  ? ['岁岁长安', '功不唐捐', '马年吉祥', '马越新程']
+  : ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
 
 onMounted(async () => {
   // 获取版本号

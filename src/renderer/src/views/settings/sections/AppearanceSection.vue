@@ -96,6 +96,38 @@ const switchStyle = (style: 'windows' | 'traffic-light'): void => {
         </div>
         <ThemeSelector />
       </div>
+
+      <t-divider />
+
+      <div
+        v-if="settingsStore.shouldUseSpringFestivalTheme()"
+        id="appearance-festival-theme"
+        class="setting-group-item"
+      >
+        <div class="setting-label">
+          <h4>节日主题(限时体验)</h4>
+          <p>当前为春节主题，您可以选择关闭</p>
+        </div>
+        <div class="setting-control" style="display: flex; align-items: center; gap: 10px">
+          <t-button
+            v-if="!settings.springFestivalDisabled"
+            theme="danger"
+            @click="settingsStore.disableSpringFestivalTheme()"
+          >
+            关闭春节主题
+          </t-button>
+          <template v-else>
+            <t-tag theme="default">春节主题已关闭</t-tag>
+            <t-button
+              theme="success"
+              variant="outline"
+              @click="settingsStore.enableSpringFestivalTheme()"
+            >
+              开启春节主题
+            </t-button>
+          </template>
+        </div>
+      </div>
     </t-card>
 
     <!-- 歌词设置 -->
