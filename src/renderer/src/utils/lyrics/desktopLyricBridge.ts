@@ -24,21 +24,32 @@ function lineText(line?: LyricLine) {
   return (line?.words || []).map((w) => w.word).join('').trim()
 }
 
-function buildLyricPayload(lines: LyricLine[], source?: string) {
+interface DesktopLyricFrame {
+  lyric: Array<{ content: string; tran: string }>
+  mapIndex: (rawIndex: number) => number
+}
+
+function buildLyricFrame(lines: LyricLine[], source?: string): DesktopLyricFrame {
   const raw = lines || []
   if (source !== 'local') {
-    return raw.map((l) => ({
+    const lyric = raw.map((l) => ({
       content: lineText(l),
       tran: (l.translatedLyric || '').trim()
     }))
+    return {
+      lyric,
+      mapIndex: (rawIndex: number) => rawIndex
+    }
   }
 
   // 本地 LRC 常见同时间戳双行：第一行原文，第二行翻译。
   // 将其合并成一条，避免把翻译误当作“下一句歌词”。
-  const merged: Array<{ content: string; tran: string }> = []
+  const lyric: Array<{ content: string; tran: string }> = []
+  const rawToMerged = new Map<number, number>()
   const sameTimeTolerance = 120
 
   for (let i = 0; i < raw.length; i++) {
+    const rawIndex = i
     const cur = raw[i]
     const curContent = lineText(cur)
     const curTran = (cur.translatedLyric || '').trim()
@@ -59,17 +70,22 @@ function buildLyricPayload(lines: LyricLine[], source?: string) {
 
       if (canPair) {
         tran = nextContent
+        rawToMerged.set(i + 1, lyric.length)
         i++
       }
     }
 
-    merged.push({
+    rawToMerged.set(rawIndex, lyric.length)
+    lyric.push({
       content: curContent,
       tran
     })
   }
 
-  return merged
+  return {
+    lyric,
+    mapIndex: (rawIndex: number) => rawToMerged.get(rawIndex) ?? rawIndex
+  }
 }
 
 function computeLyricIndex(timeMs: number, lines: LyricLine[], leadMs = 0) {
@@ -98,9 +114,10 @@ export function installDesktopLyricBridge() {
     () => player.value.lyrics.lines,
     (lines) => {
       lastIndex = -1
+      const frame = buildLyricFrame(lines, (player.value.songInfo as any)?.source)
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
         index: -1,
-        lyric: buildLyricPayload(lines, (player.value.songInfo as any)?.source)
+        lyric: frame.lyric
       })
       // 提示前端进入准备态
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
@@ -137,13 +154,15 @@ export function installDesktopLyricBridge() {
     const rawCurrentTime = a?.audio?.currentTime ?? a?.currentTime ?? 0
     const ms = Math.round(rawCurrentTime * 1000)
     const currentLines = player.value.lyrics.lines || []
+    const frame = buildLyricFrame(currentLines, (player.value.songInfo as any)?.source)
     const adjustedMs = ms + DESKTOP_LYRIC_LEAD_MS
-    const idx = computeLyricIndex(ms, currentLines, DESKTOP_LYRIC_LEAD_MS)
+    const rawIdx = computeLyricIndex(ms, currentLines, DESKTOP_LYRIC_LEAD_MS)
+    const idx = frame.mapIndex(rawIdx)
 
     // 计算当前行进度（0~1）
     let progress = 0
-    if (idx >= 0 && currentLines[idx]) {
-      const line = currentLines[idx]
+    if (rawIdx >= 0 && currentLines[rawIdx]) {
+      const line = currentLines[rawIdx]
       const dur = Math.max(1, (line.endTime ?? line.startTime + 1) - line.startTime)
       progress = Math.min(1, Math.max(0, (adjustedMs - line.startTime) / dur))
     }
@@ -160,7 +179,7 @@ export function installDesktopLyricBridge() {
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
         index: idx,
-        lyric: buildLyricPayload(currentLines, (player.value.songInfo as any)?.source)
+        lyric: frame.lyric
       })
     }
   }, 50)
