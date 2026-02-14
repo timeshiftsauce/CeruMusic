@@ -1,6 +1,6 @@
 import { createWebHashHistory, createRouter, RouteRecordRaw, RouterOptions } from 'vue-router'
 
-const routes: RouteRecordRaw[] = [
+const appRouter: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'welcome',
@@ -63,12 +63,19 @@ const routes: RouteRecordRaw[] = [
     },
     component: () => import('@renderer/views/settings/index.vue')
   }
-  // {
-  //   path: '/plugins',
-  //   name: 'plugins',
-  //   component: () => import('@renderer/views/settings/plugins.vue')
-  // }
 ]
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    children: appRouter
+  },
+  {
+    path: '/desktop-lyric',
+    name: 'desktop-lyric',
+    component: () => import('@renderer/views/DeskTopLyric/DeskTopLyric.vue')
+  }
+]
+
 function setAnimate(routerObj: RouteRecordRaw[]) {
   for (let i = 0; i < routerObj.length; i++) {
     const item = routerObj[i]
