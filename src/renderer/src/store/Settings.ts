@@ -26,6 +26,7 @@ export interface SettingsState {
   hasConfiguredCloseBehavior?: boolean
   theme?: string // 主题
   isDarkMode?: boolean // 暗色模式
+  springFestivalDisabled?: boolean
 }
 
 export const useSettingsStore = defineStore(
@@ -50,7 +51,8 @@ export const useSettingsStore = defineStore(
       closeToTray: true,
       hasConfiguredCloseBehavior: false,
       theme: 'default',
-      isDarkMode: false
+      isDarkMode: false,
+      springFestivalDisabled: false
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -110,6 +112,9 @@ export const useSettingsStore = defineStore(
       if (typeof settings.value.isDarkMode === 'undefined') {
         settings.value.isDarkMode = false
       }
+      if (typeof settings.value.springFestivalDisabled === 'undefined') {
+        settings.value.springFestivalDisabled = false
+      }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {
           basicInfo: true,
@@ -134,10 +139,36 @@ export const useSettingsStore = defineStore(
       saveSettings()
     }
 
+    const isSpringFestivalWindow = () => {
+      const now = new Date()
+      const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
+      return today >= 20260217 && today <= 20260223
+    }
+
+    const shouldUseSpringFestivalTheme = () => {
+      const preview = localStorage.getItem('ceru_welcome_newyear_preview')
+      if (preview === '1') return true
+      return isSpringFestivalWindow() && !settings.value.springFestivalDisabled
+    }
+
+    const disableSpringFestivalTheme = () => {
+      settings.value.springFestivalDisabled = true
+      saveSettings()
+    }
+
+    const enableSpringFestivalTheme = () => {
+      settings.value.springFestivalDisabled = false
+      saveSettings()
+    }
+
     return {
       settings,
       updateSettings,
-      toggleFloatBall
+      toggleFloatBall,
+      isSpringFestivalWindow,
+      shouldUseSpringFestivalTheme,
+      disableSpringFestivalTheme,
+      enableSpringFestivalTheme
     }
   },
   {

@@ -39,6 +39,153 @@ const showLeftPanel = computed({
   set: (val) => playSetting.setShowLeftPanel(val)
 })
 
+const festivalOverlay = ref<HTMLDivElement | null>(null)
+let fwCanvas: HTMLCanvasElement | null = null
+let fwCtx: CanvasRenderingContext2D | null = null
+let rafId: number | null = null
+let loopId: number | null = null
+let bursts: any[] = []
+let particles: any[] = []
+let lastTime = 0
+let running = false
+const showFestivalEffects = computed(() => settingsStore.shouldUseSpringFestivalTheme())
+
+const rnd = (min: number, max: number) => Math.random() * (max - min) + min
+const pick = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)]
+const colors = ['#ff3b3b', '#ffd65a', '#ff7a00', '#ff2d55', '#ffe08a', '#fa383e', '#ff9f0a']
+
+const resizeCanvas = () => {
+  if (!fwCanvas || !festivalOverlay.value) return
+  const rect = festivalOverlay.value.getBoundingClientRect()
+  fwCanvas.width = Math.floor(rect.width * window.devicePixelRatio)
+  fwCanvas.height = Math.floor(rect.height * window.devicePixelRatio)
+}
+
+const addBurst = (x: number, y: number) => {
+  const c = pick(colors)
+  const count = Math.floor(rnd(40, 80))
+  for (let i = 0; i < count; i++) {
+    const angle = rnd(0, Math.PI * 2)
+    const speed = rnd(2, 6)
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: rnd(60, 120),
+      color: c,
+      alpha: 1,
+      size: rnd(1, 2.8)
+    })
+  }
+  if (particles.length > 2000) {
+    particles.splice(0, particles.length - 2000)
+  }
+}
+
+const scheduleBursts = (w: number, h: number) => {
+  bursts.push({ t: 0, x: rnd(w * 0.15, w * 0.85), y: rnd(h * 0.15, h * 0.5) })
+  bursts.push({ t: 400, x: rnd(w * 0.1, w * 0.9), y: rnd(h * 0.2, h * 0.6) })
+  bursts.push({ t: 800, x: rnd(w * 0.2, w * 0.8), y: rnd(h * 0.15, h * 0.55) })
+  bursts.push({ t: 1200, x: rnd(w * 0.25, w * 0.75), y: rnd(h * 0.1, h * 0.5) })
+  bursts.push({ t: 1600, x: rnd(w * 0.2, w * 0.8), y: rnd(h * 0.15, h * 0.6) })
+}
+
+const step = (ts: number) => {
+  if (!fwCtx || !fwCanvas) return
+  const dt = ts - lastTime
+  lastTime = ts
+  fwCtx.globalCompositeOperation = 'source-over'
+  fwCtx.fillStyle = 'rgba(0,0,0,0)'
+  fwCtx.clearRect(0, 0, fwCanvas.width, fwCanvas.height)
+  const g = 0.05
+  const f = 0.985
+  fwCtx.globalCompositeOperation = 'lighter'
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]
+    p.vx *= f
+    p.vy = p.vy * f + g
+    p.x += p.vx
+    p.y += p.vy
+    p.life -= 1
+    p.alpha = Math.max(0, p.life / 120)
+    fwCtx.beginPath()
+    fwCtx.fillStyle = p.color
+    fwCtx.globalAlpha = p.alpha
+    fwCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+    fwCtx.fill()
+    if (p.life <= 0) particles.splice(i, 1)
+  }
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i]
+    b.t -= dt
+    if (b.t <= 0) {
+      addBurst(b.x, b.y)
+      bursts.splice(i, 1)
+    }
+  }
+  if (running) rafId = requestAnimationFrame(step)
+}
+
+const startFireworks = () => {
+  if (running) return
+  if (!festivalOverlay.value) return
+  fwCanvas = document.createElement('canvas')
+  fwCanvas.style.position = 'absolute'
+  fwCanvas.style.top = '0'
+  fwCanvas.style.left = '0'
+  fwCanvas.style.width = '100%'
+  fwCanvas.style.height = '100%'
+  fwCanvas.style.zIndex = '0'
+  fwCanvas.style.pointerEvents = 'none'
+  festivalOverlay.value.appendChild(fwCanvas)
+  fwCtx = fwCanvas.getContext('2d')
+  resizeCanvas()
+  particles = []
+  bursts = []
+  const w = fwCanvas.width
+  const h = fwCanvas.height
+  scheduleBursts(w, h)
+  scheduleBursts(w, h)
+  lastTime = performance.now()
+  running = true
+  rafId = requestAnimationFrame(step)
+  loopId = window.setInterval(() => {
+    if (!running || !fwCanvas) return
+    const cw = fwCanvas.width
+    const ch = fwCanvas.height
+    scheduleBursts(cw, ch)
+  }, 2200)
+  window.setTimeout(() => stopFireworks(), 14000)
+}
+
+const stopFireworks = () => {
+  running = false
+  if (rafId) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+  if (loopId) {
+    clearInterval(loopId)
+    loopId = null
+  }
+  particles = []
+  bursts = []
+  if (fwCanvas && festivalOverlay.value) {
+    festivalOverlay.value.removeChild(fwCanvas)
+  }
+  fwCanvas = null
+  fwCtx = null
+}
+
+onMounted(() => {
+  window.addEventListener('resize', resizeCanvas)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', resizeCanvas)
+  stopFireworks()
+})
 interface Props {
   show?: boolean
   coverImage?: string
@@ -95,6 +242,17 @@ const resetIdleTimer = () => {
     }, 3000)
   }
 }
+
+watch(
+  () => [props.show, showFestivalEffects.value],
+  (vals) => {
+    const visible = vals[0]
+    const seasonal = vals[1]
+    if (visible && seasonal && !running) startFireworks()
+    if ((!visible || !seasonal) && running) stopFireworks()
+  },
+  { immediate: true }
+)
 
 const handleKeyDown = (e: { key: string; preventDefault: () => void }) => {
   if (e.key === 'F1') {
@@ -501,6 +659,7 @@ onUnmounted(() => {
       ref="backgroundContainer"
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
     ></div>
+    <div v-if="showFestivalEffects" ref="festivalOverlay" class="festival-overlay"></div>
     <!-- 全屏按钮 -->
     <button
       class="fullscreen-btn"
@@ -661,6 +820,15 @@ onUnmounted(() => {
 </template>
 
 <style lang="scss" scoped>
+.festival-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
 .fade-nav-enter-active,
 .fade-nav-leave-active {
   transition: all 0.6s cubic-bezier(0.8, 0, 0.8, 0.43);
