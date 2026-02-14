@@ -3,6 +3,7 @@ export interface lyricConfig {
   mainColor: string
   shadowColor: string
   singleLine?: boolean
+  showTranslation?: boolean
   // 窗口位置
   x?: number
   y?: number

@@ -6,6 +6,7 @@ interface LyricOption {
   mainColor: string
   shadowColor: string
   singleLine: boolean
+  showTranslation: boolean
   x: number
   y: number
   width: number
@@ -19,6 +20,7 @@ const option = ref<LyricOption>({
   mainColor: '#73BCFC',
   shadowColor: 'rgba(255, 255, 255, 0.5)',
   singleLine: false,
+  showTranslation: true,
   x: 0,
   y: 0,
   width: 800,
@@ -163,6 +165,10 @@ onMounted(() => {
               >
             </div>
           </div>
+          <div class="field">
+            <label>翻译</label>
+            <t-switch v-model="option.showTranslation">显示翻译</t-switch>
+          </div>
         </div>
 
         <div class="actions">
@@ -178,26 +184,53 @@ onMounted(() => {
       <div class="preview">
         <div class="preview-label">预览</div>
         <div class="preview-box" :class="{ 'is-single': option.singleLine }">
-          <div
-            class="preview-row current"
-            :style="{
-              fontSize: `${Math.max(16, Math.min(option.fontSize, 42))}px`,
-              color: mainHex,
-              textShadow: `0 0 6px ${shadowColorStr}`
-            }"
-          >
-            {{ option.singleLine ? '这是桌面歌词单行预览' : '当前歌词预览' }}
+          <div class="preview-group current">
+            <div
+              class="preview-row current"
+              :style="{
+                fontSize: `${Math.max(16, Math.min(option.fontSize, 42))}px`,
+                color: mainHex,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              {{ option.singleLine ? '这是桌面歌词单行预览' : '当前歌词预览' }}
+            </div>
+            <div
+              v-if="option.showTranslation"
+              class="preview-row tran"
+              :style="{
+                fontSize: `${Math.max(14, Math.min(option.fontSize - 6, 30))}px`,
+                color: mainHex,
+                opacity: 0.75,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              当前翻译预览
+            </div>
           </div>
-          <div
-            v-if="!option.singleLine"
-            class="preview-row upnext"
-            :style="{
-              fontSize: `${Math.max(14, Math.min(option.fontSize - 2, 36))}px`,
-              color: mainHex,
-              textShadow: `0 0 6px ${shadowColorStr}`
-            }"
-          >
-            下一句预览
+          <div v-if="!option.singleLine" class="preview-group upnext">
+            <div
+              class="preview-row upnext"
+              :style="{
+                fontSize: `${Math.max(14, Math.min(option.fontSize - 2, 36))}px`,
+                color: mainHex,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              下一句预览
+            </div>
+            <div
+              v-if="option.showTranslation"
+              class="preview-row tran"
+              :style="{
+                fontSize: `${Math.max(12, Math.min(option.fontSize - 8, 26))}px`,
+                color: mainHex,
+                opacity: 0.6,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              下一句翻译预览
+            </div>
           </div>
         </div>
       </div>
@@ -271,6 +304,18 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
 }
+.preview-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+}
+.preview-group.current {
+  align-items: flex-start;
+}
+.preview-group.upnext {
+  align-items: flex-end;
+}
 .preview-row {
   font-weight: 700;
   line-height: 1.3;
@@ -285,7 +330,16 @@ onMounted(() => {
   text-align: right;
   opacity: 0.62;
 }
+.preview-row.tran {
+  font-weight: 500;
+}
 .preview-box.is-single .preview-row.current {
+  text-align: center;
+}
+.preview-box.is-single .preview-group.current {
+  align-items: center;
+}
+.preview-box.is-single .preview-row.tran {
   text-align: center;
 }
 </style>

@@ -18,11 +18,56 @@ let installed = false
 let playStateInterval: number | null = null
 let lyricProgressInterval: number | null = null
 
-function buildLyricPayload(lines: LyricLine[]) {
-  return (lines || []).map((l) => ({
-    content: (l.words || []).map((w) => w.word).join(''),
-    tran: l.translatedLyric || ''
-  }))
+function lineText(line?: LyricLine) {
+  return (line?.words || []).map((w) => w.word).join('').trim()
+}
+
+function buildLyricPayload(lines: LyricLine[], source?: string) {
+  const raw = lines || []
+  if (source !== 'local') {
+    return raw.map((l) => ({
+      content: lineText(l),
+      tran: (l.translatedLyric || '').trim()
+    }))
+  }
+
+  // 本地 LRC 常见同时间戳双行：第一行原文，第二行翻译。
+  // 将其合并成一条，避免把翻译误当作“下一句歌词”。
+  const merged: Array<{ content: string; tran: string }> = []
+  const sameTimeTolerance = 120
+
+  for (let i = 0; i < raw.length; i++) {
+    const cur = raw[i]
+    const curContent = lineText(cur)
+    const curTran = (cur.translatedLyric || '').trim()
+    let tran = curTran
+
+    const next = raw[i + 1]
+    if (next) {
+      const nextContent = lineText(next)
+      const nextTran = (next.translatedLyric || '').trim()
+      const sameTime = Math.abs((next.startTime || 0) - (cur.startTime || 0)) <= sameTimeTolerance
+      const canPair =
+        sameTime &&
+        !curTran &&
+        !nextTran &&
+        !!curContent &&
+        !!nextContent &&
+        curContent !== nextContent
+
+      if (canPair) {
+        tran = nextContent
+        i++
+      }
+    }
+
+    merged.push({
+      content: curContent,
+      tran
+    })
+  }
+
+  return merged
 }
 
 function computeLyricIndex(timeMs: number, lines: LyricLine[]) {
@@ -53,7 +98,7 @@ export function installDesktopLyricBridge() {
       lastIndex = -1
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
         index: -1,
-        lyric: buildLyricPayload(lines)
+        lyric: buildLyricPayload(lines, (player.value.songInfo as any)?.source)
       })
       // 提示前端进入准备态
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
@@ -111,7 +156,7 @@ export function installDesktopLyricBridge() {
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', {
         index: idx,
-        lyric: buildLyricPayload(currentLines)
+        lyric: buildLyricPayload(currentLines, (player.value.songInfo as any)?.source)
       })
     }
   }, 100)

@@ -16,7 +16,8 @@ const lyricStore = {
       width: 800,
       height: 180,
       fontFamily: 'PingFangSC-Semibold',
-      singleLine: false
+      singleLine: false,
+      showTranslation: true
     }),
   set: (value: lyricConfig) => configManager.set<lyricConfig>('lyric', value)
 }

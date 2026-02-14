@@ -252,7 +252,7 @@
       .lines-root.single-line .line-b {
         display: none;
       }
-      .lines-root.single-line .line-a .tran {
+      .lines-root.hide-translation .line .tran {
         display: none;
       }
 
@@ -445,6 +445,7 @@
           this._pendingUpnext = null // { wrapEl, textEl, tranEl, data }
           this._lastLyricPayload = { lyric: [] }
           this._singleLine = false
+          this._showTranslation = true
           // 初始化
           this.restoreOptions()
           this.menuClick()
@@ -466,7 +467,7 @@
           const aTran = lineA.querySelector('.tran')
           const bText = lineB.querySelector('.text')
           const bTran = lineB.querySelector('.tran')
-          root.classList.toggle('single-line', !!this._singleLine)
+          this.syncLineRootClasses(root)
           lineA.classList.remove('current', 'upnext')
           lineB.classList.remove('current', 'upnext')
           if (this._singleLine) {
@@ -480,14 +481,21 @@
           this.updateSideWithAnimation(lineB, bText, bTran, second)
         }
 
+        syncLineRootClasses(root) {
+          if (!root) return
+          root.classList.toggle('single-line', !!this._singleLine)
+          root.classList.toggle('hide-translation', !this._showTranslation)
+        }
+
         updateSideWithAnimation(wrapEl, textEl, tranEl, data) {
           const newText = data?.content || ''
           const newTran = data?.tran || ''
+          const displayTran = this._showTranslation ? newTran : ''
           const oldText = textEl.textContent || ''
           const oldTran = tranEl.textContent || ''
-          if (newText === oldText && newTran === oldTran) return
+          if (newText === oldText && displayTran === oldTran) return
           textEl.textContent = newText
-          tranEl.textContent = this._singleLine ? '' : newTran
+          tranEl.textContent = displayTran
           wrapEl.style.animation = 'none'
           void wrapEl.offsetWidth
           wrapEl.style.animation = 'lyricEnter 0.35s ease-out'
@@ -515,7 +523,7 @@
           const aTran = lineA.querySelector('.tran')
           const bText = lineB.querySelector('.text')
           const bTran = lineB.querySelector('.tran')
-          root.classList.toggle('single-line', !!this._singleLine)
+          this.syncLineRootClasses(root)
 
           if (this._singleLine) {
             lineA.classList.remove('current', 'upnext')
@@ -597,14 +605,15 @@
         // 修改配置
         changeOptions(options, callback = true) {
           if (!options) return
-          const { fontSize, mainColor, shadowColor, singleLine } = options
+          const { fontSize, mainColor, shadowColor, singleLine, showTranslation } = options
           const root = document.documentElement
           root.style.setProperty('--font-size', fontSize)
           root.style.setProperty('--main-color', mainColor)
           root.style.setProperty('--shadow-color', shadowColor)
           this._singleLine = !!singleLine
+          this._showTranslation = showTranslation !== false
           const linesRoot = document.getElementById('lines-root')
-          linesRoot?.classList.toggle('single-line', this._singleLine)
+          this.syncLineRootClasses(linesRoot)
           // 基于主色生成灰度化的 next 颜色（使用 color-mix 提升兼容/观感）
           try {
             const next = `color-mix(in srgb, ${mainColor} 35%, white 65%)`
@@ -612,6 +621,13 @@
           } catch (e) {
             // 退化：若不支持 color-mix，则使用固定透明度的主色
             root.style.setProperty('--next-color', mainColor)
+          }
+          if (Array.isArray(this._lastLyricPayload?.lyric) && this._lastLyricPayload.lyric.length > 0) {
+            if (typeof this._lastIndex === 'number' && this._lastIndex >= 0) {
+              this.renderByIndex(this._lastIndex)
+            } else {
+              this.renderPrepare()
+            }
           }
           if (callback) window.electron.ipcRenderer.send('set-desktop-lyric-option', options)
         }
@@ -800,7 +816,7 @@
           if (!root || !lineA || !lineB || !aText || !aTran || !bText || !bTran) return
 
           const lines = this._lastLyricPayload?.lyric || []
-          root.classList.toggle('single-line', !!this._singleLine)
+          this.syncLineRootClasses(root)
           if (!Array.isArray(lines) || lines.length === 0) {
             this._pendingUpnext = null
             lineA.classList.remove('current', 'upnext')

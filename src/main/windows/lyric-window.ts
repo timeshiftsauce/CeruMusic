@@ -14,7 +14,8 @@ const lyricStore = {
       y: screen.getPrimaryDisplay().workAreaSize.height - 90,
       width: 800,
       height: 180,
-      singleLine: false
+      singleLine: false,
+      showTranslation: true
     }),
   set: (value: lyricConfig) => configManager.set<lyricConfig>('lyric', value)
 }
