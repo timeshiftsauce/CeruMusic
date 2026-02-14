@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
     .content {
       display: block;
       font-size: var(--amll-lyric-player-font-size, 22px);
-      font-weight: 600 !important;
+      font-weight: var(--amll-lyric-player-font-weight, 600);
 
       color: var(--amll-lyric-view-color, rgba(255, 255, 255, 1));
       width: 100%;
@@ -451,10 +451,10 @@ onBeforeUnmount(() => {
         overflow-wrap: anywhere;
         word-break: break-word;
         white-space: normal;
-        font-weight: 600;
+        font-weight: var(--amll-lyric-player-font-weight, 600);
         text-align: v-bind(textAlign);
         .yrc-word {
-          font-weight: 600;
+          font-weight: var(--amll-lyric-player-font-weight, 600);
           display: inline-block;
           box-sizing: border-box;
           padding-block: 0.2em;
