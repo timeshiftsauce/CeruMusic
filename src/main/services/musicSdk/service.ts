@@ -76,7 +76,7 @@ function main(source: string = 'wy') {
 
     async getLyric({ songInfo, grepLyricInfo = false, useStrictMode = true }: GetLyricArg) {
       try {
-        console.log('getLyric', songInfo, grepLyricInfo, useStrictMode)
+        // console.log('getLyric', songInfo, grepLyricInfo, useStrictMode)
         const res = await Api.getLyric(songInfo).promise
         // console.log('getLyric res', res)
         if (res && grepLyricInfo) {
