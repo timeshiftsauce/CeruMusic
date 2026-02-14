@@ -215,6 +215,7 @@
         display: flex;
         flex-direction: column;
         width: 100%;
+        position: relative;
         transition:
           transform 0.35s ease,
           opacity 0.35s ease;
@@ -244,6 +245,16 @@
         align-items: flex-end;
         text-align: right;
       }
+      .lines-root.single-line .line-a {
+        align-items: center;
+        text-align: center;
+      }
+      .lines-root.single-line .line-b {
+        display: none;
+      }
+      .lines-root.single-line .line-a .tran {
+        display: none;
+      }
 
       /* 当前句 vs 下一句 颜色区分 */
       .line.current .text {
@@ -265,7 +276,7 @@
       @keyframes lyricEnter {
         from {
           opacity: 0;
-          transform: translateY(8px);
+          transform: translateY(18px);
         }
         to {
           opacity: 1;
@@ -433,6 +444,7 @@
           this._lastIndex = -1
           this._pendingUpnext = null // { wrapEl, textEl, tranEl, data }
           this._lastLyricPayload = { lyric: [] }
+          this._singleLine = false
           // 初始化
           this.restoreOptions()
           this.menuClick()
@@ -454,21 +466,31 @@
           const aTran = lineA.querySelector('.tran')
           const bText = lineB.querySelector('.text')
           const bTran = lineB.querySelector('.tran')
+          root.classList.toggle('single-line', !!this._singleLine)
           lineA.classList.remove('current', 'upnext')
           lineB.classList.remove('current', 'upnext')
-          const updateSide = (wrapEl, textEl, tranEl, data) => {
-            const newText = data?.content || ''
-            const newTran = data?.tran || ''
-            if (textEl.textContent !== newText || tranEl.textContent !== newTran) {
-              textEl.textContent = newText
-              tranEl.textContent = newTran
-              wrapEl.style.animation = 'none'
-              void wrapEl.offsetWidth
-              wrapEl.style.animation = 'lyricEnter 0.35s ease'
-            }
+          if (this._singleLine) {
+            lineA.classList.add('current')
+            lineB.classList.remove('current', 'upnext')
+            this.updateSideWithAnimation(lineA, aText, aTran, first)
+            this._pendingUpnext = null
+            return
           }
-          updateSide(lineA, aText, aTran, first)
-          updateSide(lineB, bText, bTran, second)
+          this.updateSideWithAnimation(lineA, aText, aTran, first)
+          this.updateSideWithAnimation(lineB, bText, bTran, second)
+        }
+
+        updateSideWithAnimation(wrapEl, textEl, tranEl, data) {
+          const newText = data?.content || ''
+          const newTran = data?.tran || ''
+          const oldText = textEl.textContent || ''
+          const oldTran = tranEl.textContent || ''
+          if (newText === oldText && newTran === oldTran) return
+          textEl.textContent = newText
+          tranEl.textContent = this._singleLine ? '' : newTran
+          wrapEl.style.animation = 'none'
+          void wrapEl.offsetWidth
+          wrapEl.style.animation = 'lyricEnter 0.35s ease-out'
         }
 
         // 基于当前行索引的“AB 交错 + 预显下一句”规则：
@@ -493,6 +515,16 @@
           const aTran = lineA.querySelector('.tran')
           const bText = lineB.querySelector('.text')
           const bTran = lineB.querySelector('.tran')
+          root.classList.toggle('single-line', !!this._singleLine)
+
+          if (this._singleLine) {
+            lineA.classList.remove('current', 'upnext')
+            lineB.classList.remove('current', 'upnext')
+            lineA.classList.add('current')
+            this.updateSideWithAnimation(lineA, aText, aTran, cur)
+            this._pendingUpnext = null
+            return
+          }
 
           const even = (index - this._baseIndex) % 2 === 0
 
@@ -522,21 +554,8 @@
             upnextTran = aTran
           }
 
-          const updateSide = (wrapEl, textEl, tranEl, data) => {
-            const newText = data?.content || ''
-            const newTran = data?.tran || ''
-            const oldText = textEl.textContent || ''
-            const oldTran = tranEl.textContent || ''
-            if (newText === oldText && newTran === oldTran) return
-            textEl.textContent = newText
-            tranEl.textContent = newTran
-            wrapEl.style.animation = 'none'
-            void wrapEl.offsetWidth
-            wrapEl.style.animation = 'lyricEnter 0.35s ease'
-          }
-
           // 1) 立即更新“当前句”内容，保证开始朗读就高亮且正确
-          updateSide(currentWrap, currentText, currentTran, cur)
+          this.updateSideWithAnimation(currentWrap, currentText, currentTran, cur)
 
           // 2) 对“上一行 -> 下一行”的替换延迟到 30% 进度
           const desiredUpText = next?.content || ''
@@ -578,11 +597,14 @@
         // 修改配置
         changeOptions(options, callback = true) {
           if (!options) return
-          const { fontSize, mainColor, shadowColor } = options
+          const { fontSize, mainColor, shadowColor, singleLine } = options
           const root = document.documentElement
           root.style.setProperty('--font-size', fontSize)
           root.style.setProperty('--main-color', mainColor)
           root.style.setProperty('--shadow-color', shadowColor)
+          this._singleLine = !!singleLine
+          const linesRoot = document.getElementById('lines-root')
+          linesRoot?.classList.toggle('single-line', this._singleLine)
           // 基于主色生成灰度化的 next 颜色（使用 color-mix 提升兼容/观感）
           try {
             const next = `color-mix(in srgb, ${mainColor} 35%, white 65%)`
@@ -714,6 +736,10 @@
           // 进度事件：用于 30% 后再替换上一侧为“下一句”
           window.electron.ipcRenderer.on('play-lyric-progress', (_, payload) => {
             try {
+              if (this._singleLine) {
+                this._pendingUpnext = null
+                return
+              }
               const { index, progress } = payload || {}
               if (!this._pendingUpnext) return
               // 仅当仍在同一行朗读时触发
@@ -727,11 +753,7 @@
                 return
               }
               // 执行替换与入场动画
-              textEl.textContent = newText
-              tranEl.textContent = newTran
-              wrapEl.style.animation = 'none'
-              void wrapEl.offsetWidth
-              wrapEl.style.animation = 'lyricEnter 0.35s ease'
+              this.updateSideWithAnimation(wrapEl, textEl, tranEl, data)
               this._pendingUpnext = null
             } catch {}
           })
@@ -766,6 +788,30 @@
           if (typeof index === 'number' && index >= 0 && index < lyric.length) {
             this.renderByIndex(index)
           }
+        }
+        updateLyrics(title = '') {
+          const root = document.getElementById('lines-root')
+          const lineA = root?.querySelector('.line-a')
+          const lineB = root?.querySelector('.line-b')
+          const aText = lineA?.querySelector('.text')
+          const aTran = lineA?.querySelector('.tran')
+          const bText = lineB?.querySelector('.text')
+          const bTran = lineB?.querySelector('.tran')
+          if (!root || !lineA || !lineB || !aText || !aTran || !bText || !bTran) return
+
+          const lines = this._lastLyricPayload?.lyric || []
+          root.classList.toggle('single-line', !!this._singleLine)
+          if (!Array.isArray(lines) || lines.length === 0) {
+            this._pendingUpnext = null
+            lineA.classList.remove('current', 'upnext')
+            lineB.classList.remove('current', 'upnext')
+            aText.textContent = title || '该歌曲暂无歌词'
+            aTran.textContent = ''
+            bText.textContent = ''
+            bTran.textContent = ''
+            return
+          }
+          this.renderPrepare()
         }
         setupWindowDragListeners() {
           this.isResizing = false
