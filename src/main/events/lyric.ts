@@ -15,7 +15,9 @@ const lyricStore = {
       y: screen.getPrimaryDisplay().workAreaSize.height - 90,
       width: 800,
       height: 180,
-      fontFamily: 'PingFangSC-Semibold'
+      fontFamily: 'PingFangSC-Semibold',
+      singleLine: false,
+      showTranslation: true
     }),
   set: (value: lyricConfig) => configManager.set<lyricConfig>('lyric', value)
 }

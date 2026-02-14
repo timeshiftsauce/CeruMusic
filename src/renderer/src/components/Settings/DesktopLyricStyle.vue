@@ -5,6 +5,8 @@ interface LyricOption {
   fontSize: number
   mainColor: string
   shadowColor: string
+  singleLine: boolean
+  showTranslation: boolean
   x: number
   y: number
   width: number
@@ -17,6 +19,8 @@ const option = ref<LyricOption>({
   fontSize: 30,
   mainColor: '#73BCFC',
   shadowColor: 'rgba(255, 255, 255, 0.5)',
+  singleLine: false,
+  showTranslation: true,
   x: 0,
   y: 0,
   width: 800,
@@ -94,6 +98,10 @@ const toggleDesktopLyric = (enabled: boolean) => {
   window.electron.ipcRenderer.send('change-desktop-lyric', enabled)
 }
 
+const setDisplayMode = (singleLine: boolean) => {
+  option.value.singleLine = singleLine
+}
+
 onMounted(() => {
   loadOption()
 })
@@ -138,6 +146,29 @@ onMounted(() => {
             <label>高度</label>
             <t-input-number v-model="option.height" :min="100" :max="600" :step="10" />
           </div>
+          <div class="field">
+            <label>显示模式</label>
+            <div class="mode-toggle">
+              <t-button
+                size="small"
+                :theme="option.singleLine ? 'default' : 'primary'"
+                variant="outline"
+                @click="setDisplayMode(false)"
+                >双行交错</t-button
+              >
+              <t-button
+                size="small"
+                :theme="option.singleLine ? 'primary' : 'default'"
+                variant="outline"
+                @click="setDisplayMode(true)"
+                >单行</t-button
+              >
+            </div>
+          </div>
+          <div class="field">
+            <label>翻译</label>
+            <t-switch v-model="option.showTranslation">显示翻译</t-switch>
+          </div>
         </div>
 
         <div class="actions">
@@ -151,15 +182,56 @@ onMounted(() => {
       </div>
 
       <div class="preview">
-        <div
-          class="preview-lyric"
-          :style="{
-            fontSize: option.fontSize + 'px',
-            color: mainHex,
-            textShadow: `0 0 6px ${shadowColorStr}`
-          }"
-        >
-          这是桌面歌词预览
+        <div class="preview-label">预览</div>
+        <div class="preview-box" :class="{ 'is-single': option.singleLine }">
+          <div class="preview-group current">
+            <div
+              class="preview-row current"
+              :style="{
+                fontSize: `${Math.max(16, Math.min(option.fontSize, 42))}px`,
+                color: mainHex,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              {{ option.singleLine ? '这是桌面歌词单行预览' : '当前歌词预览' }}
+            </div>
+            <div
+              v-if="option.showTranslation"
+              class="preview-row tran"
+              :style="{
+                fontSize: `${Math.max(14, Math.min(option.fontSize - 6, 30))}px`,
+                color: mainHex,
+                opacity: 0.75,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              当前翻译预览
+            </div>
+          </div>
+          <div v-if="!option.singleLine" class="preview-group upnext">
+            <div
+              class="preview-row upnext"
+              :style="{
+                fontSize: `${Math.max(14, Math.min(option.fontSize - 2, 36))}px`,
+                color: mainHex,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              下一句预览
+            </div>
+            <div
+              v-if="option.showTranslation"
+              class="preview-row tran"
+              :style="{
+                fontSize: `${Math.max(12, Math.min(option.fontSize - 8, 26))}px`,
+                color: mainHex,
+                opacity: 0.6,
+                textShadow: `0 0 6px ${shadowColorStr}`
+              }"
+            >
+              下一句翻译预览
+            </div>
+          </div>
         </div>
       </div>
     </t-card>
@@ -190,6 +262,11 @@ onMounted(() => {
   flex-direction: column;
   gap: 6px;
 }
+.mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .color-input {
   width: 48px;
   height: 32px;
@@ -205,13 +282,64 @@ onMounted(() => {
 }
 .preview {
   margin-top: 16px;
-  padding: 30px;
-  border: 1px dashed var(--td-border-level-1-color);
-  border-radius: var(--td-radius-medium);
-  background: var(--settings-preview-bg);
 }
-.preview-lyric {
-  text-align: center;
+.preview-label {
+  font-size: 14px;
+  color: var(--td-text-color-secondary);
+  margin-bottom: 8px;
+}
+.preview-box {
+  padding: 20px;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-default);
+  background-color: var(--td-bg-color-container);
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  overflow: hidden;
+}
+.preview-box.is-single {
+  justify-content: center;
+  align-items: center;
+}
+.preview-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+}
+.preview-group.current {
+  align-items: flex-start;
+}
+.preview-group.upnext {
+  align-items: flex-end;
+}
+.preview-row {
   font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-row.current {
+  text-align: left;
+}
+.preview-row.upnext {
+  text-align: right;
+  opacity: 0.62;
+}
+.preview-row.tran {
+  font-weight: 500;
+}
+.preview-box.is-single .preview-row.current {
+  text-align: center;
+}
+.preview-box.is-single .preview-group.current {
+  align-items: center;
+}
+.preview-box.is-single .preview-row.tran {
+  text-align: center;
 }
 </style>
