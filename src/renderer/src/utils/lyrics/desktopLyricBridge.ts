@@ -17,6 +17,8 @@ let installed = false
 // 保存定时器ID以便清理
 let playStateInterval: number | null = null
 let lyricProgressInterval: number | null = null
+// 桌面歌词同步提前量（毫秒），用于抵消渲染链路延迟
+const DESKTOP_LYRIC_LEAD_MS = 120
 
 function lineText(line?: LyricLine) {
   return (line?.words || []).map((w) => w.word).join('').trim()
@@ -70,9 +72,9 @@ function buildLyricPayload(lines: LyricLine[], source?: string) {
   return merged
 }
 
-function computeLyricIndex(timeMs: number, lines: LyricLine[]) {
+function computeLyricIndex(timeMs: number, lines: LyricLine[], leadMs = 0) {
   if (!lines || lines.length === 0) return -1
-  const t = timeMs
+  const t = timeMs + leadMs
   const i = lines.findIndex((l) => t >= l.startTime && t < l.endTime)
   if (i !== -1) return i
   for (let j = lines.length - 1; j >= 0; j--) {
@@ -134,14 +136,15 @@ export function installDesktopLyricBridge() {
     const a = controlAudio.Audio
     const ms = Math.round((a?.currentTime || 0) * 1000)
     const currentLines = player.value.lyrics.lines || []
-    const idx = computeLyricIndex(ms, currentLines)
+    const adjustedMs = ms + DESKTOP_LYRIC_LEAD_MS
+    const idx = computeLyricIndex(ms, currentLines, DESKTOP_LYRIC_LEAD_MS)
 
     // 计算当前行进度（0~1）
     let progress = 0
     if (idx >= 0 && currentLines[idx]) {
       const line = currentLines[idx]
       const dur = Math.max(1, (line.endTime ?? line.startTime + 1) - line.startTime)
-      progress = Math.min(1, Math.max(0, (ms - line.startTime) / dur))
+      progress = Math.min(1, Math.max(0, (adjustedMs - line.startTime) / dur))
     }
 
     // 首先推送进度，便于前端做 30% 判定（避免 setTimeout 带来的抖动）
@@ -159,7 +162,7 @@ export function installDesktopLyricBridge() {
         lyric: buildLyricPayload(currentLines, (player.value.songInfo as any)?.source)
       })
     }
-  }, 100)
+  }, 50)
 }
 
 // 导出清理函数，用于清除所有定时器
