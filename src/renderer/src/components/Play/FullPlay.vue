@@ -30,6 +30,11 @@ const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
 const showSettings = ref(false)
 
+const lyricFontSize = computed(() =>
+  settingsStore.settings.lyricFontSize ? `${settingsStore.settings.lyricFontSize}px` : '30px'
+)
+const lyricFontWeight = computed(() => settingsStore.settings.lyricFontWeight || 600)
+
 const lyricFontFamily = computed(
   () => settingsStore.settings.lyricFontFamily || 'PingFangSC-Semibold'
 )
@@ -1007,18 +1012,21 @@ onUnmounted(() => {
         --amll-lp-color: v-bind(lyricViewColor);
         transition: color 0.2s;
         font-family: v-bind(lyricFontFamily);
-        --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
-        --amll-lp-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
+        --amll-lyric-player-font-size: v-bind(lyricFontSize);
+        --amll-lp-font-size: v-bind(lyricFontSize);
+        --amll-lyric-player-font-weight: v-bind(lyricFontWeight);
 
         // bottom: max(2vw, 29px);
 
         * [class^='_lyricMainLine'] {
-          font-weight: 600 !important;
+          font-weight: v-bind(lyricFontWeight) !important;
+          font-size: v-bind(lyricFontSize) !important;
           // text-align: center;
           margin: -0.8em -1 -0.8em -1;
           padding: min(1.05em, 38px) 1em min(1.05em, 38px) 1em;
           * {
-            font-weight: 600 !important;
+            font-weight: v-bind(lyricFontWeight) !important;
+            font-size: v-bind(lyricFontSize) !important;
           }
         }
         [class^='_interludeDots'] {
