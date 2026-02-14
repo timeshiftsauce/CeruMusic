@@ -10,7 +10,6 @@
             placeholder="请选择字体"
             filterable
             multiple
-            :min-collapsed-num="3"
             @change="handleFontChange"
           />
         </div>
@@ -51,8 +50,6 @@ import { MessagePlugin } from 'tdesign-vue-next'
 
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
-
-// Default lyricFontSize
 
 const lyricFontSize = computed({
   get: () => settings.value.lyricFontSize || 36,
