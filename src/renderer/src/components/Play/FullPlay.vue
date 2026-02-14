@@ -1028,6 +1028,13 @@ onUnmounted(() => {
             font-weight: v-bind(lyricFontWeight) !important;
             font-size: v-bind(lyricFontSize) !important;
           }
+
+          [class*='romanWord'] {
+            font-weight: normal !important;
+            font-size: calc(v-bind(lyricFontSize) * 0.5) !important;
+            font-family: v-bind(lyricFontFamily) !important;
+            opacity: 0.8;
+          }
         }
         [class^='_interludeDots'] {
           // left: 1.2em;
