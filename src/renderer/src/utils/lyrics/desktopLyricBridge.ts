@@ -18,7 +18,7 @@ let installed = false
 let playStateInterval: number | null = null
 let lyricProgressInterval: number | null = null
 // 桌面歌词同步提前量（毫秒），用于抵消渲染链路延迟
-const DESKTOP_LYRIC_LEAD_MS = 120
+const DESKTOP_LYRIC_LEAD_MS = 0
 
 function lineText(line?: LyricLine) {
   return (line?.words || []).map((w) => w.word).join('').trim()
@@ -134,7 +134,8 @@ export function installDesktopLyricBridge() {
   // 时间推进与当前行/进度推送
   lyricProgressInterval = window.setInterval(() => {
     const a = controlAudio.Audio
-    const ms = Math.round((a?.currentTime || 0) * 1000)
+    const rawCurrentTime = a?.audio?.currentTime ?? a?.currentTime ?? 0
+    const ms = Math.round(rawCurrentTime * 1000)
     const currentLines = player.value.lyrics.lines || []
     const adjustedMs = ms + DESKTOP_LYRIC_LEAD_MS
     const idx = computeLyricIndex(ms, currentLines, DESKTOP_LYRIC_LEAD_MS)
