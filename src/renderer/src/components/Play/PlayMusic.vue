@@ -239,27 +239,37 @@ onMounted(async () => {
   window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
     desktopLyricLocked.value = !!lock
   })
-  window.electron?.ipcRenderer?.on?.('desktopLyricVisibility', async (_: any, visible: boolean) => {
-    desktopLyricOpen.value = !!visible
-    if (desktopLyricOpen.value) {
-      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-      desktopLyricLocked.value = !!lock
-    } else {
-      desktopLyricLocked.value = false
+  window.electron?.ipcRenderer?.on?.(
+    'desktop-lyric-open-change',
+    async (_: any, visible: boolean) => {
+      desktopLyricOpen.value = !!visible
+      if (desktopLyricOpen.value) {
+        const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+        desktopLyricLocked.value = !!lock
+      } else {
+        desktopLyricLocked.value = false
+      }
     }
-  })
+  )
   // 监听主进程通知关闭桌面歌词
   window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
     desktopLyricOpen.value = false
     desktopLyricLocked.value = false
   })
+  // 初始化同步当前打开与锁定状态
+  try {
+    const open = await window.electron?.ipcRenderer?.invoke?.('get-lyric-open-state')
+    desktopLyricOpen.value = !!open
+    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+    desktopLyricLocked.value = !!lock
+  } catch {}
   window.addEventListener('global-music-control', globalControls)
 })
 
 // 组件卸载时清理
 onUnmounted(() => {
   window.electron?.ipcRenderer?.removeAllListeners?.('toogleDesktopLyricLock')
-  window.electron?.ipcRenderer?.removeAllListeners?.('desktopLyricVisibility')
+  window.electron?.ipcRenderer?.removeAllListeners?.('desktop-lyric-open-change')
   window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
   window.removeEventListener('global-music-control', globalControls)
 

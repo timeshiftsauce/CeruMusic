@@ -3,6 +3,7 @@ import { createWindow } from './index'
 import { configManager } from '../services/ConfigManager'
 import { join } from 'path'
 import { lyricConfig } from '@common/types/config'
+import { is } from '@electron-toolkit/utils'
 
 const lyricStore = {
   get: () =>
@@ -13,9 +14,26 @@ const lyricStore = {
       x: screen.getPrimaryDisplay().workAreaSize.width / 2 - 400,
       y: screen.getPrimaryDisplay().workAreaSize.height - 90,
       width: 800,
-      height: 180
+      height: 180,
+      fontFamily: 'PingFangSC-Semibold',
+      fontWeight: 600,
+      position: 'center',
+      alwaysShowPlayInfo: false,
+      isLock: false,
+      animation: true,
+      showYrc: true,
+      showTran: false,
+      isDoubleLine: true,
+      textBackgroundMask: false,
+      backgroundMaskColor: 'rgba(0,0,0,0.2)',
+      unplayedColor: 'rgba(255,255,255,0.5)',
+      limitBounds: true
     }),
-  set: (value: lyricConfig) => configManager.set<lyricConfig>('lyric', value)
+  set: (value: Partial<lyricConfig>) =>
+    configManager.set<lyricConfig>('lyric', {
+      ...lyricStore.get(),
+      ...value
+    })
 }
 
 class LyricWindow {
@@ -59,13 +77,16 @@ class LyricWindow {
       maxWidth: 1600,
       maxHeight: 300,
       show: false,
+      // 没有指定位置时居中显示
+      center: !(x && y),
       // 窗口位置
       x,
       y,
       transparent: true,
+      hasShadow: false,
       backgroundColor: 'rgba(0, 0, 0, 0)',
       alwaysOnTop: true,
-      resizable: false,
+      resizable: true,
       movable: true,
       // 不在任务栏显示
       skipTaskbar: true,
@@ -77,8 +98,14 @@ class LyricWindow {
       fullscreenable: false
     })
     if (!this.win) return null
+    // 禁用背景节流，防止后台时歌词更新延迟
+    this.win.webContents.setBackgroundThrottling(false)
     // 加载地址（开发环境用项目根目录，生产用打包后的相对路径）
-    this.win.loadFile(join(__dirname, '../main/src/web/lyric.html'))
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      this.win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/#/desktop-lyric`)
+    } else {
+      this.win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'desktop-lyric' })
+    }
     // 窗口事件
     this.event()
     return this.win

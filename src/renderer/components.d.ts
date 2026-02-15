@@ -48,6 +48,7 @@ declare module 'vue' {
     PlaySettings: typeof import('./src/components/Play/PlaySettings.vue')['default']
     PluginNoticeDialog: typeof import('./src/components/PluginNoticeDialog.vue')['default']
     Plugins: typeof import('./src/components/Settings/plugins.vue')['default']
+    Provider: typeof import('./src/components/layout/Provider.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SearchSuggest: typeof import('./src/components/search/searchSuggest.vue')['default']
