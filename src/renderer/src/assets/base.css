@@ -26,7 +26,7 @@ ul {
 html {
   font-size: min(max(1.4vw, 15px), 18px);
 }
-#app{
+#app {
   height: 100%;
   width: 100%;
 }

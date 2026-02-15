@@ -15,13 +15,13 @@ export default {
       type: 1, // 1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单, 1002: 用户, 1004: MV, 1006: 歌词, 1009: 电台, 1014: 视频
       limit,
       total: page == 1,
-      offset: limit * (page - 1),
+      offset: limit * (page - 1)
     })
     return searchRequest.promise.then(({ body }) => body)
   },
   getSinger(singers) {
     let arr = []
-    singers.forEach(singer => {
+    singers.forEach((singer) => {
       arr.push(singer.name)
     })
     return arr.join('、')
@@ -29,7 +29,7 @@ export default {
   handleResult(rawList) {
     // console.log(rawList)
     if (!rawList) return []
-    return rawList.map(item => {
+    return rawList.map((item) => {
       const types = []
       const _types = {}
       let size
@@ -38,7 +38,7 @@ export default {
         size = item.hr ? sizeFormate(item.hr.size) : null
         types.push({ type: 'flac24bit', size })
         _types.flac24bit = {
-          size,
+          size
         }
       }
       switch (item.privilege.maxbr) {
@@ -46,20 +46,20 @@ export default {
           size = item.sq ? sizeFormate(item.sq.size) : null
           types.push({ type: 'flac', size })
           _types.flac = {
-            size,
+            size
           }
         case 320000:
           size = item.h ? sizeFormate(item.h.size) : null
           types.push({ type: '320k', size })
           _types['320k'] = {
-            size,
+            size
           }
         case 192000:
         case 128000:
           size = item.l ? sizeFormate(item.l.size) : null
           types.push({ type: '128k', size })
           _types['128k'] = {
-            size,
+            size
           }
       }
 
@@ -77,14 +77,14 @@ export default {
         lrc: null,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       }
     })
   },
   search(str, page = 1, limit, retryNum = 0) {
     if (++retryNum > 3) return Promise.reject(new Error('try max num'))
     if (limit == null) limit = this.limit
-    return this.musicSearch(str, page, limit).then(result => {
+    return this.musicSearch(str, page, limit).then((result) => {
       // console.log(result)
       if (!result || result.code !== 200) return this.search(str, page, limit, retryNum)
       let list = this.handleResult(result.result.songs || [])
@@ -101,9 +101,9 @@ export default {
         allPage: this.allPage,
         limit: this.limit,
         total: this.total,
-        source: 'wy',
+        source: 'wy'
       }
       // return result.data
     })
-  },
+  }
 }
