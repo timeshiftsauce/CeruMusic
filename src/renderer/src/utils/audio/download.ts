@@ -24,6 +24,82 @@ interface MusicItem {
   typeUrl: Record<string, any>
 }
 
+function parseTimeTagMs(tag: string): number {
+  const m = tag.match(/\[(\d{2}):(\d{2})\.(\d{2,3})]/)
+  if (!m) return Number.NaN
+  const mm = Number(m[1]) || 0
+  const ss = Number(m[2]) || 0
+  const fracRaw = m[3] || '0'
+  const frac = fracRaw.length === 2 ? Number(fracRaw) * 10 : Number(fracRaw)
+  return mm * 60_000 + ss * 1_000 + frac
+}
+
+function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
+  if (!baseLyric || !tlyric) return baseLyric || ''
+
+  const baseLines = String(baseLyric).replace(/\r/g, '').split('\n')
+  const transLines = String(tlyric).replace(/\r/g, '').split('\n')
+
+  const transTimed = transLines
+    .map((line) => {
+      const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
+      if (!m) return null
+      const firstTag = (m[1].match(/\[\d{2}:\d{2}\.\d{2,3}]/g) || [])[0]
+      if (!firstTag) return null
+      return {
+        ms: parseTimeTagMs(firstTag),
+        text: (m[2] || '').trim()
+      }
+    })
+    .filter((v): v is { ms: number; text: string } => !!v && Number.isFinite(v.ms) && !!v.text)
+    .sort((a, b) => a.ms - b.ms)
+
+  if (transTimed.length === 0) return baseLyric
+
+  const used = new Set<number>()
+  let cursor = 0
+  const maxDiffMs = 300
+  const out: string[] = []
+
+  for (const line of baseLines) {
+    out.push(line)
+    const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
+    if (!m) continue
+
+    const tags = m[1].match(/\[\d{2}:\d{2}\.\d{2,3}]/g) || []
+    const firstTag = tags[0]
+    const baseText = (m[2] || '').trim()
+    if (!firstTag || !baseText) continue
+
+    const baseMs = parseTimeTagMs(firstTag)
+    if (!Number.isFinite(baseMs)) continue
+
+    while (cursor < transTimed.length && transTimed[cursor].ms < baseMs - maxDiffMs) cursor++
+
+    let best = -1
+    let bestDiff = Number.POSITIVE_INFINITY
+    for (let i = cursor; i < transTimed.length; i++) {
+      if (used.has(i)) continue
+      const diff = Math.abs(transTimed[i].ms - baseMs)
+      if (diff > maxDiffMs && transTimed[i].ms > baseMs + maxDiffMs) break
+      if (diff <= maxDiffMs && diff < bestDiff) {
+        best = i
+        bestDiff = diff
+      }
+    }
+
+    if (best >= 0) {
+      const text = transTimed[best].text
+      if (text && text !== baseText) {
+        out.push(`${firstTag}${text}`)
+        used.add(best)
+      }
+    }
+  }
+
+  return out.join('\n')
+}
+
 // 创建音质选择弹窗
 export function createQualityDialog(
   songInfoOrTypes: MusicItem | Array<{ type: string; size?: string }>,
@@ -198,9 +274,11 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       }
     }
 
-    const { crlyric, lyric } = lrcData || {}
+    const { crlyric, lyric, tlyric } = lrcData || {}
     console.log(songInfo)
-    songInfo.lrc = crlyric && songInfo.source !== 'tx' ? crlyric : lyric
+    const baseLyric =
+      tlyric && lyric ? lyric : crlyric && songInfo.source !== 'tx' ? crlyric : lyric
+    songInfo.lrc = mergeLyricWithTranslation(baseLyric || '', tlyric)
 
     // 显示音质选择弹窗
     const selectedQuality = await createQualityDialog(songInfo, userQuality)
