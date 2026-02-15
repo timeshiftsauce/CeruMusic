@@ -180,6 +180,15 @@ const openLink = (url: string) => {
             <p>修复部分bug & 新增部分功能（简称：打杂）</p>
           </div>
         </div>
+        <div class="developer-item" @click="openLink('https://github.com/ITManCHINA/')">
+          <div class="developer-avatar">
+            <img src="/furina.jpg" alt="ITMan_CHINA" />
+          </div>
+          <div class="developer-info">
+            <h4>ITMan_CHINA</h4>
+            <p>神秘的AI驾驶员<br>开源社区街溜子<br>某不知名TTML歌词作者</p>
+          </div>
+        </div>
       </div>
     </div>
 
