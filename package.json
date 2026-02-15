@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.8.5",
+  "version": "1.9.0",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",

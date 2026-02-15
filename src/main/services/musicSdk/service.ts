@@ -76,8 +76,9 @@ function main(source: string = 'wy') {
 
     async getLyric({ songInfo, grepLyricInfo = false, useStrictMode = true }: GetLyricArg) {
       try {
-        console.log('getLyric', songInfo, grepLyricInfo, useStrictMode)
+        // console.log('getLyric', songInfo, grepLyricInfo, useStrictMode)
         const res = await Api.getLyric(songInfo).promise
+        // console.log('getLyric res', res)
         if (res && grepLyricInfo) {
           const grepKeyRaw = [
             '作曲',
@@ -101,13 +102,21 @@ function main(source: string = 'wy') {
             '和声',
             '弦乐',
             '企划',
-            '录音室'
+            '录音室',
+            '鼓',
+            '弦',
+            '弦乐部分'
           ]
-          const grepKey = grepKeyRaw.map((key) => `.*${key}.*`)
+          const grepKey = grepKeyRaw.map((key) => `.*${key.split('').join('.*')}.*`)
           const regex = new RegExp(`^.*(${grepKey.join('|')})[:：]\s*(.+)(\n)*$`, 'gm')
           // 匹配带冒号的行（含时间戳前缀）
-          const pureLyric = (lyric: string[]) =>
-            lyric.filter((line) => !/^\[\d+[:,][\d.]+].+[：:].+$/.test(line))
+          const pureLyric = (lyric: string[]) => {
+            return lyric.filter((line) => {
+              const raw = line.replace(/\[.*]/g, '')
+              // console.log('raw', raw, !raw.includes(':') && !raw.includes('：'))
+              return !raw.includes(':') && !raw.includes('：')
+            })
+          }
 
           const lyric = {}
           for (const key in res) {

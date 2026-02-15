@@ -362,7 +362,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics as LyricLine[]
 
-              sdkPromise.catch(() => { })
+              sdkPromise.catch(() => {})
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return
