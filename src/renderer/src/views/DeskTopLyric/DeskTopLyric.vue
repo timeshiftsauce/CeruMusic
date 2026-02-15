@@ -432,7 +432,17 @@ const getScrollStyle = (line: RenderLine) => {
   const container = lineRefs.get(line.key)
   const content = contentRefs.get(line.key)
   if (!container || !content || !line?.line) return {}
-  const overflow = Math.max(0, content.scrollWidth - container.clientWidth)
+  const containerStyle = window.getComputedStyle(container)
+  const contentStyle = window.getComputedStyle(content)
+  const padL = parseFloat(containerStyle.paddingLeft) || 0
+  const padR = parseFloat(containerStyle.paddingRight) || 0
+  const marginL = parseFloat(contentStyle.marginLeft) || 0
+  const marginR = parseFloat(contentStyle.marginRight) || 0
+  const borderL = parseFloat(contentStyle.borderLeftWidth) || 0
+  const borderR = parseFloat(contentStyle.borderRightWidth) || 0
+  const visibleWidth = Math.max(0, container.clientWidth - padL - padR)
+  const contentFullWidth = Math.max(0, content.scrollWidth + marginL + marginR + borderL + borderR)
+  const overflow = Math.max(0, contentFullWidth - visibleWidth)
   if (overflow <= 0) return { transform: 'translateX(0px)' }
   const seekSec = playSeekMs.value
   const start = Number(line.line.startTime ?? 0)
