@@ -228,10 +228,18 @@ const cancelImportPrompt = () => {
   importPromptVisible.value = false
 }
 
+const isDesktopLyricContext = () => {
+  const r = router.currentRoute.value
+  if (location.hash && location.hash.includes('desktop-lyric')) return true
+  if (location.pathname && location.pathname.includes('desktop-lyric')) return true
+  if (r?.name === 'desktop-lyric') return true
+  if (r?.path && r.path.includes('desktop-lyric')) return true
+  return false
+}
+
 onMounted(() => {
-  if (location.pathname.includes('desktop-lyric')) return
+  if (isDesktopLyricContext()) return
   userInfo.init()
-  authStore.init()
   settingsSyncService.init()
   setupSystemThemeListener()
   loadSavedTheme()
@@ -357,6 +365,7 @@ onMounted(() => {
         const silent = !!(settings as any).autoImportPlaylistOnOpen
         confirmImportPromptPath(p, fileName, silent)
       }
+      authStore.init()
     }, 500)
   })
 })

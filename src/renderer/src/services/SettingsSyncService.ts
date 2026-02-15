@@ -55,19 +55,27 @@ class SettingsSyncService {
   }
 
   // Check sync status (call on login)
+  /**
+   * 检查并同步本地配置与云端配置
+   * 该方法会对比本地和云端配置，如有差异则提示用户选择使用哪种配置
+   */
   async checkSync() {
-    const authStore = useAuthStore()
+    const authStore = useAuthStore() // 获取认证状态存储
+    // 如果用户未认证，直接返回
     if (!authStore.isAuthenticated) return
 
     try {
-      this.isSyncing = true
-      console.log('checkSync')
+      this.isSyncing = true // 设置同步状态为进行中
+      console.log('checkSync') // 输出同步检查日志
+      // 获取云端配置
       const cloudSettings = await this.fetchCloudSettings()
+      // 如果没有云端配置，则上传本地配置后返回
       if (!cloudSettings) {
         // No cloud settings, upload local
         return
       }
 
+      // 获取本地配置
       const localSettings = this.getLocalSettings()
 
       // Deep compare settings
