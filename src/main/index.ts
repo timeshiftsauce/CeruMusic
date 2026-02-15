@@ -335,6 +335,7 @@ function setupDownloadManager() {
 
     const source = task.songInfo.source
     const songId = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
+    const includeTranslation = !!task.tagWriteOptions?.includeTranslation
 
     // Check cache
     const cachedLyric = await musicCacheService.getCachedLyric(songId)
@@ -349,12 +350,14 @@ function setupDownloadManager() {
         const result = await api.getLyric({ songInfo: task.songInfo })
         if (result && !result.error) {
           const baseLyric =
-            result?.tlyric && result?.lyric
+            includeTranslation && result?.tlyric && result?.lyric
               ? result.lyric
               : result?.crlyric && source !== 'tx'
                 ? result.crlyric
                 : result?.lyric || result?.lrc || ''
-          lyric = mergeLyricWithTranslation(baseLyric, result?.tlyric) || null
+          lyric = includeTranslation
+            ? mergeLyricWithTranslation(baseLyric, result?.tlyric) || null
+            : baseLyric || null
         } else if (result && result.error) {
           console.warn(`Built-in SDK getLyric error for ${source}:`, result.error)
         }

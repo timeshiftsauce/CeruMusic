@@ -6,6 +6,7 @@ export interface TagWriteOptions {
   cover: boolean // 封面
   lyrics: boolean // 普通歌词
   downloadLyrics: boolean // 单独下载歌词文件
+  includeTranslation: boolean // 歌词包含翻译
   lyricFormat: 'lrc' | 'word-by-word' // 歌词格式
 }
 
@@ -42,6 +43,7 @@ export const useSettingsStore = defineStore(
         cover: true,
         lyrics: true,
         downloadLyrics: false,
+        includeTranslation: false,
         lyricFormat: 'word-by-word'
       },
       autoUpdate: true,
@@ -77,6 +79,9 @@ export const useSettingsStore = defineStore(
               downloadLyrics:
                 parsed.tagWriteOptions?.downloadLyrics ??
                 (defaultSettings.tagWriteOptions as TagWriteOptions).downloadLyrics,
+              includeTranslation:
+                parsed.tagWriteOptions?.includeTranslation ??
+                (defaultSettings.tagWriteOptions as TagWriteOptions).includeTranslation,
               lyricFormat:
                 parsed.tagWriteOptions?.lyricFormat ??
                 (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat
@@ -121,6 +126,7 @@ export const useSettingsStore = defineStore(
           cover: true,
           lyrics: true,
           downloadLyrics: false,
+          includeTranslation: false,
           lyricFormat: 'word-by-word'
         }
       }

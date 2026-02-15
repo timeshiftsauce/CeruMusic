@@ -276,9 +276,16 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
 
     const { crlyric, lyric, tlyric } = lrcData || {}
     console.log(songInfo)
+    const includeTranslation = !!settingsStore.settings.tagWriteOptions?.includeTranslation
     const baseLyric =
-      tlyric && lyric ? lyric : crlyric && songInfo.source !== 'tx' ? crlyric : lyric
-    songInfo.lrc = mergeLyricWithTranslation(baseLyric || '', tlyric)
+      includeTranslation && tlyric && lyric
+        ? lyric
+        : crlyric && songInfo.source !== 'tx'
+          ? crlyric
+          : lyric
+    songInfo.lrc = includeTranslation
+      ? mergeLyricWithTranslation(baseLyric || '', tlyric)
+      : baseLyric || ''
 
     // 显示音质选择弹窗
     const selectedQuality = await createQualityDialog(songInfo, userQuality)

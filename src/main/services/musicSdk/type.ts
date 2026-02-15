@@ -98,6 +98,7 @@ export interface TagWriteOptions {
   cover?: boolean
   lyrics?: boolean
   downloadLyrics?: boolean
+  includeTranslation?: boolean
   lyricFormat?: 'lrc' | 'word-by-word'
 }
 
