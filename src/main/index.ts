@@ -102,12 +102,15 @@ function parseTimeTagMs(tag: string): number {
 }
 
 function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
+  // 任一为空时直接返回主歌词。
   if (!baseLyric || !tlyric) return baseLyric || ''
 
+  // 统一换行并按行拆分。
   const baseLines = String(baseLyric).replace(/\r/g, '').split('\n')
   const transLines = String(tlyric).replace(/\r/g, '').split('\n')
   const maxDiffMs = 300
 
+  // 预处理翻译：提取首个时间标签并排序，便于后续线性匹配。
   const transTimed = transLines
     .map((line) => {
       const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
@@ -122,12 +125,16 @@ function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
     .filter((v): v is { ms: number; text: string } => !!v && Number.isFinite(v.ms) && !!v.text)
     .sort((a, b) => a.ms - b.ms)
 
+  // 无可用翻译行，直接返回主歌词。
   if (transTimed.length === 0) return baseLyric
 
+  // used: 防止翻译重复匹配
+  // cursor: 扫描游标，减少重复比较
   const used = new Set<number>()
   let cursor = 0
   const out: string[] = []
 
+  // 逐行处理主歌词：先输出主行，再尝试附加翻译。
   for (const line of baseLines) {
     out.push(line)
     const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
@@ -141,8 +148,10 @@ function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
     const baseMs = parseTimeTagMs(firstTag)
     if (!Number.isFinite(baseMs)) continue
 
+    // 跳过明显早于当前主行的翻译项。
     while (cursor < transTimed.length && transTimed[cursor].ms < baseMs - maxDiffMs) cursor++
 
+    // 在容差窗口内，选时间最接近的翻译。
     let best = -1
     let bestDiff = Number.POSITIVE_INFINITY
     for (let i = cursor; i < transTimed.length; i++) {
@@ -157,6 +166,7 @@ function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
 
     if (best >= 0) {
       const text = transTimed[best].text
+      // 翻译与主行一致时不追加，避免重复。
       if (text && text !== baseText) {
         out.push(`${firstTag}${text}`)
         used.add(best)
@@ -349,6 +359,15 @@ function setupDownloadManager() {
         const api = musicSdkService(source)
         const result = await api.getLyric({ songInfo: task.songInfo })
         if (result && !result.error) {
+          // baseLyric 的嵌套三目等价于：
+          // if (includeTranslation && result?.tlyric && result?.lyric) {
+          //   baseLyric = result.lyric
+          // } else if (result?.crlyric && source !== 'tx') {
+          //   baseLyric = result.crlyric
+          // } else {
+          //   baseLyric = result?.lyric || result?.lrc || ''
+          // }
+          // 优先选用于翻译对齐的 lyric，再回退 crlyric，最后回退 lyric/lrc。
           const baseLyric =
             includeTranslation && result?.tlyric && result?.lyric
               ? result.lyric

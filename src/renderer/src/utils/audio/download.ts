@@ -35,11 +35,15 @@ function parseTimeTagMs(tag: string): number {
 }
 
 function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
+  // 任一为空时直接返回主歌词。
   if (!baseLyric || !tlyric) return baseLyric || ''
 
+  // 统一换行并按行拆分，便于后续逐行处理。
   const baseLines = String(baseLyric).replace(/\r/g, '').split('\n')
   const transLines = String(tlyric).replace(/\r/g, '').split('\n')
 
+  // 先把翻译行预处理为“时间戳 + 文本”结构，并按时间升序排列。
+  // 这样后面在主歌词循环里只需做一次线性扫描，性能更稳定。
   const transTimed = transLines
     .map((line) => {
       const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
@@ -54,13 +58,18 @@ function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
     .filter((v): v is { ms: number; text: string } => !!v && Number.isFinite(v.ms) && !!v.text)
     .sort((a, b) => a.ms - b.ms)
 
+  // 没有有效翻译时间轴时，不做任何合并。
   if (transTimed.length === 0) return baseLyric
 
+  // used: 记录已被匹配过的翻译行，避免一条翻译被复用到多条主歌词。
+  // cursor: 游标，只向前推进，减少无效比较。
+  // maxDiffMs: 最大匹配容差，允许轻微时间偏移（如接口返回误差）。
   const used = new Set<number>()
   let cursor = 0
   const maxDiffMs = 300
   const out: string[] = []
 
+  // 遍历主歌词：先写入原行，再尝试附加对应翻译行。
   for (const line of baseLines) {
     out.push(line)
     const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
@@ -74,8 +83,10 @@ function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
     const baseMs = parseTimeTagMs(firstTag)
     if (!Number.isFinite(baseMs)) continue
 
+    // 游标跳过明显早于当前主行的翻译，避免每次都从头扫描。
     while (cursor < transTimed.length && transTimed[cursor].ms < baseMs - maxDiffMs) cursor++
 
+    // 在“容差窗口”内选择最接近当前主行时间戳的翻译行。
     let best = -1
     let bestDiff = Number.POSITIVE_INFINITY
     for (let i = cursor; i < transTimed.length; i++) {
@@ -90,6 +101,7 @@ function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
 
     if (best >= 0) {
       const text = transTimed[best].text
+      // 与主行相同的翻译不写入，避免重复。
       if (text && text !== baseText) {
         out.push(`${firstTag}${text}`)
         used.add(best)
@@ -277,12 +289,23 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     const { crlyric, lyric, tlyric } = lrcData || {}
     console.log(songInfo)
     const includeTranslation = !!settingsStore.settings.tagWriteOptions?.includeTranslation
+
+    // baseLyric 的嵌套三目等价于：
+    // if (includeTranslation && tlyric && lyric) {
+    //   baseLyric = lyric
+    // } else if (crlyric && songInfo.source !== 'tx') {
+    //   baseLyric = crlyric
+    // } else {
+    //   baseLyric = lyric
+    // }
+    // 先判定“需要翻译合并且有主歌词”，再回退到 crlyric，最后回退 lyric。
     const baseLyric =
       includeTranslation && tlyric && lyric
         ? lyric
         : crlyric && songInfo.source !== 'tx'
           ? crlyric
           : lyric
+
     songInfo.lrc = includeTranslation
       ? mergeLyricWithTranslation(baseLyric || '', tlyric)
       : baseLyric || ''
