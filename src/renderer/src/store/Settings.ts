@@ -22,6 +22,8 @@ export interface SettingsState {
   autoImportPlaylistOnOpen?: boolean
   suppressImportPrompt?: boolean
   lyricFontFamily?: string
+  lyricFontSize?: number
+  lyricFontWeight?: number
   closeToTray?: boolean
   hasConfiguredCloseBehavior?: boolean
   theme?: string // 主题
@@ -48,6 +50,8 @@ export const useSettingsStore = defineStore(
       autoImportPlaylistOnOpen: false,
       suppressImportPrompt: false,
       lyricFontFamily: 'PingFangSC-Semibold',
+      lyricFontSize: 36,
+      lyricFontWeight: 700,
       closeToTray: true,
       hasConfiguredCloseBehavior: false,
       theme: 'default',
@@ -100,6 +104,13 @@ export const useSettingsStore = defineStore(
       if (!settings.value.lyricFontFamily) {
         settings.value.lyricFontFamily = 'PingFangSC-Semibold'
       }
+      if (!settings.value.lyricFontSize) {
+        settings.value.lyricFontSize = 36
+      }
+      if (!settings.value.lyricFontWeight) {
+        settings.value.lyricFontWeight = 700
+      }
+      
       if (typeof settings.value.closeToTray === 'undefined') {
         settings.value.closeToTray = true
       }
