@@ -1,22 +1,41 @@
 <template>
   <div class="lyric-font-settings">
     <t-card title="歌词字体设置" hover-shadow>
-      <div class="setting-item">
-        <div class="label">选择字体</div>
-        <div class="control">
+      <div class="controls">
+        <div class="field">
+          <label>选择字体（支持多选）</label>
           <t-select
             v-model="lyricFontFamily"
             :options="fontOptions"
             placeholder="请选择字体"
             filterable
+            multiple
             @change="handleFontChange"
           />
         </div>
-      </div>
-      <div class="setting-item">
-        <div class="label">预览</div>
-        <div class="preview-box" :style="{ fontFamily: lyricFontFamily }">
-          这是一段歌词预览 Text Preview 123
+
+        <div class="row">
+          <div class="field">
+            <label>字体大小(px)</label>
+            <t-input-number v-model="lyricFontSize" :min="12" :max="100" :step="1" />
+          </div>
+          <div class="field">
+            <label>字重(100-900)</label>
+            <t-input-number v-model="lyricFontWeight" :min="100" :max="900" :step="100" />
+          </div>
+        </div>
+
+        <div class="preview">
+          <div
+            class="preview-lyric"
+            :style="{
+              fontFamily: settings.lyricFontFamily,
+              fontSize: settings.lyricFontSize + 'px',
+              fontWeight: settings.lyricFontWeight
+            }"
+          >
+            这是一段歌词预览 Text Preview 123
+          </div>
         </div>
       </div>
     </t-card>
@@ -32,11 +51,30 @@ import { MessagePlugin } from 'tdesign-vue-next'
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
 
+const lyricFontSize = computed({
+  get: () => settings.value.lyricFontSize || 36,
+  set: (val: number) => {
+    settingsStore.updateSettings({ lyricFontSize: val })
+  }
+})
+
+const lyricFontWeight = computed({
+  get: () => settings.value.lyricFontWeight || 700,
+  set: (val: number) => {
+    settingsStore.updateSettings({ lyricFontWeight: val })
+  }
+})
+
 // Local state for v-model to sync with settings store
 const lyricFontFamily = computed({
-  get: () => settings.value.lyricFontFamily || 'PingFangSC-Semibold',
-  set: (val) => {
-    settingsStore.updateSettings({ lyricFontFamily: val })
+  get: () => {
+    const font = settings.value.lyricFontFamily || 'PingFangSC-Semibold'
+    // Split by comma and filter empty strings to get array for multi-select
+    return font.split(',').filter(Boolean)
+  },
+  set: (val: string[]) => {
+    // Join by comma to store as string
+    settingsStore.updateSettings({ lyricFontFamily: val.join(',') })
   }
 })
 
@@ -85,27 +123,37 @@ onMounted(async () => {
 
 <style scoped>
 .lyric-font-settings {
-  /* margin-bottom: 24px; */
-}
-.setting-item {
-  margin-bottom: 20px;
-}
-.label {
-  font-size: 14px;
-  color: var(--td-text-color-secondary);
-  margin-bottom: 8px;
-}
-.preview-box {
-  padding: 20px;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-default);
-  background-color: var(--td-bg-color-container);
-  font-size: 24px;
-  font-weight: bold;
-  text-align: center;
-  min-height: 80px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.preview {
+  margin-top: 16px;
+  padding: 30px;
+  border: 1px dashed var(--td-border-level-1-color);
+  border-radius: var(--td-radius-medium);
+  background: var(--settings-preview-bg);
+}
+.preview-lyric {
+  text-align: center;
+  font-weight: 700;
+  /* Ensure preview handles overflow gracefully if font is huge */
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 </style>
