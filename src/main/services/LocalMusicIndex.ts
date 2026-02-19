@@ -59,7 +59,7 @@ export class LocalMusicIndexService {
       const dir = path.dirname(this.indexFile)
       await fsp.mkdir(dir, { recursive: true })
       await fsp.writeFile(this.indexFile, JSON.stringify(this.data, null, 2))
-    } catch {}
+    } catch { }
   }
 
   getDirs() {
