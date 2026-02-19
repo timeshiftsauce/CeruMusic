@@ -16,8 +16,8 @@
 
         <div class="row">
           <div class="field">
-            <label>字体大小(px)</label>
-            <t-input-number v-model="lyricFontSize" :min="12" :max="100" :step="1" />
+            <label>字体倍率 (Rate)</label>
+            <t-input-number v-model="lyricFontRate" :min="0.1" :max="2" :step="0.05" />
           </div>
           <div class="field">
             <label>字重(100-900)</label>
@@ -30,7 +30,7 @@
             class="preview-lyric"
             :style="{
               fontFamily: settings.lyricFontFamily,
-              fontSize: settings.lyricFontSize + 'px',
+              fontSize: `calc(min(clamp(30px, 2.5vw, 50px), 5vh) * ${settings.FullPlayLyricFontRate || 1.0})`,
               fontWeight: settings.lyricFontWeight
             }"
           >
@@ -51,10 +51,10 @@ import { MessagePlugin } from 'tdesign-vue-next'
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
 
-const lyricFontSize = computed({
-  get: () => settings.value.lyricFontSize || 36,
+const lyricFontRate = computed({
+  get: () => settings.value.FullPlayLyricFontRate || 1.0,
   set: (val: number) => {
-    settingsStore.updateSettings({ lyricFontSize: val })
+    settingsStore.updateSettings({ FullPlayLyricFontRate: val })
   }
 })
 

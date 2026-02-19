@@ -30,9 +30,10 @@ const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
 const showSettings = ref(false)
 
-const lyricFontSize = computed(() =>
-  settingsStore.settings.lyricFontSize ? `${settingsStore.settings.lyricFontSize}px` : '30px'
-)
+const lyricFontSize = computed(() => {
+  const rate = settingsStore.settings.FullPlayLyricFontRate || 1.0
+  return `calc(min(clamp(30px, 2.5vw, 50px), 5vh) * ${rate})`
+})
 const lyricFontWeight = computed(() => settingsStore.settings.lyricFontWeight || 600)
 
 const lyricFontFamily = computed(

@@ -23,6 +23,7 @@ export interface SettingsState {
   suppressImportPrompt?: boolean
   lyricFontFamily?: string
   lyricFontSize?: number
+  FullPlayLyricFontRate?: number
   lyricFontWeight?: number
   closeToTray?: boolean
   hasConfiguredCloseBehavior?: boolean
@@ -107,10 +108,13 @@ export const useSettingsStore = defineStore(
       if (!settings.value.lyricFontSize) {
         settings.value.lyricFontSize = 36
       }
+      if (!settings.value.FullPlayLyricFontRate) {
+        settings.value.FullPlayLyricFontRate = 1
+      }
       if (!settings.value.lyricFontWeight) {
         settings.value.lyricFontWeight = 700
       }
-      
+
       if (typeof settings.value.closeToTray === 'undefined') {
         settings.value.closeToTray = true
       }
@@ -141,6 +145,12 @@ export const useSettingsStore = defineStore(
     // 更新设置
     const updateSettings = (newSettings: Partial<SettingsState>) => {
       settings.value = { ...settings.value, ...newSettings }
+      if (
+        settings.value.FullPlayLyricFontRate &&
+        (settings.value?.FullPlayLyricFontRate < 0.1 || settings.value?.FullPlayLyricFontRate > 2)
+      ) {
+        settings.value.FullPlayLyricFontRate = 1
+      }
       saveSettings()
     }
 
