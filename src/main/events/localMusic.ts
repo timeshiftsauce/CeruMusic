@@ -25,7 +25,7 @@ async function walkDir(dir: string, results: string[]) {
         if (AUDIO_EXTS.has(ext)) results.push(full)
       }
     }
-  } catch {}
+  } catch { }
 }
 
 function readTags(filePath: string, includeLrc = false) {
@@ -42,7 +42,7 @@ function readTags(filePath: string, includeLrc = false) {
         const buf = tag.pictures[0].data
         const mime = tag.pictures[0].mimeType || 'image/jpeg'
         img = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
-      } catch {}
+      } catch { }
     }
     let lrc: string | null = null
     if (includeLrc) {
@@ -51,7 +51,7 @@ function readTags(filePath: string, includeLrc = false) {
         if (raw && typeof raw === 'string') {
           lrc = normalizeLyricsToCrLyric(raw)
         }
-      } catch {}
+      } catch { }
     }
     f.dispose()
     return { title, album, performers, img, lrc }
@@ -187,10 +187,10 @@ function normalizeLyricsToCrLyric(input: string): string {
     const lineEnd =
       nextLineStart ??
       segs[segs.length - 1].start +
-        Math.max(
-          1,
-          (nextLineStart ?? segs[segs.length - 1].start + 1000) - segs[segs.length - 1].start
-        )
+      Math.max(
+        1,
+        (nextLineStart ?? segs[segs.length - 1].start + 1000) - segs[segs.length - 1].start
+      )
     const ld = Math.max(0, lineEnd - lineStart)
     res.push(`[${lineStart},${ld}]` + tokens.join(''))
   }
@@ -239,7 +239,7 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
         }
         try {
           tags = readTags(p, false) // 扫描时不读取歌词
-        } catch {}
+        } catch { }
 
         const base = path.basename(p)
         const noExt = base.replace(path.extname(base), '')
@@ -345,10 +345,10 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
             songFile.tag.pictures = [pic]
             try {
               await fsp.unlink(tmp)
-            } catch {}
+            } catch { }
           }
         }
-      } catch {}
+      } catch { }
     }
     songFile.save()
     songFile.dispose()

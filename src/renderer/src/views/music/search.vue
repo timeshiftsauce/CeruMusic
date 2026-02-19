@@ -132,7 +132,7 @@ const performSearch = async (reset = false) => {
       page: currentPage.value,
       limit: pageSize
     })
-
+    console.log('搜索结果', result)
     totalItems.value = result.total || 0
     const newSongs = (result.list || []).map((song: any, index: number) => ({
       ...song,
