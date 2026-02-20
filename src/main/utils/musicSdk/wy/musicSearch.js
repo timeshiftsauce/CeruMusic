@@ -14,7 +14,7 @@ export default {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-        origin: 'https://music.163.com',
+        origin: 'https://music.163.com'
       },
       form: eapi('/api/search/song/list/page', {
         keyword: str,
@@ -23,8 +23,8 @@ export default {
         offset: limit * (page - 1),
         scene: 'normal',
         total: page == 1,
-        limit: limit,
-      }),
+        limit: limit
+      })
     })
     return searchRequest.promise.then(({ body }) => body)
   },
@@ -52,8 +52,8 @@ export default {
               headers: {
                 'User-Agent':
                   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-                origin: 'https://music.163.com',
-              },
+                origin: 'https://music.163.com'
+              }
             }
           )
 
@@ -112,7 +112,7 @@ export default {
             lrc: null,
             types,
             _types,
-            typeUrl: {},
+            typeUrl: {}
           }
         } catch (error) {
           console.error(error.message)
@@ -139,9 +139,9 @@ export default {
           allPage: this.allPage,
           limit: this.limit,
           total: this.total,
-          source: 'wy',
+          source: 'wy'
         }
       })
     })
-  },
+  }
 }

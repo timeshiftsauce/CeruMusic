@@ -9,7 +9,7 @@ export const getMusicQualityInfo = (id) => {
     timeout,
     headers,
     lookup: dnsLookup,
-    family: 4,
+    family: 4
   })
 
   const types = []
@@ -50,7 +50,6 @@ export const getMusicQualityInfo = (id) => {
       types.push({ type: 'hires', size })
       _types.hires = { size }
     }
-
 
     if (data.je != null && data.je.size != null) {
       let size = sizeFormate(data.je.size)

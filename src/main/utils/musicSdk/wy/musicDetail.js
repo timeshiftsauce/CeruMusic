@@ -33,7 +33,7 @@ export default {
           otherSource: null,
           types,
           _types,
-          typeUrl: {},
+          typeUrl: {}
         })
       } else {
         list.push({
@@ -49,7 +49,7 @@ export default {
           otherSource: null,
           types,
           _types,
-          typeUrl: {},
+          typeUrl: {}
         })
       }
     })
@@ -63,15 +63,15 @@ export default {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-        origin: 'https://music.163.com',
+        origin: 'https://music.163.com'
       },
       form: weapi({
         c: '[' + ids.map((id) => '{"id":' + id + '}').join(',') + ']',
-        ids: '[' + ids.join(',') + ']',
-      }),
+        ids: '[' + ids.join(',') + ']'
+      })
     })
     const { body, statusCode } = await requestObj.promise
     if (statusCode != 200 || body.code !== 200) throw new Error('获取歌曲详情失败')
     return { source: 'wy', list: await this.filterList(body) }
-  },
+  }
 }

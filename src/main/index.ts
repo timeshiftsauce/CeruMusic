@@ -155,7 +155,8 @@ function setupTray() {
     tray = null
   }
 
-  const iconPath = path.join(__dirname, '../../resources/logo.ico')
+  const iconName = process.platform === 'win32' ? 'logo.ico' : 'logo.png'
+  const iconPath = path.join(__dirname, `../../resources/${iconName}`)
   tray = new Tray(iconPath)
   tray.setToolTip('Ceru Music')
   updateTrayMenu()
@@ -583,7 +584,13 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    } else if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
   })
 })
 
