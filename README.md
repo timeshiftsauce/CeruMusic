@@ -232,6 +232,7 @@ CeruMuisc/
 - **IDE**: VS Code 或 WebStorm
 - **Node.js 版本**: 22 及以上
 - **包管理器**: **yarn**
+- **项目后端**: 欢迎对接[https://api.ceru.shiqianjiang.cn/api-docs](https://api.ceru.shiqianjiang.cn/api-docs)
 
 ### 项目设置
 
