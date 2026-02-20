@@ -313,6 +313,7 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
         </div>
       </t-content>
     </t-layout>
+    <FirstRunDialog />
   </t-layout>
 </template>
 
