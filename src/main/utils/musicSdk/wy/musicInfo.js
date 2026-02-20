@@ -9,12 +9,12 @@ export default (songmid) => {
       'User-Agent':
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
       Referer: 'https://music.163.com/song?id=' + songmid,
-      origin: 'https://music.163.com',
+      origin: 'https://music.163.com'
     },
     form: weapi({
       c: `[{"id":${songmid}}]`,
-      ids: `[${songmid}]`,
-    }),
+      ids: `[${songmid}]`
+    })
   })
   requestObj.promise = requestObj.promise.then(({ body }) => {
     // console.log(body)

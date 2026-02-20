@@ -7,8 +7,8 @@ export default {
       `http://music.migu.cn/v3/api/music/audioPlayer/getSongPic?songId=${songId}`,
       {
         headers: {
-          Referer: 'http://music.migu.cn/v3/music/player/audio?from=migu',
-        },
+          Referer: 'http://music.migu.cn/v3/music/player/audio?from=migu'
+        }
       }
     )
     requestObj.promise.then(({ body }) => {
@@ -27,5 +27,5 @@ export default {
   async getPic(songInfo) {
     const songId = await getSongId(songInfo)
     return this.getPicUrl(songId)
-  },
+  }
 }

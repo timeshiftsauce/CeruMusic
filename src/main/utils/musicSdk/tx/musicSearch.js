@@ -1,6 +1,6 @@
 import { formatPlayTime, sizeFormate } from '../../index'
 import { formatSingerName } from '../utils'
-import { signRequest } from "./utils";
+import { signRequest } from './utils'
 
 export default {
   limit: 50,
@@ -38,7 +38,7 @@ export default {
         teenMode: '0',
         ui_mode: '2',
         nettype: '1020',
-        v4ip: '',
+        v4ip: ''
       },
       req: {
         module: 'music.search.SearchCgiService',
@@ -55,9 +55,9 @@ export default {
           cat: 2,
           grp: 1,
           sin: 0,
-          sem: 0,
-        },
-      },
+          sem: 0
+        }
+      }
     })
     return searchRequest.promise.then(({ body }) => {
       console.log(body)
@@ -89,49 +89,49 @@ export default {
         let size = sizeFormate(file.size_128mp3)
         types.push({ type: '128k', size })
         _types['128k'] = {
-          size,
+          size
         }
       }
       if (file.size_320mp3 !== 0) {
         let size = sizeFormate(file.size_320mp3)
         types.push({ type: '320k', size })
         _types['320k'] = {
-          size,
+          size
         }
       }
       if (file.size_flac !== 0) {
         let size = sizeFormate(file.size_flac)
         types.push({ type: 'flac', size })
         _types.flac = {
-          size,
+          size
         }
       }
       if (file.size_hires !== 0) {
         let size = sizeFormate(file.size_hires)
         types.push({ type: 'hires', size })
         _types.hires = {
-          size,
+          size
         }
       }
       if (file.size_new[1] !== 0) {
         let size = sizeFormate(file.size_new[1])
         types.push({ type: 'atmos', size })
         _types.atmos = {
-          size,
+          size
         }
       }
       if (file.size_new[2] !== 0) {
         let size = sizeFormate(file.size_new[2])
         types.push({ type: 'atmos_plus', size })
         _types.atmos_plus = {
-          size,
+          size
         }
       }
       if (file.size_new[0] !== 0) {
         let size = sizeFormate(file.size_new[0])
         types.push({ type: 'master', size })
         _types.master = {
-          size,
+          size
         }
       }
 
@@ -160,7 +160,7 @@ export default {
             : `https://y.gtimg.cn/music/photo_new/T002R500x500M000${albumId}.jpg`,
         types,
         _types,
-        typeUrl: {},
+        typeUrl: {}
       })
     })
     return list
@@ -179,8 +179,8 @@ export default {
         allPage: this.allPage,
         limit,
         total: this.total,
-        source: 'tx',
+        source: 'tx'
       })
     })
-  },
+  }
 }

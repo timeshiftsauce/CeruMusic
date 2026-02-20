@@ -21,20 +21,20 @@ export default {
           tmeAppID: 'qqmusic',
           tmeLoginType: 0,
           uin: '0',
-          wid: '0',
+          wid: '0'
         },
         hotkey: {
           method: 'GetHotkeyForQQMusicPC',
           module: 'tencent_musicsoso_hotkey.HotkeyService',
           param: {
             search_id: '',
-            uin: 0,
-          },
-        },
+            uin: 0
+          }
+        }
       },
       headers: {
-        Referer: 'https://y.qq.com/portal/player.html',
-      },
+        Referer: 'https://y.qq.com/portal/player.html'
+      }
     })
     const { body, statusCode } = await _requestObj.promise
     if (statusCode != 200 || body.code !== 0) throw new Error('获取热搜词失败')
@@ -42,5 +42,5 @@ export default {
   },
   filterList(rawList) {
     return rawList.map((item) => item.query)
-  },
+  }
 }
