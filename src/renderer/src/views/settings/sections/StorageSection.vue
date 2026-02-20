@@ -49,6 +49,7 @@ const tagWriteOptions = ref({
   cover: settings.value.tagWriteOptions?.cover ?? true,
   lyrics: settings.value.tagWriteOptions?.lyrics ?? true,
   downloadLyrics: settings.value.tagWriteOptions?.downloadLyrics ?? false,
+  includeTranslation: settings.value.tagWriteOptions?.includeTranslation ?? false,
   lyricFormat: settings.value.tagWriteOptions?.lyricFormat ?? 'word-by-word'
 })
 
@@ -64,6 +65,7 @@ const getTagOptionsStatus = () => {
   if (tagWriteOptions.value.cover) enabled.push('封面')
   if (tagWriteOptions.value.lyrics) enabled.push('歌词')
   if (tagWriteOptions.value.downloadLyrics) enabled.push('单独下载歌词')
+  if (tagWriteOptions.value.includeTranslation) enabled.push('歌词翻译')
 
   return enabled.length > 0 ? enabled.join('、') : '未选择任何选项'
 }
@@ -172,6 +174,13 @@ const getTagOptionsStatus = () => {
             单独下载歌词文件
           </t-checkbox>
           <p class="option-desc">在下载歌曲的同时，在相同目录下保存一个独立的LRC歌词文件</p>
+        </div>
+
+        <div class="tag-option">
+          <t-checkbox v-model="tagWriteOptions.includeTranslation" @change="updateTagWriteOptions">
+            歌词包含翻译
+          </t-checkbox>
+          <p class="option-desc">下载歌词时合并翻译行，翻译将显示在对应歌词下方</p>
         </div>
 
         <div class="tag-option lyric-format-options">
