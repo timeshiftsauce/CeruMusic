@@ -167,41 +167,6 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       (LocalUserDetail.userSource.quality as string)
     const settingsStore = useSettingsStore()
 
-    // 获取歌词
-    let lrcData: any = {}
-    let retryCount = 0
-    const maxRetries = 3
-
-    while (retryCount < maxRetries) {
-      try {
-        lrcData = await window.api.music.requestSdk('getLyric', {
-          source: toRaw(songInfo.source),
-          songInfo: toRaw(songInfo) as any
-        })
-
-        // Check if valid result (not error and has content)
-        if (lrcData && !lrcData.error && (lrcData.lyric || lrcData.crlyric)) {
-          break
-        }
-        // If we got an error object, treat it as failure and retry
-        if (lrcData && lrcData.error) {
-          console.warn(`获取歌词返回错误 (尝试 ${retryCount + 1}/${maxRetries}):`, lrcData.error)
-        }
-      } catch (e) {
-        console.warn(`获取歌词抛出异常 (尝试 ${retryCount + 1}/${maxRetries}):`, e)
-      }
-
-      retryCount++
-      if (retryCount < maxRetries) {
-        // Linear backoff: 500ms, 1000ms, 1500ms...
-        await new Promise((r) => setTimeout(r, 500 * retryCount))
-      }
-    }
-
-    const { crlyric, lyric } = lrcData || {}
-    console.log(songInfo)
-    songInfo.lrc = crlyric && songInfo.source !== 'tx' ? crlyric : lyric
-
     // 显示音质选择弹窗
     const selectedQuality = await createQualityDialog(songInfo, userQuality)
 

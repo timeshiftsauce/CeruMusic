@@ -1199,52 +1199,43 @@ const downloadPlaylist = async (playlist: SongList) => {
 
     if (!userQuality) return
 
-    let count = 0
+    const tasks: any[] = []
+    const d = new Date()
     for (const song of songs) {
-      // Skip local songs
       if (song.source === 'local') continue
 
-      // 3. 计算每首歌的最佳匹配音质
-      // 如果歌曲有 types 信息，使用 calculateBestQuality
-      // 如果没有 types 信息（可能还没获取详情），尝试使用 userQuality，或者默认降级逻辑
-      // 注意：song 对象可能没有 types 属性，取决于 API 返回的详情程度。
-      // 如果没有 types，这里可能无法准确降级。
-      // 但是 requestSdk('downloadSingleSong') 内部通常会处理单个歌曲的下载。
-      // 如果我们在这里直接调用 requestSdk，我们需要传 quality。
-      // 如果 song.types 存在：
       let qualityToUse = userQuality
       if (song.types && song.types.length > 0) {
         const best = calculateBestQuality(song.types, userQuality)
         if (best) qualityToUse = best
       }
 
-      // 如果 song.types 不存在，我们只能传 userQuality，
-      // 并期望后端或 downloadSingleSong 在下载前能获取详情并做降级？
-      // 但 downloadSingleSong 需要 songInfo。
-      // 实际上，如果批量下载时 song 对象没有 types，可能需要先 fetch 详情。
-      // 不过目前的逻辑似乎是直接调用的。
-      // 假设 song 对象已经有了必要信息。
+      const songInfoWithTemplate = {
+        ...toRaw(song),
+        template: settingsStore.settings.filenameTemplate || '%t - %s',
+        date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      }
 
-      window.api.music
-        .requestSdk('downloadSingleSong', {
-          pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
-          source: song.source,
-          quality: qualityToUse,
-          songInfo: toRaw(song),
-          tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
-          lazy: true // Enable lazy loading
-        })
-        .catch((err) => {
-          console.error('Download failed for song:', song.name, err)
-        })
-      count++
+      tasks.push({
+        pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
+        source: song.source,
+        quality: qualityToUse,
+        songInfo: songInfoWithTemplate as any,
+        tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
+        lazy: true
+      })
     }
 
-    if (count > 0) {
-      MessagePlugin.success(`已添加 ${count} 首歌曲到下载队列`)
-    } else {
+    if (tasks.length === 0) {
       MessagePlugin.warning('没有可下载的在线歌曲')
+      return
     }
+
+    await window.api.music.requestSdk('downloadBatchSongs', {
+      source: songs[0]?.source || 'wy',
+      tasks
+    })
+    MessagePlugin.success(`已添加 ${tasks.length} 首歌曲到下载队列`)
   } catch (error) {
     console.error('Download playlist failed:', error)
     MessagePlugin.error('下载失败')

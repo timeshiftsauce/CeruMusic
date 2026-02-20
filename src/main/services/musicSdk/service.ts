@@ -76,10 +76,26 @@ function main(source: string = 'wy') {
 
     async getLyric({ songInfo, grepLyricInfo = false, useStrictMode = true }: GetLyricArg) {
       try {
-        // console.log('getLyric', songInfo, grepLyricInfo, useStrictMode)
         const res = await Api.getLyric(songInfo).promise
-        // console.log('getLyric res', res)
-        if (res && grepLyricInfo) {
+        if (!res) return null as any
+
+        // 主进程统一歌词选择逻辑：根据 lyricFormat 决定返回逐字或标准歌词
+        const preferWordByWord =
+          !!(songInfo as any).lyricFormat && (songInfo as any).lyricFormat === 'word-by-word'
+
+        // 标准与逐字字段兼容
+        const cr = (res as any).crlyric || (res as any).cr_lyric || null
+        const std = (res as any).lyric || (res as any).lrc || null
+
+        let picked: string | null = null
+        if (preferWordByWord) {
+          picked = (cr as any) || (std as any) || null
+        } else {
+          picked = (std as any) || (cr as any) || null
+        }
+
+        // 兼容旧调用：当需要结构化结果时仍返回原始对象
+        if (grepLyricInfo && picked && typeof picked === 'string') {
           const grepKeyRaw = [
             '作曲',
             '作词',
@@ -128,6 +144,10 @@ function main(source: string = 'wy') {
           }
           return lyric
         }
+
+        // 默认直接返回挑选后的字符串（供下载管理和单曲下载使用）
+        if (picked && typeof picked === 'string') return picked as any
+
         return res
       } catch (e: any) {
         return {

@@ -186,7 +186,7 @@ const openLink = (url: string) => {
           </div>
           <div class="developer-info">
             <h4>ITMan_CHINA</h4>
-            <p>神秘的AI驾驶员<br>开源社区街溜子<br>某不知名TTML歌词作者</p>
+            <p>神秘的AI驾驶员<br />开源社区街溜子<br />某不知名TTML歌词作者</p>
           </div>
         </div>
       </div>

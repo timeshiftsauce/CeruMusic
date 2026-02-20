@@ -52,6 +52,11 @@ const filteredTasks = computed(() => {
 
   // Sort tasks
   return tasks.sort((a, b) => {
+    // 最新在上：完成与失败页按创建时间降序
+    if (activeTab.value === 'completed' || activeTab.value === 'failed') {
+      return b.createdAt - a.createdAt
+    }
+
     // 1. Status Priority for Downloading tab
     if (activeTab.value === 'downloading') {
       const statusOrder = {
@@ -134,6 +139,15 @@ const formatSize = (size: number) => {
     unitIndex++
   }
   return `${s.toFixed(2)} ${units[unitIndex]}`
+}
+
+// 立即安装（仅针对应用更新任务）
+const installUpdate = () => {
+  try {
+    window.api.autoUpdater.quitAndInstall()
+  } catch (e) {
+    console.error('安装更新失败', e)
+  }
 }
 
 const getStatusColor = (status: DownloadStatus) => {
@@ -247,6 +261,14 @@ const getStatusText = (status: DownloadStatus) => {
               <t-tag :theme="getStatusColor(task.status)" variant="light" size="small">
                 {{ getStatusText(task.status) }}
               </t-tag>
+              <t-tag
+                v-if="task.songInfo && task.songInfo.source === 'update'"
+                theme="warning"
+                variant="light-outline"
+                size="small"
+              >
+                应用更新
+              </t-tag>
               <span v-if="task.status === DownloadStatus.Downloading" class="speed">
                 {{ formatSpeed(task.speed) }}
               </span>
@@ -319,6 +341,21 @@ const getStatusText = (status: DownloadStatus) => {
               @click="store.openFileLocation(task.filePath)"
             >
               <template #icon><FolderOpenIcon /></template>
+            </t-button>
+
+            <!-- 应用更新：立即安装按钮 -->
+            <t-button
+              v-if="
+                task.status === DownloadStatus.Completed &&
+                task.songInfo &&
+                task.songInfo.source === 'update'
+              "
+              size="small"
+              theme="primary"
+              variant="outline"
+              @click="installUpdate"
+            >
+              立即安装
             </t-button>
 
             <t-button

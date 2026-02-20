@@ -189,6 +189,8 @@ const api = {
     checkForUpdates: () => ipcRenderer.invoke('auto-updater:check-for-updates'),
     downloadUpdate: () => ipcRenderer.invoke('auto-updater:download-update'),
     quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
+    getDownloadedPath: (updateInfo?: any) =>
+      ipcRenderer.invoke('auto-updater:get-downloaded-path', updateInfo),
 
     // 监听更新事件
     onCheckingForUpdate: (callback: () => void) => {

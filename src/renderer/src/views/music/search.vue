@@ -62,6 +62,10 @@ onActivated(async () => {
     search,
     async () => {
       if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
+      if (search.getValue.trim() === '') {
+        router.push({ name: 'find' })
+        return
+      }
       keyword.value = search.getValue
       searchResults.value = []
       playlistResults.value = []

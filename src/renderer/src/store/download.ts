@@ -66,6 +66,36 @@ export const useDownloadStore = defineStore('download', {
 
       window.api.download.onTaskCompleted((_event, updatedTask) => {
         this.updateTask(updatedTask)
+        try {
+          // 应用更新任务完成后推送系统通知，点击直接安装
+          if (updatedTask?.songInfo?.source === 'update') {
+            const showNotify = () => {
+              const n = new Notification('更新下载完成', {
+                body: '点击安装最新版本',
+                silent: false
+              })
+              n.onclick = () => {
+                try {
+                  window.api.autoUpdater.quitAndInstall()
+                } catch (e) {
+                  console.error('调用安装失败', e)
+                }
+              }
+            }
+
+            if ('Notification' in window) {
+              if (Notification.permission === 'granted') {
+                showNotify()
+              } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then((perm) => {
+                  if (perm === 'granted') showNotify()
+                })
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('发送更新完成通知失败', e)
+        }
       })
 
       window.api.download.onTaskError((_event, updatedTask) => {
