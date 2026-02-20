@@ -142,11 +142,79 @@ export class AutoUpdateService {
   }
 
   // 显示有更新可用对话框
-  private showUpdateAvailableDialog(updateInfo: UpdateInfo) {
+  private async showUpdateAvailableDialog(updateInfo: UpdateInfo) {
     // 保存更新信息到状态中
     downloadState.updateInfo = updateInfo
-    console.log(updateInfo)
     const releaseDate = new Date(updateInfo.pub_date).toLocaleDateString('zh-CN')
+
+    // 先检测是否存在未完成的“应用更新”任务
+    try {
+      const tasks = await window.api.download.getTasks()
+      const updateTask = (tasks || []).find((t: any) => t?.songInfo?.source === 'update')
+
+      if (updateTask) {
+        // 若已在进行中或排队中，则不打扰用户，提示后台下载中
+        if (['downloading', 'queued'].includes(updateTask.status)) {
+          NotifyPlugin.info({
+            title: '正在后台下载更新',
+            content: '已在“下载管理”继续下载，完成后将提示安装',
+            duration: 2500
+          })
+          return
+        }
+
+        // 若是暂停状态，询问是否继续
+        if (updateTask.status === 'paused') {
+          const dialog = DialogPlugin.confirm({
+            header: `发现未完成的更新 ${updateInfo.name}`,
+            body: () => {
+              const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否继续在后台下载安装？`
+              return h(
+                'div',
+                { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
+                content
+              )
+            },
+            confirmBtn: '继续下载',
+            cancelBtn: '稍后再说',
+            onConfirm: () => {
+              try {
+                window.api.download.resumeTask(updateTask.id)
+                NotifyPlugin.info({
+                  title: '已继续下载',
+                  content: '可在“下载管理”查看进度',
+                  duration: 2000
+                })
+              } catch {}
+              dialog.hide()
+            }
+          })
+          return
+        }
+      }
+    } catch {}
+
+    // 优先检测是否已下载完成，若已下载则提示安装
+    const path = await window.api.autoUpdater.getDownloadedPath(updateInfo)
+    if (path) {
+      DialogPlugin.confirm({
+        header: `新版本 ${updateInfo.name} 已下载`,
+        body: () => {
+          const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否立即安装？`
+          return h(
+            'div',
+            { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
+            content
+          )
+        },
+        confirmBtn: '立即安装',
+        cancelBtn: '稍后再说',
+        onConfirm: () => {
+          this.quitAndInstall()
+        }
+      })
+      return
+    }
 
     const dialog = DialogPlugin.confirm({
       header: `发现新版本 ${updateInfo.name}`,
@@ -163,9 +231,6 @@ export class AutoUpdateService {
       onConfirm: () => {
         this.downloadUpdate()
         dialog.hide()
-      },
-      onCancel: () => {
-        console.log('用户选择稍后下载更新')
       }
     })
   }
@@ -181,26 +246,21 @@ export class AutoUpdateService {
 
   // 处理下载开始事件
   private handleDownloadStarted(updateInfo: UpdateInfo) {
-    downloadState.isDownloading = true
+    // 迁移到下载管理：不再显示覆盖层，提示用户前往“下载管理”查看
+    downloadState.isDownloading = false
     downloadState.updateInfo = updateInfo
-    downloadState.progress = {
-      percent: 0,
-      transferred: 0,
-      total: 0
-    }
-
-    console.log('开始下载更新:', updateInfo.name)
+    downloadState.progress = { percent: 0, transferred: 0, total: 0 }
+    NotifyPlugin.info({
+      title: '开始下载更新',
+      content: '已加入下载管理，可在“下载管理”查看进度',
+      duration: 3000
+    })
   }
 
   // 更新下载进度状态
   private showDownloadProgressNotification(progress: DownloadProgress) {
-    // 更新响应式状态
-    downloadState.isDownloading = true
+    // 已迁移到下载管理，保持兼容但不再显示覆盖层
     downloadState.progress = progress
-
-    console.log(
-      `下载进度: ${Math.round(progress.percent)}% (${this.formatBytes(progress.transferred)} / ${this.formatBytes(progress.total)})`
-    )
   }
 
   // 显示更新下载完成对话框
@@ -233,15 +293,6 @@ export class AutoUpdateService {
   }
 
   // 格式化字节大小
-  private formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B'
-
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
 }
 
 // 导出单例实例

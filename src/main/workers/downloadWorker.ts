@@ -179,7 +179,7 @@ async function download(task: DownloadTask): Promise<any> {
       await fsPromise.rename(tempFilePath, filePath)
     }
 
-    if (tagWriteOptions) {
+    if (tagWriteOptions && songInfo?.source !== 'update' && isAudioFile(filePath)) {
       await processSongFiles(filePath, songInfo, tagWriteOptions)
     }
 
@@ -267,4 +267,9 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
       await fsPromise.unlink(coverPath).catch(() => {})
     }
   }
+}
+
+function isAudioFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase()
+  return ['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.wma'].includes(ext)
 }

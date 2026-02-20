@@ -1,5 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { initAutoUpdater, checkForUpdates, downloadUpdate, quitAndInstall } from '../autoUpdate'
+import {
+  initAutoUpdater,
+  checkForUpdates,
+  downloadUpdate,
+  quitAndInstall,
+  getDownloadedUpdatePath
+} from '../autoUpdate'
 
 // 注册自动更新相关的IPC事件
 export function registerAutoUpdateEvents() {
@@ -19,6 +25,11 @@ export function registerAutoUpdateEvents() {
   // 安装更新
   ipcMain.handle('auto-updater:quit-and-install', () => {
     quitAndInstall()
+  })
+
+  // 查询是否已有已下载更新包
+  ipcMain.handle('auto-updater:get-downloaded-path', (_event, updateInfo) => {
+    return getDownloadedUpdatePath(updateInfo || undefined)
   })
 }
 

@@ -258,10 +258,12 @@ function setupDownloadManager() {
     }
 
     const source = task.songInfo.source
-    const songId = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
+    const songIdBase = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
+    const preferWordByWord = task.tagWriteOptions?.lyricFormat === 'word-by-word'
+    const cacheKey = `${songIdBase}:${preferWordByWord ? 'word' : 'lrc'}`
 
     // Check cache
-    const cachedLyric = await musicCacheService.getCachedLyric(songId)
+    const cachedLyric = await musicCacheService.getCachedLyric(cacheKey)
     if (cachedLyric) return cachedLyric
 
     let lyric: string | null = null
@@ -270,11 +272,36 @@ function setupDownloadManager() {
     if (!lyric && ['wy', 'kw', 'tx', 'mg', 'kg'].includes(source)) {
       try {
         const api = musicSdkService(source)
-        const result = await api.getLyric({ songInfo: task.songInfo })
+        const result = await api.getLyric({
+          songInfo: {
+            ...task.songInfo,
+            lyricFormat: task.tagWriteOptions?.lyricFormat || 'lrc'
+          }
+        })
+
         if (result && !result.error) {
-          lyric = result.lyric || result.lrc || null
-        } else if (result && result.error) {
-          console.warn(`Built-in SDK getLyric error for ${source}:`, result.error)
+          if (typeof result === 'string') {
+            lyric = result
+          } else {
+            const cr = (result as any).crlyric || (result as any).cr_lyric || null
+            const std = (result as any).lyric || (result as any).lrc || null
+            if (preferWordByWord) {
+              lyric = (cr as any) || (std as any) || null
+            } else {
+              lyric = (std as any) || (cr as any) || null
+            }
+            // 若同时拿到两种格式，分别缓存以便下次命中正确偏好
+            if (cr && typeof cr === 'string') {
+              const wordKey = `${songIdBase}:word`
+              musicCacheService.cacheLyric(wordKey, cr as string).catch(() => {})
+            }
+            if (std && typeof std === 'string') {
+              const lrcKey = `${songIdBase}:lrc`
+              musicCacheService.cacheLyric(lrcKey, std as string).catch(() => {})
+            }
+          }
+        } else if (result && (result as any).error) {
+          console.warn(`Built-in SDK getLyric error for ${source}:`, (result as any).error)
         }
       } catch (error) {
         console.warn(`Built-in SDK getLyric exception for ${source}:`, error)
@@ -285,9 +312,9 @@ function setupDownloadManager() {
       throw new Error('Failed to get lyric: ' + JSON.stringify(lyric))
     }
 
-    // Cache result
+    // Cache result（按偏好维度区分缓存键）
     if (lyric) {
-      musicCacheService.cacheLyric(songId, lyric).catch(console.error)
+      musicCacheService.cacheLyric(cacheKey, lyric).catch(console.error)
     }
 
     return lyric
@@ -485,6 +512,7 @@ function createWindow(): void {
 }
 
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
+import { cleanupDownloadedInstallers } from './autoUpdate'
 
 // 注册自动更新事件 - 尽早注册以避免时序问题
 registerAutoUpdateEvents()
@@ -493,6 +521,10 @@ registerAutoUpdateEvents()
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // 清理上次安装残留的安装包（仅限临时目录）
+  try {
+    await cleanupDownloadedInstallers()
+  } catch {}
   // Set app user model id for windows - 确保与 electron-builder.yml 中的 appId 一致
   electronApp.setAppUserModelId('com.cerumusic.app')
 

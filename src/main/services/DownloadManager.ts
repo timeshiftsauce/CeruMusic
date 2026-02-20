@@ -209,10 +209,10 @@ export default class DownloadManager extends EventEmitter {
         throw new Error('No URL and no URL fetcher configured')
       }
 
-      // Fetch Lyric if missing and configured to download lyrics
+      // Fetch Lyric if missing and configured to embed or download lyrics
       if (
         task.tagWriteOptions &&
-        task.tagWriteOptions.downloadLyrics &&
+        (task.tagWriteOptions.downloadLyrics || task.tagWriteOptions.lyrics) &&
         !task.songInfo.lrc &&
         this.lyricFetcher
       ) {
