@@ -1,5 +1,5 @@
 import { httpFetch } from '../../../request'
-import { zzcSign } from "./sign";
+import { zzcSign } from './sign'
 
 export const signRequest = (data) => {
   console.log(data)
@@ -8,8 +8,8 @@ export const signRequest = (data) => {
   return httpFetch(`https://u.y.qq.com/cgi-bin/musics.fcg?sign=${sign}`, {
     method: 'post',
     headers: {
-      'User-Agent': 'QQMusic 14090508(android 12)',
+      'User-Agent': 'QQMusic 14090508(android 12)'
     },
-    body: data,
+    body: data
   })
 }

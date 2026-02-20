@@ -17,12 +17,12 @@ export default {
     {
       name: '最热',
       tid: 'hot',
-      id: 'hot',
-    },
+      id: 'hot'
+    }
   ],
   regExps: {
     listDetailLink: /^.+(?:\?|&)id=(\d+)(?:&.*$|#.*$|$)/,
-    listDetailLink2: /^.+\/playlist\/(\d+)\/\d+\/.+$/,
+    listDetailLink2: /^.+\/playlist\/(\d+)\/\d+\/.+$/
   },
 
   async handleParseId(link, retryNum = 0) {
@@ -68,7 +68,7 @@ export default {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-        Cookie: this.cookie,
+        Cookie: this.cookie
       },
       credentials: 'omit',
       cache: 'default',
@@ -78,9 +78,9 @@ export default {
         params: {
           id,
           n: this.limit_song,
-          s: 8,
-        },
-      }),
+          s: 8
+        }
+      })
     })
     const { statusCode, body } = await requestObj_listDetail.promise
     if (statusCode !== 200 || body.code !== this.successCode)
@@ -119,8 +119,8 @@ export default {
         name: body.playlist.name,
         img: body.playlist.coverImgUrl,
         desc: body.playlist.description,
-        author: body.playlist.creator.nickname,
-      },
+        author: body.playlist.creator.nickname
+      }
     }
   },
   filterListDetail({ playlist: { tracks }, privileges }) {
@@ -138,7 +138,7 @@ export default {
         size = item.hr ? sizeFormate(item.hr.size) : null
         types.push({ type: 'hires', size })
         _types.hires = {
-          size,
+          size
         }
       }
       switch (privilege.maxbr) {
@@ -146,20 +146,20 @@ export default {
           size = null
           types.push({ type: 'flac', size })
           _types.flac = {
-            size,
+            size
           }
         case 320000:
           size = item.h ? sizeFormate(item.h.size) : null
           types.push({ type: '320k', size })
           _types['320k'] = {
-            size,
+            size
           }
         case 192000:
         case 128000:
           size = item.l ? sizeFormate(item.l.size) : null
           types.push({ type: '128k', size })
           _types['128k'] = {
-            size,
+            size
           }
       }
 
@@ -179,7 +179,7 @@ export default {
           otherSource: null,
           types,
           _types,
-          typeUrl: {},
+          typeUrl: {}
         })
       } else {
         list.push({
@@ -195,7 +195,7 @@ export default {
           otherSource: null,
           types,
           _types,
-          typeUrl: {},
+          typeUrl: {}
         })
       }
     })
@@ -213,8 +213,8 @@ export default {
         order: sortId, // hot,new
         limit: this.limit_list,
         offset: this.limit_list * (page - 1),
-        total: true,
-      }),
+        total: true
+      })
     })
     return this._requestObj_list.promise.then(({ body }) => {
       // console.log(body)
@@ -224,7 +224,7 @@ export default {
         total: parseInt(body.total),
         page,
         limit: this.limit_list,
-        source: 'wy',
+        source: 'wy'
       }
     })
   },
@@ -240,7 +240,7 @@ export default {
       grade: item.grade,
       total: item.trackCount,
       desc: item.description,
-      source: 'wy',
+      source: 'wy'
     }))
   },
 
@@ -250,7 +250,7 @@ export default {
     if (tryNum > 2) return Promise.reject(new Error('try max num'))
     this._requestObj_tags = httpFetch('https://music.163.com/weapi/playlist/catalogue', {
       method: 'post',
-      form: weapi({}),
+      form: weapi({})
     })
     return this._requestObj_tags.promise.then(({ body }) => {
       // console.log(JSON.stringify(body))
@@ -267,7 +267,7 @@ export default {
         parent_name: categories[item.category],
         id: item.name,
         name: item.name,
-        source: 'wy',
+        source: 'wy'
       })
     }
 
@@ -276,7 +276,7 @@ export default {
       list.push({
         name: categories[key],
         list: subList[key],
-        source: 'wy',
+        source: 'wy'
       })
     }
     return list
@@ -288,7 +288,7 @@ export default {
     if (tryNum > 2) return Promise.reject(new Error('try max num'))
     this._requestObj_hotTags = httpFetch('https://music.163.com/weapi/playlist/hottags', {
       method: 'post',
-      form: weapi({}),
+      form: weapi({})
     })
     return this._requestObj_hotTags.promise.then(({ body }) => {
       // console.log(JSON.stringify(body))
@@ -300,7 +300,7 @@ export default {
     return rawList.map((item) => ({
       id: item.playlistTag.name,
       name: item.playlistTag.name,
-      source: 'wy',
+      source: 'wy'
     }))
   },
 
@@ -308,7 +308,7 @@ export default {
     return Promise.all([this.getTag(), this.getHotTag()]).then(([tags, hotTag]) => ({
       tags,
       hotTag,
-      source: 'wy',
+      source: 'wy'
     }))
   },
 
@@ -323,7 +323,7 @@ export default {
       type: 1000, // 1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单, 1002: 用户, 1004: MV, 1006: 歌词, 1009: 电台, 1014: 视频
       limit,
       total: page == 1,
-      offset: limit * (page - 1),
+      offset: limit * (page - 1)
     }).promise.then(({ body }) => {
       if (body.code != this.successCode) throw new Error('filed')
       // console.log(body)
@@ -331,10 +331,10 @@ export default {
         list: this.filterList(body.result.playlists),
         limit,
         total: body.result.playlistCount,
-        source: 'wy',
+        source: 'wy'
       }
     })
-  },
+  }
 }
 
 // getList
