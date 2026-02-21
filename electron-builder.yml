@@ -43,12 +43,19 @@ win:
       schemes:
         - cerumusic
 nsis:
+  include: build/installer.nsh
+  license: EULA.txt
   artifactName: ${name}-${version}-win-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
   installerIcon: 'resources/icons/icon.ico'
   uninstallerIcon: 'resources/icons/icon.ico'
+  # 建议提供高分辨率的安装插图以解决高分屏模糊问题
+  # installerHeader: build/installerHeader.png # 推荐尺寸: 150x57 (或倍数)
+  # installerSidebar: build/installerSidebar.png # 推荐尺寸: 164x314 (或倍数)
+  deleteAppDataOnUninstall: true
+  displayLanguageSelector: true
   oneClick: false
   allowToChangeInstallationDirectory: true
   allowElevation: true
