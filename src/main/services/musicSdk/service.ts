@@ -74,81 +74,82 @@ function main(source: string = 'wy') {
       }
     },
 
-    async getLyric({ songInfo, grepLyricInfo = false, useStrictMode = true }: GetLyricArg) {
+    async getLyric({
+      songInfo,
+      grepLyricInfo = false,
+      useStrictMode = true,
+      useFormat = null
+    }: GetLyricArg) {
       try {
         const res = await Api.getLyric(songInfo).promise
         if (!res) return null as any
-
         // 主进程统一歌词选择逻辑：根据 lyricFormat 决定返回逐字或标准歌词
-        const preferWordByWord =
-          !!(songInfo as any).lyricFormat && (songInfo as any).lyricFormat === 'word-by-word'
+        if (useFormat !== null) {
+          if (source == 'tx') return res.lyric || res.lrc || null
+          const preferWordByWord = useFormat === 'word-by-word'
+          // 标准与逐字字段兼容
+          const cr = (res as any).crlyric || (res as any).cr_lyric || null
+          const std = (res as any).lyric || (res as any).lrc || null
 
-        // 标准与逐字字段兼容
-        const cr = (res as any).crlyric || (res as any).cr_lyric || null
-        const std = (res as any).lyric || (res as any).lrc || null
-
-        let picked: string | null = null
-        if (preferWordByWord) {
-          picked = (cr as any) || (std as any) || null
+          let picked: string | null = null
+          if (preferWordByWord) {
+            picked = (cr as any) || (std as any) || null
+          } else {
+            picked = (std as any) || (cr as any) || null
+          }
+          return picked
         } else {
-          picked = (std as any) || (cr as any) || null
-        }
-
-        // 兼容旧调用：当需要结构化结果时仍返回原始对象
-        if (grepLyricInfo && picked && typeof picked === 'string') {
-          const grepKeyRaw = [
-            '作曲',
-            '作词',
-            '编曲',
-            '制作人',
-            '专辑',
-            '时间',
-            '时长',
-            '发行',
-            'OP',
-            'SP',
-            '词',
-            '曲',
-            '吉他',
-            '贝斯',
-            '录音',
-            '混音',
-            '出品',
-            '演唱',
-            '和声',
-            '弦乐',
-            '企划',
-            '录音室',
-            '鼓',
-            '弦',
-            '弦乐部分'
-          ]
-          const grepKey = grepKeyRaw.map((key) => `.*${key.split('').join('.*')}.*`)
-          const regex = new RegExp(`^.*(${grepKey.join('|')})[:：]\s*(.+)(\n)*$`, 'gm')
-          // 匹配带冒号的行（含时间戳前缀）
-          const pureLyric = (lyric: string[]) => {
-            return lyric.filter((line) => {
-              const raw = line.replace(/\[.*]/g, '')
-              // console.log('raw', raw, !raw.includes(':') && !raw.includes('：'))
-              return !raw.includes(':') && !raw.includes('：')
-            })
-          }
-
-          const lyric = {}
-          for (const key in res) {
-            if (!useStrictMode) {
-              lyric[key] = res[key]?.replace(regex, '') || ''
-            } else {
-              lyric[key] = pureLyric(res[key]?.split('\n') || []).join('\n') || ''
+          if (grepLyricInfo) {
+            const grepKeyRaw = [
+              '作曲',
+              '作词',
+              '编曲',
+              '制作人',
+              '专辑',
+              '时间',
+              '时长',
+              '发行',
+              'OP',
+              'SP',
+              '词',
+              '曲',
+              '吉他',
+              '贝斯',
+              '录音',
+              '混音',
+              '出品',
+              '演唱',
+              '和声',
+              '弦乐',
+              '企划',
+              '录音室',
+              '鼓',
+              '弦',
+              '弦乐部分'
+            ]
+            const grepKey = grepKeyRaw.map((key) => `.*${key.split('').join('.*')}.*`)
+            const regex = new RegExp(`^.*(${grepKey.join('|')})[:：]\s*(.+)(\n)*$`, 'gm')
+            // 匹配带冒号的行（含时间戳前缀）
+            const pureLyric = (lyric: string[]) => {
+              return lyric.filter((line) => {
+                const raw = line.replace(/\[.*]/g, '')
+                // console.log('raw', raw, !raw.includes(':') && !raw.includes('：'))
+                return !raw.includes(':') && !raw.includes('：')
+              })
             }
+
+            const lyric = {}
+            for (const key in res) {
+              if (!useStrictMode) {
+                lyric[key] = res[key]?.replace(regex, '') || ''
+              } else {
+                lyric[key] = pureLyric(res[key]?.split('\n') || []).join('\n') || ''
+              }
+            }
+            return lyric
           }
-          return lyric
+          return res
         }
-
-        // 默认直接返回挑选后的字符串（供下载管理和单曲下载使用）
-        if (picked && typeof picked === 'string') return picked as any
-
-        return res
       } catch (e: any) {
         return {
           error: '获取歌词失败 ' + (e.error || e.message || e)
