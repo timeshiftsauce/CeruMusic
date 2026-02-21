@@ -54,7 +54,10 @@ let bursts: any[] = []
 let particles: any[] = []
 let lastTime = 0
 let running = false
-const showFestivalEffects = computed(() => settingsStore.shouldUseSpringFestivalTheme())
+const showFestivalEffects = computed(
+  () =>
+    settingsStore.shouldUseSpringFestivalTheme() && !settingsStore.settings.springFestivalDisabled
+)
 
 const rnd = (min: number, max: number) => Math.random() * (max - min) + min
 const pick = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)]
