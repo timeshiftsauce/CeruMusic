@@ -274,10 +274,8 @@ function setupDownloadManager() {
       try {
         const api = musicSdkService(source)
         const result = await api.getLyric({
-          songInfo: {
-            ...task.songInfo,
-            lyricFormat: task.tagWriteOptions?.lyricFormat || 'lrc'
-          }
+          songInfo: task.songInfo,
+          useFormat: task.tagWriteOptions?.lyricFormat || 'lrc'
         })
 
         if (result && !result.error) {
