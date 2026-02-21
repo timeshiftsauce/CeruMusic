@@ -6,7 +6,6 @@ out
 *.log*
 .idea
 .kiro
-build
 /download/
 /plugin/
 /plugins/
