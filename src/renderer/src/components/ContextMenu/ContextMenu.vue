@@ -55,11 +55,7 @@
 
               <!-- 子菜单箭头 -->
               <div v-if="item.children && item.children.length > 0" class="context-menu__arrow">
-                <chevron-right-icon
-                  :fill-color="'transparent'"
-                  :stroke-color="'#000000'"
-                  :stroke-width="1.5"
-                />
+                <chevron-right-icon :fill-color="'transparent'" :stroke-width="1.5" />
               </div>
             </template>
           </li>
@@ -571,7 +567,7 @@ defineExpose({
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .context-menu-backdrop {
   position: fixed;
   top: 0;
@@ -777,12 +773,11 @@ defineExpose({
 }
 
 /* 暗色主题支持 */
-@media (prefers-color-scheme: dark) {
-  .context-menu {
-    background: #2d2d2d;
-    border-color: #404040;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  }
+
+html[data-theme='dark'] .context-menu {
+  background: #2d2d2d;
+  border-color: #404040;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 
   .context-menu__item:hover:not(.context-menu__item--disabled):not(.context-menu__item--separator) {
     background: #404040;
@@ -804,6 +799,12 @@ defineExpose({
   .context-menu__scroll-indicator-top,
   .context-menu__scroll-indicator-bottom {
     background: linear-gradient(to bottom, rgba(45, 45, 45, 0.9), transparent);
+  }
+  :deep(.context-menu__arrow) {
+    color: #ccc;
+    .t-icon {
+      color: #f5f5f5;
+    }
   }
 }
 </style>
