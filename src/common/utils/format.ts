@@ -5,19 +5,30 @@ export const formatMusicInfo = (template: string, data: any) => {
     '%s': ['singer'],
     '%a': ['albumName'],
     '%u': ['source', 'platform'],
-    '%d': ['date']
+    '%d': ['date'],
+    '%q': ['quality']
   }
 
   // 一次性替换所有占位符
   let result = template || '%t - %s'
 
   // 使用正则匹配所有占位符
-  result = result.replace(/%[tsaud]/g, (match: string) => {
+  result = result.replace(/%[tsaudq]/g, (match: string) => {
+    const d = new Date()
     const keys = patterns[match]
     if (!keys) return match
 
     for (const key of keys) {
-      if (data[key] !== undefined) return data[key]
+      if (data[key] !== undefined)
+        return (
+          data[key] ??
+          (match === '%d' && !data.date
+            ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+              2,
+              '0'
+            )}-${String(d.getDate()).padStart(2, '0')}`
+            : null)
+        )
     }
     return match
   })
