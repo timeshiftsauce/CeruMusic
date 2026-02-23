@@ -28,13 +28,13 @@ const handleCacheCleared = () => {
 
 // Filename template logic
 const filenameTemplate = ref(settings.value.filenameTemplate || '%t - %s')
-const d = new Date()
 const previewSongInfo: any = {
   name: '半岛铁盒',
   singer: '周杰伦',
   albumName: '八度空间',
   platform: 'tx',
-  date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  quality: 'master',
+  date: '2026-01-01'
 }
 
 const updateFilenameTemplate = () => {
@@ -120,6 +120,15 @@ const getTagOptionsStatus = () => {
           <t-tag>%u</t-tag>
           <span>平台</span>
         </div>
+        <t-tooltip content="例如:128k/320k/flac/hires/master...">
+          <div class="template-tip-item">
+            <t-tag>%q</t-tag>
+            <span style="display: flex; align-items: center">
+              音质
+              <t-icon name="info-circle" size="12" style="margin-left: 0.2em" />
+            </span>
+          </div>
+        </t-tooltip>
         <div class="template-tip-item">
           <t-tag>%d</t-tag>
           <span>日期</span>
