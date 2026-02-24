@@ -272,6 +272,13 @@ function main(source: string = 'wy') {
     // 最新评论
     async getComment({ songInfo, page = 1, limit = 20 }: GetCommentArg) {
       return await Api.comment.getComment(songInfo, page, limit)
+    },
+    // 听歌识曲
+    async recognize({ fp, duration }: { fp: string; duration: number }) {
+      if (source === 'wy' && Api.recognize) {
+        return await Api.recognize.recognize(fp, duration)
+      }
+      return []
     }
   }
 }

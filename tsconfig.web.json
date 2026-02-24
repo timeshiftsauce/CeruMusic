@@ -10,6 +10,10 @@
     "src/types/**/*",
     "src/common/**/*"
   ],
+  "exclude": [
+    "src/renderer/src/public/**/*",
+    "src/renderer/src/public/*"
+  ],
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
