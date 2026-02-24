@@ -76,12 +76,15 @@ const openLink = (url: string) => {
 const handleConfirm = () => {
   localStorage.setItem(STORAGE_KEY, 'true')
   visible.value = false
+  emit('next')
 }
-
+const emit = defineEmits(['next'])
 onMounted(() => {
   const hasSeen = localStorage.getItem(STORAGE_KEY)
   if (!hasSeen) {
     visible.value = true
+  } else {
+    emit('next')
   }
 })
 </script>

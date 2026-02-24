@@ -1,16 +1,66 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog } from 'electron'
 import fs from 'fs'
 import fsp from 'fs/promises'
 import path from 'node:path'
-import crypto from 'crypto'
 import { localMusicIndexService } from '../services/LocalMusicIndex'
-import { convertLrcFormat } from '../utils/lrcParser'
-// remove static import to avoid runtime failures if native module is missing
+import { coverCacheService } from '../services/CoverCache'
+import { genId, genCoverKey, normPath } from '../utils/fileUtils'
+import { readTags } from '../utils/tagUtils'
 
 const AUDIO_EXTS = new Set(['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.wma'])
 
-function genId(input: string) {
-  return crypto.createHash('md5').update(input).digest('hex')
+async function readHeader(filePath: string): Promise<Buffer> {
+  const h = Buffer.alloc(64)
+  try {
+    const f = await fsp.open(filePath, 'r')
+    await f.read(h, 0, 64, 0)
+    await f.close()
+  } catch {}
+  return h
+}
+
+async function detectFormat(filePath: string): Promise<string> {
+  const h = await readHeader(filePath)
+  const s3 = h.slice(0, 3).toString('ascii')
+  const s4 = h.slice(0, 4).toString('ascii')
+  const sFTYP = h.slice(4, 8).toString('ascii')
+  if (s3 === 'ID3') return 'mp3'
+  if (s4 === 'fLaC') return 'flac'
+  if (h[0] === 0x4f && h[1] === 0x67 && h[2] === 0x67 && h[3] === 0x53) return 'ogg'
+  if (h[0] === 0x30 && h[1] === 0x26 && h[2] === 0xb2 && h[3] === 0x75) return 'wma'
+  if (
+    h[0] === 0x52 &&
+    h[1] === 0x49 &&
+    h[2] === 0x46 &&
+    h[3] === 0x46 &&
+    h[8] === 0x57 &&
+    h[9] === 0x41 &&
+    h[10] === 0x56 &&
+    h[11] === 0x45
+  )
+    return 'wav'
+  if (sFTYP === 'ftyp') return 'm4a'
+  if (h[0] === 0xff && (h[1] & 0xe0) === 0xe0) return 'mp3'
+  return ''
+}
+
+function extForFormat(fmt: string): string {
+  switch (fmt) {
+    case 'mp3':
+      return '.mp3'
+    case 'flac':
+      return '.flac'
+    case 'm4a':
+      return '.m4a'
+    case 'wav':
+      return '.wav'
+    case 'ogg':
+      return '.ogg'
+    case 'wma':
+      return '.wma'
+    default:
+      return ''
+  }
 }
 
 async function walkDir(dir: string, results: string[]) {
@@ -26,175 +76,6 @@ async function walkDir(dir: string, results: string[]) {
       }
     }
   } catch {}
-}
-
-function readTags(filePath: string, includeLrc = false) {
-  try {
-    const taglib = require('node-taglib-sharp')
-    const f = taglib.File.createFromPath(filePath)
-    const tag = f.tag
-    const title = tag.title || ''
-    const album = tag.album || ''
-    const performers = Array.isArray(tag.performers) ? tag.performers : []
-    let img = ''
-    if (Array.isArray(tag.pictures) && tag.pictures.length > 0) {
-      try {
-        const buf = tag.pictures[0].data
-        const mime = tag.pictures[0].mimeType || 'image/jpeg'
-        img = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
-      } catch {}
-    }
-    let lrc: string | null = null
-    if (includeLrc) {
-      try {
-        const raw = tag.lyrics || ''
-        if (raw && typeof raw === 'string') {
-          lrc = normalizeLyricsToCrLyric(raw)
-        }
-      } catch {}
-    }
-    f.dispose()
-    return { title, album, performers, img, lrc }
-  } catch {
-    return { title: '', album: '', performers: [], img: '', lrc: null }
-  }
-}
-
-// 将两种逐字/行内时间歌词统一转换为标准LRC（仅保留行时间标签）
-function normalizeLyricsToLrc(input: string): string {
-  const lines = String(input).split('\n')
-  const msFormat = (timeMs: number) => {
-    if (!Number.isFinite(timeMs)) return ''
-    const m = Math.floor(timeMs / 60000)
-    const s = Math.floor((timeMs % 60000) / 1000)
-    const ms = Math.floor(timeMs % 1000)
-    return `[${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}]`
-  }
-  const out: string[] = []
-  for (const line of lines) {
-    if (!line.trim()) {
-      out.push(line)
-      continue
-    }
-    const off = /^\[offset:[+-]?\d+\]$/i.exec(line.trim())
-    if (off) {
-      out.push(line.trim())
-      continue
-    }
-    const mNew = /^\[(\d+),(\d+)\](.*)$/.exec(line)
-    if (mNew) {
-      const startMs = parseInt(mNew[1])
-      let text = mNew[3] || ''
-      text = text.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
-      text = text.replace(/<\d{2}:\d{2}\.\d{3}>/g, '')
-      text = text.replace(/\s+/g, ' ').trim()
-      const tag = msFormat(startMs)
-      out.push(`${tag}${text}`)
-      continue
-    }
-    const mOld = /^\[(\d{2}:\d{2}\.\d{3})\](.*)$/.exec(line)
-    if (mOld) {
-      let text = mOld[2] || ''
-      text = text.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
-      text = text.replace(/<\d{2}:\d{2}\.\d{3}>/g, '')
-      text = text.replace(/\s+/g, ' ').trim()
-      const tag = `[${mOld[1]}]`
-      out.push(`${tag}${text}`)
-      continue
-    }
-    out.push(line)
-  }
-  return out.join('\n')
-}
-
-function timeToMs(s: string): number {
-  const m = /(\d{2}):(\d{2})\.(\d{3})/.exec(s)
-  if (!m) return NaN
-  return parseInt(m[1]) * 60000 + parseInt(m[2]) * 1000 + parseInt(m[3])
-}
-
-function normalizeLyricsToCrLyric(input: string): string {
-  const raw = String(input).replace(/\r/g, '')
-  const lines = raw.split('\n')
-  let offset = 0
-  const res: string[] = []
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line.trim()) {
-      res.push(line)
-      continue
-    }
-    const off = /^\[offset:([+-]?\d+)\]$/i.exec(line.trim())
-    if (off) {
-      offset = parseInt(off[1]) || 0
-      res.push(line)
-      continue
-    }
-    const yrcLike = /\[\d+,\d+\]/.test(line) && /\(\d+,\d+,\d+\)/.test(line)
-    if (yrcLike) {
-      res.push(line)
-      continue
-    }
-    const mLine = /^\[(\d{2}:\d{2}\.\d{3})\](.*)$/.exec(line)
-    if (!mLine) {
-      res.push(line)
-      continue
-    }
-    const lineStart = timeToMs(mLine[1]) + offset
-    let rest = mLine[2]
-    rest = rest.replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
-    const segs: { start: number; text: string }[] = []
-    const re = /<(\d{2}:\d{2}\.\d{3})>([^<]*)/g
-    let m: RegExpExecArray | null
-    while ((m = re.exec(rest))) {
-      const start = timeToMs(m[1]) + offset
-      const text = m[2] || ''
-      if (text) segs.push({ start, text })
-    }
-    if (segs.length === 0) {
-      res.push(line)
-      continue
-    }
-    let nextLineStart: number | null = null
-    for (let j = i + 1; j < lines.length; j++) {
-      const ml = /^\[(\d{2}:\d{2}\.\d{3})\]/.exec(lines[j])
-      if (ml) {
-        nextLineStart = timeToMs(ml[1]) + offset
-        break
-      }
-      const skip = lines[j].trim()
-      if (!skip || /^\[offset:/.test(skip)) continue
-      break
-    }
-    const tokens: string[] = []
-    for (let k = 0; k < segs.length; k++) {
-      const cur = segs[k]
-      const nextStart =
-        k < segs.length - 1 ? segs[k + 1].start : (nextLineStart ?? cur.start + 1000)
-      const span = Math.max(1, nextStart - cur.start)
-      const chars = Array.from(cur.text)
-      if (chars.length <= 1) {
-        if (chars.length === 1) tokens.push(`(${cur.start},${span},0)` + chars[0])
-      } else {
-        const per = Math.max(1, Math.floor(span / chars.length))
-        for (let c = 0; c < chars.length; c++) {
-          const cs = cur.start + c * per
-          const cd = c === chars.length - 1 ? Math.max(1, nextStart - cs) : per
-          tokens.push(`(${cs},${cd},0)` + chars[c])
-        }
-      }
-    }
-    const lineEnd =
-      nextLineStart ??
-      segs[segs.length - 1].start +
-        Math.max(
-          1,
-          (nextLineStart ?? segs[segs.length - 1].start + 1000) - segs[segs.length - 1].start
-        )
-    const ld = Math.max(0, lineEnd - lineStart)
-    res.push(`[${lineStart},${ld}]` + tokens.join(''))
-  }
-  return res.join('\n')
 }
 
 ipcMain.handle('local-music:select-dirs', async () => {
@@ -234,8 +115,13 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
           title: '',
           album: '',
           performers: [] as string[],
-          img: '',
-          lrc: null as null | string
+          hasCover: false,
+          lrc: null as null | string,
+          year: 0,
+          bitrate: 0,
+          sampleRate: 0,
+          channels: 0,
+          duration: 0
         }
         try {
           tags = readTags(p, false) // 扫描时不读取歌词
@@ -262,7 +148,21 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
             Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : ''
         }
 
+        // normPath is handled by upsertSongs -> keyForItem, so we can just use genId(p) here for initial object
+        // but to be safe and consistent with previous logic, we use normalized path for initial ID if we want
+        // However, LocalMusicIndexService.upsertSongs RE-CALCULATES the ID based on path.
+        // So we just need to provide the path.
+
+        // We provide a temporary songmid. upsertSongs will overwrite it with the correct one based on path.
         const songmid = genId(p)
+
+        const formatTime = (sec: number) => {
+          if (!sec || !isFinite(sec)) return ''
+          const m = Math.floor(sec / 60)
+          const s = Math.floor(sec % 60)
+          return `${m}:${String(s).padStart(2, '0')}`
+        }
+
         return {
           songmid,
           singer: singer || '未知艺术家',
@@ -270,14 +170,21 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
           albumName: tags.album || '未知专辑',
           albumId: 0,
           source: 'local',
-          interval: '',
-          img: tags.img || '',
+          interval: tags.duration ? formatTime(tags.duration) : '',
+          img: '',
+          hasCover: !!(tags as any).hasCover,
+          coverKey: genCoverKey(p),
+          year: (tags as any).year || 0,
           lrc: null, // 初始歌词为空
           types: [],
           _types: {},
           typeUrl: {},
           url: 'file://' + p,
-          path: p
+          path: p,
+          bitrate: tags.bitrate,
+          sampleRate: tags.sampleRate,
+          channels: tags.channels,
+          duration: tags.duration
         }
       })
 
@@ -294,6 +201,7 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
 
     await localMusicIndexService.setDirs(existsDirs)
     await localMusicIndexService.upsertSongs(allSongs)
+    await localMusicIndexService.pruneByScan(existsDirs, files)
 
     // 通知 renderer 扫描完成
     sender.send('local-music:scan-finished', allSongs)
@@ -315,21 +223,60 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
   if (!filePath || !fs.existsSync(filePath)) return { success: false, message: '文件不存在' }
   try {
     const taglib = require('node-taglib-sharp')
-    const songFile = taglib.File.createFromPath(filePath)
-    taglib.Id3v2Settings.forceDefaultVersion = true
-    taglib.Id3v2Settings.defaultVersion = 3
+    // 先备份原文件，确保失败时可回滚
+    const dir = path.dirname(filePath)
+    const base = path.basename(filePath)
+    const backupPath = path.join(dir, `${base}.bak_${Date.now()}`)
+    await fsp.copyFile(filePath, backupPath)
+
+    let targetFilePath = filePath
+    let ext = (path.extname(targetFilePath) || '').toLowerCase()
+    const detected = await detectFormat(filePath)
+    const shouldExt = extForFormat(detected)
+    if (shouldExt && shouldExt !== ext) {
+      const baseNoExt = path.basename(filePath, ext)
+      const proposed = path.join(dir, `${baseNoExt}${shouldExt}`)
+      if (tagWriteOptions?.fixExt === true) {
+        let target = proposed
+        if (fs.existsSync(target)) {
+          const uniq = `${baseNoExt}.${Date.now()}${shouldExt}`
+          target = path.join(dir, uniq)
+        }
+        await fsp.rename(targetFilePath, target)
+        targetFilePath = target
+        ext = (path.extname(targetFilePath) || '').toLowerCase()
+      } else {
+        return {
+          success: false,
+          code: 'NEED_FIX_EXT',
+          message: '扩展名与实际格式不一致，需修复后再写入',
+          detected,
+          currentExt: ext,
+          proposedExt: shouldExt,
+          proposedPath: proposed
+        }
+      }
+    }
+    // 不支持的格式（如 WAV）提前提示
+    if (ext === '.wav') {
+      return { success: false, message: 'WAV 文件不支持写入封面/歌词标签' }
+    }
+
+    const songFile = taglib.File.createFromPath(targetFilePath)
+    if (ext === '.mp3') {
+      try {
+        taglib.Id3v2Settings.forceDefaultVersion = true
+        taglib.Id3v2Settings.defaultVersion = 3
+      } catch {}
+    }
     songFile.tag.title = songInfo?.name || '未知曲目'
     songFile.tag.album = songInfo?.albumName || '未知专辑'
     const artists = songInfo?.singer ? [songInfo.singer] : ['未知艺术家']
     songFile.tag.performers = artists
     songFile.tag.albumArtists = artists
     if (tagWriteOptions?.lyrics && songInfo?.lrc) {
-      let finalLrc = songInfo.lrc
-      if (/\[\d+,\d+\]/.test(finalLrc)) {
-        finalLrc = convertLrcFormat(finalLrc)
-      } else {
-        finalLrc = normalizeLyricsToLrc(finalLrc)
-      }
+      const finalLrc = songInfo.lrc
+
       songFile.tag.lyrics = finalLrc
     }
     if (tagWriteOptions?.cover && songInfo?.img) {
@@ -337,9 +284,11 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
         if (songInfo.img.startsWith('data:')) {
           const m = songInfo.img.match(/^data:(.*?);base64,(.*)$/)
           if (m) {
-            // const mime = m[1]
+            const mime = m[1]
             const buf = Buffer.from(m[2], 'base64')
-            const tmp = path.join(path.dirname(filePath), genId(filePath) + '.cover')
+            const ext =
+              mime && /jpeg|jpg/i.test(mime) ? '.jpg' : mime && /png/i.test(mime) ? '.png' : '.img'
+            const tmp = path.join(path.dirname(targetFilePath), genId(targetFilePath) + ext)
             await fsp.writeFile(tmp, buf)
             const pic = taglib.Picture.fromPath(tmp)
             songFile.tag.pictures = [pic]
@@ -350,28 +299,87 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
         }
       } catch {}
     }
+    try {
+      if (typeof songInfo?.year === 'number' && songInfo.year > 0) {
+        songFile.tag.year = songInfo.year
+      }
+    } catch {}
     songFile.save()
     songFile.dispose()
-    const songmid = genId(filePath)
-    await localMusicIndexService.upsertSong({
-      songmid,
-      singer: songInfo?.singer || '未知艺术家',
-      name: songInfo?.name || '未知曲目',
-      albumName: songInfo?.albumName || '未知专辑',
-      albumId: 0,
-      source: 'local',
-      interval: '',
-      img: songInfo?.img || '',
-      lrc: songInfo?.lrc || null,
-      types: [],
-      _types: {},
-      typeUrl: {},
-      url: 'file://' + filePath,
-      path: filePath
-    })
+
+    // 基本校验：保存后能否重新打开
+    try {
+      const check = taglib.File.createFromPath(targetFilePath)
+      check.dispose()
+    } catch (e: any) {
+      // 恢复备份并返回失败
+      try {
+        await fsp.copyFile(backupPath, targetFilePath)
+      } catch {}
+      try {
+        await fsp.unlink(backupPath)
+      } catch {}
+      return { success: false, message: '写入后校验失败，已回滚' }
+    }
+
+    // 写入成功，清理备份
+    try {
+      await fsp.unlink(backupPath)
+    } catch {}
+
+    // Fix: Use normalized path to find the correct existing song ID
+    const normalizedPath = normPath(targetFilePath)
+    // If normPath returns null (shouldn't happen here), fallback to empty
+    const songmid = genId(normalizedPath || targetFilePath)
+
+    const exists = localMusicIndexService.getSongById(songmid) || ({} as any)
+    const updated = {
+      // 原有字段优先保留
+      ...exists,
+      path: targetFilePath,
+      url: exists.url || `file://${targetFilePath}`,
+      singer: songInfo?.singer ?? exists.singer ?? '未知艺术家',
+      name: songInfo?.name ?? exists.name ?? '未知曲目',
+      albumName: songInfo?.albumName ?? exists.albumName ?? '未知专辑',
+      year: Number(songInfo?.year ?? exists.year ?? 0) || 0
+    }
+    await localMusicIndexService.upsertSong(updated as any)
+    // 如果发生了重命名，移除旧路径对应的索引，避免重复
+    if (targetFilePath !== filePath) {
+      await localMusicIndexService.removeSongByPath(filePath)
+    }
+    // 通知 renderer 刷新列表（复用 scan-finished 通道）
+    try {
+      const all = localMusicIndexService.getAllSongs()
+      ;(_e as any)?.sender?.send?.('local-music:scan-finished', all)
+    } catch {}
     return { success: true }
   } catch (e: any) {
-    return { success: false, message: e?.message || '写入失败' }
+    // 失败时尝试回滚
+    try {
+      const dir = path.dirname(filePath)
+      const base = path.basename(filePath)
+      const pattern = new RegExp(`^${base}\\.bak_\\d+$`)
+      const items = await fsp.readdir(dir)
+      const latestBak = items
+        .filter((n) => pattern.test(n))
+        .map((n) => path.join(dir, n))
+        .sort()
+        .pop()
+      if (latestBak) {
+        try {
+          await fsp.copyFile(latestBak, filePath)
+        } catch {}
+        try {
+          await fsp.unlink(latestBak)
+        } catch {}
+      }
+    } catch {}
+    const msg: string = e?.message || '写入失败'
+    const mapped = /MPEG audio header not found/i.test(msg)
+      ? '文件不是有效的 MP3，或扩展名与实际格式不匹配'
+      : msg
+    return { success: false, message: mapped }
   }
 })
 
@@ -395,7 +403,7 @@ ipcMain.handle('local-music:get-lyric', async (_e, songmid: string) => {
 
   try {
     const tags = readTags(song.path, true) // 读取歌词
-    return tags.lrc
+    return tags.lrc || ''
   } catch {
     return null
   }
@@ -407,17 +415,56 @@ ipcMain.handle('local-music:get-url', async (_e, id: string | number) => {
   return u
 })
 
+ipcMain.handle('local-music:get-cover', async (_e, trackId: string) => {
+  if (!trackId) return ''
+  const song = localMusicIndexService.getSongById(trackId)
+  if (!song || !song.path) return ''
+  try {
+    const key = genCoverKey(song.path)
+    const data = await coverCacheService.getCoverByFile(song.path, key)
+    return data || ''
+  } catch {
+    return ''
+  }
+})
+
+ipcMain.handle('local-music:get-covers', async (_e, trackIds: string[]) => {
+  if (!Array.isArray(trackIds) || trackIds.length === 0) return {}
+  const res: Record<string, string> = {}
+  for (const id of trackIds) {
+    const s = localMusicIndexService.getSongById(id)
+    if (!s?.path) continue
+    try {
+      const data = await coverCacheService.getCoverByFile(s.path, genCoverKey(s.path))
+      if (data) res[id] = data
+    } catch {}
+  }
+  return res
+})
+
+ipcMain.handle('local-music:get-tags', async (_e, songmid: string, includeLyrics: boolean) => {
+  if (!songmid) return null
+  const s = localMusicIndexService.getSongById(songmid)
+  if (!s?.path) return null
+  try {
+    const tags = readTags(s.path, !!includeLyrics)
+    return {
+      name: tags.title || '',
+      singer:
+        Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : '',
+      albumName: tags.album || '',
+      year: tags.year || 0,
+      lrc: tags.lrc || ''
+    }
+  } catch {
+    return null
+  }
+})
+
 ipcMain.handle('local-music:clear-index', async () => {
   try {
-    const fn = (localMusicIndexService as any).clearSongs
-    if (typeof fn === 'function') {
-      await fn.call(localMusicIndexService)
-      return { success: true }
-    }
-    const dirs = localMusicIndexService.getDirs()
-    const file = require('node:path').join(app.getPath('userData'), 'local-music-index.json')
-    const data = { songs: {}, dirs: Array.isArray(dirs) ? dirs : [], updatedAt: Date.now() }
-    await require('fs/promises').writeFile(file, JSON.stringify(data, null, 2))
+    // Calling the newly added method directly
+    await localMusicIndexService.clearSongs()
     return { success: true }
   } catch (e: any) {
     return { success: false, message: e?.message || '清空失败' }

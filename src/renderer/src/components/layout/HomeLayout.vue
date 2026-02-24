@@ -6,6 +6,7 @@ import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter, useRoute } from 'vue-router'
 import { useSearchStore } from '@renderer/store'
+import { GuideStep } from 'tdesign-vue-next'
 
 let stopWatchEffect: (() => void) | null = null
 
@@ -14,7 +15,6 @@ onMounted(() => {
   stopWatchEffect = watchEffect(() => {
     source.value = sourceicon[LocalUserDetail.userSource.source || 'wy']
   })
-
   // Listen for global hotkey to open audio output selector
   // Note: Logic moved to App.vue to support global toggle and prevent duplicate listeners.
   // This listener is removed to avoid conflict.
@@ -204,6 +204,107 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
   SearchStore.setValue(suggestion)
   handleSearch()
 }
+
+// 已迁移到 App.vue 全局引导
+const steps = ref<GuideStep[]>([
+  {
+    element: '.home-container',
+    title: '欢迎使用 Ceru Music',
+    body: '这是一个基于 Electron 框架的开源音乐播放器应用。你可以自由选择合规插件进行播放歌曲，亦或是使用内置的本地播放器进行播放。下面即将开始新手教程请确认是否开始。',
+    mode: 'dialog'
+  },
+  {
+    element: '.sidebar',
+    title: '导航栏',
+    body: '导航栏是 Ceru Music 的重要组成部分，它提供了快速访问不同功能模块的入口。你可以通过点击导航栏上的图标或文本，切换到对应的功能页面。其中包括首页、搜索、本地音乐、下载等功能模块。',
+    placement: 'right'
+  },
+  {
+    element: '.header',
+    title: '顶部栏',
+    body: '顶部栏包含了应用的一些高频操作按钮，如返回、前进、全局在线搜索、账号等。你可以在顶部栏上点击这些按钮，执行对应的操作。'
+  },
+  {
+    element: '.source-selector',
+    title: '音源选择器',
+    body: '其中的搜索框左侧音源选择器是用来选择播放音源的工具。你可以在音源选择器中选择插件所支持的音源，在这快速切换到不同的音源查找你的喜欢音乐或歌单。'
+  },
+  {
+    element: '.settings-btn',
+    title: '设置按钮',
+    body: '顶部栏右侧的设置按钮是用来打开应用设置的。你可以在设置中调整应用的一些参数，如插件选择、音源配置、全局缓存，软件UI样式等。'
+  },
+  {
+    element: '.find-tabs',
+    title: '筛选工具',
+    body: '发现页顶部的筛选工具是用来筛选歌单的。你可以在筛选工具中选择不同的筛选条件，如歌单-分类、排行榜，来快速找到你喜欢的音乐。'
+  },
+  {
+    element: '.player-container',
+    title: '播放器',
+    body: '播放器是 Ceru Music 的核心组件，它负责播放音乐。你可以在播放器中控制音乐的播放、暂停、上/下一曲、调整音量、歌词、喜欢等操作。'
+  },
+  {
+    element: '.playlist-container',
+    title: '播放列表',
+    body: '播放列表是用来临时存储你喜欢的音乐的播放顺序列表。你可以在播放列表中添加、删除、长按调整顺序。',
+    placement: 'left'
+  },
+  {
+    element: '.home-container',
+    title: '设置页面',
+    body: '设置页面是 Ceru Music 的配置中心。你可以在这里设置样式软件配置、快捷键、全局缓存、插件管理等、音源选择、查看关于软件。',
+    mode: 'dialog'
+  },
+  {
+    element: '#settings-nav-appearance',
+    title: '外观与主题',
+    body: '包含 标题栏风格(Windows/红绿灯)、关闭按钮行为(最小化到托盘/直接退出)、应用主题色选择，以及歌词字体与桌面歌词样式的详细配置。'
+  },
+  {
+    element: '#settings-nav-hotkeys',
+    title: '快捷键',
+    body: '配置系统级全局快捷键，如播放/暂停、上下曲、切换歌词面板等，支持启用/禁用与按键冲突提示，确保在任意页面可用。'
+  },
+  {
+    element: '#settings-nav-storage',
+    title: '全局缓存',
+    body: '包含 下载/缓存目录管理与容量统计、音乐缓存清理，缓存策略(自动缓存)，下载文件名模板(支持 %t/%s/%a/%u/%q/%d 预览)，以及下载标签写入设置(基础信息/封面/歌词/逐字/独立LRC)。'
+  },
+  {
+    element: '#settings-nav-plugins',
+    title: '插件管理',
+    body: '用于安装/启用/配置音乐插件，决定支持的音乐源与能力；设置后可在“音乐源”中选择具体源与默认音质。'
+  },
+  {
+    element: '#settings-nav-music',
+    title: '音源选择',
+    body: '展示当前插件支持的音乐源列表，可切换活跃源；支持按源选择音质(滑条标注质量等级)，以及“全局音质(交集)”统一设定；右侧显示当前源与音质配置状态。'
+  },
+  {
+    element: '#settings-nav-about',
+    title: '关于与支持',
+    body: '包含 应用版本信息(启动检查更新/手动检查)、技术栈与服务链接、开发团队介绍、法律声明与联系方式(QQ群/官网/问题反馈)。'
+  },
+  {
+    element: '.home-container',
+    title: '开始前的准备工作',
+    body: '在开始使用 Ceru Music 之前，你需要先安装并配置一个音乐插件。插件是用来获取音乐数据的，你可以在设置中配置符合你需求的插件进行播放。如果没有合适的插件，你也可以使用内置的本地播放器来体验澜音。下面轻点完成开始你的澜音之旅吧！还有很多功能等待你去发现。',
+    mode: 'dialog'
+  }
+] as GuideStep[])
+function checkGuide() {
+  setTimeout(() => {
+    if (!LocalUserDetailStore().userInfo.hasGuide) {
+      try {
+        if (!(window as any).__guide_initialized) {
+          window.dispatchEvent(new CustomEvent('guide:init', { detail: { steps: steps.value } }))
+        }
+      } catch {}
+    }
+  }, 1000)
+}
+// 引导步骤变更逻辑已迁移到 App.vue 的全局引导中
 </script>
 
 <template>
@@ -313,7 +414,7 @@ const handleSuggestionSelect = (suggestion: any, _type: any) => {
         </div>
       </t-content>
     </t-layout>
-    <FirstRunDialog />
+    <FirstRunDialog @next="checkGuide" />
   </t-layout>
 </template>
 

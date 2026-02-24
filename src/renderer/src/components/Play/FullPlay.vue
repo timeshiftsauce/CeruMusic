@@ -23,6 +23,7 @@ import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { usePlaySettingStore } from '@renderer/store'
 import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
+import CommentsOverlay from './CommentsOverlay.vue'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
@@ -197,6 +198,7 @@ onUnmounted(() => {
 })
 interface Props {
   show?: boolean
+  showComments?: boolean
   coverImage?: string
   songId?: string | null
   songInfo: SongList | { songmid: number | null | string; lrc: string | null }
@@ -205,12 +207,13 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   show: false,
+  showComments: false,
   coverImage: '@assets/images/Default.jpg',
   songId: '',
   mainColor: '#rgb(0,0,0)'
 })
 // 定义事件
-const emit = defineEmits(['toggle-fullscreen', 'idle-change'])
+const emit = defineEmits(['toggle-fullscreen', 'idle-change', 'update:showComments'])
 
 // 跟踪全屏状态
 const isFullscreen = ref(false)
@@ -825,6 +828,11 @@ onUnmounted(() => {
         </div>
       </Transition>
     </div>
+    <CommentsOverlay
+      :show="props.showComments"
+      :main-color="lightMainColor"
+      @close="emit('update:showComments', false)"
+    />
   </div>
 </template>
 
