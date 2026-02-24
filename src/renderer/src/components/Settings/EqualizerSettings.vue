@@ -16,7 +16,7 @@
 
         <!-- Preset Selector -->
         <div class="controls-row">
-          <t-space align="center">
+          <div class="preset-controls">
             <t-select
               v-model="currentPresetName"
               placeholder="选择预设"
@@ -40,7 +40,7 @@
               @click="saveCurrentToPreset"
             >
               <template #icon><SaveIcon /></template>
-              保存当前值
+              保存
             </t-button>
 
             <!-- 删除预设按钮 - 只对自定义预设显示 -->
@@ -54,9 +54,9 @@
               <template #icon><DeleteIcon /></template>
               删除
             </t-button>
-          </t-space>
+          </div>
 
-          <t-space>
+          <div class="action-buttons">
             <t-button theme="primary" variant="outline" @click="savePresetDialogVisible = true"
               >保存预设</t-button
             >
@@ -69,7 +69,7 @@
               style="display: none"
               @change="handleFileImport"
             />
-          </t-space>
+          </div>
         </div>
 
         <!-- Sliders -->
@@ -114,16 +114,7 @@ import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { DeleteIcon, SaveIcon } from 'tdesign-icons-vue-next'
 
 // 内置预设列表 - 这些预设不能被删除
-const BUILTIN_PRESETS = [
-  'Flat',
-  'Pop',
-  'Rock',
-  'Jazz',
-  'Classical',
-  'Bass Boost',
-  'Vocal Boost',
-  'Treble Boost'
-]
+const BUILTIN_PRESETS = ['Flat', 'Pop', 'Rock', 'Jazz', 'Classical', 'Bass Boost', 'Vocal Boost', 'Treble Boost']
 
 const eqStore = useEqualizerStore()
 const audioStore = ControlAudioStore()
@@ -152,9 +143,12 @@ const currentPresetName = computed({
   }
 })
 
-// 判断当前预设是否可以删除（非内置预设）
+// 判断当前预设是否可以删除（从后往前找，找到的是用户创建的同名预设）
 const canDeleteCurrentPreset = computed(() => {
-  return !BUILTIN_PRESETS.includes(currentPreset.value)
+  // 从后往前查找，找到最后一个匹配的预设（用户创建的）
+  const reversedPresets = [...presets.value].reverse()
+  const preset = reversedPresets.find((p) => p.name === currentPreset.value)
+  return preset && preset.originalGains !== undefined
 })
 
 // 删除预设确认
@@ -181,10 +175,24 @@ const confirmDeletePreset = () => {
 // 删除当前预设
 const deleteCurrentPreset = () => {
   const presetName = currentPreset.value
-  const index = presets.value.findIndex((p) => p.name === presetName)
+
+  // 从后往前查找最后一个匹配的预设（用户创建的）
+  let index = -1
+  for (let i = presets.value.length - 1; i >= 0; i--) {
+    if (presets.value[i].name === presetName) {
+      index = i
+      break
+    }
+  }
 
   if (index === -1) {
     MessagePlugin.error('预设不存在')
+    return
+  }
+
+  // 检查是否是自定义预设（有 originalGains）
+  if (presets.value[index].originalGains === undefined) {
+    MessagePlugin.warning('内置预设不能删除')
     return
   }
 
@@ -270,7 +278,7 @@ const onGainChange = (index: number, val: number) => {
 
 // 重置功能：
 // - 内置预设：恢复到该预设的原始值
-// - 自定义预设：恢复到创建时基于的源预设值
+// - 自定义预设：恢复到创建时的初始值（originalGains）
 const resetToCurrentPreset = () => {
   const presetName = currentPreset.value
 
@@ -284,18 +292,15 @@ const resetToCurrentPreset = () => {
       eqStore.addLog(`Reset to preset original values: ${presetName}`)
     }
   } else {
-    // 自定义预设：恢复到创建时基于的源预设值
+    // 自定义预设：恢复到创建时的初始值
     const preset = presets.value.find((p) => p.name === presetName)
-    if (preset && preset.basePreset) {
-      // 有记录源预设，恢复到源预设的值
-      const basePreset = presets.value.find((p) => p.name === preset.basePreset)
-      if (basePreset) {
-        gains.value = [...basePreset.gains]
-        MessagePlugin.success(`已重置到源预设 "${preset.basePreset}" 的值`)
-        eqStore.addLog(`Reset custom preset "${presetName}" to base preset "${preset.basePreset}"`)
-      }
+    if (preset && preset.originalGains) {
+      // 恢复到创建时的初始值
+      gains.value = [...preset.originalGains]
+      MessagePlugin.success(`已重置到 "${presetName}" 的初始值`)
+      eqStore.addLog(`Reset custom preset "${presetName}" to original values`)
     } else {
-      // 没有记录源预设（兼容旧数据），恢复到 Flat
+      // 没有记录初始值（兼容旧数据），恢复到 Flat
       handlePresetChange('Flat')
       MessagePlugin.success('已重置到 Flat (000)')
       eqStore.addLog(`Reset custom preset "${presetName}" to Flat`)
@@ -306,19 +311,31 @@ const resetToCurrentPreset = () => {
 const saveNewPreset = () => {
   if (!newPresetName.value) return
 
-  // 记录当前选中的预设作为源预设
-  const basePresetName = currentPreset.value
+  // 检查是否与内置预设同名
+  if (BUILTIN_PRESETS.includes(newPresetName.value)) {
+    MessagePlugin.warning(`"${newPresetName.value}" 是内置预设名称，请使用其他名称`)
+    return
+  }
+
+  // 检查是否已存在同名预设
+  if (presets.value.some((p) => p.name === newPresetName.value)) {
+    MessagePlugin.warning(`预设 "${newPresetName.value}" 已存在`)
+    return
+  }
+
+  // 记录当前增益值作为初始值
+  const currentGains = [...gains.value]
 
   presets.value.push({
     name: newPresetName.value,
-    gains: [...gains.value],
-    basePreset: basePresetName // 记录基于哪个预设创建的
+    gains: currentGains,
+    originalGains: currentGains // 记录创建时的初始值，用于重置
   })
   currentPreset.value = newPresetName.value
   savePresetDialogVisible.value = false
   newPresetName.value = ''
   MessagePlugin.success('预设保存成功')
-  eqStore.addLog(`Saved new preset based on "${basePresetName}": ${newPresetName.value}`)
+  eqStore.addLog(`Saved new preset "${newPresetName.value}" with gains: ${currentGains.map(g => g.toFixed(1)).join(', ')}`)
 }
 
 // Import/Export
@@ -357,7 +374,23 @@ const handleFileImport = async (event: Event) => {
     const text = await file.text()
     const data = JSON.parse(text)
 
-    if (data.presets) presets.value = data.presets
+    if (data.presets) {
+      // 兼容旧数据：将 basePreset 转换为 originalGains
+      presets.value = data.presets.map((preset: any) => {
+        // 如果有 basePreset 但没有 originalGains，需要转换
+        if (preset.basePreset && !preset.originalGains) {
+          // 查找 basePreset 的增益值
+          const basePreset = data.presets.find((p: any) => p.name === preset.basePreset)
+          if (basePreset) {
+            return {
+              ...preset,
+              originalGains: [...basePreset.gains]
+            }
+          }
+        }
+        return preset
+      })
+    }
     if (data.enabled !== undefined) enabled.value = data.enabled
     if (data.gains) gains.value = data.gains
     if (data.currentPreset) currentPreset.value = data.currentPreset
@@ -478,10 +511,26 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.preset-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .preset-select {
-  width: 200px;
+  width: 160px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .sliders-container {
