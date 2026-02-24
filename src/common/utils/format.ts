@@ -24,9 +24,9 @@ export const formatMusicInfo = (template: string, data: any) => {
           data[key] ??
           (match === '%d' && !data.date
             ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-              2,
-              '0'
-            )}-${String(d.getDate()).padStart(2, '0')}`
+                2,
+                '0'
+              )}-${String(d.getDate()).padStart(2, '0')}`
             : null)
         )
     }

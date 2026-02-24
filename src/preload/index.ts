@@ -272,6 +272,34 @@ const api = {
     getList: () => ipcRenderer.invoke('local-music:get-list'),
     getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id),
     clearIndex: () => ipcRenderer.invoke('local-music:clear-index'),
+    getCoverBase64: async (trackId: string) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-cover', trackId)
+      } catch (e: any) {
+        return ''
+      }
+    },
+    getCoversBase64: async (trackIds: string[]) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-covers', trackIds)
+      } catch (e: any) {
+        return {}
+      }
+    },
+    getTags: async (songmid: string, includeLyrics: boolean = true) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-tags', songmid, includeLyrics)
+      } catch (e: any) {
+        return null
+      }
+    },
+    getLyric: async (songmid: string) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-lyric', songmid)
+      } catch (e: any) {
+        return ''
+      }
+    },
     onScanProgress: (callback: (processed: number, total: number) => void) => {
       const handler = (_event: any, data: { processed: number; total: number }) =>
         callback(data.processed, data.total)

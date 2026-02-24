@@ -37,12 +37,7 @@
         </div>
       </div>
       <div class="header-right" @pointerdown.stop>
-        <div
-          class="menu-btn lock-btn"
-          @mouseenter.stop="tempToggleLyricLock(false)"
-          @mouseleave.stop="tempToggleLyricLock(true)"
-          @click.stop="toggleLyricLock"
-        >
+        <div class="menu-btn lock-btn" @click.stop="toggleLyricLock()">
           <SvgIcon :name="lyricConfig.isLock ? 'ListLockOpen' : 'EyeLock'" />
         </div>
         <div class="menu-btn" @click.stop="sendToMain('closeDesktopLyric')">
@@ -787,10 +782,10 @@ const toggleLyricLock = async () => {
   window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', next)
   lyricConfig.isLock = next
 }
-const tempToggleLyricLock = (isLock: boolean) => {
-  if (!lyricConfig.isLock) return
-  window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', isLock)
-}
+// const tempToggleLyricLock = (isLock: boolean) => {
+//   if (!lyricConfig.isLock) return
+//   window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', isLock)
+// }
 
 onMounted(() => {
   window.electron?.ipcRenderer?.on?.(
@@ -978,12 +973,12 @@ onBeforeUnmount(() => {
       .n-icon {
         font-size: 24px;
       }
-      &.lock-btn {
-        pointer-events: auto;
-        .n-icon {
-          filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8));
-        }
-      }
+      // &.lock-btn {
+      //   pointer-events: auto;
+      //   .n-icon {
+      //     filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8));
+      //   }
+      // }
       &:hover {
         background-color: rgba(255, 255, 255, 0.3);
       }
@@ -1192,12 +1187,12 @@ onBeforeUnmount(() => {
     .lyric-container {
       pointer-events: none;
     }
-    &.hovered {
-      .lock-btn {
-        opacity: 1;
-        pointer-events: auto;
-      }
-    }
+    // &.hovered {
+    //   // .lock-btn {
+    //   //   opacity: 1;
+    //   //   pointer-events: auto;
+    //   // }
+    // }
   }
 }
 </style>

@@ -15,4 +15,5 @@ export interface UserInfo {
   selectSources?: string
   selectQuality?: string
   sourceQualityMap?: Record<string, string>
+  hasGuide?: boolean
 }

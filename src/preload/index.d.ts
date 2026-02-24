@@ -188,6 +188,7 @@ interface CustomAPI {
       songInfo: any,
       tagWriteOptions: any
     ) => Promise<{ success: boolean; message?: string }>
+    getLyric: (songmid: string) => Promise<string>
     onScanProgress: (callback: (processed: number, total: number) => void) => void
     onScanFinished: (callback: (resList: any[]) => void) => void
     removeScanProgress: () => void

@@ -37,10 +37,11 @@
               </template>
             </t-button>
             <t-button
+              v-if="enableDownload"
               class="action-btn"
               theme="default"
               size="small"
-              :disabled="selectedCount === 0"
+              :disabled="selectedNonLocalCount === 0"
               @click="downloadSelected"
             >
               批量下载
@@ -100,7 +101,8 @@
         <div class="virtual-scroll-content" :style="{ transform: `translateY(${offsetY}px)` }">
           <div
             v-for="(song, index) in visibleItems"
-            :key="`${song.source || ''}-${song.songmid}-${song.albumId || ''}-${index}`"
+            :key="`${song.source || ''}-${song.songmid}-${song.albumId || ''}`"
+            v-observe-cover="song"
             class="song-item"
             @mouseenter="hoveredSong = song.id || song.songmid"
             @mouseleave="hoveredSong = null"
@@ -146,7 +148,13 @@
                   <span v-if="song.types && song.types.length > 0" class="quality-tag">
                     {{ getQualityDisplayName(song.types[song.types.length - 1]) }}
                   </span>
-                  <span v-if="song.source" class="source-tag">
+                  <span v-else-if="getLocalQualityLabel(song)" class="quality-tag">
+                    {{ getLocalQualityLabel(song) }}
+                  </span>
+                  <span
+                    v-if="song.source && !(hideLocalSource && song.source === 'local')"
+                    class="source-tag"
+                  >
                     {{ song.source }}
                   </span>
                   {{ song.singer }}
@@ -185,6 +193,7 @@
                 </span>
                 <div v-else class="action-buttons">
                   <button
+                    v-if="enableDownload && song.source !== 'local'"
                     class="action-btn download-btn"
                     title="下载"
                     @click.stop="$emit('download', song)"
@@ -252,6 +261,9 @@ interface Song {
   types: any[]
   _types: Record<string, any>
   typeUrl: Record<string, any>
+  bitrate?: number
+  sampleRate?: number
+  path?: string
 }
 
 interface Props {
@@ -264,6 +276,12 @@ interface Props {
   isLocalPlaylist?: boolean
   playlistId?: string
   multiSelect?: boolean
+  bufferSize?: number
+  coverConcurrency?: number
+  coverLoader?: (song: Song, signal: AbortSignal) => Promise<string>
+  extraMenuFactory?: (song: Song) => Array<{ key: string; label: string }>
+  hideLocalSource?: boolean
+  enableDownload?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -274,7 +292,11 @@ const props = withDefaults(defineProps<Props>(), {
   showDuration: true,
   isLocalPlaylist: false,
   playlistId: '',
-  multiSelect: false
+  multiSelect: false,
+  bufferSize: 10,
+  coverConcurrency: 30,
+  hideLocalSource: false,
+  enableDownload: true
 })
 
 const emit = defineEmits([
@@ -288,14 +310,15 @@ const emit = defineEmits([
   'removeFromLocalPlaylist',
   'removeBatch',
   'exitMultiSelect',
-  'addToSongListBatch'
+  'addToSongListBatch',
+  'extraMenuClick'
 ])
 
 // 虚拟滚动相关状态
 const scrollContainer = ref<HTMLElement>()
 const hoveredSong = ref<number | null>(null)
 const itemHeight = 64
-const buffer = 5
+const buffer = computed(() => Number(props.bufferSize) || 10)
 
 const scrollTop = ref(0)
 const visibleStartIndex = ref(0)
@@ -339,12 +362,153 @@ const visibleItems = computed(() => {
 
   const visibleCount = Math.ceil(containerHeight / itemHeight)
   const startIndex = Math.floor(scrollTop.value / itemHeight)
-  const endIndex = Math.min(startIndex + visibleCount + buffer * 2, totalItems)
+  const endIndex = Math.min(startIndex + visibleCount + buffer.value, totalItems)
 
-  visibleStartIndex.value = Math.max(0, startIndex - buffer)
+  visibleStartIndex.value = Math.max(0, startIndex - buffer.value)
   visibleEndIndex.value = endIndex
 
   return props.songs.slice(visibleStartIndex.value, visibleEndIndex.value)
+})
+
+// 封面懒加载
+const coverControllers = new Map<number | string, AbortController>()
+const elementSongMap = new WeakMap<Element, Song>()
+let coverObserver: IntersectionObserver | null = null
+
+// Initialize IntersectionObserver immediately to catch initial renders
+if (typeof IntersectionObserver !== 'undefined') {
+  coverObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const song = elementSongMap.get(entry.target)
+        if (!song) return
+        if (entry.isIntersecting) {
+          ensureCover(song)
+        } else {
+          abortCover(song)
+        }
+      })
+    },
+    {
+      root: null, // 使用视口作为根
+      rootMargin: '100px 0px' // 预加载 100px
+    }
+  )
+}
+
+let inflight = 0
+const waiters: Array<() => void> = []
+
+function acquireSlot() {
+  if (inflight < (props.coverConcurrency || 30)) {
+    inflight++
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) =>
+    waiters.push(() => {
+      inflight++
+      resolve()
+    })
+  )
+}
+
+function releaseSlot() {
+  inflight = Math.max(0, inflight - 1)
+  const n = waiters.shift()
+  if (n) n()
+}
+
+async function ensureCover(song: Song) {
+  if (!props.coverLoader) return
+  if ((song as any).img) return
+
+  const id = (song as any).songmid
+  if (coverControllers.has(id)) return // 已经在加载中
+
+  const ctrl = new AbortController()
+  coverControllers.set(id, ctrl)
+
+  await acquireSlot()
+  try {
+    if (ctrl.signal.aborted) return
+    const data = await props.coverLoader(song, ctrl.signal)
+    if (!ctrl.signal.aborted && data) {
+      ;(song as any).img = data
+    }
+  } catch (e) {
+    // 忽略错误
+  } finally {
+    releaseSlot()
+    coverControllers.delete(id)
+  }
+}
+
+function abortCover(song: Song) {
+  const id = (song as any).songmid
+  const ctrl = coverControllers.get(id)
+  if (ctrl) {
+    ctrl.abort()
+    coverControllers.delete(id)
+  }
+}
+
+const vObserveCover = {
+  mounted(el: HTMLElement, binding: any) {
+    if (!coverObserver) return
+    const song = binding.value
+    elementSongMap.set(el, song)
+    coverObserver.observe(el)
+  },
+  unmounted(el: HTMLElement) {
+    if (!coverObserver) return
+    coverObserver.unobserve(el)
+    const song = elementSongMap.get(el)
+    if (song) {
+      abortCover(song)
+    }
+    elementSongMap.delete(el)
+  }
+}
+
+watch(
+  () => props.songs,
+  () => {
+    for (const [, ctrl] of coverControllers) ctrl.abort()
+    coverControllers.clear()
+  },
+  { deep: false }
+)
+
+onMounted(() => {
+  // 兼容逻辑：如果在 setup 中未能初始化（例如服务端渲染环境或极早期版本），尝试在此初始化
+  if (!coverObserver && typeof IntersectionObserver !== 'undefined') {
+    coverObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const song = elementSongMap.get(entry.target)
+          if (!song) return
+          if (entry.isIntersecting) {
+            ensureCover(song)
+          } else {
+            abortCover(song)
+          }
+        })
+      },
+      {
+        root: null, // 使用视口作为根
+        rootMargin: '100px 0px' // 预加载 100px
+      }
+    )
+  }
+})
+
+onUnmounted(() => {
+  if (coverObserver) {
+    coverObserver.disconnect()
+    coverObserver = null
+  }
+  for (const [, ctrl] of coverControllers) ctrl.abort()
+  coverControllers.clear()
 })
 
 // 处理播放
@@ -413,8 +577,9 @@ const qualityMap: Record<string, string> = {
   '320k': '超高',
   flac: '无损',
   flac24bit: '超高解析',
-  hires: '高清',
+  hires: 'Hi-Res',
   atmos: '全景',
+  atmos_plus: '全景Plus',
   master: '母带'
 }
 
@@ -423,6 +588,21 @@ const getQualityDisplayName = (quality: any) => {
     return qualityMap[quality.type] || quality.type
   }
   return qualityMap[quality] || quality || ''
+}
+
+const getLocalQualityLabel = (song: Song) => {
+  if (song.source !== 'local') return ''
+  if (song.sampleRate && song.sampleRate > 48000) return 'Hi-Res'
+  if (song.path) {
+    const ext = song.path.split('.').pop()?.toLowerCase()
+    if (ext === 'flac' || ext === 'wav' || ext === 'ape' || ext === 'dsd' || ext === 'dff')
+      return '无损'
+  }
+  if (song.bitrate) {
+    if (song.bitrate >= 800) return '无损'
+    return `${song.bitrate}k`
+  }
+  return ''
 }
 
 // 处理滚动事件
@@ -441,6 +621,10 @@ const selectedSongs = computed(() => {
   return props.songs.filter((s) => set.has(s.songmid))
 })
 const selectedCount = computed(() => selectedSongs.value.length)
+const selectedNonLocalSongs = computed(() =>
+  selectedSongs.value.filter((s) => s.source !== 'local')
+)
+const selectedNonLocalCount = computed(() => selectedNonLocalSongs.value.length)
 const toggleSelect = (song: Song) => {
   const id = song.songmid
   if (selectedSet.value.has(id)) {
@@ -474,8 +658,11 @@ const toggleSelectAll = () => {
   }
 }
 const downloadSelected = () => {
-  const list = selectedSongs.value
-  if (list.length === 0) return
+  const list = selectedNonLocalSongs.value
+  if (list.length === 0) {
+    MessagePlugin.warning('未选择可下载的歌曲')
+    return
+  }
   emit('downloadBatch', list)
 }
 const playSelected = () => {
@@ -535,16 +722,18 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
     )
   }
 
-  baseItems.push(
-    createMenuItem('download', '下载', {
-      icon: DownloadIcon,
-      onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
-        if (contextMenuSong.value) {
-          emit('download', contextMenuSong.value)
+  if (props.enableDownload && contextMenuSong.value?.source !== 'local') {
+    baseItems.push(
+      createMenuItem('download', '下载', {
+        icon: DownloadIcon,
+        onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+          if (contextMenuSong.value) {
+            emit('download', contextMenuSong.value)
+          }
         }
-      }
-    })
-  )
+      })
+    )
+  }
   // 如果是本地歌单，添加"移出本地歌单"选项
   if (props.isLocalPlaylist) {
     // 添加分隔线
@@ -560,6 +749,21 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       })
     )
   }
+  if (props.extraMenuFactory && contextMenuSong.value) {
+    const extras = props.extraMenuFactory(contextMenuSong.value)
+    if (Array.isArray(extras)) {
+      for (const it of extras) {
+        baseItems.push(
+          createMenuItem(it.key, it.label, {
+            onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+              if (contextMenuSong.value)
+                emit('extraMenuClick', { key: it.key, song: contextMenuSong.value })
+            }
+          })
+        )
+      }
+    }
+  }
 
   return baseItems
 })
@@ -574,7 +778,8 @@ const handleContextMenu = (event: MouseEvent, song: Song) => {
 
   // 使用智能位置计算，确保菜单在可视区域内
   contextMenuPosition.value = calculateMenuPosition(event, 240, 300)
-
+  if (song.source === 'local') {
+  }
   // 直接显示菜单
   contextMenuVisible.value = true
 }

@@ -33,7 +33,13 @@ import {
 } from '@renderer/utils/audio/globaPlayList'
 import songCover from '@renderer/assets/images/song.jpg'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
-import { HeartIcon, DownloadIcon, CheckIcon, LockOnIcon } from 'tdesign-icons-vue-next'
+import {
+  HeartIcon,
+  DownloadIcon,
+  CheckIcon,
+  LockOnIcon,
+  ChatBubble1Icon
+} from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
 
@@ -76,6 +82,15 @@ watch(
 )
 onMounted(() => refreshLikeState())
 const showFullPlay = ref(false)
+const showComments = ref(false)
+
+const toggleComments = () => {
+  showComments.value = !showComments.value
+  if (showComments.value && !showFullPlay.value) {
+    showFullPlay.value = true
+  }
+}
+
 // 桌面歌词开关与锁定状态
 const desktopLyricOpen = ref(false)
 const desktopLyricLocked = ref(false)
@@ -264,6 +279,20 @@ onMounted(async () => {
     desktopLyricLocked.value = !!lock
   } catch {}
   window.addEventListener('global-music-control', globalControls)
+  const openPlaylistHandler = () => {
+    showPlaylist.value = true
+    nextTick(() => {
+      playlistDrawerRef.value?.scrollToCurrentSong?.()
+    })
+  }
+  const closePlaylistHandler = () => {
+    showPlaylist.value = false
+  }
+  window.addEventListener('open-playlist', openPlaylistHandler)
+  window.addEventListener('close-playlist', closePlaylistHandler)
+  // stash handler for removal
+  ;(window as any).__open_playlist_handler__ = openPlaylistHandler
+  ;(window as any).__close_playlist_handler__ = closePlaylistHandler
 })
 
 // 组件卸载时清理
@@ -272,6 +301,14 @@ onUnmounted(() => {
   window.electron?.ipcRenderer?.removeAllListeners?.('desktop-lyric-open-change')
   window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
   window.removeEventListener('global-music-control', globalControls)
+  try {
+    const h = (window as any).__open_playlist_handler__
+    if (h) window.removeEventListener('open-playlist', h)
+  } catch {}
+  try {
+    const h2 = (window as any).__close_playlist_handler__
+    if (h2) window.removeEventListener('close-playlist', h2)
+  } catch {}
 
   // 清理可能存在的拖动监听器
   window.removeEventListener('mousemove', handleVolumeDragMove)
@@ -579,6 +616,25 @@ watch(showFullPlay, (val) => {
               <DownloadIcon size="18" />
             </t-button>
           </t-tooltip>
+          <Transition name="comment-fade" mode="out-in" appear>
+            <div v-if="songInfo.source !== 'local' && showFullPlay" class="comment-btn-wrapper">
+              <t-tooltip content="评论">
+                <t-button
+                  class="control-btn"
+                  variant="text"
+                  shape="circle"
+                  :disabled="!songInfo.songmid"
+                  @click.stop="toggleComments"
+                >
+                  <chat-bubble-1-icon
+                    :fill-color="'transparent'"
+                    :stroke-color="'currentColor'"
+                    :stroke-width="1.5"
+                  />
+                </t-button>
+              </t-tooltip>
+            </div>
+          </Transition>
         </div>
       </div>
 
@@ -693,6 +749,7 @@ watch(showFullPlay, (val) => {
   </div>
   <div class="fullbox">
     <FullPlay
+      v-model:show-comments="showComments"
       :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
       :show="showFullPlay"
       :cover-image="player.cover"
@@ -731,6 +788,21 @@ watch(showFullPlay, (val) => {
 .fade-enter-from {
   opacity: 0;
   transform: rotate(-180deg);
+}
+
+.comment-btn-wrapper {
+  display: inline-flex;
+  will-change: opacity, transform;
+}
+
+.comment-fade-enter-active,
+.comment-fade-leave-active {
+  transition: all 0.2s ease-in-out;
+}
+.comment-fade-enter-from,
+.comment-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
 }
 
 /* 加载动画 */
@@ -939,7 +1011,7 @@ watch(showFullPlay, (val) => {
 .left-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 3px;
   margin-left: 12px;
 
   .control-btn {

@@ -48,6 +48,11 @@ const appRouter: RouteRecordRaw[] = [
         component: () => import('@renderer/views/download/index.vue')
       },
       {
+        path: 'local/edit-tag',
+        name: 'local-tag-editor',
+        component: () => import('@renderer/views/music/LocalTagEditorPage.vue')
+      },
+      {
         path: 'profile',
         name: 'profile',
         component: () => import('@renderer/views/user/Profile.vue')

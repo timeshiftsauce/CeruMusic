@@ -77,19 +77,25 @@ export function createQualityDialog(
                     class: 'quality-item',
                     title: undefined,
                     style: {
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  margin: '8px 0',
-                  border: '1px solid ' + (disabled ? 'var(--td-border-level-2-color)' : 'var(--td-border-level-1-color)'),
-                  borderRadius: '6px',
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  backgroundColor:
-                    quality.type === userQuality ? 'var(--td-brand-color-light)' : 'var(--td-bg-color-container)',
-                  opacity: disabled ? 0.55 : 1
-                },
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px 16px',
+                      margin: '8px 0',
+                      border:
+                        '1px solid ' +
+                        (disabled
+                          ? 'var(--td-border-level-2-color)'
+                          : 'var(--td-border-level-1-color)'),
+                      borderRadius: '6px',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      backgroundColor:
+                        quality.type === userQuality
+                          ? 'var(--td-brand-color-light)'
+                          : 'var(--td-bg-color-container)',
+                      opacity: disabled ? 0.55 : 1
+                    },
                     onClick: () => {
                       if (disabled) return
                       dialog.destroy()
@@ -104,7 +110,9 @@ export function createQualityDialog(
                     onMouseleave: (e: MouseEvent) => {
                       const target = e.target as HTMLElement
                       target.style.backgroundColor =
-                        quality.type === userQuality ? 'var(--td-brand-color-light)' : 'var(--td-bg-color-container)'
+                        quality.type === userQuality
+                          ? 'var(--td-brand-color-light)'
+                          : 'var(--td-bg-color-container)'
                       target.style.borderColor = 'var(--td-border-level-1-color)'
                     }
                   },
@@ -116,7 +124,10 @@ export function createQualityDialog(
                           style: {
                             fontWeight: '500',
                             fontSize: '14px',
-                            color: quality.type === userQuality ? 'var(--td-brand-color)' : 'var(--td-text-color-primary)'
+                            color:
+                              quality.type === userQuality
+                                ? 'var(--td-brand-color)'
+                                : 'var(--td-text-color-primary)'
                           }
                         },
                         getQualityDisplayName(quality.type)

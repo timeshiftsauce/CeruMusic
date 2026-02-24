@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import {
   PaletteIcon,
@@ -26,6 +27,7 @@ import type { SearchItem } from './searchIndex'
 
 // 当前选择的设置分类
 const activeCategory = ref<string>('appearance')
+const route = useRoute()
 const contentPanelRef = ref<HTMLElement>()
 const scrollPositions = ref<Record<string, number>>({})
 
@@ -112,6 +114,43 @@ const switchCategory = async (categoryKey: string) => {
   }
 }
 
+function scrollToSection(sectionId?: string) {
+  if (!sectionId) return
+  let attempts = 0
+  const maxAttempts = 20
+  const tryScroll = () => {
+    const el = document.getElementById(sectionId)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      el.classList.remove('highlight-flash')
+      void el.offsetWidth
+      el.classList.add('highlight-flash')
+      setTimeout(() => el.classList.remove('highlight-flash'), 2000)
+    } else if (attempts < maxAttempts) {
+      attempts++
+      setTimeout(tryScroll, 100)
+    }
+  }
+  tryScroll()
+}
+
+watch(
+  () => route.query,
+  async (q) => {
+    const category = String(q.category || '')
+    const section = String(q.section || '')
+    if (category && category !== activeCategory.value) {
+      await switchCategory(category)
+      await nextTick()
+    }
+    if (section) {
+      await nextTick()
+      scrollToSection(section)
+    }
+  },
+  { immediate: true, deep: true }
+)
+
 const handleSearchSelect = async (item: SearchItem) => {
   console.log('Settings: Handling search select', item)
   if (activeCategory.value !== item.category) {
@@ -177,6 +216,7 @@ const handleSearchSelect = async (item: SearchItem) => {
         <nav class="sidebar-nav">
           <div
             v-for="category in settingsCategories"
+            :id="`settings-nav-${category.key}`"
             :key="category.key"
             class="nav-item"
             :class="{ active: activeCategory === category.key }"

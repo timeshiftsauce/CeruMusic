@@ -20,10 +20,11 @@ import {
   CloudUploadIcon,
   EllipsisIcon,
   RefreshIcon,
-  RootListFilledIcon
+  RootListFilledIcon,
+  SearchIcon
 } from 'tdesign-icons-vue-next'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import { computed, h, onMounted, ref, toRaw, type Component } from 'vue'
+import { computed, h, onMounted, ref, toRaw, type Component, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 
 interface MusicItem {
@@ -74,6 +75,26 @@ const playlistInfo = ref({
   isLeaderboard: false,
   meta: {} as Record<string, any>
 })
+
+// 搜索（聚焦时展开、失焦最小化）
+const searchQuery = ref('')
+const searchFocused = ref(false)
+import type { InputInst } from 'naive-ui'
+const searchInputRef = ref<InputInst | null>(null)
+const displaySongs = computed(() => {
+  const q = (searchQuery.value || '').trim().toLowerCase()
+  if (!q) return songs.value
+  const includes = (s?: string) => !!s && s.toLowerCase().includes(q)
+  return songs.value.filter((s) => includes(s.name) || includes(s.singer) || includes(s.albumName))
+})
+
+function openSearch() {
+  searchFocused.value = true
+  nextTick(() => {
+    searchInputRef.value?.focus()
+  })
+}
+void openSearch
 
 // 检查是否是本地歌单
 const isLocalPlaylist = computed(() => {
@@ -1498,6 +1519,21 @@ const filteredMoreActions = computed(() =>
                 </template>
               </t-button>
             </n-dropdown>
+
+            <div class="playlist-search" :class="{ focused: searchFocused || !!searchQuery }">
+              <n-input
+                ref="searchInputRef"
+                v-model:value="searchQuery"
+                max-width="200px"
+                :placeholder="searchFocused == true ? '搜索歌单内歌曲/歌手/专辑' : '搜索'"
+                @focus="searchFocused = true"
+                @blur="() => (searchFocused = !!searchQuery)"
+              >
+                <template #prefix>
+                  <SearchIcon size="16" />
+                </template>
+              </n-input>
+            </div>
           </div>
         </div>
       </div>
@@ -1515,7 +1551,7 @@ const filteredMoreActions = computed(() =>
       <div v-else class="song-list-wrapper">
         <SongVirtualList
           ref="songListRef"
-          :songs="songs"
+          :songs="displaySongs"
           :current-song="currentSong"
           :is-playing="isPlaying"
           :show-index="true"
@@ -1786,6 +1822,33 @@ const filteredMoreActions = computed(() =>
             width: 14px;
             height: 14px;
           }
+        }
+      }
+
+      .playlist-search {
+        margin-left: auto;
+        width: 90px;
+        transition: width 0.2s;
+        position: relative;
+        :deep(.n-input) {
+          width: 100%;
+        }
+        &.focused {
+          width: 250px;
+        }
+        .collapsed-hint {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          // padding: 0 8px;
+          color: var(--list-stats-color);
+          cursor: text;
+          pointer-events: auto;
+        }
+        &.focused .collapsed-hint {
+          display: none;
         }
       }
     }
