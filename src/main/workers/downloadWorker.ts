@@ -57,6 +57,60 @@ import { convertLrcFormat, convertToStandardLrc } from '../utils/lrcParser'
 
 const fileLock: Record<string, boolean> = {}
 
+async function readHeader(filePath: string): Promise<Buffer> {
+  const h = Buffer.alloc(64)
+  try {
+    const f = await fsPromise.open(filePath, 'r')
+    await f.read(h, 0, 64, 0)
+    await f.close()
+  } catch {}
+  return h
+}
+
+async function detectFormat(filePath: string): Promise<string> {
+  const h = await readHeader(filePath)
+  const s3 = h.slice(0, 3).toString('ascii')
+  const s4 = h.slice(0, 4).toString('ascii')
+  const sFTYP = h.slice(4, 8).toString('ascii')
+  if (s3 === 'ID3') return 'mp3'
+  if (s4 === 'fLaC') return 'flac'
+  if (h[0] === 0x4f && h[1] === 0x67 && h[2] === 0x67 && h[3] === 0x53) return 'ogg'
+  if (h[0] === 0x30 && h[1] === 0x26 && h[2] === 0xb2 && h[3] === 0x75) return 'wma'
+  if (
+    h[0] === 0x52 &&
+    h[1] === 0x49 &&
+    h[2] === 0x46 &&
+    h[3] === 0x46 &&
+    h[8] === 0x57 &&
+    h[9] === 0x41 &&
+    h[10] === 0x56 &&
+    h[11] === 0x45
+  )
+    return 'wav'
+  if (sFTYP === 'ftyp') return 'm4a'
+  if (h[0] === 0xff && (h[1] & 0xe0) === 0xe0) return 'mp3'
+  return ''
+}
+
+function extForFormat(fmt: string): string {
+  switch (fmt) {
+    case 'mp3':
+      return '.mp3'
+    case 'flac':
+      return '.flac'
+    case 'm4a':
+      return '.m4a'
+    case 'wav':
+      return '.wav'
+    case 'ogg':
+      return '.ogg'
+    case 'wma':
+      return '.wma'
+    default:
+      return ''
+  }
+}
+
 function resolveCoverExt(imgUrl: string, contentType?: string): string {
   const validExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])
   let urlExt: string | undefined
@@ -179,13 +233,29 @@ async function download(task: DownloadTask): Promise<any> {
       await fsPromise.rename(tempFilePath, filePath)
     }
 
-    if (tagWriteOptions && songInfo?.source !== 'update' && isAudioFile(filePath)) {
-      await processSongFiles(filePath, songInfo, tagWriteOptions)
+    let finalPath = filePath
+    try {
+      const detected = await detectFormat(filePath)
+      const shouldExt = extForFormat(detected)
+      const curExt = path.extname(filePath).toLowerCase()
+      if (shouldExt && shouldExt !== curExt) {
+        const baseNoExt = path.basename(filePath, curExt)
+        let proposed = path.join(path.dirname(filePath), `${baseNoExt}${shouldExt}`)
+        if (fs.existsSync(proposed)) {
+          proposed = path.join(path.dirname(filePath), `${baseNoExt}.${Date.now()}${shouldExt}`)
+        }
+        await fsPromise.rename(filePath, proposed)
+        finalPath = proposed
+      }
+    } catch {}
+
+    if (tagWriteOptions && songInfo?.source !== 'update' && isAudioFile(finalPath)) {
+      await processSongFiles(finalPath, songInfo, tagWriteOptions)
     }
 
     return {
       message: '下载成功',
-      path: filePath
+      path: finalPath
     }
   } catch (error) {
     if (fs.existsSync(filePath)) {
@@ -238,8 +308,13 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
     }
 
     const songFile = File.createFromPath(songPath)
-    Id3v2Settings.forceDefaultVersion = true
-    Id3v2Settings.defaultVersion = 3
+    const ext = path.extname(songPath).toLowerCase()
+    if (ext === '.mp3') {
+      try {
+        Id3v2Settings.forceDefaultVersion = true
+        Id3v2Settings.defaultVersion = 3
+      } catch {}
+    }
 
     songFile.tag.title = songInfo?.name || '未知曲目'
     songFile.tag.album = songInfo?.albumName || '未知专辑'
@@ -258,7 +333,9 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
       songFile.tag.pictures = [Picture.fromPath(coverPath)]
     }
 
-    songFile.save()
+    if (ext !== '.wav') {
+      songFile.save()
+    }
     songFile.dispose()
   } catch (error) {
     console.warn('写入音乐元信息或LRC文件失败:', error)

@@ -180,6 +180,8 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 关闭桌面歌词
   ipcMain.on('closeDesktopLyric', () => {
     lyricWin?.hide()
+    lyricOpenState = false
+    lyricStore.set({ isOpen: lyricOpenState })
     mainWin?.webContents.send('closeDesktopLyric')
   })
 

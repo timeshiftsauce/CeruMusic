@@ -27,7 +27,8 @@ export const LocalUserDetailStore = defineStore(
           volume: 80,
           currentTime: 0,
           selectSources: 'wy',
-          sourceQualityMap: {}
+          sourceQualityMap: {},
+          hasGuide: false
         }
         localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
       }

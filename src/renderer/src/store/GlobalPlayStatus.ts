@@ -39,6 +39,39 @@ interface Player {
     source?: string
   }
   isLoading: boolean
+  comments: {
+    hotList: Comment[]
+    latestList: Comment[]
+    total: number
+    page: number
+    limit: number
+    maxPage: number
+    type: 'hot' | 'latest'
+    isLoading: boolean
+  }
+}
+
+export interface Comment {
+  id: number | string
+  text: string
+  time: number
+  timeStr: string
+  location: string
+  userName: string
+  avatar: string
+  userId: number | string
+  likedCount: number
+  images: string[]
+  reply: Comment[]
+}
+
+export interface CommentResponse {
+  source: string
+  comments: Comment[]
+  total: number
+  page: number
+  limit: number
+  maxPage: number
 }
 
 // 辅助函数：将URL转换为 Blob URL
@@ -133,7 +166,17 @@ export const useGlobalPlayStatusStore = defineStore(
       lyrics: {
         lines: []
       },
-      isLoading: false
+      isLoading: false,
+      comments: {
+        hotList: [],
+        latestList: [],
+        total: 0,
+        page: 0,
+        limit: 20,
+        maxPage: 0,
+        type: 'hot',
+        isLoading: false
+      }
     })
 
     // 同步 userInfo.lastPlaySongId
@@ -232,7 +275,7 @@ export const useGlobalPlayStatusStore = defineStore(
       player.coverDetail.playBgHover = 'var(--player-btn-bg-hover-idle)'
     }
 
-    // 监听歌曲ID变化，获取歌词
+    // 监听歌曲ID变化，获取歌词, 评论
     watch(
       [() => player.songId, () => player.songInfo?.songmid],
       async ([newId], _oldArgs, onCleanup) => {
@@ -240,7 +283,6 @@ export const useGlobalPlayStatusStore = defineStore(
           player.lyrics.lines = []
           return
         }
-
         player.isLoading = true
 
         // 竞态与取消控制
@@ -252,6 +294,7 @@ export const useGlobalPlayStatusStore = defineStore(
         })
 
         const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(player.songInfo)))
+        updateCommon(getCleanSongInfo())
 
         const parseCrLyricBySource = (source: string, text: string): LyricLine[] => {
           return source === 'tx' ? (parseQrc(text) as any) : (parseYrc(text) as any)
@@ -429,9 +472,64 @@ export const useGlobalPlayStatusStore = defineStore(
       player.songInfo = songInfo
     }
 
+    async function fetchComments(page = 1, type: 'hot' | 'latest' = 'hot') {
+      const currentSongInfo = toRaw(player.songInfo)
+      if (!currentSongInfo || !currentSongInfo.songmid) return
+
+      player.comments.isLoading = true
+      try {
+        const method = type === 'hot' ? 'getHotComment' : 'getComment'
+        const res = await window.api.music.requestSdk(method, {
+          source: currentSongInfo.source || 'wy',
+          songInfo: currentSongInfo,
+          page,
+          limit: player.comments.limit
+        })
+
+        console.log('评论获取成功', res)
+
+        if (type === 'hot') {
+          if (page === 1) {
+            player.comments.hotList = res.comments || []
+          } else {
+            player.comments.hotList.push(...(res.comments || []))
+          }
+        } else {
+          if (page === 1) {
+            player.comments.latestList = res.comments || []
+          } else {
+            player.comments.latestList.push(...(res.comments || []))
+          }
+        }
+
+        player.comments.total = res.total
+        player.comments.page = res.page
+        player.comments.maxPage = res.maxPage
+        player.comments.type = type
+      } catch (err) {
+        console.error('评论获取失败', err)
+      } finally {
+        player.comments.isLoading = false
+      }
+    }
+
+    function updateCommon(songInfo: SongList) {
+      if (songInfo.source === 'local') return
+      // Reset comments
+      player.comments.hotList = []
+      player.comments.latestList = []
+      player.comments.page = 0
+      player.comments.total = 0
+
+      // 同时获取热门和最新评论
+      fetchComments(1, 'hot')
+      fetchComments(1, 'latest')
+    }
+
     return {
       player,
-      updatePlayerInfo
+      updatePlayerInfo,
+      fetchComments
     }
   },
   {

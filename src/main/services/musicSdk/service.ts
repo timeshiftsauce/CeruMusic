@@ -8,7 +8,8 @@ import {
   GetSongListDetailsArg,
   PlaylistDetailResult,
   DownloadSingleSongArgs,
-  TipSearchResult
+  TipSearchResult,
+  GetCommentArg
 } from './type'
 import pluginService from '../plugin/index'
 import musicSdk from '../../utils/musicSdk/index'
@@ -263,6 +264,14 @@ function main(source: string = 'wy') {
         return (await Api.leaderboard.getList(id, page)) as PlaylistDetailResult
       }
       return { list: [], total: 0 } as unknown as PlaylistDetailResult
+    },
+    // 热门评论
+    async getHotComment({ songInfo, page = 1, limit = 100 }: GetCommentArg) {
+      return await Api.comment.getHotComment(songInfo, page, limit)
+    },
+    // 最新评论
+    async getComment({ songInfo, page = 1, limit = 20 }: GetCommentArg) {
+      return await Api.comment.getComment(songInfo, page, limit)
     }
   }
 }

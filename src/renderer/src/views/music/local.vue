@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, toRaw } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, toRaw } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
   ChevronRightIcon,
@@ -11,8 +11,10 @@ import {
   FolderIcon
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
-import { createMenuItem, calculateMenuPosition } from '@renderer/components/ContextMenu/utils'
-import songCover from '@renderer/assets/images/song.jpg'
+import { createMenuItem } from '@renderer/components/ContextMenu/utils'
+import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
+import LocalTagEditor from '@renderer/components/Music/LocalTagEditor.vue'
+import { useRouter } from 'vue-router'
 
 type MusicItem = {
   hash?: string
@@ -23,13 +25,18 @@ type MusicItem = {
   source: string
   interval: string
   songmid: number | string
-  img: string
+  img?: string
+  hasCover?: boolean
+  coverKey?: string
   lrc: null | string
   types: string[]
   _types: Record<string, any>
   typeUrl: Record<string, any>
   url?: string
   path?: string
+  bitrate?: number
+  sampleRate?: number
+  channels?: number
 }
 
 const scanDirs = ref<string[]>([])
@@ -47,8 +54,17 @@ const sourcesOrder = ['wy', 'tx', 'kg', 'kw', 'mg']
 const selectedPlaylistId = ref<string>('')
 const showDirModal = ref(false)
 // const newDirInput = ref('')
+const router = useRouter()
 
 const hasDirs = computed(() => scanDirs.value.length > 0)
+const multiSelect = ref(false)
+const searchQuery = ref('')
+const displaySongs = computed(() => {
+  const q = (searchQuery.value || '').trim().toLowerCase()
+  if (!q) return songs.value
+  const includes = (s: string | undefined) => !!s && s.toLowerCase().includes(q)
+  return songs.value.filter((s) => includes(s.name) || includes(s.singer) || includes(s.albumName))
+})
 const moreActions = ref([
   {
     label: '添加全部到播放列表',
@@ -61,9 +77,13 @@ const moreActions = ref([
   {
     label: '批量匹配标签',
     key: 'batch-batch'
+  },
+  {
+    label: '批量选择',
+    key: 'toggle-multi'
   }
 ])
-const moreActionSelect = (e: 'add-to-playlist' | 'clear' | 'batch-batch') => {
+const moreActionSelect = (e: 'add-to-playlist' | 'clear' | 'batch-batch' | 'toggle-multi') => {
   switch (e) {
     case 'add-to-playlist':
       addAllToPlaylist()
@@ -73,6 +93,9 @@ const moreActionSelect = (e: 'add-to-playlist' | 'clear' | 'batch-batch') => {
       break
     case 'batch-batch':
       matchBatch()
+      break
+    case 'toggle-multi':
+      multiSelect.value = !multiSelect.value
       break
   }
 }
@@ -261,6 +284,25 @@ const addAllToPlaylist = () => {
   }
 }
 
+const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => {
+  if (!(window as any).musicEmitter) {
+    MessagePlugin.error('播放器未初始化')
+    return
+  }
+  let finalSongs: any[] = toRaw(songsToReplace)
+  if (shouldShuffle) {
+    const idx = Array.from({ length: finalSongs.length }, (_, i) => i)
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[idx[i], idx[j]] = [idx[j], idx[i]]
+    }
+    finalSongs = idx.map((i) => songsToReplace[i])
+  }
+  const replaceData = finalSongs.map((song) => toRaw(song))
+  ;(window as any).musicEmitter.emit('replacePlaylist', replaceData)
+  MessagePlugin.success('批量歌曲已加入播放')
+}
+
 const scanLibrary = async () => {
   if (!hasDirs.value) {
     MessagePlugin.warning('请先选择扫描目录')
@@ -300,32 +342,8 @@ const addToPlaylistEnd = (song: MusicItem) => {
   }
 }
 
-// 单击/双击交互（单击加入播放列表，双击播放）
-let clickTimer: NodeJS.Timeout | null = null
-let lastClickTime = 0
-const doubleClickDelay = 300
-
 const handlePlay = (song: MusicItem) => {
   addToPlaylistAndPlay(song)
-}
-
-const handleSongClick = (song: MusicItem) => {
-  const currentTime = Date.now()
-  const timeDiff = currentTime - lastClickTime
-  if (clickTimer) {
-    clearTimeout(clickTimer)
-    clickTimer = null
-  }
-  if (timeDiff < doubleClickDelay && timeDiff > 0) {
-    handlePlay(song)
-    lastClickTime = 0
-  } else {
-    lastClickTime = currentTime
-    clickTimer = setTimeout(() => {
-      addToPlaylistEnd(song)
-      clickTimer = null
-    }, doubleClickDelay)
-  }
 }
 
 // 右键菜单
@@ -352,6 +370,12 @@ const contextMenuItems = computed(() => {
         if (contextMenuSong.value) openAccurateMatch(contextMenuSong.value)
       }
     }),
+    createMenuItem('editTags', '编辑标签', {
+      icon: AddIcon,
+      onClick: () => {
+        if (contextMenuSong.value) openTagEditor(contextMenuSong.value)
+      }
+    }),
     createMenuItem('addToLocalPlaylist', '添加到本地歌单', {
       icon: FolderIcon,
       onClick: () => {
@@ -361,14 +385,6 @@ const contextMenuItems = computed(() => {
   ]
   return items
 })
-
-const handleContextMenu = (event: MouseEvent, song: MusicItem) => {
-  event.preventDefault()
-  event.stopPropagation()
-  contextMenuSong.value = song
-  contextMenuPosition.value = calculateMenuPosition(event, 240, 300)
-  contextMenuVisible.value = true
-}
 
 const closeContextMenu = () => {
   contextMenuVisible.value = false
@@ -411,7 +427,10 @@ const matchTags = async (song: MusicItem) => {
 }
 
 const matchBatch = async () => {
-  const need = songs.value.filter((s) => !s.img || !s.singer || !s.albumName)
+  MessagePlugin.info('维护中，请暂时右键自己匹配')
+  return
+  // eslint-disable-next-line no-unreachable
+  const need = songs.value.filter((s) => !s.hasCover || !s.singer || !s.albumName)
   if (need.length === 0) {
     MessagePlugin.warning('没有需要匹配的歌曲')
     return
@@ -453,6 +472,73 @@ onBeforeUnmount(() => {
   window.api.localMusic.removeScanProgress()
   window.api.localMusic.removeScanFinished()
 })
+
+async function coverLoader(song: MusicItem, signal: AbortSignal) {
+  if (signal.aborted) return ''
+  if (song?.hasCover === false) return ''
+  const data = await (window as any).api.localMusic.getCoverBase64(String(song.songmid))
+  if (signal.aborted) return ''
+  if (data) {
+    song.hasCover = true
+    return data
+  } else {
+    song.hasCover = false
+    return ''
+  }
+}
+
+const showTagEditor = ref(false)
+const tagEditorSong = ref<MusicItem | null>(null)
+function openTagEditor(song: MusicItem) {
+  // tagEditorSong.value = song
+  // showTagEditor.value = true
+  router.push({
+    name: 'local-tag-editor',
+    query: { id: song.songmid }
+  })
+}
+function onEditorSaved(payload: any) {
+  if (!tagEditorSong.value) return
+  tagEditorSong.value.name = payload.name || tagEditorSong.value.name
+  tagEditorSong.value.singer = payload.singer || tagEditorSong.value.singer
+  tagEditorSong.value.albumName = payload.albumName || tagEditorSong.value.albumName
+  tagEditorSong.value.lrc = payload.lrc || tagEditorSong.value.lrc
+  if (payload.img) {
+    tagEditorSong.value.img = payload.img
+    tagEditorSong.value.hasCover = true
+  }
+}
+const extraMenuFactory = (song: MusicItem) => {
+  void song
+  return [{ key: 'editTags', label: '编辑标签' }]
+}
+function onExtraMenuClick(e: any) {
+  if (!e) return
+  const { key, song } = e
+  if (key === 'editTags') openTagEditor(song)
+}
+
+function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
+  if (!batchSongs || batchSongs.length === 0) {
+    MessagePlugin.warning('未选择歌曲')
+    return
+  }
+  window.api.songList
+    .addSongs(
+      playlist.id,
+      batchSongs.map((s) => toRaw(s) as any)
+    )
+    .then((res: any) => {
+      if (res?.success) {
+        MessagePlugin.success(`已添加 ${batchSongs.length} 首到歌单"${playlist.name}"`)
+      } else {
+        MessagePlugin.error(res?.error || '添加到歌单失败')
+      }
+    })
+    .catch((err: any) => {
+      MessagePlugin.error(err?.message || '添加到歌单失败')
+    })
+}
 </script>
 
 <template>
@@ -518,6 +604,18 @@ onBeforeUnmount(() => {
         <t-loading size="small" />
         扫描中... {{ scanProgress.processed }}/{{ scanProgress.total }}
       </div>
+      <div style="margin-left: auto; display: flex; align-items: center">
+        <n-input
+          v-model:value="searchQuery"
+          clearable
+          placeholder="搜索本地歌曲/歌手/专辑"
+          style="width: 260px"
+        >
+          <template #prefix>
+            <SearchIcon size="16" />
+          </template>
+        </n-input>
+      </div>
     </div>
 
     <n-modal
@@ -557,31 +655,29 @@ onBeforeUnmount(() => {
     </n-modal>
 
     <div v-if="songs.length > 0" class="list">
-      <div class="row header">
-        <div class="col cover" style="text-align: center">封面</div>
-        <div class="col title">标题</div>
-        <div class="col artist">歌手</div>
-        <div class="col album">专辑</div>
-        <div class="col dura">时长</div>
-      </div>
-      <div
-        v-for="s in songs"
-        :key="s.songmid"
-        class="row"
-        @click="handleSongClick(s)"
-        @contextmenu="handleContextMenu($event, s)"
-      >
-        <div v-if="matching[s.songmid]" class="row-loading">
-          <n-spin size="small" />
-        </div>
-        <div class="col cover">
-          <img :src="s.img" alt="cover" @error="s.img = songCover" />
-        </div>
-        <div class="col title">{{ matching[s.songmid] ? '匹配中...' : s.name }}</div>
-        <div class="col artist">{{ s.singer }}</div>
-        <div class="col album">{{ s.albumName }}</div>
-        <div class="col dura">{{ s.interval || '' }}</div>
-      </div>
+      <SongVirtualList
+        style="flex: 1; min-height: 0; border-radius: 6px; overflow: hidden"
+        :songs="displaySongs as any"
+        :show-index="true"
+        :show-album="true"
+        :show-duration="true"
+        :buffer-size="10"
+        :cover-concurrency="30"
+        :cover-loader="coverLoader as any"
+        :extra-menu-factory="extraMenuFactory as any"
+        :hide-local-source="true"
+        :enable-download="false"
+        :multi-select="multiSelect"
+        @play="(s: any) => handlePlay(s)"
+        @add-to-playlist="(s: any) => addToPlaylistEnd(s)"
+        @play-batch="(list: any[]) => replacePlaylist(list as any, false)"
+        @add-to-song-list-batch="
+          (list: any[], playlist: any) => handleAddBatchToSongList(list as any, playlist)
+        "
+        @exit-multi-select="() => (multiSelect = false)"
+        @extra-menu-click="onExtraMenuClick"
+        @scroll="() => {}"
+      />
     </div>
     <div v-else class="empty">暂无数据，点击选择目录后扫描</div>
 
@@ -626,6 +722,8 @@ onBeforeUnmount(() => {
       :items="contextMenuItems"
       @close="closeContextMenu"
     />
+
+    <LocalTagEditor v-model:show="showTagEditor" :song="tagEditorSong" @saved="onEditorSaved" />
   </div>
 </template>
 
@@ -634,6 +732,7 @@ onBeforeUnmount(() => {
   padding: 0 32px;
   padding-top: 1rem;
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   .local-header {
@@ -675,12 +774,12 @@ onBeforeUnmount(() => {
   max-width: 360px;
 }
 .list {
-  margin-top: 20px;
+  margin-top: 0px;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow: auto;
 }
 .row {
   display: grid;
