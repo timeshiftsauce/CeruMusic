@@ -114,7 +114,16 @@ import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { DeleteIcon, SaveIcon } from 'tdesign-icons-vue-next'
 
 // 内置预设列表 - 这些预设不能被删除
-const BUILTIN_PRESETS = ['Flat', 'Pop', 'Rock', 'Jazz', 'Classical', 'Bass Boost', 'Vocal Boost', 'Treble Boost']
+const BUILTIN_PRESETS = [
+  'Flat',
+  'Pop',
+  'Rock',
+  'Jazz',
+  'Classical',
+  'Bass Boost',
+  'Vocal Boost',
+  'Treble Boost'
+]
 
 const eqStore = useEqualizerStore()
 const audioStore = ControlAudioStore()
@@ -210,7 +219,9 @@ const saveCurrentToPreset = () => {
   preset.gains = [...gains.value]
 
   MessagePlugin.success(`已保存当前值到预设 "${presetName}"`)
-  eqStore.addLog(`Updated preset "${presetName}" with current gains: ${gains.value.map(g => g.toFixed(1)).join(', ')}`)
+  eqStore.addLog(
+    `Updated preset "${presetName}" with current gains: ${gains.value.map((g) => g.toFixed(1)).join(', ')}`
+  )
 }
 
 // Apply gains to AudioManager

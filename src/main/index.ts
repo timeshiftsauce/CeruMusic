@@ -7,7 +7,8 @@ import {
   Rectangle,
   Display,
   Tray,
-  Menu
+  Menu,
+  desktopCapturer
 } from 'electron'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
@@ -621,6 +622,17 @@ ipcMain.handle('get-pending-open-playlist-files', async () => {
   const list = [...pendingPlaylistFiles]
   pendingPlaylistFiles = []
   return list
+})
+
+// 系统音频采集 - 获取屏幕源ID
+ipcMain.handle('system-audio:get-default-source-id', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] })
+    return (sources && sources[0] && sources[0].id) || ''
+  } catch (e) {
+    console.error('Failed to get screen sources:', e)
+    return ''
+  }
 })
 
 // In this file you can include the rest of your app's specific main process

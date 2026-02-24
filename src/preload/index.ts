@@ -328,6 +328,16 @@ const api = {
       ipcRenderer.on('plugin-notice', listener)
       return () => ipcRenderer.removeListener('plugin-notice', listener)
     }
+  },
+  // 系统音频采集
+  systemAudio: {
+    getDefaultScreenSourceId: async () => {
+      return ipcRenderer.invoke('system-audio:get-default-source-id')
+    },
+    getAllScreenSourceIds: async () => {
+      // 暂时保留这个或者也迁移到主进程，目前主要用 getDefaultScreenSourceId
+      return []
+    }
   }
 }
 
