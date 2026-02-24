@@ -4,7 +4,7 @@
       <template #actions>
         <t-space>
           <t-switch v-model="enabled" :label="['开启', '关闭']" />
-          <t-button theme="default" variant="text" @click="resetToFlat">重置</t-button>
+          <t-button theme="default" variant="text" @click="resetToCurrentPreset">重置</t-button>
         </t-space>
       </template>
 
@@ -16,19 +16,45 @@
 
         <!-- Preset Selector -->
         <div class="controls-row">
-          <t-select
-            v-model="currentPresetName"
-            placeholder="选择预设"
-            class="preset-select"
-            @change="(val) => handlePresetChange(val as string)"
-          >
-            <t-option
-              v-for="preset in presets"
-              :key="preset.name"
-              :label="preset.name"
-              :value="preset.name"
-            />
-          </t-select>
+          <t-space align="center">
+            <t-select
+              v-model="currentPresetName"
+              placeholder="选择预设"
+              class="preset-select"
+              @change="(val) => handlePresetChange(val as string)"
+            >
+              <t-option
+                v-for="preset in presets"
+                :key="preset.name"
+                :label="preset.name"
+                :value="preset.name"
+              />
+            </t-select>
+
+            <!-- 保存当前值到预设 - 只对自定义预设显示 -->
+            <t-button
+              v-if="canDeleteCurrentPreset"
+              theme="primary"
+              variant="text"
+              size="small"
+              @click="saveCurrentToPreset"
+            >
+              <template #icon><SaveIcon /></template>
+              保存当前值
+            </t-button>
+
+            <!-- 删除预设按钮 - 只对自定义预设显示 -->
+            <t-button
+              v-if="canDeleteCurrentPreset"
+              theme="danger"
+              variant="text"
+              size="small"
+              @click="confirmDeletePreset"
+            >
+              <template #icon><DeleteIcon /></template>
+              删除
+            </t-button>
+          </t-space>
 
           <t-space>
             <t-button theme="primary" variant="outline" @click="savePresetDialogVisible = true"
@@ -84,7 +110,11 @@ import { storeToRefs } from 'pinia'
 import { useEqualizerStore } from '@renderer/store/Equalizer'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import AudioManager from '@renderer/utils/audio/audioManager'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { DeleteIcon, SaveIcon } from 'tdesign-icons-vue-next'
+
+// 内置预设列表 - 这些预设不能被删除
+const BUILTIN_PRESETS = ['Flat', 'Pop', 'Rock', 'Jazz', 'Classical', 'Bass Boost', 'Vocal Boost', 'Treble Boost']
 
 const eqStore = useEqualizerStore()
 const audioStore = ControlAudioStore()
@@ -112,6 +142,76 @@ const currentPresetName = computed({
     currentPreset.value = val
   }
 })
+
+// 判断当前预设是否可以删除（非内置预设）
+const canDeleteCurrentPreset = computed(() => {
+  return !BUILTIN_PRESETS.includes(currentPreset.value)
+})
+
+// 删除预设确认
+const confirmDeletePreset = () => {
+  if (!canDeleteCurrentPreset.value) {
+    MessagePlugin.warning('内置预设不能删除')
+    return
+  }
+
+  const dialog = DialogPlugin.confirm({
+    header: '删除预设',
+    body: `确定要删除预设 "${currentPreset.value}" 吗？`,
+    confirmBtn: {
+      theme: 'danger',
+      content: '删除'
+    },
+    onConfirm: () => {
+      deleteCurrentPreset()
+      dialog.destroy()
+    }
+  })
+}
+
+// 删除当前预设
+const deleteCurrentPreset = () => {
+  const presetName = currentPreset.value
+  const index = presets.value.findIndex((p) => p.name === presetName)
+
+  if (index === -1) {
+    MessagePlugin.error('预设不存在')
+    return
+  }
+
+  // 删除预设
+  presets.value.splice(index, 1)
+
+  // 切换到 Flat 预设
+  currentPreset.value = 'Flat'
+  handlePresetChange('Flat')
+
+  MessagePlugin.success(`预设 "${presetName}" 已删除`)
+  eqStore.addLog(`Deleted preset: ${presetName}`)
+}
+
+// 保存当前增益值到当前自定义预设
+const saveCurrentToPreset = () => {
+  const presetName = currentPreset.value
+
+  // 只有自定义预设才能保存
+  if (BUILTIN_PRESETS.includes(presetName)) {
+    MessagePlugin.warning('内置预设不能修改，请创建新预设')
+    return
+  }
+
+  const preset = presets.value.find((p) => p.name === presetName)
+  if (!preset) {
+    MessagePlugin.error('预设不存在')
+    return
+  }
+
+  // 更新预设的增益值
+  preset.gains = [...gains.value]
+
+  MessagePlugin.success(`已保存当前值到预设 "${presetName}"`)
+  eqStore.addLog(`Updated preset "${presetName}" with current gains: ${gains.value.map(g => g.toFixed(1)).join(', ')}`)
+}
 
 // Apply gains to AudioManager
 const applyGains = () => {
@@ -157,22 +257,57 @@ const onGainChange = (index: number, val: number) => {
   eqStore.addLog(`Adjusted band ${frequencies[index]}Hz to ${val}dB`)
 }
 
-const resetToFlat = () => {
-  handlePresetChange('Flat')
-  currentPreset.value = 'Flat'
+// 重置功能：
+// - 内置预设：恢复到该预设的原始值
+// - 自定义预设：恢复到创建时基于的源预设值
+const resetToCurrentPreset = () => {
+  const presetName = currentPreset.value
+
+  // 判断是否是内置预设
+  if (BUILTIN_PRESETS.includes(presetName)) {
+    // 内置预设：恢复到该预设的原始值
+    const preset = presets.value.find((p) => p.name === presetName)
+    if (preset) {
+      gains.value = [...preset.gains]
+      MessagePlugin.success(`已重置到 "${presetName}" 预设的原始值`)
+      eqStore.addLog(`Reset to preset original values: ${presetName}`)
+    }
+  } else {
+    // 自定义预设：恢复到创建时基于的源预设值
+    const preset = presets.value.find((p) => p.name === presetName)
+    if (preset && preset.basePreset) {
+      // 有记录源预设，恢复到源预设的值
+      const basePreset = presets.value.find((p) => p.name === preset.basePreset)
+      if (basePreset) {
+        gains.value = [...basePreset.gains]
+        MessagePlugin.success(`已重置到源预设 "${preset.basePreset}" 的值`)
+        eqStore.addLog(`Reset custom preset "${presetName}" to base preset "${preset.basePreset}"`)
+      }
+    } else {
+      // 没有记录源预设（兼容旧数据），恢复到 Flat
+      handlePresetChange('Flat')
+      MessagePlugin.success('已重置到 Flat (000)')
+      eqStore.addLog(`Reset custom preset "${presetName}" to Flat`)
+    }
+  }
 }
 
 const saveNewPreset = () => {
   if (!newPresetName.value) return
+
+  // 记录当前选中的预设作为源预设
+  const basePresetName = currentPreset.value
+
   presets.value.push({
     name: newPresetName.value,
-    gains: [...gains.value]
+    gains: [...gains.value],
+    basePreset: basePresetName // 记录基于哪个预设创建的
   })
   currentPreset.value = newPresetName.value
   savePresetDialogVisible.value = false
   newPresetName.value = ''
   MessagePlugin.success('预设保存成功')
-  eqStore.addLog(`Saved new preset: ${newPresetName.value}`)
+  eqStore.addLog(`Saved new preset based on "${basePresetName}": ${newPresetName.value}`)
 }
 
 // Import/Export
