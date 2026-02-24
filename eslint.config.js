@@ -32,7 +32,8 @@ export default [
       'src/main/utils/musicSdk/**', // 忽略第三方音乐 SDK
       'src/main/utils/request.js', // 忽略第三方请求库
       'scripts/**', // 忽略脚本文件
-      'src/common/utils/lyricUtils/**' // 忽略第三方歌词工具
+      'src/common/utils/lyricUtils/**', // 忽略第三方歌词工具
+      'src/renderer/public/**' // 忽略渲染进程公共目录
     ]
   },
 
