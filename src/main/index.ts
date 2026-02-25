@@ -375,21 +375,18 @@ function setupDownloadManager() {
             if (preferWordByWord) {
               lyric = (cr as any) || (std as any) || null
             } else {
-              // baseLyric 的嵌套三目等价于：
-              // if (includeTranslation && (result as any)?.tlyric && std) {
-              //   baseLyric = std
-              // } else if (cr && source !== 'tx') {
-              //   baseLyric = cr
-              // } else {
-              //   baseLyric = std || cr || ''
-              // }
-              // 在标准歌词模式下，优先用 std 与翻译对齐；否则按 std/cr 回退。
-              const baseLyric =
-                includeTranslation && (result as any)?.tlyric && std
-                  ? (std as string)
-                  : cr && source !== 'tx'
-                    ? (cr as string)
-                    : ((std as string) || (cr as string) || '')
+              // 标准歌词模式下：
+              // 1) 开启翻译且有 tlyric 时，优先用 std 与翻译对齐
+              // 2) 否则（非 tx）优先用 cr
+              // 3) 最后回退 std/cr
+              let baseLyric = ''
+              if (includeTranslation && (result as any)?.tlyric && std) {
+                baseLyric = std as string
+              } else if (cr && source !== 'tx') {
+                baseLyric = cr as string
+              } else {
+                baseLyric = (std as string) || (cr as string) || ''
+              }
               lyric = includeTranslation
                 ? mergeLyricWithTranslation(baseLyric, (result as any)?.tlyric) || null
                 : baseLyric || null
