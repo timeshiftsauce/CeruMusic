@@ -7,7 +7,8 @@ import {
   Rectangle,
   Display,
   Tray,
-  Menu
+  Menu,
+  desktopCapturer
 } from 'electron'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
@@ -241,7 +242,8 @@ function setupTray() {
     tray = null
   }
 
-  const iconPath = path.join(__dirname, '../../resources/logo.ico')
+  const iconName = process.platform === 'win32' ? 'logo.ico' : 'logo.png'
+  const iconPath = path.join(__dirname, `../../resources/${iconName}`)
   tray = new Tray(iconPath)
   tray.setToolTip('Ceru Music')
   updateTrayMenu()
@@ -344,11 +346,13 @@ function setupDownloadManager() {
     }
 
     const source = task.songInfo.source
-    const songId = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
+    const songIdBase = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
+    const preferWordByWord = task.tagWriteOptions?.lyricFormat === 'word-by-word'
     const includeTranslation = !!task.tagWriteOptions?.includeTranslation
+    const cacheKey = `${songIdBase}:${preferWordByWord ? 'word' : 'lrc'}:${includeTranslation ? 'tran' : 'plain'}`
 
     // Check cache
-    const cachedLyric = await musicCacheService.getCachedLyric(songId)
+    const cachedLyric = await musicCacheService.getCachedLyric(cacheKey)
     if (cachedLyric) return cachedLyric
 
     let lyric: string | null = null
@@ -357,28 +361,51 @@ function setupDownloadManager() {
     if (!lyric && ['wy', 'kw', 'tx', 'mg', 'kg'].includes(source)) {
       try {
         const api = musicSdkService(source)
-        const result = await api.getLyric({ songInfo: task.songInfo })
+        const result = await api.getLyric({
+          songInfo: task.songInfo,
+          useFormat: task.tagWriteOptions?.lyricFormat || 'lrc'
+        })
+
         if (result && !result.error) {
-          // baseLyric 的嵌套三目等价于：
-          // if (includeTranslation && result?.tlyric && result?.lyric) {
-          //   baseLyric = result.lyric
-          // } else if (result?.crlyric && source !== 'tx') {
-          //   baseLyric = result.crlyric
-          // } else {
-          //   baseLyric = result?.lyric || result?.lrc || ''
-          // }
-          // 优先选用于翻译对齐的 lyric，再回退 crlyric，最后回退 lyric/lrc。
-          const baseLyric =
-            includeTranslation && result?.tlyric && result?.lyric
-              ? result.lyric
-              : result?.crlyric && source !== 'tx'
-                ? result.crlyric
-                : result?.lyric || result?.lrc || ''
-          lyric = includeTranslation
-            ? mergeLyricWithTranslation(baseLyric, result?.tlyric) || null
-            : baseLyric || null
-        } else if (result && result.error) {
-          console.warn(`Built-in SDK getLyric error for ${source}:`, result.error)
+          if (typeof result === 'string') {
+            lyric = result
+          } else {
+            const cr = (result as any).crlyric || (result as any).cr_lyric || null
+            const std = (result as any).lyric || (result as any).lrc || null
+            if (preferWordByWord) {
+              lyric = (cr as any) || (std as any) || null
+            } else {
+              // baseLyric 的嵌套三目等价于：
+              // if (includeTranslation && (result as any)?.tlyric && std) {
+              //   baseLyric = std
+              // } else if (cr && source !== 'tx') {
+              //   baseLyric = cr
+              // } else {
+              //   baseLyric = std || cr || ''
+              // }
+              // 在标准歌词模式下，优先用 std 与翻译对齐；否则按 std/cr 回退。
+              const baseLyric =
+                includeTranslation && (result as any)?.tlyric && std
+                  ? (std as string)
+                  : cr && source !== 'tx'
+                    ? (cr as string)
+                    : ((std as string) || (cr as string) || '')
+              lyric = includeTranslation
+                ? mergeLyricWithTranslation(baseLyric, (result as any)?.tlyric) || null
+                : baseLyric || null
+            }
+            // 若同时拿到两种格式，分别缓存以便下次命中正确偏好
+            if (cr && typeof cr === 'string') {
+              const wordKey = `${songIdBase}:word`
+              musicCacheService.cacheLyric(wordKey, cr as string).catch(() => {})
+            }
+            if (std && typeof std === 'string') {
+              const lrcKey = `${songIdBase}:lrc`
+              musicCacheService.cacheLyric(lrcKey, std as string).catch(() => {})
+            }
+          }
+        } else if (result && (result as any).error) {
+          console.warn(`Built-in SDK getLyric error for ${source}:`, (result as any).error)
         }
       } catch (error) {
         console.warn(`Built-in SDK getLyric exception for ${source}:`, error)
@@ -389,9 +416,9 @@ function setupDownloadManager() {
       throw new Error('Failed to get lyric: ' + JSON.stringify(lyric))
     }
 
-    // Cache result
+    // Cache result（按偏好维度区分缓存键）
     if (lyric) {
-      musicCacheService.cacheLyric(songId, lyric).catch(console.error)
+      musicCacheService.cacheLyric(cacheKey, lyric).catch(console.error)
     }
 
     return lyric
@@ -589,6 +616,7 @@ function createWindow(): void {
 }
 
 import { registerAutoUpdateEvents, initAutoUpdateForWindow } from './events/autoUpdate'
+import { cleanupDownloadedInstallers } from './autoUpdate'
 
 // 注册自动更新事件 - 尽早注册以避免时序问题
 registerAutoUpdateEvents()
@@ -597,6 +625,10 @@ registerAutoUpdateEvents()
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // 清理上次安装残留的安装包（仅限临时目录）
+  try {
+    await cleanupDownloadedInstallers()
+  } catch {}
   // Set app user model id for windows - 确保与 electron-builder.yml 中的 appId 一致
   electronApp.setAppUserModelId('com.cerumusic.app')
 
@@ -655,7 +687,13 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    } else if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
   })
 })
 
@@ -688,6 +726,17 @@ ipcMain.handle('get-pending-open-playlist-files', async () => {
   const list = [...pendingPlaylistFiles]
   pendingPlaylistFiles = []
   return list
+})
+
+// 系统音频采集 - 获取屏幕源ID
+ipcMain.handle('system-audio:get-default-source-id', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] })
+    return (sources && sources[0] && sources[0].id) || ''
+  } catch (e) {
+    console.error('Failed to get screen sources:', e)
+    return ''
+  }
 })
 
 // In this file you can include the rest of your app's specific main process

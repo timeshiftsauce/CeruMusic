@@ -38,6 +38,11 @@ const appRouter: RouteRecordRaw[] = [
         component: () => import('@renderer/views/music/search.vue')
       },
       {
+        path: 'recognize',
+        name: 'recognize',
+        component: () => import('@renderer/views/music/recognize.vue')
+      },
+      {
         path: 'list/:id',
         name: 'list',
         component: () => import('@renderer/views/music/list.vue')
@@ -46,6 +51,11 @@ const appRouter: RouteRecordRaw[] = [
         path: 'download',
         name: 'download',
         component: () => import('@renderer/views/download/index.vue')
+      },
+      {
+        path: 'local/edit-tag',
+        name: 'local-tag-editor',
+        component: () => import('@renderer/views/music/LocalTagEditorPage.vue')
       },
       {
         path: 'profile',

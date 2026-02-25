@@ -242,10 +242,10 @@ const playSong = async (song: SongList) => {
           tryAutoNext('自动换源失败：所有源均无法播放')
           return
         }
-      } catch (e) {
+      } catch (e: any) {
         if (currentPlayRequestId !== requestId) return
         isLoadingSong.value = false
-        tryAutoNext('自动换源失败')
+        tryAutoNext('自动换源失败,原因:' + e?.message || '未知')
         return
       }
     } else {
@@ -417,7 +417,11 @@ const playSong = async (song: SongList) => {
 }
 
 const tryAutoNext = (reason: string) => {
-  if (localUserStore.userSource.pluginId === undefined) {
+  if (
+    localUserStore.userSource.pluginId === undefined ||
+    reason.includes('频率') ||
+    reason.includes('限制')
+  ) {
     return
   }
   const limit = getAutoNextLimit()

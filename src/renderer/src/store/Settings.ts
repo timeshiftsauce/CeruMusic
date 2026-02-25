@@ -23,6 +23,9 @@ export interface SettingsState {
   autoImportPlaylistOnOpen?: boolean
   suppressImportPrompt?: boolean
   lyricFontFamily?: string
+  lyricFontSize?: number
+  FullPlayLyricFontRate?: number
+  lyricFontWeight?: number
   closeToTray?: boolean
   hasConfiguredCloseBehavior?: boolean
   theme?: string // 主题
@@ -50,6 +53,8 @@ export const useSettingsStore = defineStore(
       autoImportPlaylistOnOpen: false,
       suppressImportPrompt: false,
       lyricFontFamily: 'PingFangSC-Semibold',
+      lyricFontSize: 36,
+      lyricFontWeight: 700,
       closeToTray: true,
       hasConfiguredCloseBehavior: false,
       theme: 'default',
@@ -105,6 +110,16 @@ export const useSettingsStore = defineStore(
       if (!settings.value.lyricFontFamily) {
         settings.value.lyricFontFamily = 'PingFangSC-Semibold'
       }
+      if (!settings.value.lyricFontSize) {
+        settings.value.lyricFontSize = 36
+      }
+      if (!settings.value.FullPlayLyricFontRate) {
+        settings.value.FullPlayLyricFontRate = 1
+      }
+      if (!settings.value.lyricFontWeight) {
+        settings.value.lyricFontWeight = 700
+      }
+
       if (typeof settings.value.closeToTray === 'undefined') {
         settings.value.closeToTray = true
       }
@@ -136,6 +151,12 @@ export const useSettingsStore = defineStore(
     // 更新设置
     const updateSettings = (newSettings: Partial<SettingsState>) => {
       settings.value = { ...settings.value, ...newSettings }
+      if (
+        settings.value.FullPlayLyricFontRate &&
+        (settings.value?.FullPlayLyricFontRate < 0.1 || settings.value?.FullPlayLyricFontRate > 2)
+      ) {
+        settings.value.FullPlayLyricFontRate = 1
+      }
       saveSettings()
     }
 
@@ -154,7 +175,7 @@ export const useSettingsStore = defineStore(
     const shouldUseSpringFestivalTheme = () => {
       const preview = localStorage.getItem('ceru_welcome_newyear_preview')
       if (preview === '1') return true
-      return isSpringFestivalWindow() && !settings.value.springFestivalDisabled
+      return isSpringFestivalWindow()
     }
 
     const disableSpringFestivalTheme = () => {

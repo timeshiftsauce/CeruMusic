@@ -11,6 +11,7 @@ import {
 } from 'tdesign-icons-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
+import { formatMusicInfo } from '@common/utils/format'
 
 const store = useDownloadStore()
 const maxConcurrent = ref(3)
@@ -52,6 +53,11 @@ const filteredTasks = computed(() => {
 
   // Sort tasks
   return tasks.sort((a, b) => {
+    // 最新在上：完成与失败页按创建时间降序
+    if (activeTab.value === 'completed' || activeTab.value === 'failed') {
+      return b.createdAt - a.createdAt
+    }
+
     // 1. Status Priority for Downloading tab
     if (activeTab.value === 'downloading') {
       const statusOrder = {
@@ -90,28 +96,6 @@ const failedTasks = computed(() =>
   store.tasks.filter((t) => [DownloadStatus.Error, DownloadStatus.Cancelled].includes(t.status))
 )
 
-const formatMusicInfo = (template: string, data: any) => {
-  // 定义占位符映射
-  const patterns = {
-    '%t': 'name',
-    '%s': 'singer',
-    '%a': 'albumName',
-    '%u': 'source',
-    '%d': 'date'
-  }
-
-  // 一次性替换所有占位符
-  let result = template
-
-  // 使用正则匹配所有占位符
-  result = result.replace(/%[tsaud]/g, (match: string) => {
-    const key = patterns[match]
-    return data[key] !== undefined ? data[key] : match
-  })
-
-  return result
-}
-
 const formatSpeed = (speed: number) => {
   if (speed === 0) return '0 B/s'
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
@@ -134,6 +118,15 @@ const formatSize = (size: number) => {
     unitIndex++
   }
   return `${s.toFixed(2)} ${units[unitIndex]}`
+}
+
+// 立即安装（仅针对应用更新任务）
+const installUpdate = () => {
+  try {
+    window.api.autoUpdater.quitAndInstall()
+  } catch (e) {
+    console.error('安装更新失败', e)
+  }
 }
 
 const getStatusColor = (status: DownloadStatus) => {
@@ -242,10 +235,25 @@ const getStatusText = (status: DownloadStatus) => {
       <div v-else class="tasks">
         <div v-for="task in filteredTasks" :key="task.id" class="task-item">
           <div class="task-info">
-            <div class="task-name">{{ formatMusicInfo(filenameTemplate, task.songInfo) }}</div>
+            <div class="task-name">
+              {{
+                formatMusicInfo(
+                  filenameTemplate,
+                  Object.assign({}, task.songInfo, { quality: task.quality })
+                )
+              }}
+            </div>
             <div class="task-meta">
               <t-tag :theme="getStatusColor(task.status)" variant="light" size="small">
                 {{ getStatusText(task.status) }}
+              </t-tag>
+              <t-tag
+                v-if="task.songInfo && task.songInfo.source === 'update'"
+                theme="warning"
+                variant="light-outline"
+                size="small"
+              >
+                应用更新
               </t-tag>
               <span v-if="task.status === DownloadStatus.Downloading" class="speed">
                 {{ formatSpeed(task.speed) }}
@@ -319,6 +327,21 @@ const getStatusText = (status: DownloadStatus) => {
               @click="store.openFileLocation(task.filePath)"
             >
               <template #icon><FolderOpenIcon /></template>
+            </t-button>
+
+            <!-- 应用更新：立即安装按钮 -->
+            <t-button
+              v-if="
+                task.status === DownloadStatus.Completed &&
+                task.songInfo &&
+                task.songInfo.source === 'update'
+              "
+              size="small"
+              theme="primary"
+              variant="outline"
+              @click="installUpdate"
+            >
+              立即安装
             </t-button>
 
             <t-button

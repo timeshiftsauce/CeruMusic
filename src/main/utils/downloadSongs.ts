@@ -17,11 +17,17 @@ export default function download(
 ): any {
   const downloadDir = getDownloadDirectory()
   const fileExtension = getFileExtension(url, quality)
-  const fileName = `${formatMusicInfo(songInfo.template, songInfo)}.${fileExtension}`
-    .replace(/[/\\:*?"<>|]/g, '')
-    .replace(/^\.+/, '')
-    .replace(/\.+$/, '')
-    .trim()
+  console.log('fileExtension:', songInfo.template, songInfo)
+  const d = new Date()
+  if (!songInfo.date) {
+    songInfo.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const fileName =
+    `${formatMusicInfo(songInfo.template, Object.assign(songInfo, { quality }))}.${fileExtension}`
+      .replace(/[/\\:*?"<>|]/g, '')
+      .replace(/^\.+/, '')
+      .replace(/\.+$/, '')
+      .trim()
   const filePath = path.join(downloadDir, fileName)
   const priority = tagWriteOptions.priority || 0
 

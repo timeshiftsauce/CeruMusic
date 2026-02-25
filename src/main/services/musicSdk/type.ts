@@ -50,6 +50,7 @@ export interface GetLyricArg {
   songInfo: MusicItem
   grepLyricInfo?: boolean
   useStrictMode?: boolean
+  useFormat?: string | null
 }
 
 interface Playlist {
@@ -110,3 +111,9 @@ export interface DownloadSingleSongArgs extends GetMusicUrlArg {
 
 // 搜索联想结果的类型定义
 export type TipSearchResult = string[]
+
+export interface GetCommentArg {
+  songInfo: MusicItem
+  page: number
+  limit: number
+}

@@ -1,22 +1,22 @@
 import { httpFetch } from '../../request'
+import { dnsLookup } from '../utils'
+import { headers, timeout } from '../options'
 import { sizeFormate } from '../../index'
 
 export const getMusicQualityInfo = (id) => {
   const requestObj = httpFetch(`https://music.163.com/api/song/music/detail/get?songId=${id}`, {
     method: 'get',
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-      origin: 'https://music.163.com'
-    }
+    timeout,
+    headers,
+    lookup: dnsLookup,
+    family: 4
   })
 
   const types = []
   const _types = {}
 
   requestObj.promise = requestObj.promise.then(({ statusCode, body }) => {
-    if (statusCode != 200 && body.code != 200)
-      return Promise.reject(new Error('获取音质信息失败' + id))
+    if (statusCode != 200 && body.code != 200) return Promise.reject(new Error('获取音质信息失败'))
 
     const data = body.data
 
@@ -51,18 +51,17 @@ export const getMusicQualityInfo = (id) => {
       _types.hires = { size }
     }
 
-    if (data.jm != null && data.jm.size != null) {
-      let size = sizeFormate(data.jm.size)
-      types.push({ type: 'master', size })
-      _types.master = { size }
-    }
-
     if (data.je != null && data.je.size != null) {
       let size = sizeFormate(data.je.size)
       types.push({ type: 'atmos', size })
       _types.atmos = { size }
     }
 
+    if (data.jm != null && data.jm.size != null) {
+      let size = sizeFormate(data.jm.size)
+      types.push({ type: 'master', size })
+      _types.master = { size }
+    }
     return { types: [...types], _types: { ..._types } }
   })
 

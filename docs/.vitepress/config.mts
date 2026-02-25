@@ -59,7 +59,8 @@ export default defineConfig({
         text: '澜音&插件',
         items: [
           { text: '插件类使用', link: '/guide/CeruMusicPluginHost' },
-          { text: '澜音插件开发文档（重点）', link: '/guide/CeruMusicPluginDev' }
+          { text: '澜音插件开发文档（重点）', link: '/guide/CeruMusicPluginDev' },
+          { text: '澜音后端对接文档', link: '/guide/api' }
         ]
       },
       {

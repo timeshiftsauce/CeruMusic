@@ -24,94 +24,6 @@ interface MusicItem {
   typeUrl: Record<string, any>
 }
 
-function parseTimeTagMs(tag: string): number {
-  const m = tag.match(/\[(\d{2}):(\d{2})\.(\d{2,3})]/)
-  if (!m) return Number.NaN
-  const mm = Number(m[1]) || 0
-  const ss = Number(m[2]) || 0
-  const fracRaw = m[3] || '0'
-  const frac = fracRaw.length === 2 ? Number(fracRaw) * 10 : Number(fracRaw)
-  return mm * 60_000 + ss * 1_000 + frac
-}
-
-function mergeLyricWithTranslation(baseLyric: string, tlyric?: string): string {
-  // 任一为空时直接返回主歌词。
-  if (!baseLyric || !tlyric) return baseLyric || ''
-
-  // 统一换行并按行拆分，便于后续逐行处理。
-  const baseLines = String(baseLyric).replace(/\r/g, '').split('\n')
-  const transLines = String(tlyric).replace(/\r/g, '').split('\n')
-
-  // 先把翻译行预处理为“时间戳 + 文本”结构，并按时间升序排列。
-  // 这样后面在主歌词循环里只需做一次线性扫描，性能更稳定。
-  const transTimed = transLines
-    .map((line) => {
-      const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
-      if (!m) return null
-      const firstTag = (m[1].match(/\[\d{2}:\d{2}\.\d{2,3}]/g) || [])[0]
-      if (!firstTag) return null
-      return {
-        ms: parseTimeTagMs(firstTag),
-        text: (m[2] || '').trim()
-      }
-    })
-    .filter((v): v is { ms: number; text: string } => !!v && Number.isFinite(v.ms) && !!v.text)
-    .sort((a, b) => a.ms - b.ms)
-
-  // 没有有效翻译时间轴时，不做任何合并。
-  if (transTimed.length === 0) return baseLyric
-
-  // used: 记录已被匹配过的翻译行，避免一条翻译被复用到多条主歌词。
-  // cursor: 游标，只向前推进，减少无效比较。
-  // maxDiffMs: 最大匹配容差，允许轻微时间偏移（如接口返回误差）。
-  const used = new Set<number>()
-  let cursor = 0
-  const maxDiffMs = 300
-  const out: string[] = []
-
-  // 遍历主歌词：先写入原行，再尝试附加对应翻译行。
-  for (const line of baseLines) {
-    out.push(line)
-    const m = line.match(/^((?:\[\d{2}:\d{2}\.\d{2,3}])+)(.*)$/)
-    if (!m) continue
-
-    const tags = m[1].match(/\[\d{2}:\d{2}\.\d{2,3}]/g) || []
-    const firstTag = tags[0]
-    const baseText = (m[2] || '').trim()
-    if (!firstTag || !baseText) continue
-
-    const baseMs = parseTimeTagMs(firstTag)
-    if (!Number.isFinite(baseMs)) continue
-
-    // 游标跳过明显早于当前主行的翻译，避免每次都从头扫描。
-    while (cursor < transTimed.length && transTimed[cursor].ms < baseMs - maxDiffMs) cursor++
-
-    // 在“容差窗口”内选择最接近当前主行时间戳的翻译行。
-    let best = -1
-    let bestDiff = Number.POSITIVE_INFINITY
-    for (let i = cursor; i < transTimed.length; i++) {
-      if (used.has(i)) continue
-      const diff = Math.abs(transTimed[i].ms - baseMs)
-      if (diff > maxDiffMs && transTimed[i].ms > baseMs + maxDiffMs) break
-      if (diff <= maxDiffMs && diff < bestDiff) {
-        best = i
-        bestDiff = diff
-      }
-    }
-
-    if (best >= 0) {
-      const text = transTimed[best].text
-      // 与主行相同的翻译不写入，避免重复。
-      if (text && text !== baseText) {
-        out.push(`${firstTag}${text}`)
-        used.add(best)
-      }
-    }
-  }
-
-  return out.join('\n')
-}
-
 // 创建音质选择弹窗
 export function createQualityDialog(
   songInfoOrTypes: MusicItem | Array<{ type: string; size?: string }>,
@@ -170,12 +82,18 @@ export function createQualityDialog(
                       alignItems: 'center',
                       padding: '12px 16px',
                       margin: '8px 0',
-                      border: '1px solid ' + (disabled ? '#f0f0f0' : '#e7e7e7'),
+                      border:
+                        '1px solid ' +
+                        (disabled
+                          ? 'var(--td-border-level-2-color)'
+                          : 'var(--td-border-level-1-color)'),
                       borderRadius: '6px',
                       cursor: disabled ? 'not-allowed' : 'pointer',
                       transition: 'all 0.2s ease',
                       backgroundColor:
-                        quality.type === userQuality ? (disabled ? '#f5faff' : '#e6f7ff') : '#fff',
+                        quality.type === userQuality
+                          ? 'var(--td-brand-color-light)'
+                          : 'var(--td-bg-color-container)',
                       opacity: disabled ? 0.55 : 1
                     },
                     onClick: () => {
@@ -186,14 +104,16 @@ export function createQualityDialog(
                     onMouseenter: (e: MouseEvent) => {
                       if (disabled) return
                       const target = e.target as HTMLElement
-                      target.style.backgroundColor = '#f0f9ff'
-                      target.style.borderColor = '#1890ff'
+                      target.style.backgroundColor = 'var(--td-bg-color-secondarycontainer)'
+                      target.style.borderColor = 'var(--td-brand-color)'
                     },
                     onMouseleave: (e: MouseEvent) => {
                       const target = e.target as HTMLElement
                       target.style.backgroundColor =
-                        quality.type === userQuality ? '#e6f7ff' : '#fff'
-                      target.style.borderColor = '#e7e7e7'
+                        quality.type === userQuality
+                          ? 'var(--td-brand-color-light)'
+                          : 'var(--td-bg-color-container)'
+                      target.style.borderColor = 'var(--td-border-level-1-color)'
                     }
                   },
                   [
@@ -204,7 +124,10 @@ export function createQualityDialog(
                           style: {
                             fontWeight: '500',
                             fontSize: '14px',
-                            color: quality.type === userQuality ? '#1890ff' : '#333'
+                            color:
+                              quality.type === userQuality
+                                ? 'var(--td-brand-color)'
+                                : 'var(--td-text-color-primary)'
                           }
                         },
                         getQualityDisplayName(quality.type)
@@ -214,7 +137,7 @@ export function createQualityDialog(
                         {
                           style: {
                             fontSize: '12px',
-                            color: '#999',
+                            color: 'var(--td-text-color-secondary)',
                             marginTop: '2px'
                           }
                         },
@@ -227,7 +150,7 @@ export function createQualityDialog(
                         class: 'quality-size',
                         style: {
                           fontSize: '12px',
-                          color: '#666',
+                          color: 'var(--td-text-color-secondary)',
                           fontWeight: '500'
                         }
                       },
@@ -254,61 +177,6 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
       (LocalUserDetail.userInfo.sourceQualityMap || {})[toRaw(songInfo.source) as any] ||
       (LocalUserDetail.userSource.quality as string)
     const settingsStore = useSettingsStore()
-
-    // 获取歌词
-    let lrcData: any = {}
-    let retryCount = 0
-    const maxRetries = 3
-
-    while (retryCount < maxRetries) {
-      try {
-        lrcData = await window.api.music.requestSdk('getLyric', {
-          source: toRaw(songInfo.source),
-          songInfo: toRaw(songInfo) as any
-        })
-
-        // Check if valid result (not error and has content)
-        if (lrcData && !lrcData.error && (lrcData.lyric || lrcData.crlyric)) {
-          break
-        }
-        // If we got an error object, treat it as failure and retry
-        if (lrcData && lrcData.error) {
-          console.warn(`获取歌词返回错误 (尝试 ${retryCount + 1}/${maxRetries}):`, lrcData.error)
-        }
-      } catch (e) {
-        console.warn(`获取歌词抛出异常 (尝试 ${retryCount + 1}/${maxRetries}):`, e)
-      }
-
-      retryCount++
-      if (retryCount < maxRetries) {
-        // Linear backoff: 500ms, 1000ms, 1500ms...
-        await new Promise((r) => setTimeout(r, 500 * retryCount))
-      }
-    }
-
-    const { crlyric, lyric, tlyric } = lrcData || {}
-    console.log(songInfo)
-    const includeTranslation = !!settingsStore.settings.tagWriteOptions?.includeTranslation
-
-    // baseLyric 的嵌套三目等价于：
-    // if (includeTranslation && tlyric && lyric) {
-    //   baseLyric = lyric
-    // } else if (crlyric && songInfo.source !== 'tx') {
-    //   baseLyric = crlyric
-    // } else {
-    //   baseLyric = lyric
-    // }
-    // 先判定“需要翻译合并且有主歌词”，再回退到 crlyric，最后回退 lyric。
-    const baseLyric =
-      includeTranslation && tlyric && lyric
-        ? lyric
-        : crlyric && songInfo.source !== 'tx'
-          ? crlyric
-          : lyric
-
-    songInfo.lrc = includeTranslation
-      ? mergeLyricWithTranslation(baseLyric || '', tlyric)
-      : baseLyric || ''
 
     // 显示音质选择弹窗
     const selectedQuality = await createQualityDialog(songInfo, userQuality)

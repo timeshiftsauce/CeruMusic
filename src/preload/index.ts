@@ -189,6 +189,8 @@ const api = {
     checkForUpdates: () => ipcRenderer.invoke('auto-updater:check-for-updates'),
     downloadUpdate: () => ipcRenderer.invoke('auto-updater:download-update'),
     quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
+    getDownloadedPath: (updateInfo?: any) =>
+      ipcRenderer.invoke('auto-updater:get-downloaded-path', updateInfo),
 
     // 监听更新事件
     onCheckingForUpdate: (callback: () => void) => {
@@ -270,6 +272,34 @@ const api = {
     getList: () => ipcRenderer.invoke('local-music:get-list'),
     getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id),
     clearIndex: () => ipcRenderer.invoke('local-music:clear-index'),
+    getCoverBase64: async (trackId: string) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-cover', trackId)
+      } catch (e: any) {
+        return ''
+      }
+    },
+    getCoversBase64: async (trackIds: string[]) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-covers', trackIds)
+      } catch (e: any) {
+        return {}
+      }
+    },
+    getTags: async (songmid: string, includeLyrics: boolean = true) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-tags', songmid, includeLyrics)
+      } catch (e: any) {
+        return null
+      }
+    },
+    getLyric: async (songmid: string) => {
+      try {
+        return await ipcRenderer.invoke('local-music:get-lyric', songmid)
+      } catch (e: any) {
+        return ''
+      }
+    },
     onScanProgress: (callback: (processed: number, total: number) => void) => {
       const handler = (_event: any, data: { processed: number; total: number }) =>
         callback(data.processed, data.total)
@@ -297,6 +327,16 @@ const api = {
       }
       ipcRenderer.on('plugin-notice', listener)
       return () => ipcRenderer.removeListener('plugin-notice', listener)
+    }
+  },
+  // 系统音频采集
+  systemAudio: {
+    getDefaultScreenSourceId: async () => {
+      return ipcRenderer.invoke('system-audio:get-default-source-id')
+    },
+    getAllScreenSourceIds: async () => {
+      // 暂时保留这个或者也迁移到主进程，目前主要用 getDefaultScreenSourceId
+      return []
     }
   }
 }

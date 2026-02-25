@@ -6,6 +6,7 @@ import songList from './songList'
 import hotSearch from './hotSearch'
 import comment from './comment'
 import tipSearch from './tipSearch'
+import recognize from './recognize'
 
 const wy = {
   tipSearch,
@@ -14,6 +15,7 @@ const wy = {
   songList,
   hotSearch,
   comment,
+  recognize,
   getLyric(songInfo) {
     return getLyric(songInfo.songmid)
   },

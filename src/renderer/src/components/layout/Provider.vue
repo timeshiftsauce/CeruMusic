@@ -13,7 +13,13 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
-import { NConfigProvider, darkTheme, NGlobalStyle } from 'naive-ui'
+import {
+  NConfigProvider,
+  darkTheme,
+  NGlobalStyle,
+  NMessageProvider,
+  NDialogProvider
+} from 'naive-ui'
 import { useSettingsStore } from '@renderer/store/Settings'
 import songListAPI from '@renderer/api/songList'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -73,6 +79,79 @@ let usageActive = false
 let usageActiveSince = 0
 let usageTrackingEnabled = true
 const router = useRouter()
+
+// 全局教程引导
+import type { GuideStep } from 'tdesign-vue-next'
+const guideSteps = ref<GuideStep[]>([])
+const guideCurrent = ref(-1)
+let guidePrevIndex = -1
+let guideInitialized = false
+const isPlaylistStep = (s: any) => !!s && /播放器|播放列表/.test(String(s.title))
+function onGuideChange(e: number) {
+  const cur: any = guideSteps.value[e]
+  const prev: any = guidePrevIndex >= 0 ? guideSteps.value[guidePrevIndex] : undefined
+  if (isPlaylistStep(cur)) {
+    try {
+      window.dispatchEvent(new Event('open-playlist'))
+    } catch {}
+  } else if (isPlaylistStep(prev)) {
+    try {
+      window.dispatchEvent(new Event('close-playlist'))
+    } catch {}
+  }
+  const title = String(cur?.title || '')
+  const map: Record<string, Record<string, string>> = {
+    设置页面: {},
+    外观与主题: { category: 'appearance', section: 'appearance-theme' },
+    快捷键: { category: 'hotkeys', section: 'hotkey-settings' },
+    全局缓存: { category: 'storage', section: 'storage-directory' },
+    插件管理: { category: 'plugins', section: 'plugin-settings' },
+    音源选择: { category: 'music', section: 'music-source' },
+    关于与支持: { category: 'about', section: 'about-version' }
+  }
+  if (map[title] !== undefined) {
+    const q = map[title]
+    router.push({ path: '/settings', query: q }).catch(() => {})
+  } else if (prev && map[String(prev.title)] !== undefined) {
+    // 离开设置相关介绍，切回主页
+    router.push({ path: '/home/find' }).catch(() => {})
+  }
+  guidePrevIndex = e
+}
+function handleGuideInit(ev: CustomEvent) {
+  const detail: any = (ev as any).detail || {}
+  if (Array.isArray(detail.steps)) {
+    if (guideInitialized) return
+    guideInitialized = true
+    try {
+      ;(window as any).__guide_initialized = true
+    } catch {}
+    guideSteps.value = detail.steps
+    guideCurrent.value = 0
+    guidePrevIndex = -1
+  }
+}
+
+const markGuideDone = () => {
+  try {
+    const store = LocalUserDetailStore()
+    if (!store.userInfo.hasGuide) {
+      store.userInfo.hasGuide = true
+    }
+    try {
+      const raw = localStorage.getItem('userInfo')
+      const obj = raw ? JSON.parse(raw) : {}
+      obj.hasGuide = true
+      localStorage.setItem('userInfo', JSON.stringify(obj))
+    } catch {}
+  } catch {}
+}
+
+watch(guideCurrent, (val) => {
+  if (val < 0) {
+    markGuideDone()
+  }
+})
 
 const isWelcomeRoute = computed(() => {
   const r = router.currentRoute.value
@@ -368,6 +447,8 @@ onMounted(() => {
       authStore.init()
     }, 500)
   })
+  // 教程初始化监听
+  window.addEventListener('guide:init', handleGuideInit as any)
 })
 
 watch([appInteractiveReady, isWelcomeRoute], () => {
@@ -517,66 +598,76 @@ onUnmounted(() => {
     mediaQueryChangeHandler()
     mediaQueryChangeHandler = null
   }
+  try {
+    window.removeEventListener('guide:init', handleGuideInit as any)
+  } catch {}
 })
 </script>
 
 <template>
   <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
-    <NGlobalStyle />
-    <div class="page">
-      <slot></slot>
-      <t-dialog v-model:visible="importPromptVisible" header="是否导入此歌单" :footer="false">
-        <div>
-          <p>已打开歌单文件：{{ importPromptFileName }}</p>
-          <p>是否导入为本地歌单？</p>
-          <t-checkbox v-model="dontAskAgain">以后不再提醒，自动导入</t-checkbox>
-          <div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end">
-            <t-button theme="default" variant="outline" @click="cancelImportPrompt">取消</t-button>
-            <t-button theme="primary" @click="confirmImportPrompt">导入</t-button>
-          </div>
-        </div>
-      </t-dialog>
-      <t-dialog
-        v-model:visible="sponsorPromptVisible"
-        header="感谢使用澜音"
-        :close-btn="true"
-        :close-on-overlay-click="true"
-        :destroy-on-close="true"
-        :footer="false"
-        placement="center"
-        @close="closeSponsorPrompt"
-      >
-        <div style="max-width: 420px">
-          <p style="margin: 0 0 8px 0">
-            hi！ 大大澜音已经陪伴您
-            {{
-              sponsorUsageText
-            }}。如果您喜欢澜音可以给我们一点小小的支持吗，我相信我们会越做越好哒。
-          </p>
-          <div style="display: flex; gap: 8px; justify-content: flex-end">
-            <t-button theme="default" variant="outline" @click="closeSponsorPrompt"
-              >不再提示</t-button
-            >
-            <t-button theme="primary" @click="openSponsor">支持！必须加鸡腿</t-button>
-          </div>
-        </div>
-      </t-dialog>
+    <NMessageProvider>
+      <NDialogProvider>
+        <NGlobalStyle />
+        <div class="page">
+          <slot></slot>
+          <t-dialog v-model:visible="importPromptVisible" header="是否导入此歌单" :footer="false">
+            <div>
+              <p>已打开歌单文件：{{ importPromptFileName }}</p>
+              <p>是否导入为本地歌单？</p>
+              <t-checkbox v-model="dontAskAgain">以后不再提醒，自动导入</t-checkbox>
+              <div style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end">
+                <t-button theme="default" variant="outline" @click="cancelImportPrompt"
+                  >取消</t-button
+                >
+                <t-button theme="primary" @click="confirmImportPrompt">导入</t-button>
+              </div>
+            </div>
+          </t-dialog>
+          <t-dialog
+            v-model:visible="sponsorPromptVisible"
+            header="感谢使用澜音"
+            :close-btn="true"
+            :close-on-overlay-click="true"
+            :destroy-on-close="true"
+            :footer="false"
+            placement="center"
+            @close="closeSponsorPrompt"
+          >
+            <div style="max-width: 420px">
+              <p style="margin: 0 0 8px 0">
+                hi！ 大大澜音已经陪伴您
+                {{
+                  sponsorUsageText
+                }}。如果您喜欢澜音可以给我们一点小小的支持吗，我相信我们会越做越好哒。
+              </p>
+              <div style="display: flex; gap: 8px; justify-content: flex-end">
+                <t-button theme="default" variant="outline" @click="closeSponsorPrompt"
+                  >不再提示</t-button
+                >
+                <t-button theme="primary" @click="openSponsor">支持！必须加鸡腿</t-button>
+              </div>
+            </div>
+          </t-dialog>
 
-      <!-- Audio Output Selector Modal -->
-      <t-dialog
-        v-model:visible="audioSelectorVisible"
-        header="音频输出选择"
-        :footer="false"
-        width="80vw"
-        placement="center"
-      >
-        <AudioOutputSettings :embedded="true" />
-      </t-dialog>
-      <GlobalAudio />
-      <FloatBall />
-      <PluginNoticeDialog />
-      <UpdateProgress />
-    </div>
+          <!-- Audio Output Selector Modal -->
+          <t-dialog
+            v-model:visible="audioSelectorVisible"
+            header="音频输出选择"
+            :footer="false"
+            width="80vw"
+            placement="center"
+          >
+            <AudioOutputSettings :embedded="true" />
+          </t-dialog>
+          <GlobalAudio />
+          <FloatBall />
+          <PluginNoticeDialog />
+          <UpdateProgress />
+          <t-guide v-model="guideCurrent" :steps="guideSteps" @change="onGuideChange" />
+        </div>
+      </NDialogProvider>
+    </NMessageProvider>
   </NConfigProvider>
 </template>
 <style>

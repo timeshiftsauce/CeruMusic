@@ -3,10 +3,83 @@ import axios from 'axios'
 import fs from 'fs'
 import path from 'node:path'
 import { updateLog } from './logger'
+import { downloadManager } from './services/DownloadManager'
+import { DownloadStatus } from './types/download'
 
 let mainWindow: BrowserWindow | null = null
 let currentUpdateInfo: UpdateInfo | null = null
 let downloadProgress = { percent: 0, transferred: 0, total: 0 }
+let currentDownloadTaskId: string | null = null
+let unsubscribeDownloadEvents: (() => void) | null = null
+let lastDownloadedFilePath: string | null = null
+
+// 记录待清理安装包的文件（保存在用户数据目录）
+const CLEANUP_RECORD_FILE = path.join(app.getPath('userData'), 'update_cleanup.json')
+
+function loadCleanupList(): string[] {
+  try {
+    const raw = fs.readFileSync(CLEANUP_RECORD_FILE, 'utf-8')
+    const list = JSON.parse(raw)
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+function saveCleanupList(list: string[]) {
+  try {
+    fs.writeFileSync(CLEANUP_RECORD_FILE, JSON.stringify(list, null, 2))
+  } catch {}
+}
+
+function addInstallerForCleanup(filePath: string) {
+  try {
+    const tempDir = app.getPath('temp')
+    // 仅记录位于临时目录的安装包
+    if (!filePath || !path.resolve(filePath).startsWith(path.resolve(tempDir))) return
+    const list = loadCleanupList()
+    if (!list.includes(filePath)) {
+      list.push(filePath)
+      saveCleanupList(list)
+    }
+  } catch {}
+}
+
+export async function cleanupDownloadedInstallers() {
+  try {
+    const tempDir = path.resolve(app.getPath('temp'))
+    const list = loadCleanupList()
+    if (list.length === 0) return
+    const remain: string[] = []
+    for (const p of list) {
+      try {
+        if (!p) continue
+        const abs = path.resolve(p)
+        if (!abs.startsWith(tempDir)) {
+          // 安全保护：仅删除临时目录下的文件
+          remain.push(p)
+          continue
+        }
+        if (fs.existsSync(abs)) {
+          try {
+            await fs.promises.unlink(abs)
+            updateLog.log('Removed leftover installer:', abs)
+          } catch {
+            remain.push(p)
+          }
+        }
+      } catch {
+        remain.push(p)
+      }
+    }
+    if (remain.length > 0) saveCleanupList(remain)
+    else {
+      try {
+        fs.unlinkSync(CLEANUP_RECORD_FILE)
+      } catch {}
+    }
+  } catch {}
+}
 
 // 更新信息接口
 interface UpdateInfo {
@@ -19,113 +92,6 @@ interface UpdateInfo {
 // 更新服务器配置
 const UPDATE_SERVER = 'https://update.ceru.shiqianjiang.cn'
 const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${app.getVersion()}`
-
-// Alist API 配置
-const ALIST_BASE_URL = 'https://alist.shiqianjiang.cn' // 请替换为实际的 alist 域名
-const ALIST_USERNAME = 'ceruupdate'
-const ALIST_PASSWORD = '123456' //登录公开的账号密码
-
-// Alist 认证 token
-let alistToken: string | null = null
-
-// 获取 Alist 认证 token
-async function getAlistToken(): Promise<string> {
-  if (alistToken) {
-    return alistToken
-  }
-
-  try {
-    updateLog.log('Authenticating with Alist...')
-    const response = await axios.post(
-      `${ALIST_BASE_URL}/api/auth/login`,
-      {
-        username: ALIST_USERNAME,
-        password: ALIST_PASSWORD
-      },
-      {
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
-    )
-
-    updateLog.log('Alist auth response:', response.data)
-
-    if (response.data.code === 200) {
-      alistToken = response.data.data.token
-      updateLog.log('Alist authentication successful')
-      return alistToken! // 我们已经确认 token 存在
-    } else {
-      throw new Error(`Alist authentication failed: ${response.data.message || 'Unknown error'}`)
-    }
-  } catch (error: any) {
-    console.error('Alist authentication error:', error)
-    if (error.response) {
-      throw new Error(
-        `Failed to authenticate with Alist: HTTP ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
-      )
-    } else {
-      throw new Error(`Failed to authenticate with Alist: ${error.message}`)
-    }
-  }
-}
-
-// 获取 Alist 文件下载链接
-async function getAlistDownloadUrl(version: string, fileName: string): Promise<string> {
-  const token = await getAlistToken()
-  const filePath = `/${version}/${fileName}`
-
-  try {
-    updateLog.log(`Getting file info for: ${filePath}`)
-    const response = await axios.post(
-      `${ALIST_BASE_URL}/api/fs/get`,
-      {
-        path: filePath
-      },
-      {
-        timeout: 10000,
-        headers: {
-          Authorization: token,
-          'Content-Type': 'application/json'
-        }
-      }
-    )
-
-    updateLog.log('Alist file info response:', response.data)
-
-    if (response.data.code === 200) {
-      const fileInfo = response.data.data
-
-      // 检查文件是否存在且有下载链接
-      if (fileInfo && fileInfo.raw_url) {
-        updateLog.log('Using raw_url for download:', fileInfo.raw_url)
-        return fileInfo.raw_url
-      } else if (fileInfo && fileInfo.sign) {
-        // 使用签名构建下载链接
-        const downloadUrl = `${ALIST_BASE_URL}/d${filePath}?sign=${fileInfo.sign}`
-        updateLog.log('Using signed download URL:', downloadUrl)
-        return downloadUrl
-      } else {
-        // 尝试直接下载链接（无签名）
-        const directUrl = `${ALIST_BASE_URL}/d${filePath}`
-        updateLog.log('Using direct download URL:', directUrl)
-        return directUrl
-      }
-    } else {
-      throw new Error(`Failed to get file info: ${response.data.message || 'Unknown error'}`)
-    }
-  } catch (error: any) {
-    console.error('Alist file info error:', error)
-    if (error.response) {
-      throw new Error(
-        `Failed to get download URL from Alist: HTTP ${error.response.status} - ${error.response.data?.message || error.response.statusText}`
-      )
-    } else {
-      throw new Error(`Failed to get download URL from Alist: ${error.message}`)
-    }
-  }
-}
 
 // 初始化自动更新器
 export function initAutoUpdater(window: BrowserWindow) {
@@ -220,136 +186,107 @@ export async function downloadUpdate() {
   }
 
   try {
-    updateLog.log('Starting download:', currentUpdateInfo.url)
+    updateLog.log('Starting download via DownloadManager:', currentUpdateInfo.url)
 
-    // 通知渲染进程开始下载
+    // 目标下载路径（临时目录，文件名与远端保持一致）
+    const fileName = path.basename(currentUpdateInfo.url)
+    const downloadPath = path.join(app.getPath('temp'), fileName)
+
+    // 构建用于下载管理显示的简要信息
+    const songInfo = {
+      name: `应用更新 ${currentUpdateInfo.name}`,
+      singer: 'Ceru Music',
+      albumName: 'Update',
+      source: 'update',
+      date: new Date(currentUpdateInfo.pub_date).toLocaleDateString('zh-CN')
+    }
+
+    // 高优先级加入下载队列（数值越小优先级越高）
+    const priority = -100
+
+    // 通知渲染进程开始下载（兼容旧事件）
     mainWindow?.webContents.send('auto-updater:download-started', currentUpdateInfo)
 
-    const downloadPath = await downloadFile(currentUpdateInfo.url)
-    updateLog.log('Download completed:', downloadPath)
-
-    mainWindow?.webContents.send('auto-updater:update-downloaded', {
+    const task = downloadManager.addTask(
+      songInfo,
+      currentUpdateInfo.url,
       downloadPath,
-      updateInfo: currentUpdateInfo
-    })
+      { downloadLyrics: false, priority },
+      priority,
+      'autoUpdate',
+      undefined
+    )
+
+    currentDownloadTaskId = task.id
+
+    // 订阅该任务的进度与完成事件，并在结束后取消订阅
+    const onProgress = (t: any) => {
+      if (t.id !== currentDownloadTaskId) return
+      downloadProgress = {
+        percent: t.progress,
+        transferred: t.downloadedSize,
+        total: t.totalSize
+      }
+      mainWindow?.webContents.send('auto-updater:download-progress', downloadProgress)
+    }
+
+    const onStatusChanged = (t: any) => {
+      if (t.id !== currentDownloadTaskId) return
+      if (t.status === DownloadStatus.Completed) {
+        lastDownloadedFilePath = downloadPath
+        mainWindow?.webContents.send('auto-updater:update-downloaded', {
+          downloadPath,
+          updateInfo: currentUpdateInfo
+        })
+        cleanupListeners()
+      } else if (t.status === DownloadStatus.Error) {
+        mainWindow?.webContents.send('auto-updater:error', t.error || '下载失败')
+        cleanupListeners()
+      }
+    }
+
+    const onError = (t: any) => {
+      if (t.id !== currentDownloadTaskId) return
+      mainWindow?.webContents.send('auto-updater:error', t.error || '下载失败')
+      cleanupListeners()
+    }
+
+    const cleanupListeners = () => {
+      if (unsubscribeDownloadEvents) {
+        try {
+          unsubscribeDownloadEvents()
+        } catch {}
+      }
+      downloadManager.off('task-progress', onProgress)
+      downloadManager.off('task-status-changed', onStatusChanged)
+      downloadManager.off('task-error', onError)
+      currentDownloadTaskId = null
+      unsubscribeDownloadEvents = null
+    }
+
+    downloadManager.on('task-progress', onProgress)
+    downloadManager.on('task-status-changed', onStatusChanged)
+    downloadManager.on('task-error', onError)
   } catch (error) {
     console.error('Download failed:', error)
     mainWindow?.webContents.send('auto-updater:error', (error as Error).message)
   }
 }
 
-// 下载文件
-async function downloadFile(originalUrl: string): Promise<string> {
-  const fileName = path.basename(originalUrl)
-  const downloadPath = path.join(app.getPath('temp'), fileName)
-
-  // 进度节流变量
-  let lastProgressSent = 0
-  let lastProgressTime = 0
-  const PROGRESS_THROTTLE_INTERVAL = 500 // 500ms 发送一次进度
-  const PROGRESS_THRESHOLD = 1 // 进度变化超过1%才发送
-
-  try {
-    let downloadUrl = originalUrl
-
-    try {
-      // 从当前更新信息中提取版本号
-      const version = currentUpdateInfo?.name || app.getVersion()
-
-      // 尝试使用 alist API 获取下载链接
-      downloadUrl = await getAlistDownloadUrl(version, fileName)
-      updateLog.log('Using Alist download URL:', downloadUrl)
-    } catch (alistError) {
-      console.warn('Alist download failed, falling back to original URL:', alistError)
-      updateLog.log('Using original download URL:', originalUrl)
-      downloadUrl = originalUrl
-    }
-
-    const response = await axios({
-      method: 'GET',
-      url: downloadUrl,
-      responseType: 'stream',
-      timeout: 30000, // 30秒超时
-      onDownloadProgress: (progressEvent) => {
-        const { loaded, total } = progressEvent
-        const percent = total ? (loaded / total) * 100 : 0
-        const currentTime = Date.now()
-
-        // 节流逻辑：只在进度变化显著或时间间隔足够时发送
-        const progressDiff = Math.abs(percent - lastProgressSent)
-        const timeDiff = currentTime - lastProgressTime
-
-        if (progressDiff >= PROGRESS_THRESHOLD || timeDiff >= PROGRESS_THROTTLE_INTERVAL) {
-          downloadProgress = {
-            percent,
-            transferred: loaded,
-            total: total || 0
-          }
-
-          mainWindow?.webContents.send('auto-updater:download-progress', downloadProgress)
-          lastProgressSent = percent
-          lastProgressTime = currentTime
-        }
-      }
-    })
-
-    // 发送初始进度
-    const totalSize = parseInt(response.headers['content-length'] || '0', 10)
-    mainWindow?.webContents.send('auto-updater:download-progress', {
-      percent: 0,
-      transferred: 0,
-      total: totalSize
-    })
-
-    // 创建写入流
-    const writer = fs.createWriteStream(downloadPath)
-
-    // 将响应数据流写入文件
-    response.data.pipe(writer)
-
-    return new Promise((resolve, reject) => {
-      writer.on('finish', () => {
-        // 发送最终进度
-        mainWindow?.webContents.send('auto-updater:download-progress', {
-          percent: 100,
-          transferred: totalSize,
-          total: totalSize
-        })
-
-        updateLog.log('File download completed:', downloadPath)
-        resolve(downloadPath)
-      })
-
-      writer.on('error', (error) => {
-        // 删除部分下载的文件
-        fs.unlink(downloadPath, () => {})
-        reject(error)
-      })
-
-      response.data.on('error', (error: Error) => {
-        writer.destroy()
-        fs.unlink(downloadPath, () => {})
-        reject(error)
-      })
-    })
-  } catch (error: any) {
-    // 删除可能创建的文件
-    if (fs.existsSync(downloadPath)) {
-      fs.unlink(downloadPath, () => {})
-    }
-
-    if (error.response) {
-      throw new Error(`Download failed: HTTP ${error.response.status} ${error.response.statusText}`)
-    } else if (error.request) {
-      throw new Error('Download failed: Network error')
-    } else {
-      throw new Error(`Download failed: ${error.message}`)
-    }
-  }
-}
+// 已迁移到 DownloadManager，此处不再保留下载函数
 
 // 退出并安装
 export function quitAndInstall() {
+  // 优先使用下载完成时记录的路径，避免状态丢失导致无法安装
+  if (!currentUpdateInfo && lastDownloadedFilePath) {
+    try {
+      if (fs.existsSync(lastDownloadedFilePath)) {
+        shell.openPath(lastDownloadedFilePath).then(() => app.quit())
+        return
+      }
+    } catch {}
+  }
+
   if (!currentUpdateInfo) {
     console.error('No update info available for installation')
     return
@@ -362,11 +299,19 @@ export function quitAndInstall() {
     const downloadPath = path.join(app.getPath('temp'), fileName)
 
     if (fs.existsSync(downloadPath)) {
+      // 记录到清理列表，在下次应用启动时自动删除
+      addInstallerForCleanup(downloadPath)
       shell.openPath(downloadPath).then(() => {
         app.quit()
       })
     } else {
-      console.error('Downloaded file not found:', downloadPath)
+      // 尝试使用最后记录的文件路径作为备用
+      if (lastDownloadedFilePath && fs.existsSync(lastDownloadedFilePath)) {
+        addInstallerForCleanup(lastDownloadedFilePath)
+        shell.openPath(lastDownloadedFilePath).then(() => app.quit())
+      } else {
+        console.error('Downloaded file not found:', downloadPath)
+      }
     }
   } else if (process.platform === 'darwin') {
     // macOS: 打开 dmg 或 zip 文件
@@ -374,6 +319,7 @@ export function quitAndInstall() {
     const downloadPath = path.join(app.getPath('temp'), fileName)
 
     if (fs.existsSync(downloadPath)) {
+      addInstallerForCleanup(downloadPath)
       shell.openPath(downloadPath).then(() => {
         app.quit()
       })
@@ -384,4 +330,25 @@ export function quitAndInstall() {
     // Linux: 打开下载文件夹
     shell.showItemInFolder(path.join(app.getPath('temp'), path.basename(currentUpdateInfo.url)))
   }
+}
+
+// 获取已下载的更新包路径（若存在）
+export function getDownloadedUpdatePath(updateInfo?: UpdateInfo): string | null {
+  try {
+    // 1. 如果记录了最后下载路径且存在，优先返回
+    if (lastDownloadedFilePath && fs.existsSync(lastDownloadedFilePath)) {
+      return lastDownloadedFilePath
+    }
+
+    // 2. 根据传入或当前的 updateInfo 计算临时目录路径
+    const info = updateInfo || currentUpdateInfo
+    if (info && info.url) {
+      const fileName = path.basename(info.url)
+      const downloadPath = path.join(app.getPath('temp'), fileName)
+      if (fs.existsSync(downloadPath)) return downloadPath
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null
 }

@@ -23,12 +23,19 @@ import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { usePlaySettingStore } from '@renderer/store'
 import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
+import CommentsOverlay from './CommentsOverlay.vue'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
 const showSettings = ref(false)
+
+const lyricFontSize = computed(() => {
+  const rate = settingsStore.settings.FullPlayLyricFontRate || 1.0
+  return `calc(min(clamp(30px, 2.5vw, 50px), 5vh) * ${rate})`
+})
+const lyricFontWeight = computed(() => settingsStore.settings.lyricFontWeight || 600)
 
 const lyricFontFamily = computed(
   () => settingsStore.settings.lyricFontFamily || 'PingFangSC-Semibold'
@@ -48,7 +55,10 @@ let bursts: any[] = []
 let particles: any[] = []
 let lastTime = 0
 let running = false
-const showFestivalEffects = computed(() => settingsStore.shouldUseSpringFestivalTheme())
+const showFestivalEffects = computed(
+  () =>
+    settingsStore.shouldUseSpringFestivalTheme() && !settingsStore.settings.springFestivalDisabled
+)
 
 const rnd = (min: number, max: number) => Math.random() * (max - min) + min
 const pick = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)]
@@ -188,6 +198,7 @@ onUnmounted(() => {
 })
 interface Props {
   show?: boolean
+  showComments?: boolean
   coverImage?: string
   songId?: string | null
   songInfo: SongList | { songmid: number | null | string; lrc: string | null }
@@ -196,12 +207,13 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   show: false,
+  showComments: false,
   coverImage: '@assets/images/Default.jpg',
   songId: '',
   mainColor: '#rgb(0,0,0)'
 })
 // 定义事件
-const emit = defineEmits(['toggle-fullscreen', 'idle-change'])
+const emit = defineEmits(['toggle-fullscreen', 'idle-change', 'update:showComments'])
 
 // 跟踪全屏状态
 const isFullscreen = ref(false)
@@ -816,6 +828,11 @@ onUnmounted(() => {
         </div>
       </Transition>
     </div>
+    <CommentsOverlay
+      :show="props.showComments"
+      :main-color="lightMainColor"
+      @close="emit('update:showComments', false)"
+    />
   </div>
 </template>
 
@@ -1173,22 +1190,22 @@ onUnmounted(() => {
         transform: translateY(-80px);
         --amll-lyric-view-color: v-bind(lyricViewColor);
         --amll-lp-color: v-bind(lyricViewColor);
-        transition: color 0.2s;
+        --amll-lyric-player-font-size: v-bind(lyricFontSize);
+        --amll-lp-font-size: v-bind(lyricFontSize);
+        --amll-lyric-player-font-weight: v-bind(lyricFontWeight);
+        --amll-lp-bg-line-scale: 0.7;
         font-family: v-bind(lyricFontFamily);
-        --amll-lyric-player-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
-        --amll-lp-font-size: min(clamp(30px, 2.5vw, 50px), 5vh);
 
-        // bottom: max(2vw, 29px);
-
-        * [class^='_lyricMainLine'] {
-          font-weight: 600 !important;
-          // text-align: center;
-          margin: -0.8em -1 -0.8em -1;
-          padding: min(1.05em, 38px) 1em min(1.05em, 38px) 1em;
-          * {
-            font-weight: 600 !important;
-          }
+        [class*='romanWord'] {
+          font-size: calc(var(--amll-lp-font-size) * 0.5);
+          font-family: v-bind(lyricFontFamily) !important;
+          opacity: 0.8;
         }
+
+        [class*='lyricSubLine'] {
+          font-weight: v-bind(lyricFontWeight) !important;
+        }
+
         [class^='_interludeDots'] {
           // left: 1.2em;
           padding: auto;
@@ -1537,6 +1554,37 @@ onUnmounted(() => {
   100% {
     opacity: 0.05;
     transform: rotate(360deg);
+  }
+}
+</style>
+
+<style lang="scss">
+.full-play {
+  /* 强制注入变量到歌词界面 */
+  --user-lyric-fw: v-bind(lyricFontWeight) !important;
+
+  .lyric-player {
+    /* 暴力覆盖所有包含 Line 字样的类及其下的所有层级 */
+    [class*='Line' i] {
+      &,
+      & *,
+      span,
+      div {
+        font-weight: var(--user-lyric-fw) !important;
+      }
+    }
+
+    /* 针对 romanWord 存在时可能产生的强调标签 */
+    [class*='emphasize' i] {
+      font-weight: var(--user-lyric-fw) !important;
+    }
+
+    /* 针对注音文字的大小和行高进行微调，防止字重增加后挤在一起 */
+    [class*='romanWord' i] {
+      font-size: 0.5em !important;
+      font-weight: var(--user-lyric-fw) !important;
+      line-height: 1 !important;
+    }
   }
 }
 </style>

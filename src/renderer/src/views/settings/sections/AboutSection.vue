@@ -144,7 +144,7 @@ const openLink = (url: string) => {
     <div id="about-team" class="setting-group">
       <h3>开发团队</h3>
       <div class="developer-list">
-        <div class="developer-item" @click="openLink('https://shiqianjiang.cn/')">
+        <div class="developer-item link" @click="openLink('https://shiqianjiang.cn/')">
           <div class="developer-avatar">
             <img src="/head.jpg" alt="时迁酱" />
           </div>
@@ -153,7 +153,7 @@ const openLink = (url: string) => {
             <p>产品总体设计与开发</p>
           </div>
         </div>
-        <div class="developer-item">
+        <div class="developer-item link" @click="openLink('https://wldss.cn/')">
           <div class="developer-avatar">
             <img src="/wldss.png" alt="无聊的霜霜" />
           </div>
@@ -178,6 +178,15 @@ const openLink = (url: string) => {
           <div class="developer-info">
             <h4>lemon</h4>
             <p>修复部分bug & 新增部分功能（简称：打杂）</p>
+          </div>
+        </div>
+        <div class="developer-item link" @click="openLink('https://github.com/ITManCHINA/')">
+          <div class="developer-avatar">
+            <img src="/furina.jpg" alt="ITMan_CHINA" />
+          </div>
+          <div class="developer-info">
+            <h4>ITMan_CHINA</h4>
+            <p>神秘的AI驾驶员<br />开源社区街溜子<br />某不知名TTML歌词作者</p>
           </div>
         </div>
       </div>
@@ -423,7 +432,10 @@ const openLink = (url: string) => {
     &:hover {
       box-shadow: 0 4px 6px -1px var(--settings-group-shadow);
     }
-
+    &.link:hover {
+      background-color: var(--td-brand-color-1);
+      border: 1px solid var(--td-brand-color-5);
+    }
     .developer-avatar {
       width: 3rem;
       height: 3rem;

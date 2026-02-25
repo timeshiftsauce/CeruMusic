@@ -4,6 +4,7 @@ import { ref } from 'vue'
 export interface EqualizerPreset {
   name: string
   gains: number[]
+  originalGains?: number[] // 记录创建时的初始值，用于重置时恢复
 }
 
 export const useEqualizerStore = defineStore(

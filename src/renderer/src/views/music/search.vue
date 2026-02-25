@@ -62,6 +62,10 @@ onActivated(async () => {
     search,
     async () => {
       if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
+      if (search.getValue.trim() === '') {
+        router.push({ name: 'find' })
+        return
+      }
       keyword.value = search.getValue
       searchResults.value = []
       playlistResults.value = []
@@ -132,7 +136,7 @@ const performSearch = async (reset = false) => {
       page: currentPage.value,
       limit: pageSize
     })
-
+    console.log('搜索结果', result)
     totalItems.value = result.total || 0
     const newSongs = (result.list || []).map((song: any, index: number) => ({
       ...song,

@@ -133,7 +133,11 @@ export const filterMusicInfoListV5 = (rawList) => {
           break
       }
     })
-
+    // 2、20fix mg接口返回图片处理
+    let img = item.img3 || item.img2 || item.img1 || null
+    if (img.startsWith('/')) {
+      img = 'https://d.musicapp.migu.cn' + img
+    }
     list.push({
       singer: formatSingerName(item.singerList, 'name'),
       name: item.songName,
@@ -143,7 +147,7 @@ export const filterMusicInfoListV5 = (rawList) => {
       copyrightId: item.copyrightId,
       source: 'mg',
       interval: formatPlayTime(item.duration),
-      img: item.img3 || item.img2 || item.img1 || null,
+      img,
       lrc: null,
       lrcUrl: item.lrcUrl,
       mrcUrl: item.mrcUrl,
