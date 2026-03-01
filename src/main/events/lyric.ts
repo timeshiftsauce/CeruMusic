@@ -218,6 +218,12 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
             lyricWin.setAlwaysOnTop(true, 'screen-saver')
           }, 1000)
         }
+        // 恢复锁定状态
+        if (lyricLockState) {
+          lyricWin.setIgnoreMouseEvents(true, { forward: true })
+          lyricWin.webContents.send('toogleDesktopLyricLock', lyricLockState)
+          mainWin?.webContents.send('toogleDesktopLyricLock', lyricLockState)
+        }
       }
     } catch {}
     mainWin?.webContents.send('lyric-window-ready')
