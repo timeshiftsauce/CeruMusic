@@ -71,14 +71,14 @@ export class CoverCacheService {
       const txt = await fsp.readFile(file, 'utf8')
       this.lru.set(key, txt)
       return txt
-    } catch {}
+    } catch { }
 
     const dataUrl = await this.extractCoverAsDataUrl(filePath)
     if (dataUrl) {
       try {
         await ensureDir(dir)
         await fsp.writeFile(file, dataUrl)
-      } catch {}
+      } catch { }
       this.lru.set(key, dataUrl)
     }
     return dataUrl
@@ -106,7 +106,7 @@ export class CoverCacheService {
         return dataUrl
       }
       f.dispose()
-    } catch {}
+    } catch { }
     return ''
   }
 }

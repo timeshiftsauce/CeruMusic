@@ -9,7 +9,8 @@ import {
   PlaylistDetailResult,
   DownloadSingleSongArgs,
   TipSearchResult,
-  GetCommentArg
+  GetCommentArg,
+  GetAlbumDetailArg
 } from './type'
 import pluginService from '../plugin/index'
 import musicSdk from '../../utils/musicSdk/index'
@@ -279,7 +280,16 @@ function main(source: string = 'wy') {
         return await Api.recognize.recognize(fp, duration)
       }
       return []
+    },
+    // 获取专辑列表
+    async getAlbumList({ songInfo, page = 1, limit = 10 }: GetAlbumDetailArg) {
+      return await Api.singer.getAlbumList(songInfo.albumId, page, limit)
     }
   }
 }
 export default main
+// main('wy')
+//   .getAlbumList({ songInfo: { albumId: '250748750' } as any, page: 1, limit: 10 })
+//   .then((res) => {
+//     console.log(res)
+//   })

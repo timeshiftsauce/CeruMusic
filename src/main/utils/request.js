@@ -260,14 +260,14 @@ const fetchData = async (url, method = 'get', options = {}) => {
       try {
         bodyData = JSON.parse(rawData.toString())
       } catch {
-        bodyData = rawData.toString()
+        bodyData = rawData
       }
     } else {
       rawData = Buffer.isBuffer(response.data)
         ? response.data
         : Buffer.from(
-            typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
-          )
+          typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+        )
     }
 
     return {

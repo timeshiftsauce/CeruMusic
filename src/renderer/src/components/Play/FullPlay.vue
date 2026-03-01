@@ -498,12 +498,11 @@ const initBackgroundRender = async () => {
     // 设置参数
     bgRef.value.setRenderScale(0.5)
     bgRef.value.setFlowSpeed(1)
-    bgRef.value.setFPS(60)
+    bgRef.value.setFPS(30)
     bgRef.value.setHasLyric(player.value.lyrics.lines.length > 10)
 
     // 设置专辑图片
     await bgRef.value.setAlbum(actualCoverImage.value, false)
-
     // 恢复动画
     bgRef.value.resume()
   }
@@ -625,6 +624,14 @@ const checkOverflow = async () => {
 
 // 监听歌曲信息变化和窗口大小变化
 watch(() => [props.songInfo, props.show], checkOverflow, { immediate: true })
+
+// watchEffect(() => {
+//   if (Audio.value.isPlay) {
+//     bgRef.value?.resume()
+//   } else {
+//     bgRef.value?.pause()
+//   }
+// })
 
 // 点击外部关闭设置面板
 const floatActionRef = ref<HTMLElement | null>(null)

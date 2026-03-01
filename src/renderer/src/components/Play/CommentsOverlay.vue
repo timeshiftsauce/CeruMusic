@@ -41,10 +41,20 @@ const list = computed(() => {
     : player.value.comments.latestList
 })
 
-const isLoading = computed(() => player.value.comments.isLoading)
+const isLoading = computed(() => {
+  return currentType.value === 'hot'
+    ? player.value.comments.hotIsLoading
+    : player.value.comments.latestIsLoading
+})
 const hasMore = computed(() => {
   // if (currentType.value === 'hot') return false
-  return player.value.comments.page < player.value.comments.maxPage
+  if (currentType.value === 'hot') {
+    // 增加数量判断：如果列表长度已经达到或超过总数，则不再加载
+    if (player.value.comments.hotList.length >= player.value.comments.hotTotal) return false
+    return player.value.comments.hotPage < player.value.comments.hotMaxPage
+  }
+  if (player.value.comments.latestList.length >= player.value.comments.latestTotal) return false
+  return player.value.comments.latestPage < player.value.comments.latestMaxPage
 })
 
 const switchType = (type: 'hot' | 'latest') => {
@@ -73,7 +83,10 @@ const switchType = (type: 'hot' | 'latest') => {
 
 const loadMore = () => {
   if (isLoading.value || !hasMore.value) return
-  const nextPage = player.value.comments.page + 1
+  const nextPage =
+    currentType.value === 'hot'
+      ? player.value.comments.hotPage + 1
+      : player.value.comments.latestPage + 1
   globalPlayStatus.fetchComments(nextPage, currentType.value)
 }
 
@@ -225,14 +238,22 @@ const onLeave = (el: Element) => {
                 :class="{ active: currentType === 'hot' }"
                 @click="switchType('hot')"
                 >热门评论
+                <span
+                  v-if="
+                    player.comments.hotTotal &&
+                    player.comments.hotTotal !== player.comments.latestTotal
+                  "
+                  class="count"
+                  >{{ formatNumber(player.comments.hotTotal) }}</span
+                >
               </span>
               <span
                 class="tab-item"
                 :class="{ active: currentType === 'latest' }"
                 @click="switchType('latest')"
                 >最新评论
-                <span v-if="player.comments.total" class="count">{{
-                  formatNumber(player.comments.total)
+                <span v-if="player.comments.latestTotal" class="count">{{
+                  formatNumber(player.comments.latestTotal)
                 }}</span></span
               >
             </div>
