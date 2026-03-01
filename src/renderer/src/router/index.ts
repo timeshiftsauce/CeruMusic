@@ -83,6 +83,11 @@ const routes: RouteRecordRaw[] = [
     path: '/desktop-lyric',
     name: 'desktop-lyric',
     component: () => import('@renderer/views/DeskTopLyric/DeskTopLyric.vue')
+  },
+  {
+    path: '/recognition-worker',
+    name: 'recognition-worker',
+    component: () => import('@renderer/views/music/RecognitionWorker.vue')
   }
 ]
 

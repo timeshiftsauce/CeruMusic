@@ -116,3 +116,9 @@ export interface GetCommentArg {
   page: number
   limit: number
 }
+
+export interface GetAlbumDetailArg {
+  songInfo: MusicItem
+  page: number
+  limit: number
+}
