@@ -98,10 +98,6 @@ class LyricWindow {
       fullscreenable: false
     })
     if (!this.win) return null
-    // 初始化锁定状态
-    if (isLock) {
-      this.win.setIgnoreMouseEvents(true, { forward: true })
-    }
     // 禁用背景节流，防止后台时歌词更新延迟
     this.win.webContents.setBackgroundThrottling(false)
     // 加载地址（开发环境用项目根目录，生产用打包后的相对路径）
@@ -110,10 +106,6 @@ class LyricWindow {
     } else {
       this.win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'desktop-lyric' })
     }
-    // 监听加载完成，发送初始锁定状态
-    this.win.webContents.on('did-finish-load', () => {
-      this.win?.webContents.send('toogleDesktopLyricLock', isLock)
-    })
     // 窗口事件
     this.event()
     return this.win
