@@ -42,7 +42,7 @@ export class LocalMusicIndexService {
     const userData = app.getPath('userData')
     this.indexFile = path.join(userData, 'local-music-index.json')
     this.load()
-    this.migrateAndDedup().catch(() => {})
+    this.migrateAndDedup().catch(() => { })
   }
 
   private load() {
@@ -62,7 +62,7 @@ export class LocalMusicIndexService {
       const dir = path.dirname(this.indexFile)
       await fsp.mkdir(dir, { recursive: true })
       await fsp.writeFile(this.indexFile, JSON.stringify(this.data, null, 2))
-    } catch {}
+    } catch { }
   }
 
   private mergePreferFilled(a: MusicItem, b: MusicItem): MusicItem {
@@ -96,7 +96,7 @@ export class LocalMusicIndexService {
     try {
       const changed = await this.dedupInMemory()
       if (changed) await this.save()
-    } catch {}
+    } catch { }
   }
 
   private keyForItem(it: MusicItem, fallbackKey: string): string {
@@ -144,6 +144,7 @@ export class LocalMusicIndexService {
     try {
       // 同步方式去重，但仅更新内存并返回，避免频繁写盘
       const input = this.data.songs || {}
+      // console.log('getAllSongs', input)
       const out: Record<string, MusicItem> = {}
       for (const k of Object.keys(input)) {
         const it = input[k]
@@ -153,7 +154,8 @@ export class LocalMusicIndexService {
         out[key].songmid = key
       }
       this.data.songs = out
-    } catch {}
+    } catch { }
+    // console.log('getAllSongs', Object.values(this.data.songs))
     return Object.values(this.data.songs)
   }
 
@@ -182,7 +184,7 @@ export class LocalMusicIndexService {
         this.data.updatedAt = Date.now()
         await this.save()
       }
-    } catch {}
+    } catch { }
   }
 
   getSongById(id: string | number): MusicItem | null {
@@ -245,7 +247,7 @@ export class LocalMusicIndexService {
         this.data.updatedAt = Date.now()
         await this.save()
       }
-    } catch {}
+    } catch { }
   }
 
   // Method to clear index (was accessed via any previously)

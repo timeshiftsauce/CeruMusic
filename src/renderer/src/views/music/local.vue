@@ -320,6 +320,7 @@ const scanLibrary = async () => {
       MessagePlugin.error('请在Electron应用中使用本地扫描功能')
       return
     }
+    // clearScan()
     await api.localMusic.scan(toRaw(scanDirs.value))
   } catch (e: any) {
     console.error('本地扫描失败:', e)
@@ -427,21 +428,22 @@ const matchTags = async (song: MusicItem) => {
 }
 
 const matchBatch = async () => {
-  MessagePlugin.info('维护中，请暂时右键自己匹配')
-  return
-  // eslint-disable-next-line no-unreachable
-  const need = songs.value.filter((s) => !s.hasCover || !s.singer || !s.albumName)
+  const need = songs.value.filter(
+    (s) =>
+      !s.hasCover || !s.singer || !s.albumName || s.singer === '未知艺术家' || s.name === '未知曲目'
+  )
   if (need.length === 0) {
     MessagePlugin.warning('没有需要匹配的歌曲')
     return
   }
   batchState.value = { total: need.length, done: 0, running: true }
-  for (const it of need) {
-    await matchTags(it)
-    batchState.value.done++
+  try {
+    const ids = need.map((s) => String(s.songmid))
+    await (window as any).api.localMusic.batchMatch(ids)
+  } catch (e: any) {
+    MessagePlugin.error('启动匹配失败: ' + e.message)
+    batchState.value.running = false
   }
-  batchState.value.running = false
-  MessagePlugin.success('批量匹配完成')
 }
 
 onMounted(async () => {
@@ -450,7 +452,7 @@ onMounted(async () => {
   const list = await (window as any).api.localMusic.getList()
   if (Array.isArray(list)) {
     songs.value = list
-    console.log('本地音乐库:', songs.value)
+    console.log('本地音乐库:', { ...toRaw(songs.value) })
     for (const s of songs.value) await ensureDuration(s)
   }
 
@@ -466,11 +468,27 @@ onMounted(async () => {
     scanProgress.value.running = false
     loading.value = false
   })
+
+  // 监听批量匹配进度
+  window.api.localMusic.onBatchMatchProgress((processed: number, total: number) => {
+    batchState.value = { total, done: processed, running: true }
+  })
+
+  window.api.localMusic.onBatchMatchFinished(async (res: any) => {
+    batchState.value.running = false
+    MessagePlugin.success(`批量匹配完成，成功匹配 ${res.matched} 首`)
+    const list = await (window as any).api.localMusic.getList()
+    if (Array.isArray(list)) {
+      songs.value = list
+      for (const s of songs.value) ensureDuration(s)
+    }
+  })
 })
 
 onBeforeUnmount(() => {
   window.api.localMusic.removeScanProgress()
   window.api.localMusic.removeScanFinished()
+  window.api.localMusic.removeBatchMatchListeners()
 })
 
 async function coverLoader(song: MusicItem, signal: AbortSignal) {

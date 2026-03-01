@@ -181,6 +181,7 @@ interface CustomAPI {
   }
 
   localMusic: {
+    [x: string]: any
     selectDirs: () => Promise<string[]>
     scan: (dirs: string[]) => Promise<any[]>
     writeTags: (

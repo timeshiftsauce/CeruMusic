@@ -351,74 +351,72 @@ function checkGuide() {
             </t-button>
 
             <div class="search-container">
-              <div style="display: flex; align-items: center">
-                <div class="search-input">
-                  <div class="source-selector" @click="toggleSourceList">
-                    <svg class="icon" aria-hidden="true">
-                      <use :xlink:href="`#icon-${source}`"></use>
-                    </svg>
-                  </div>
-                  <!-- 透明遮罩 -->
-                  <transition name="mask">
-                    <div v-if="source_list_show" class="source-mask" @click="handleMaskClick"></div>
-                  </transition>
-                  <!-- 音源选择列表 -->
-                  <transition name="source">
-                    <div v-if="source_list_show" class="source-list">
-                      <div class="items">
-                        <div
-                          v-for="item in sourceList"
-                          :key="item.key"
-                          class="source-item"
-                          :class="{ active: source === item.icon }"
-                          @click="selectSource(item.key)"
-                        >
-                          <svg class="source-icon" aria-hidden="true">
-                            <use :xlink:href="`#icon-${item.icon}`"></use>
-                          </svg>
-                          <span class="source-name">{{ item.name }}</span>
-                        </div>
+              <div class="search-input">
+                <div class="source-selector" @click="toggleSourceList">
+                  <svg class="icon" aria-hidden="true">
+                    <use :xlink:href="`#icon-${source}`"></use>
+                  </svg>
+                </div>
+                <!-- 透明遮罩 -->
+                <transition name="mask">
+                  <div v-if="source_list_show" class="source-mask" @click="handleMaskClick"></div>
+                </transition>
+                <!-- 音源选择列表 -->
+                <transition name="source">
+                  <div v-if="source_list_show" class="source-list">
+                    <div class="items">
+                      <div
+                        v-for="item in sourceList"
+                        :key="item.key"
+                        class="source-item"
+                        :class="{ active: source === item.icon }"
+                        @click="selectSource(item.key)"
+                      >
+                        <svg class="source-icon" aria-hidden="true">
+                          <use :xlink:href="`#icon-${item.icon}`"></use>
+                        </svg>
+                        <span class="source-name">{{ item.name }}</span>
                       </div>
                     </div>
-                  </transition>
-                  <t-input
-                    ref="inputRef"
-                    v-model="SearchStore.value"
-                    placeholder="搜索音乐、歌手"
-                    style="width: 100%"
-                    @enter="handleKeyDown"
-                    @focus="SearchStore.setFocus(true)"
-                    @blur="SearchStore.setFocus(false)"
-                  >
-                    <template #suffix>
-                      <t-button
-                        theme="primary"
-                        variant="text"
-                        shape="circle"
-                        style="display: flex; align-items: center; justify-content: center"
-                        @click="handleSearch"
-                      >
-                        <SearchIcon style="font-size: 16px; color: var(--td-text-color-primary)" />
-                      </t-button>
-                    </template>
-                  </t-input>
-                  <SearchSuggest @to-search="handleSuggestionSelect" />
-                </div>
-
-                <t-tooltip content="听歌识曲（Beta）" placement="bottom">
-                  <t-button
-                    shape="circle"
-                    theme="default"
-                    variant="text"
-                    class="nav-btn"
-                    @click="router.push('/home/recognize')"
-                  >
-                    <template #icon>
-                      <MicrophoneIcon />
-                    </template>
-                  </t-button>
-                </t-tooltip>
+                  </div>
+                </transition>
+                <t-input
+                  ref="inputRef"
+                  v-model="SearchStore.value"
+                  placeholder="搜索音乐、歌手"
+                  style="width: 100%"
+                  @enter="handleKeyDown"
+                  @focus="SearchStore.setFocus(true)"
+                  @blur="SearchStore.setFocus(false)"
+                >
+                  <template #suffix>
+                    <t-button
+                      theme="primary"
+                      variant="text"
+                      shape="circle"
+                      style="display: flex; align-items: center; justify-content: center"
+                      @click="handleSearch"
+                    >
+                      <SearchIcon style="font-size: 16px; color: var(--td-text-color-primary)" />
+                    </t-button>
+                  </template>
+                </t-input>
+                <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
+              <t-tooltip content="听歌识曲（Beta）" placement="bottom">
+                <t-button
+                  shape="circle"
+                  theme="default"
+                  variant="text"
+                  class="nav-btn"
+                  style="width: 32px; height: 32px; margin: 0; flex-shrink: 0"
+                  @click="router.push('/home/recognize')"
+                >
+                  <template #icon>
+                    <MicrophoneIcon />
+                  </template>
+                </t-button>
+              </t-tooltip>
 
               <TitleBarControls :show-account="true"></TitleBarControls>
             </div>
@@ -617,6 +615,7 @@ function checkGuide() {
       display: flex;
       flex: 1;
       position: relative;
+      align-items: center;
       justify-content: space-between;
 
       .search-input {
@@ -625,7 +624,7 @@ function checkGuide() {
         align-items: center;
         transition: width 0.3s;
         padding: 0 0.5rem;
-        width: 14rem;
+        width: min(18.75rem, 400px);
         margin-right: 0.5rem;
         border-radius: 1.25rem !important;
         background-color: var(--td-bg-color-container);
@@ -633,7 +632,7 @@ function checkGuide() {
         position: relative;
 
         &:has(input:focus) {
-          width: 18rem;
+          width: max(18.75rem, 400px);
         }
 
         .source-selector {
@@ -646,7 +645,6 @@ function checkGuide() {
           border-radius: 999px;
           overflow: hidden;
           transition: background-color 0.2s;
-          flex-shrink: 0;
 
           &:hover {
             background-color: var(--home-source-selector-hover);

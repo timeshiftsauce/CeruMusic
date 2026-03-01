@@ -459,6 +459,14 @@ const vObserveCover = {
     elementSongMap.set(el, song)
     coverObserver.observe(el)
   },
+  updated(el: HTMLElement, binding: any) {
+    if (!coverObserver) return
+    const song = binding.value
+    elementSongMap.set(el, song)
+    // 重新观察以触发可能的加载
+    coverObserver.unobserve(el)
+    coverObserver.observe(el)
+  },
   unmounted(el: HTMLElement) {
     if (!coverObserver) return
     coverObserver.unobserve(el)

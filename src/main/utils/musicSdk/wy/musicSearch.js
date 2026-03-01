@@ -127,6 +127,7 @@ export default {
     if (limit == null) limit = this.limit
     return this.musicSearch(str, page, limit).then((result) => {
       if (!result || result.code !== 200) return this.search(str, page, limit, retryNum)
+      // console.log(JSON.stringify(result.data.resources[0].baseInfo))
       return this.handleResult(result.data.resources || []).then((list) => {
         if (!list || list.length === 0) return this.search(str, page, limit, retryNum)
 

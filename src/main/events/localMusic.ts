@@ -1,11 +1,54 @@
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, BrowserWindow } from 'electron'
 import fs from 'fs'
 import fsp from 'fs/promises'
 import path from 'node:path'
+import { join } from 'path'
 import { localMusicIndexService } from '../services/LocalMusicIndex'
 import { coverCacheService } from '../services/CoverCache'
 import { genId, genCoverKey, normPath } from '../utils/fileUtils'
 import { readTags } from '../utils/tagUtils'
+import { is } from '@electron-toolkit/utils'
+import wy from '../utils/musicSdk/wy/recognize'
+import getLyric from '../utils/musicSdk/wy/lyric'
+import { httpFetch } from '../utils/request'
+
+let workerWindow: BrowserWindow | null = null
+
+function getOrCreateWorkerWindow(): Promise<BrowserWindow> {
+  return new Promise((resolve) => {
+    if (workerWindow && !workerWindow.isDestroyed()) {
+      resolve(workerWindow)
+      return
+    }
+
+    workerWindow = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        nodeIntegration: true,
+        contextIsolation: false,
+        backgroundThrottling: false,
+        webSecurity: false
+      }
+    })
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      workerWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/#/recognition-worker')
+    } else {
+      workerWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+        hash: 'recognition-worker'
+      })
+    }
+
+    const onReady = () => {
+      resolve(workerWindow!)
+    }
+    ipcMain.once('worker:ready', onReady)
+
+    // Fallback
+    workerWindow.webContents.once('did-finish-load', () => { })
+  })
+}
 
 const AUDIO_EXTS = new Set(['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.wma'])
 
@@ -15,7 +58,7 @@ async function readHeader(filePath: string): Promise<Buffer> {
     const f = await fsp.open(filePath, 'r')
     await f.read(h, 0, 64, 0)
     await f.close()
-  } catch {}
+  } catch { }
   return h
 }
 
@@ -75,7 +118,7 @@ async function walkDir(dir: string, results: string[]) {
         if (AUDIO_EXTS.has(ext)) results.push(full)
       }
     }
-  } catch {}
+  } catch { }
 }
 
 ipcMain.handle('local-music:select-dirs', async () => {
@@ -125,7 +168,7 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
         }
         try {
           tags = readTags(p, false) // 扫描时不读取歌词
-        } catch {}
+        } catch { }
 
         const base = path.basename(p)
         const noExt = base.replace(path.extname(base), '')
@@ -148,12 +191,6 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
             Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : ''
         }
 
-        // normPath is handled by upsertSongs -> keyForItem, so we can just use genId(p) here for initial object
-        // but to be safe and consistent with previous logic, we use normalized path for initial ID if we want
-        // However, LocalMusicIndexService.upsertSongs RE-CALCULATES the ID based on path.
-        // So we just need to provide the path.
-
-        // We provide a temporary songmid. upsertSongs will overwrite it with the correct one based on path.
         const songmid = genId(p)
 
         const formatTime = (sec: number) => {
@@ -267,7 +304,7 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       try {
         taglib.Id3v2Settings.forceDefaultVersion = true
         taglib.Id3v2Settings.defaultVersion = 3
-      } catch {}
+      } catch { }
     }
     songFile.tag.title = songInfo?.name || '未知曲目'
     songFile.tag.album = songInfo?.albumName || '未知专辑'
@@ -294,16 +331,16 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
             songFile.tag.pictures = [pic]
             try {
               await fsp.unlink(tmp)
-            } catch {}
+            } catch { }
           }
         }
-      } catch {}
+      } catch { }
     }
     try {
       if (typeof songInfo?.year === 'number' && songInfo.year > 0) {
         songFile.tag.year = songInfo.year
       }
-    } catch {}
+    } catch { }
     songFile.save()
     songFile.dispose()
 
@@ -315,17 +352,17 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       // 恢复备份并返回失败
       try {
         await fsp.copyFile(backupPath, targetFilePath)
-      } catch {}
+      } catch { }
       try {
         await fsp.unlink(backupPath)
-      } catch {}
+      } catch { }
       return { success: false, message: '写入后校验失败，已回滚' }
     }
 
     // 写入成功，清理备份
     try {
       await fsp.unlink(backupPath)
-    } catch {}
+    } catch { }
 
     // Fix: Use normalized path to find the correct existing song ID
     const normalizedPath = normPath(targetFilePath)
@@ -351,8 +388,8 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     // 通知 renderer 刷新列表（复用 scan-finished 通道）
     try {
       const all = localMusicIndexService.getAllSongs()
-      ;(_e as any)?.sender?.send?.('local-music:scan-finished', all)
-    } catch {}
+        ; (_e as any)?.sender?.send?.('local-music:scan-finished', all)
+    } catch { }
     return { success: true }
   } catch (e: any) {
     // 失败时尝试回滚
@@ -360,21 +397,22 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       const dir = path.dirname(filePath)
       const base = path.basename(filePath)
       const pattern = new RegExp(`^${base}\\.bak_\\d+$`)
-      const items = await fsp.readdir(dir)
+      const items: any = await fsp.readdir(dir)
       const latestBak = items
         .filter((n) => pattern.test(n))
         .map((n) => path.join(dir, n))
         .sort()
         .pop()
+        .pop()
       if (latestBak) {
         try {
           await fsp.copyFile(latestBak, filePath)
-        } catch {}
+        } catch { }
         try {
           await fsp.unlink(latestBak)
-        } catch {}
+        } catch { }
       }
-    } catch {}
+    } catch { }
     const msg: string = e?.message || '写入失败'
     const mapped = /MPEG audio header not found/i.test(msg)
       ? '文件不是有效的 MP3，或扩展名与实际格式不匹配'
@@ -393,7 +431,10 @@ ipcMain.handle('local-music:set-dirs', async (_e, dirs: string[]) => {
 })
 
 ipcMain.handle('local-music:get-list', async () => {
-  return localMusicIndexService.getAllSongs()
+  console.log('获取本地音乐列表')
+  const songs = localMusicIndexService.getAllSongs()
+  console.log('获取本地音乐列表', songs[0])
+  return songs
 })
 
 ipcMain.handle('local-music:get-lyric', async (_e, songmid: string) => {
@@ -417,6 +458,7 @@ ipcMain.handle('local-music:get-url', async (_e, id: string | number) => {
 
 ipcMain.handle('local-music:get-cover', async (_e, trackId: string) => {
   if (!trackId) return ''
+  console.log('获取封面:', trackId)
   const song = localMusicIndexService.getSongById(trackId)
   if (!song || !song.path) return ''
   try {
@@ -437,7 +479,7 @@ ipcMain.handle('local-music:get-covers', async (_e, trackIds: string[]) => {
     try {
       const data = await coverCacheService.getCoverByFile(s.path, genCoverKey(s.path))
       if (data) res[id] = data
-    } catch {}
+    } catch { }
   }
   return res
 })
@@ -463,10 +505,154 @@ ipcMain.handle('local-music:get-tags', async (_e, songmid: string, includeLyrics
 
 ipcMain.handle('local-music:clear-index', async () => {
   try {
-    // Calling the newly added method directly
     await localMusicIndexService.clearSongs()
     return { success: true }
   } catch (e: any) {
     return { success: false, message: e?.message || '清空失败' }
   }
+})
+
+ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
+  const sender = e.sender
+  if (!Array.isArray(songmids) || songmids.length === 0)
+    return { success: false, message: '无任务' }
+
+  const allSongs = localMusicIndexService.getAllSongs()
+  const songs = songmids
+    .map((id) => allSongs.find((s) => String(s.songmid) === String(id)))
+    .filter(Boolean)
+
+  if (songs.length === 0) return { success: false, message: '未找到歌曲' }
+
+  // Prepare worker
+  const win = await getOrCreateWorkerWindow()
+
+  const total = songs.length
+  let processed = 0
+  let matched = 0
+
+  const pendingTasks = new Map<string, { resolve: Function; song: any }>()
+
+  const onResult = async (_e, { id, fp, duration }: any) => {
+    const task = pendingTasks.get(id)
+    if (!task) return
+    pendingTasks.delete(id)
+
+    try {
+      const results = await wy.recognize(fp, duration)
+      if (results && results.length > 0) {
+        const best = results[0]
+
+        // Fetch Lyric
+        let lrc = ''
+        try {
+          const lrcRes = await getLyric(best.songmid).promise
+          if (lrcRes && lrcRes.lyric) lrc = lrcRes.lyric
+        } catch (e) {
+          console.error('Fetch lyric failed', e)
+        }
+
+        // Fetch Cover
+        let coverPath = ''
+        if (best.img) {
+          try {
+            const coverRes = await httpFetch(best.img, { format: 'arraybuffer' }).promise
+            const buf = coverRes.body
+            if (Buffer.isBuffer(buf)) {
+              const ext = (best.img.match(/\.(png|jpg|jpeg)/i) || ['.jpg'])[0]
+              const tmpPath = path.join(path.dirname(task.song.path), genId(task.song.path) + ext)
+              await fsp.writeFile(tmpPath, buf)
+              coverPath = tmpPath
+            }
+          } catch (e) {
+            console.error('Fetch cover failed', e)
+          }
+        }
+
+        // Update Tags
+        try {
+          const taglib = require('node-taglib-sharp')
+          const file = taglib.File.createFromPath(task.song.path)
+          file.tag.title = best.name
+          file.tag.performers = [best.singer]
+          file.tag.album = best.albumName
+          if (lrc) file.tag.lyrics = lrc
+          if (coverPath) {
+            const pic = taglib.Picture.fromPath(coverPath)
+            file.tag.pictures = [pic]
+          }
+          file.save()
+          file.dispose()
+
+          if (coverPath) {
+            try {
+              await fsp.unlink(coverPath)
+            } catch { }
+          }
+
+          // Update Index
+          task.song.name = best.name
+          task.song.singer = best.singer
+          task.song.albumName = best.albumName
+          if (best.img) {
+            task.song.img = best.img
+            task.song.hasCover = true
+          }
+          if (lrc) {
+            task.song.lrc = lrc
+          }
+          await localMusicIndexService.upsertSong(task.song)
+          matched++
+        } catch (err) {
+          console.error('Write tag failed', err)
+          if (coverPath) {
+            try {
+              await fsp.unlink(coverPath)
+            } catch { }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Recognition failed', err)
+    }
+
+    processed++
+    sender.send('local-music:batch-match-progress', { processed, total, matched })
+    task.resolve()
+  }
+
+  const onError = (_e, { id, error }: any) => {
+    const task = pendingTasks.get(id)
+    if (!task) return
+    pendingTasks.delete(id)
+    console.error('Worker error', id, error)
+    processed++
+    sender.send('local-music:batch-match-progress', { processed, total, matched })
+    task.resolve()
+  }
+
+  ipcMain.on('worker:fp-generated', onResult)
+  ipcMain.on('worker:fp-error', onError)
+
+  const CONCURRENCY = 3
+  for (let i = 0; i < songs.length; i += CONCURRENCY) {
+    const chunk = songs.slice(i, i + CONCURRENCY)
+    const promises = chunk.map((song) => {
+      return new Promise<void>((resolve) => {
+        const id = String(song!.songmid)
+        pendingTasks.set(id, { resolve, song })
+        win.webContents.send('worker:start-task', { id, filePath: song!.path })
+      })
+    })
+    await Promise.all(promises)
+  }
+
+  ipcMain.removeListener('worker:fp-generated', onResult)
+  ipcMain.removeListener('worker:fp-error', onError)
+
+  const finalSongs = localMusicIndexService.getAllSongs()
+  sender.send('local-music:batch-match-finished', { matched })
+  sender.send('local-music:scan-finished', finalSongs)
+
+  return { success: true, matched }
 })
