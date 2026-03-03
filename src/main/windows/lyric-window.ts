@@ -38,7 +38,7 @@ const lyricStore = {
 
 class LyricWindow {
   private win: BrowserWindow | null = null
-  constructor() {}
+  constructor() { }
   /**
    * 主窗口事件
    * @returns void
@@ -68,7 +68,7 @@ class LyricWindow {
    * @returns BrowserWindow | null
    */
   create(): BrowserWindow | null {
-    const { width, height, x, y } = lyricStore.get()
+    const { width, height, x, y, isLock } = lyricStore.get()
     this.win = createWindow({
       width: width || 800,
       height: height || 180,

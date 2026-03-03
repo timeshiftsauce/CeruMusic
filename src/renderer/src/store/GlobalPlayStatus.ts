@@ -42,12 +42,16 @@ interface Player {
   comments: {
     hotList: Comment[]
     latestList: Comment[]
-    total: number
-    page: number
+    hotTotal: number
+    hotPage: number
+    hotMaxPage: number
+    latestTotal: number
+    latestPage: number
+    latestMaxPage: number
     limit: number
-    maxPage: number
     type: 'hot' | 'latest'
-    isLoading: boolean
+    hotIsLoading: boolean
+    latestIsLoading: boolean
   }
 }
 
@@ -170,12 +174,16 @@ export const useGlobalPlayStatusStore = defineStore(
       comments: {
         hotList: [],
         latestList: [],
-        total: 0,
-        page: 0,
+        hotTotal: 0,
+        hotPage: 0,
+        hotMaxPage: 0,
+        latestTotal: 0,
+        latestPage: 0,
+        latestMaxPage: 0,
         limit: 20,
-        maxPage: 0,
         type: 'hot',
-        isLoading: false
+        hotIsLoading: false,
+        latestIsLoading: false
       }
     })
 
@@ -405,7 +413,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics as LyricLine[]
 
-              sdkPromise.catch(() => {})
+              sdkPromise.catch(() => { })
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return
@@ -476,7 +484,11 @@ export const useGlobalPlayStatusStore = defineStore(
       const currentSongInfo = toRaw(player.songInfo)
       if (!currentSongInfo || !currentSongInfo.songmid) return
 
-      player.comments.isLoading = true
+      if (type === 'hot') {
+        player.comments.hotIsLoading = true
+      } else {
+        player.comments.latestIsLoading = true
+      }
       try {
         const method = type === 'hot' ? 'getHotComment' : 'getComment'
         const res = await window.api.music.requestSdk(method, {
@@ -494,22 +506,31 @@ export const useGlobalPlayStatusStore = defineStore(
           } else {
             player.comments.hotList.push(...(res.comments || []))
           }
+          player.comments.hotTotal = res.total
+          // Use requested page instead of response page to avoid infinite loop with 0-based APIs
+          player.comments.hotPage = page
+          player.comments.hotMaxPage = res.maxPage
         } else {
           if (page === 1) {
             player.comments.latestList = res.comments || []
           } else {
             player.comments.latestList.push(...(res.comments || []))
           }
+          player.comments.latestTotal = res.total
+          // Use requested page instead of response page
+          player.comments.latestPage = page
+          player.comments.latestMaxPage = res.maxPage
         }
 
-        player.comments.total = res.total
-        player.comments.page = res.page
-        player.comments.maxPage = res.maxPage
         player.comments.type = type
       } catch (err) {
         console.error('评论获取失败', err)
       } finally {
-        player.comments.isLoading = false
+        if (type === 'hot') {
+          player.comments.hotIsLoading = false
+        } else {
+          player.comments.latestIsLoading = false
+        }
       }
     }
 
@@ -518,8 +539,12 @@ export const useGlobalPlayStatusStore = defineStore(
       // Reset comments
       player.comments.hotList = []
       player.comments.latestList = []
-      player.comments.page = 0
-      player.comments.total = 0
+      player.comments.hotPage = 0
+      player.comments.hotTotal = 0
+      player.comments.hotMaxPage = 0
+      player.comments.latestPage = 0
+      player.comments.latestTotal = 0
+      player.comments.latestMaxPage = 0
 
       // 同时获取热门和最新评论
       fetchComments(1, 'hot')

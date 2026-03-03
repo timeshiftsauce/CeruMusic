@@ -316,6 +316,22 @@ const api = {
     },
     removeScanFinished: () => {
       ipcRenderer.removeAllListeners('local-music:scan-finished')
+    },
+    batchMatch: (songmids: string[]) => ipcRenderer.invoke('local-music:batch-match', songmids),
+    onBatchMatchProgress: (callback: (processed: number, total: number, matched: number) => void) => {
+      const handler = (_event: any, data: { processed: number; total: number; matched: number }) =>
+        callback(data.processed, data.total, data.matched)
+      ipcRenderer.on('local-music:batch-match-progress', handler)
+      return () => ipcRenderer.removeListener('local-music:batch-match-progress', handler)
+    },
+    onBatchMatchFinished: (callback: (res: any) => void) => {
+      const handler = (_event: any, res: any) => callback(res)
+      ipcRenderer.on('local-music:batch-match-finished', handler)
+      return () => ipcRenderer.removeListener('local-music:batch-match-finished', handler)
+    },
+    removeBatchMatchListeners: () => {
+      ipcRenderer.removeAllListeners('local-music:batch-match-progress')
+      ipcRenderer.removeAllListeners('local-music:batch-match-finished')
     }
   },
 
