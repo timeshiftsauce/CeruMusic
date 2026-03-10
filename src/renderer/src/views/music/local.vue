@@ -412,20 +412,20 @@ const strSim = (a: string, b: string) => {
   return 0
 }
 
-const matchTags = async (song: MusicItem) => {
-  if (!song || !song.path) return
-  matching.value[song.songmid] = true
-  try {
-    const { best } = await pickBestMatch(song)
-    if (!best) {
-      MessagePlugin.warning('未匹配到合适标签')
-      return
-    }
-    await applyMatch(best)
-  } finally {
-    matching.value[song.songmid] = false
-  }
-}
+// const matchTags = async (song: MusicItem) => {
+//   if (!song || !song.path) return
+//   matching.value[song.songmid] = true
+//   try {
+//     const { best } = await pickBestMatch(song)
+//     if (!best) {
+//       MessagePlugin.warning('未匹配到合适标签')
+//       return
+//     }
+//     await applyMatch(best)
+//   } finally {
+//     matching.value[song.songmid] = false
+//   }
+// }
 
 const matchBatch = async () => {
   const need = songs.value.filter(
