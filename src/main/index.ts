@@ -146,13 +146,13 @@ function setupTray() {
   if (g.__ceru_tray__) {
     try {
       g.__ceru_tray__.destroy()
-    } catch {}
+    } catch { }
     g.__ceru_tray__ = null
   }
   if (tray) {
     try {
       tray.destroy()
-    } catch {}
+    } catch { }
     tray = null
   }
 
@@ -191,7 +191,7 @@ function setupTray() {
   app.once('before-quit', () => {
     try {
       tray?.destroy()
-    } catch {}
+    } catch { }
     tray = null
     g.__ceru_tray__ = null
   })
@@ -293,11 +293,11 @@ function setupDownloadManager() {
             // 若同时拿到两种格式，分别缓存以便下次命中正确偏好
             if (cr && typeof cr === 'string') {
               const wordKey = `${songIdBase}:word`
-              musicCacheService.cacheLyric(wordKey, cr as string).catch(() => {})
+              musicCacheService.cacheLyric(wordKey, cr as string).catch(() => { })
             }
             if (std && typeof std === 'string') {
               const lrcKey = `${songIdBase}:lrc`
-              musicCacheService.cacheLyric(lrcKey, std as string).catch(() => {})
+              musicCacheService.cacheLyric(lrcKey, std as string).catch(() => { })
             }
           }
         } else if (result && (result as any).error) {
@@ -497,6 +497,7 @@ function createWindow(): void {
     shell.openExternal(details.url).then()
     return { action: 'deny' }
   })
+
   InitEventServices(mainWindow)
   initPluginNotice(mainWindow)
   // 设置背景节流
@@ -524,7 +525,7 @@ app.whenReady().then(async () => {
   // 清理上次安装残留的安装包（仅限临时目录）
   try {
     await cleanupDownloadedInstallers()
-  } catch {}
+  } catch { }
   // Set app user model id for windows - 确保与 electron-builder.yml 中的 appId 一致
   electronApp.setAppUserModelId('com.cerumusic.app')
 

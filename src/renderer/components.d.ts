@@ -24,6 +24,7 @@ declare module 'vue' {
     FloatBall: typeof import('./src/components/AI/FloatBall.vue')['default']
     FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
+    GlobalContextMenu: typeof import('./src/components/ContextMenu/GlobalContextMenu.vue')['default']
     HomeLayout: typeof import('./src/components/layout/HomeLayout.vue')['default']
     HotkeySettings: typeof import('./src/components/Settings/HotkeySettings.vue')['default']
     InputContextMenu: typeof import('./src/components/ContextMenu/InputContextMenu.vue')['default']

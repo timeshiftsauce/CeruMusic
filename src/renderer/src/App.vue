@@ -10,6 +10,9 @@
     </router-view>
   </Provider>
   <router-view v-else />
+  <GlobalContextMenu />
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import GlobalContextMenu from '@renderer/components/ContextMenu/GlobalContextMenu.vue'
+</script>
