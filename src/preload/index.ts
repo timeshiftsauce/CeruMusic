@@ -318,7 +318,9 @@ const api = {
       ipcRenderer.removeAllListeners('local-music:scan-finished')
     },
     batchMatch: (songmids: string[]) => ipcRenderer.invoke('local-music:batch-match', songmids),
-    onBatchMatchProgress: (callback: (processed: number, total: number, matched: number) => void) => {
+    onBatchMatchProgress: (
+      callback: (processed: number, total: number, matched: number) => void
+    ) => {
       const handler = (_event: any, data: { processed: number; total: number; matched: number }) =>
         callback(data.processed, data.total, data.matched)
       ipcRenderer.on('local-music:batch-match-progress', handler)

@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import ContextMenu from './ContextMenu.vue'
 import { ContextMenuItem, ContextMenuPosition } from './types'
 import { CutIcon, CopyIcon, PasteIcon, CheckDoubleIcon } from 'tdesign-icons-vue-next'

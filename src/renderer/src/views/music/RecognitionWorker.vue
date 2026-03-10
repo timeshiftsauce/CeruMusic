@@ -47,7 +47,7 @@ async function resampleTo8kMono(audioBuffer: AudioBuffer): Promise<Float32Array>
 async function processFile(id: string, filePath: string) {
   try {
     await ensureAFP()
-    
+
     // Read file via exposed API
     // Note: We need to use arrayBuffer.
     // The exposed api.file.readFile returns Buffer (Uint8Array) which is compatible.
@@ -61,12 +61,12 @@ async function processFile(id: string, filePath: string) {
       // Electron's buffer is a Node Buffer, which is a Uint8Array.
       // We can copy it to ArrayBuffer if needed.
       const arrayBuffer = buffer.buffer.slice(
-        buffer.byteOffset, 
+        buffer.byteOffset,
         buffer.byteOffset + buffer.byteLength
       )
-      
+
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
-      
+
       // Resample
       const pcm8k = await resampleTo8kMono(audioBuffer)
 
@@ -117,7 +117,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div style="padding: 20px; color: white;">
+  <div style="padding: 20px; color: white">
     <h1>Recognition Worker</h1>
     <p>This window processes audio fingerprinting in background.</p>
   </div>
