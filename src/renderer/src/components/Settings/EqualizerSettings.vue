@@ -114,7 +114,16 @@ import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { DeleteIcon, SaveIcon } from 'tdesign-icons-vue-next'
 
 // 内置预设列表 - 这些预设不能被删除
-const BUILTIN_PRESETS = ['Flat', 'Pop', 'Rock', 'Jazz', 'Classical', 'Bass Boost', 'Vocal Boost', 'Treble Boost']
+const BUILTIN_PRESETS = [
+  'Flat(原声)',
+  'Pop(流行)',
+  'Rock(摇滚)',
+  'Jazz(爵士)',
+  'Classical(古典)',
+  'Bass Boost(低音增强)',
+  'Vocal Boost(人声增强)',
+  'Treble Boost(高音增强)'
+]
 
 const eqStore = useEqualizerStore()
 const audioStore = ControlAudioStore()
@@ -335,7 +344,9 @@ const saveNewPreset = () => {
   savePresetDialogVisible.value = false
   newPresetName.value = ''
   MessagePlugin.success('预设保存成功')
-  eqStore.addLog(`Saved new preset "${newPresetName.value}" with gains: ${currentGains.map(g => g.toFixed(1)).join(', ')}`)
+  eqStore.addLog(
+    `Saved new preset "${newPresetName.value}" with gains: ${currentGains.map((g) => g.toFixed(1)).join(', ')}`
+  )
 }
 
 // Import/Export
