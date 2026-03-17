@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, toRaw } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, toRaw, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
   ChevronRightIcon,
@@ -8,13 +8,15 @@ import {
   PlayCircleIcon,
   AddIcon,
   SearchIcon,
-  FolderIcon
+  FolderIcon,
+  MapAimingIcon
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
 import { createMenuItem } from '@renderer/components/ContextMenu/utils'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
 import LocalTagEditor from '@renderer/components/Music/LocalTagEditor.vue'
 import { useRouter } from 'vue-router'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 
 type MusicItem = {
   hash?: string
@@ -56,6 +58,9 @@ const showDirModal = ref(false)
 // const newDirInput = ref('')
 const router = useRouter()
 
+const globalPlayStatus = useGlobalPlayStatusStore()
+const songListRef = ref<any>(null)
+
 const hasDirs = computed(() => scanDirs.value.length > 0)
 const multiSelect = ref(false)
 const searchQuery = ref('')
@@ -65,6 +70,121 @@ const displaySongs = computed(() => {
   const includes = (s: string | undefined) => !!s && s.toLowerCase().includes(q)
   return songs.value.filter((s) => includes(s.name) || includes(s.singer) || includes(s.albumName))
 })
+
+const currentPlayingSongInfo = computed(() => globalPlayStatus.player.songInfo)
+
+const hasCurrentPlayingSong = computed(() => {
+  if (
+    !currentPlayingSongInfo.value ||
+    !currentPlayingSongInfo.value.songmid ||
+    !currentPlayingSongInfo.value.source
+  ) {
+    return false
+  }
+  return displaySongs.value.some(
+    (s) =>
+      String(s.songmid) === String(currentPlayingSongInfo.value!.songmid) &&
+      s.source === currentPlayingSongInfo.value!.source
+  )
+})
+
+const showLocateCurrentBtn = ref(false)
+const isHoveringLocateBtn = ref(false)
+let locateBtnTimer: ReturnType<typeof setTimeout> | null = null
+let waitingLocateScrollEnd = false
+let locateScrollSeen = false
+let locateScrollEndTimer: ReturnType<typeof setTimeout> | null = null
+let locateScrollFallbackTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearLocateBtnTimer = () => {
+  if (locateBtnTimer) {
+    clearTimeout(locateBtnTimer)
+    locateBtnTimer = null
+  }
+}
+
+const clearLocateScrollTimers = () => {
+  if (locateScrollEndTimer) {
+    clearTimeout(locateScrollEndTimer)
+    locateScrollEndTimer = null
+  }
+  if (locateScrollFallbackTimer) {
+    clearTimeout(locateScrollFallbackTimer)
+    locateScrollFallbackTimer = null
+  }
+}
+
+const startLocateBtnHideTimer = () => {
+  clearLocateBtnTimer()
+  if (!showLocateCurrentBtn.value || isHoveringLocateBtn.value) return
+  locateBtnTimer = setTimeout(() => {
+    if (isHoveringLocateBtn.value) {
+      startLocateBtnHideTimer()
+      return
+    }
+    showLocateCurrentBtn.value = false
+    locateBtnTimer = null
+  }, 3000)
+}
+
+const triggerLocateBtnVisible = () => {
+  if (!hasCurrentPlayingSong.value) {
+    showLocateCurrentBtn.value = false
+    clearLocateBtnTimer()
+    return
+  }
+  showLocateCurrentBtn.value = true
+  startLocateBtnHideTimer()
+}
+
+const handleSongListScroll = () => {
+  if (waitingLocateScrollEnd) {
+    locateScrollSeen = true
+    clearLocateBtnTimer()
+    if (locateScrollFallbackTimer) {
+      clearTimeout(locateScrollFallbackTimer)
+      locateScrollFallbackTimer = null
+    }
+    if (locateScrollEndTimer) clearTimeout(locateScrollEndTimer)
+    locateScrollEndTimer = setTimeout(() => {
+      waitingLocateScrollEnd = false
+      showLocateCurrentBtn.value = false
+      locateScrollEndTimer = null
+    }, 140)
+    return
+  }
+  triggerLocateBtnVisible()
+}
+
+const locateCurrentSong = () => {
+  if (hasCurrentPlayingSong.value && songListRef.value && currentPlayingSongInfo.value) {
+    waitingLocateScrollEnd = true
+    locateScrollSeen = false
+    clearLocateBtnTimer()
+    clearLocateScrollTimers()
+    locateScrollFallbackTimer = setTimeout(() => {
+      if (!waitingLocateScrollEnd || locateScrollSeen) return
+      waitingLocateScrollEnd = false
+      showLocateCurrentBtn.value = false
+      locateScrollFallbackTimer = null
+    }, 800)
+    songListRef.value.scrollToSong(
+      currentPlayingSongInfo.value.songmid,
+      currentPlayingSongInfo.value.source
+    )
+  }
+}
+
+const handleLocateBtnMouseEnter = () => {
+  isHoveringLocateBtn.value = true
+  clearLocateBtnTimer()
+}
+
+const handleLocateBtnMouseLeave = () => {
+  isHoveringLocateBtn.value = false
+  startLocateBtnHideTimer()
+}
+
 const moreActions = ref([
   {
     label: '添加全部到播放列表',
@@ -483,12 +603,26 @@ onMounted(async () => {
       for (const s of songs.value) ensureDuration(s)
     }
   })
+  triggerLocateBtnVisible()
 })
 
 onBeforeUnmount(() => {
+  clearLocateScrollTimers()
+  clearLocateBtnTimer()
   window.api.localMusic.removeScanProgress()
   window.api.localMusic.removeScanFinished()
   window.api.localMusic.removeBatchMatchListeners()
+})
+
+watch(hasCurrentPlayingSong, (value) => {
+  if (value) {
+    triggerLocateBtnVisible()
+  } else {
+    waitingLocateScrollEnd = false
+    showLocateCurrentBtn.value = false
+    clearLocateScrollTimers()
+    clearLocateBtnTimer()
+  }
 })
 
 async function coverLoader(song: MusicItem, signal: AbortSignal) {
@@ -672,8 +806,9 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
       </div>
     </n-modal>
 
-    <div v-if="songs.length > 0" class="list">
+    <div v-if="songs.length > 0" class="list" style="position: relative">
       <SongVirtualList
+        ref="songListRef"
         style="flex: 1; min-height: 0; border-radius: 6px; overflow: hidden"
         :songs="displaySongs as any"
         :show-index="true"
@@ -694,8 +829,20 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
         "
         @exit-multi-select="() => (multiSelect = false)"
         @extra-menu-click="onExtraMenuClick"
-        @scroll="() => {}"
+        @scroll="handleSongListScroll"
       />
+      <transition name="locate-btn-fade">
+        <div
+          v-if="hasCurrentPlayingSong && showLocateCurrentBtn"
+          class="locate-current-btn"
+          title="定位到当前播放"
+          @click="locateCurrentSong"
+          @mouseenter="handleLocateBtnMouseEnter"
+          @mouseleave="handleLocateBtnMouseLeave"
+        >
+          <MapAimingIcon />
+        </div>
+      </transition>
     </div>
     <div v-else class="empty">暂无数据，点击选择目录后扫描</div>
 
@@ -844,6 +991,56 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
 }
 .empty {
   padding: 24px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #999;
+}
+
+.locate-current-btn {
+  position: absolute;
+  bottom: 30px;
+  right: 30px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
+  border: 1px solid var(--td-border-level-2-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  z-index: 10;
+
+  &:hover {
+    transform: scale(1.05);
+    background: var(--td-bg-color-secondarycontainer);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  svg {
+    font-size: 20px;
+  }
+}
+
+.locate-btn-fade-enter-active,
+.locate-btn-fade-leave-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.locate-btn-fade-enter-from,
+.locate-btn-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.92);
 }
 </style>
