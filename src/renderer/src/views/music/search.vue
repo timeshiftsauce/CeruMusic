@@ -151,7 +151,7 @@ const performSearch = async (reset = false) => {
 
     setPic((currentPage.value - 1) * pageSize, source)
     currentPage.value += 1
-    hasMore.value = newSongs.length >= pageSize
+    hasMore.value = searchResults.value.length <= totalItems.value
   } catch (error) {
     console.error('搜索失败:', error)
   } finally {
@@ -247,7 +247,7 @@ const fetchPlaylists = async (reset = false) => {
       page: playlistPage.value,
       limit: playlistLimit
     })
-
+    console.log('歌单搜索结果', res)
     playlistTotal.value = res?.total || 0
     const list = Array.isArray(res?.list) ? res.list : []
     const mapped = list.map((item: any) => ({
@@ -294,6 +294,7 @@ const onPlaylistScroll = (event: Event) => {
   const { scrollTop, scrollHeight, clientHeight } = target
   const nearBottom = scrollHeight - scrollTop - clientHeight < 100
   const hasMore = playlistResults.value.length < playlistTotal.value
+  // console.log('歌单搜索结果', nearBottom, hasMore, !playlistLoading.value)
   if (nearBottom && hasMore && !playlistLoading.value) {
     fetchPlaylists(false)
   }

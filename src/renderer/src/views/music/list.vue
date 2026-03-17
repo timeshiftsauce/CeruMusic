@@ -4,6 +4,7 @@ import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList
 import songListAPI from '@renderer/api/songList'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { createQualityDialog, downloadSingleSong } from '@renderer/utils/audio/download'
 import { mapCloudSongToLocal, mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import type { SongList } from '@common/types/songList'
@@ -21,10 +22,21 @@ import {
   EllipsisIcon,
   RefreshIcon,
   RootListFilledIcon,
-  SearchIcon
+  SearchIcon,
+  MapAimingIcon
 } from 'tdesign-icons-vue-next'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import { computed, h, onMounted, ref, toRaw, type Component, nextTick } from 'vue'
+import {
+  computed,
+  h,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  toRaw,
+  type Component,
+  nextTick,
+  watch
+} from 'vue'
 import { useRoute } from 'vue-router'
 
 interface MusicItem {
@@ -42,14 +54,13 @@ interface MusicItem {
   typeUrl: Record<string, any>
 }
 
-// 组件挂载时获取数据
-onMounted(() => {
-  fetchPlaylistSongs()
-})
-
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
 const filenameTemplate = ref(settings.value.filenameTemplate)
+
+const globalPlayStatus = useGlobalPlayStatusStore()
+
+const songListRef = ref<any>(null)
 
 // 路由实例
 const route = useRoute()
@@ -86,6 +97,121 @@ const displaySongs = computed(() => {
   if (!q) return songs.value
   const includes = (s?: string) => !!s && s.toLowerCase().includes(q)
   return songs.value.filter((s) => includes(s.name) || includes(s.singer) || includes(s.albumName))
+})
+
+const currentPlayingSongInfo = computed(() => globalPlayStatus.player.songInfo)
+
+const hasCurrentPlayingSong = computed(() => {
+  if (
+    !currentPlayingSongInfo.value ||
+    !currentPlayingSongInfo.value.songmid ||
+    !currentPlayingSongInfo.value.source
+  ) {
+    return false
+  }
+  return displaySongs.value.some(
+    (s) =>
+      String(s.songmid) === String(currentPlayingSongInfo.value!.songmid) &&
+      s.source === currentPlayingSongInfo.value!.source
+  )
+})
+
+const showLocateCurrentBtn = ref(false)
+const isHoveringLocateBtn = ref(false)
+let locateBtnTimer: ReturnType<typeof setTimeout> | null = null
+let waitingLocateScrollEnd = false
+let locateScrollSeen = false
+let locateScrollEndTimer: ReturnType<typeof setTimeout> | null = null
+let locateScrollFallbackTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearLocateBtnTimer = () => {
+  if (locateBtnTimer) {
+    clearTimeout(locateBtnTimer)
+    locateBtnTimer = null
+  }
+}
+
+const clearLocateScrollTimers = () => {
+  if (locateScrollEndTimer) {
+    clearTimeout(locateScrollEndTimer)
+    locateScrollEndTimer = null
+  }
+  if (locateScrollFallbackTimer) {
+    clearTimeout(locateScrollFallbackTimer)
+    locateScrollFallbackTimer = null
+  }
+}
+
+const startLocateBtnHideTimer = () => {
+  clearLocateBtnTimer()
+  if (!showLocateCurrentBtn.value || isHoveringLocateBtn.value) return
+  locateBtnTimer = setTimeout(() => {
+    if (isHoveringLocateBtn.value) {
+      startLocateBtnHideTimer()
+      return
+    }
+    showLocateCurrentBtn.value = false
+    locateBtnTimer = null
+  }, 3000)
+}
+
+const triggerLocateBtnVisible = () => {
+  if (!hasCurrentPlayingSong.value) {
+    showLocateCurrentBtn.value = false
+    clearLocateBtnTimer()
+    return
+  }
+  showLocateCurrentBtn.value = true
+  startLocateBtnHideTimer()
+}
+
+const locateCurrentSong = () => {
+  if (hasCurrentPlayingSong.value && songListRef.value && currentPlayingSongInfo.value) {
+    waitingLocateScrollEnd = true
+    locateScrollSeen = false
+    clearLocateBtnTimer()
+    clearLocateScrollTimers()
+    locateScrollFallbackTimer = setTimeout(() => {
+      if (!waitingLocateScrollEnd || locateScrollSeen) return
+      waitingLocateScrollEnd = false
+      showLocateCurrentBtn.value = false
+      locateScrollFallbackTimer = null
+    }, 800)
+    songListRef.value.scrollToSong(
+      currentPlayingSongInfo.value.songmid,
+      currentPlayingSongInfo.value.source
+    )
+  }
+}
+
+const handleLocateBtnMouseEnter = () => {
+  isHoveringLocateBtn.value = true
+  clearLocateBtnTimer()
+}
+
+const handleLocateBtnMouseLeave = () => {
+  isHoveringLocateBtn.value = false
+  startLocateBtnHideTimer()
+}
+
+onMounted(() => {
+  fetchPlaylistSongs()
+  triggerLocateBtnVisible()
+})
+onBeforeUnmount(() => {
+  clearLocateScrollTimers()
+  clearLocateBtnTimer()
+})
+
+watch(hasCurrentPlayingSong, (value) => {
+  if (value) {
+    triggerLocateBtnVisible()
+  } else {
+    waitingLocateScrollEnd = false
+    showLocateCurrentBtn.value = false
+    clearLocateScrollTimers()
+    clearLocateBtnTimer()
+  }
 })
 
 function openSearch() {
@@ -1247,6 +1373,22 @@ const setPicForPlaylist = async (songs: any[], source: string) => {
  * 滚动事件处理：更新头部紧凑状态，并在接近底部时触发分页加载
  */
 const handleScroll = (event?: Event) => {
+  if (waitingLocateScrollEnd) {
+    locateScrollSeen = true
+    clearLocateBtnTimer()
+    if (locateScrollFallbackTimer) {
+      clearTimeout(locateScrollFallbackTimer)
+      locateScrollFallbackTimer = null
+    }
+    if (locateScrollEndTimer) clearTimeout(locateScrollEndTimer)
+    locateScrollEndTimer = setTimeout(() => {
+      waitingLocateScrollEnd = false
+      showLocateCurrentBtn.value = false
+      locateScrollEndTimer = null
+    }, 140)
+  } else {
+    triggerLocateBtnVisible()
+  }
   let scrollTop = 0
   let scrollHeight = 0
   let clientHeight = 0
@@ -1558,6 +1700,7 @@ const filteredMoreActions = computed(() =>
           :show-album="true"
           :show-duration="true"
           :is-local-playlist="isLocalPlaylist || isCloudUserPlaylist"
+          :enable-sort="isLocalPlaylist"
           :playlist-id="playlistInfo.id"
           :multi-select="multiSelect"
           @play="handlePlay"
@@ -1572,6 +1715,19 @@ const filteredMoreActions = computed(() =>
           @scroll="handleScroll"
           @exit-multi-select="handleExitMultiSelect"
         />
+
+        <transition name="locate-btn-fade">
+          <div
+            v-if="hasCurrentPlayingSong && showLocateCurrentBtn"
+            class="locate-current-btn"
+            title="定位到当前播放"
+            @click="locateCurrentSong"
+            @mouseenter="handleLocateBtnMouseEnter"
+            @mouseleave="handleLocateBtnMouseLeave"
+          >
+            <MapAimingIcon />
+          </div>
+        </transition>
       </div>
     </div>
   </div>
@@ -1859,6 +2015,53 @@ const filteredMoreActions = computed(() =>
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.locate-current-btn {
+  position: absolute;
+  bottom: 30px;
+  right: 30px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
+  border: 1px solid var(--td-border-level-2-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  z-index: 10;
+
+  &:hover {
+    transform: scale(1.05);
+    background: var(--td-bg-color-secondarycontainer);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  svg {
+    font-size: 20px;
+  }
+}
+
+.locate-btn-fade-enter-active,
+.locate-btn-fade-leave-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.locate-btn-fade-enter-from,
+.locate-btn-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.92);
 }
 
 /* 响应式设计 */

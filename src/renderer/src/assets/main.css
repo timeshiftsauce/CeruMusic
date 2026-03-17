@@ -1,0 +1,911 @@
+:root[data-theme='light'],
+:root:not([data-theme]) {
+  --hover-nav-color: #f3f4f6;
+  --hover-nav-text: #6b7280;
+  --hover-nav-text-hover: #111827;
+
+  --td-brand-color-1: #ddfbdd;
+  --td-brand-color-2: #bdf6c3;
+  --td-brand-color-3: #80df94;
+  --td-brand-color-4: #03de6d;
+  --td-brand-color-5: #00a74d;
+  --td-brand-color-6: #00893e;
+  --td-brand-color-7: #006d2f;
+  --td-brand-color-8: #005423;
+  --td-brand-color-9: #003c16;
+  --td-brand-color-10: #00260b;
+  --td-brand-color-light: var(--td-brand-color-1);
+  --td-brand-color-focus: var(--td-brand-color-2);
+  --td-brand-color-disabled: var(--td-brand-color-3);
+  --td-brand-color-hover: var(--td-brand-color-3);
+  --td-brand-color: var(--td-brand-color-4);
+  --td-brand-color-active: var(--td-brand-color-5);
+  --td-warning-color-1: #fef3e6;
+  --td-warning-color-2: #f9e0c7;
+  --td-warning-color-3: #f7c797;
+  --td-warning-color-4: #f2995f;
+  --td-warning-color-5: #ed7b2f;
+  --td-warning-color-6: #d35a21;
+  --td-warning-color-7: #ba431b;
+  --td-warning-color-8: #9e3610;
+  --td-warning-color-9: #842b0b;
+  --td-warning-color-10: #5a1907;
+  --td-warning-color: var(--td-warning-color-5);
+  --td-warning-color-hover: var(--td-warning-color-4);
+  --td-warning-color-focus: var(--td-warning-color-2);
+  --td-warning-color-active: var(--td-warning-color-6);
+  --td-warning-color-disabled: var(--td-warning-color-3);
+  --td-warning-color-light: var(--td-warning-color-1);
+  --td-error-color-1: #fdecee;
+  --td-error-color-2: #f9d7d9;
+  --td-error-color-3: #f8b9be;
+  --td-error-color-4: #f78d94;
+  --td-error-color-5: #f36d78;
+  --td-error-color-6: #e34d59;
+  --td-error-color-7: #c9353f;
+  --td-error-color-8: #b11f26;
+  --td-error-color-9: #951114;
+  --td-error-color-10: #680506;
+  --td-error-color: var(--td-error-color-6);
+  --td-error-color-hover: var(--td-error-color-5);
+  --td-error-color-focus: var(--td-error-color-2);
+  --td-error-color-active: var(--td-error-color-7);
+  --td-error-color-disabled: var(--td-error-color-3);
+  --td-error-color-light: var(--td-error-color-1);
+  --td-success-color-1: #e8f8f2;
+  --td-success-color-2: #bcebdc;
+  --td-success-color-3: #85dbbe;
+  --td-success-color-4: #48c79c;
+  --td-success-color-5: #00a870;
+  --td-success-color-6: #078d5c;
+  --td-success-color-7: #067945;
+  --td-success-color-8: #056334;
+  --td-success-color-9: #044f2a;
+  --td-success-color-10: #033017;
+  --td-success-color: var(--td-success-color-5);
+  --td-success-color-hover: var(--td-success-color-4);
+  --td-success-color-focus: var(--td-success-color-2);
+  --td-success-color-active: var(--td-success-color-6);
+  --td-success-color-disabled: var(--td-success-color-3);
+  --td-success-color-light: var(--td-success-color-1);
+  --td-gray-color-1: #f3f3f3;
+  --td-gray-color-2: #eee;
+  --td-gray-color-3: #e7e7e7;
+  --td-gray-color-4: #dcdcdc;
+  --td-gray-color-5: #c5c5c5;
+  --td-gray-color-6: #a6a6a6;
+  --td-gray-color-7: #8b8b8b;
+  --td-gray-color-8: #777;
+  --td-gray-color-9: #5e5e5e;
+  --td-gray-color-10: #4b4b4b;
+  --td-gray-color-11: #383838;
+  --td-gray-color-12: #2c2c2c;
+  --td-gray-color-13: #242424;
+  --td-gray-color-14: #181818;
+  --td-bg-color-container: #fff;
+  --td-bg-color-container-select: #fff;
+  --td-bg-color-page: var(--td-gray-color-2);
+  --td-bg-color-container-hover: var(--td-gray-color-1);
+  --td-bg-color-container-active: var(--td-gray-color-3);
+  --td-bg-color-secondarycontainer: var(--td-gray-color-1);
+  --td-bg-color-secondarycontainer-hover: var(--td-gray-color-2);
+  --td-bg-color-secondarycontainer-active: var(--td-gray-color-4);
+  --td-bg-color-component: var(--td-gray-color-3);
+  --td-bg-color-component-hover: var(--td-gray-color-4);
+  --td-bg-color-component-active: var(--td-gray-color-6);
+  --td-bg-color-component-disabled: var(--td-gray-color-2);
+  --td-component-stroke: var(--td-gray-color-3);
+  --td-component-border: var(--td-gray-color-4);
+  --td-font-white-1: #ffffff;
+  --td-font-white-2: rgba(255, 255, 255, 0.55);
+  --td-font-white-3: rgba(255, 255, 255, 0.35);
+  --td-font-white-4: rgba(255, 255, 255, 0.22);
+  --td-font-gray-1: rgba(0, 0, 0, 0.9);
+  --td-font-gray-2: rgba(0, 0, 0, 0.6);
+  --td-font-gray-3: rgba(0, 0, 0, 0.4);
+  --td-font-gray-4: rgba(0, 0, 0, 0.26);
+  --td-text-color-primary: var(--td-font-gray-1);
+  --td-text-color-secondary: var(--td-font-gray-2);
+  --td-text-color-placeholder: var(--td-font-gray-3);
+  --td-text-color-disabled: var(--td-font-gray-4);
+  --td-text-color-anti: #fff;
+  --td-text-color-brand: var(--td-brand-color);
+  --td-text-color-link: var(--td-brand-color);
+  --td-brand-color-light-hover: var(--td-brand-color-2);
+  --td-warning-color-light-hover: var(--td-warning-color-2);
+  --td-error-color-light-hover: var(--td-error-color-2);
+  --td-success-color-light-hover: var(--td-success-color-2);
+  --td-bg-color-secondarycomponent: var(--td-gray-color-4);
+  --td-bg-color-secondarycomponent-hover: var(--td-gray-color-5);
+  --td-bg-color-secondarycomponent-active: var(--td-gray-color-6);
+  --td-table-shadow-color: rgba(0, 0, 0, 8%);
+  --td-scrollbar-color: rgba(0, 0, 0, 10%);
+  --td-scrollbar-hover-color: rgba(0, 0, 0, 30%);
+  --td-scroll-track-color: #fff;
+  --td-bg-color-specialcomponent: #fff;
+  --td-border-level-1-color: var(--td-gray-color-3);
+  --td-border-level-2-color: var(--td-gray-color-4);
+  --td-shadow-1:
+    0 1px 10px rgba(0, 0, 0, 5%), 0 4px 5px rgba(0, 0, 0, 8%), 0 2px 4px -1px rgba(0, 0, 0, 12%);
+  --td-shadow-2:
+    0 3px 14px 2px rgba(0, 0, 0, 5%), 0 8px 10px 1px rgba(0, 0, 0, 6%),
+    0 5px 5px -3px rgba(0, 0, 0, 10%);
+  --td-shadow-3:
+    0 6px 30px 5px rgba(0, 0, 0, 5%), 0 16px 24px 2px rgba(0, 0, 0, 4%),
+    0 8px 10px -5px rgba(0, 0, 0, 8%);
+  --td-shadow-inset-top: inset 0 0.5px 0 #dcdcdc;
+  --td-shadow-inset-right: inset 0.5px 0 0 #dcdcdc;
+  --td-shadow-inset-bottom: inset 0 -0.5px 0 #dcdcdc;
+  --td-shadow-inset-left: inset -0.5px 0 0 #dcdcdc;
+  --td-mask-active: rgba(0, 0, 0, 0.6);
+  --td-mask-disabled: rgba(255, 255, 255, 0.6);
+
+  /* 通用颜色变量 - 亮色主题 */
+  --theme-bg-primary: #ffffff;
+  --theme-bg-secondary: #f8f9fa;
+  --theme-bg-tertiary: #fafafa;
+  --theme-text-primary: #111827;
+  --theme-text-secondary: #6b7280;
+  --theme-text-tertiary: #9ca3af;
+  --theme-text-muted: #9ca3af;
+  --theme-text-disabled: #666666;
+  --theme-border-light: #f3f4f6;
+  --theme-border-medium: #e5e7eb;
+  --theme-border-strong: #f3f3f3;
+  --theme-border: #e5e7eb;
+  --theme-hover-bg: #f9fafb;
+  --theme-overlay: rgba(0, 0, 0, 0.7);
+  --theme-shadow-light: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --theme-shadow-medium: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --theme-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.08);
+  --theme-card-bg: #ffffff;
+  --theme-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --theme-card-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.15);
+  --theme-header-bg: #f9fafb;
+  --theme-badge-bg: #f3f4f6;
+  --theme-tips-bg: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  --theme-warning-bg: #fef3c7;
+  --theme-warning-text: #d97706;
+  --theme-code-bg: rgba(255, 255, 255, 0.6);
+  --theme-code-hover-bg: rgba(255, 255, 255, 0.9);
+  --theme-note-bg: rgba(255, 255, 255, 0.5);
+
+  /* Find 页面专用变量 - 亮色主题 */
+  --find-bg-primary: var(--theme-bg-primary);
+  --find-bg-secondary: var(--theme-bg-secondary);
+  --find-text-primary: var(--theme-text-primary);
+  --find-text-secondary: var(--theme-text-secondary);
+  --find-text-muted: var(--theme-text-muted);
+  --find-card-bg: var(--theme-bg-primary);
+  --find-song-count-bg: rgba(156, 163, 175, 0.1);
+  --find-card-info-bg: rgba(255, 255, 255, 0.95);
+  --find-card-shadow: var(--theme-shadow-light), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --find-card-shadow-hover: var(--theme-shadow-hover);
+  --find-song-bg: var(--theme-bg-primary);
+  --find-song-hover-bg: var(--theme-hover-bg);
+  --find-border-color: var(--theme-border-light);
+  --find-meta-border: rgba(229, 231, 235, 0.5);
+
+  /* HomeLayout 页面专用变量 - 亮色主题 */
+  --home-nav-btn-color: #3d4043;
+  --home-nav-btn-hover: var(--theme-text-primary);
+  --home-source-selector-hover: var(--theme-border-light);
+  --home-source-list-bg: var(--theme-bg-primary);
+  --home-source-list-border: var(--theme-border-medium);
+  --home-source-list-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --home-source-item-hover: var(--theme-border-light);
+  --home-scrollbar-track: #f1f5f9;
+  --home-scrollbar-thumb: #cbd5e1;
+  --home-scrollbar-thumb-hover: #94a3b8;
+  --home-scrollbar-color: #cbd5e1 #f1f5f9;
+
+  /* List 页面专用变量 - 亮色主题 */
+  --list-bg-primary: var(--theme-bg-tertiary);
+  --list-content-bg: var(--theme-bg-primary);
+  --list-header-bg: var(--theme-bg-primary);
+  --list-header-shadow: var(--theme-shadow-medium);
+  --list-content-shadow: var(--theme-shadow-light);
+  --list-title-color: var(--theme-text-primary);
+  --list-author-color: var(--theme-text-secondary);
+  --list-stats-color: var(--theme-text-muted);
+  --list-loading-text: var(--theme-text-disabled);
+  --list-loading-border: var(--theme-border-strong);
+  --list-loading-spinner: var(--td-brand-color);
+  --list-cover-overlay: var(--theme-overlay);
+
+  /* SongVirtualList 组件专用变量 - 亮色主题 */
+  --song-list-header-bg: #fafafa;
+  --song-list-header-border: #e9e9e9;
+  --song-list-header-text: #999999;
+  --song-list-content-bg: var(--theme-bg-primary);
+  --song-list-item-border: #f5f5f5;
+  --song-list-item-hover: #f5f5f5;
+  --song-list-item-current: #f0f7ff;
+  --song-list-item-playing: #e6f7ff;
+  --song-list-track-number: #999999;
+  --song-list-title-color: #333333;
+  --song-list-title-hover: var(--td-brand-color);
+  --song-list-artist-color: #999999;
+  --song-list-album-color: #999999;
+  --song-list-album-hover: var(--td-brand-color);
+  --song-list-duration-color: #999999;
+  --song-list-btn-color: #cccccc;
+  --song-list-btn-hover: var(--td-brand-color);
+  --song-list-btn-bg-hover: var(--td-brand-color-light);
+  --song-list-quality-bg: #fff7e6;
+  --song-list-quality-color: #fa8c16;
+  --song-list-source-bg: #f3feff;
+  --song-list-source-color: #00d4e3;
+
+  /* Search 页面专用变量 - 亮色主题 */
+  --search-bg: var(--theme-bg-tertiary);
+  --search-title-color: #333333;
+  --search-keyword-color: var(--td-brand-color);
+  --search-info-color: #999999;
+  --search-content-bg: var(--theme-bg-primary);
+  --search-content-shadow: var(--theme-shadow-light);
+  --search-empty-title: #333333;
+  --search-empty-text: #999999;
+  --search-loading-text: #666666;
+  --search-loading-border: #f3f3f3;
+  --search-loading-spinner: var(--td-brand-color);
+
+  /* Recent 页面专用变量 - 亮色主题 */
+  --recent-bg: var(--theme-bg-tertiary);
+  --recent-title-color: #111827;
+  --recent-subtitle-color: #6b7280;
+  --recent-section-title: #111827;
+  --recent-card-bg: var(--theme-bg-primary);
+  --recent-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --recent-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --recent-playlist-title: #111827;
+  --recent-playlist-desc: #6b7280;
+  --recent-playlist-meta: #9ca3af;
+  --recent-song-item-border: #f3f4f6;
+  --recent-song-item-hover: #f9fafb;
+  --recent-song-index: #6b7280;
+  --recent-song-title: #111827;
+  --recent-song-artist: #6b7280;
+  --recent-song-stats: #6b7280;
+  --recent-song-duration: #6b7280;
+  --recent-empty-icon: #d1d5db;
+  --recent-empty-title: #111827;
+  --recent-empty-text: #6b7280;
+
+  /* Local 页面专用变量 - 亮色主题 */
+  --local-bg: var(--theme-bg-tertiary);
+  --local-text-primary: var(--theme-text-primary);
+  --local-text-secondary: var(--theme-text-secondary);
+  --local-text-tertiary: var(--theme-text-tertiary);
+  --local-card-bg: var(--theme-card-bg);
+  --local-card-shadow: var(--theme-card-shadow);
+  --local-card-shadow-hover: var(--theme-card-shadow-hover);
+  --local-border: var(--theme-border);
+  --local-hover-bg: var(--theme-hover-bg);
+  --local-header-bg: var(--theme-header-bg);
+  --local-badge-bg: var(--theme-badge-bg);
+  --local-tips-bg: var(--theme-tips-bg);
+  --local-warning-bg: var(--theme-warning-bg);
+  --local-warning-text: var(--theme-warning-text);
+  --local-code-bg: var(--theme-code-bg);
+  --local-code-hover-bg: var(--theme-code-hover-bg);
+  --local-note-bg: var(--theme-note-bg);
+
+  /* Welcome 页面专用变量 - 亮色主题 */
+  --welcome-bg: #ffffff;
+  --welcome-subtitle-color: #666666;
+  --welcome-loading-text: #888888;
+  --welcome-progress-bg: #f0f0f0;
+  --welcome-tag-bg: #b8f1ce;
+  --welcome-tag-border: #e9ecef;
+  --welcome-tag-color: #333333;
+  --welcome-version-color: #9e9e9e;
+
+  /* TitleBarControls 组件专用变量 - 亮色主题 */
+  --titlebar-icon-color: #111827;
+  --titlebar-icon-hover: #111827;
+  --titlebar-btn-hover-bg: #00000041;
+  --titlebar-close-hover-bg: #ffa1a176;
+  --titlebar-close-hover-color: #dc2626;
+
+  /* Settings 页面专用变量 - 亮色主题 */
+  --settings-main-bg: #f8fafc;
+  --settings-header-bg: #ffffff;
+  --settings-sidebar-bg: #ffffff;
+  --settings-sidebar-border: #e2e8f0;
+  --settings-nav-hover-bg: #f1f5f9;
+  --settings-nav-active-bg: var(--td-brand-color-1);
+  --settings-nav-active-border: var(--td-brand-color-5);
+  --settings-nav-icon-color: #64748b;
+  --settings-nav-icon-active: var(--td-brand-color-5);
+  --settings-nav-label-color: #334155;
+  --settings-nav-label-active: var(--td-brand-color-6);
+  --settings-nav-desc-color: #64748b;
+  --settings-content-bg: #f8fafc;
+  --settings-group-bg: #ffffff;
+  --settings-group-border: #e2e8f0;
+  --settings-group-shadow: rgba(0, 0, 0, 0.1);
+  --settings-text-primary: #1e293b;
+  --settings-text-secondary: #64748b;
+  --settings-preview-bg: #f8fafc;
+  --settings-preview-border: #e2e8f0;
+  --settings-mock-titlebar-bg: #f6f6f6;
+  --settings-mock-titlebar-border: #d1d5db;
+  --settings-feature-bg: #f8fafc;
+  --settings-feature-border: #e2e8f0;
+  --settings-api-tips-bg: #f8fafc;
+  --settings-api-tips-border: #e2e8f0;
+  --settings-source-card-bg: #ffffff;
+  --settings-source-card-border: #e2e8f0;
+  --settings-source-card-hover-border: var(--td-brand-color-3);
+  --settings-source-card-active-border: var(--td-brand-color-5);
+  --settings-source-card-active-bg: var(--td-brand-color-1);
+  --settings-source-icon-bg: #f1f5f9;
+  --settings-quality-container-bg: #f8fafc;
+  --settings-quality-container-border: #e2e8f0;
+  --settings-status-item-bg: #f8fafc;
+  --settings-status-item-border: #e2e8f0;
+  --settings-plugin-prompt-bg: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  --settings-plugin-prompt-border: #cbd5e1;
+  --settings-tech-item-bg: #f8fafc;
+  --settings-tech-item-border: #e2e8f0;
+  --settings-developer-item-bg: #f8fafc;
+  --settings-developer-item-border: #e2e8f0;
+  --settings-tag-option-bg: #f8fafc;
+  --settings-tag-option-border: #e2e8f0;
+  --settings-tag-status-bg: #f8fafc;
+  --settings-tag-status-border: #e2e8f0;
+
+  /* Plugins 组件专用变量 - 亮色主题 */
+  --plugins-bg: var(--theme-bg-tertiary);
+  --plugins-container-bg: var(--theme-bg-primary);
+  --plugins-header-bg: var(--theme-bg-primary);
+  --plugins-text-primary: var(--theme-text-primary);
+  --plugins-text-secondary: var(--theme-text-secondary);
+  --plugins-text-muted: var(--theme-text-muted);
+  --plugins-border: var(--theme-border);
+  --plugins-card-bg: var(--theme-card-bg);
+  --plugins-card-shadow: var(--theme-card-shadow);
+  --plugins-card-shadow-hover: var(--theme-card-shadow-hover);
+  --plugins-card-selected-bg: #e8f5e8;
+  --plugins-card-selected-border: #28a745;
+  --plugins-loading-spinner: var(--td-brand-color);
+  --plugins-error-color: #dc3545;
+  --plugins-success-color: #28a745;
+  --plugins-console-bg: #1e1e1e;
+  --plugins-console-header-bg: #2d2d2d;
+  --plugins-console-border: #404040;
+  --plugins-console-text: #ffffff;
+  --plugins-console-prompt: var(--td-brand-color);
+  --plugins-console-path: #8a8a8a;
+  --plugins-console-time: #666666;
+  --plugins-console-scrollbar-track: #2d2d2d;
+  --plugins-console-scrollbar-thumb: #555555;
+  --plugins-console-scrollbar-thumb-hover: #666666;
+  --plugins-log-error: #ff6b6b;
+  --plugins-log-warn: #ffd93d;
+  --plugins-log-info: #74b9ff;
+  --plugins-log-debug: #a29bfe;
+  --plugins-mac-close: #ff5f57;
+  --plugins-mac-minimize: #ffbd2e;
+  --plugins-mac-maximize: #28ca42;
+
+  /* Player 组件专用变量 - 亮色主题 */
+  --player-bg-default: #ffffff46;
+  --player-bg-idle: #ffffff;
+  --player-text-idle: rgba(0, 0, 0, 0.8);
+  --player-text-hover-idle: var(--td-brand-color-5);
+  --player-btn-bg-idle: var(--td-brand-color-2);
+  --player-btn-bg-hover-idle: var(--td-brand-color-3);
+}
+
+:root[data-theme='dark'] {
+  --hover-nav-color: #ffffff18;
+  --hover-nav-text: #a5a5a5;
+  --hover-nav-text-hover: #f3f4f6;
+
+  --td-brand-color-1: #00a74d20;
+  --td-brand-color-2: #003c16;
+  --td-brand-color-3: #005423;
+  --td-brand-color-4: #006d2f;
+  --td-brand-color-5: #00893e;
+  --td-brand-color-6: #00a74d;
+  --td-brand-color-7: #03de6d;
+  --td-brand-color-8: #80df94;
+  --td-brand-color-9: #bdf6c3;
+  --td-brand-color-10: #ddfbdd;
+  --td-brand-color-light: var(--td-brand-color-1);
+  --td-brand-color-focus: var(--td-brand-color-2);
+  --td-brand-color-disabled: var(--td-brand-color-3);
+  --td-brand-color-hover: var(--td-brand-color-5);
+  --td-brand-color: var(--td-brand-color-6);
+  --td-brand-color-active: var(--td-brand-color-7);
+  --td-warning-color-1: #4f2a1d;
+  --td-warning-color-2: #582f21;
+  --td-warning-color-3: #733c23;
+  --td-warning-color-4: #a75d2b;
+  --td-warning-color-5: #cf6e2d;
+  --td-warning-color-6: #dc7633;
+  --td-warning-color-7: #e8935c;
+  --td-warning-color-8: #ecbf91;
+  --td-warning-color-9: #eed7bf;
+  --td-warning-color-10: #f3e9dc;
+  --td-error-color-1: #472324;
+  --td-error-color-2: #5e2a2d;
+  --td-error-color-3: #703439;
+  --td-error-color-4: #83383e;
+  --td-error-color-5: #a03f46;
+  --td-error-color-6: #c64751;
+  --td-error-color-7: #de6670;
+  --td-error-color-8: #ec888e;
+  --td-error-color-9: #edb1b6;
+  --td-error-color-10: #eeced0;
+  --td-success-color-1: #193a2a;
+  --td-success-color-2: #1a4230;
+  --td-success-color-3: #17533d;
+  --td-success-color-4: #0d7a55;
+  --td-success-color-5: #059465;
+  --td-success-color-6: #43af8a;
+  --td-success-color-7: #46bf96;
+  --td-success-color-8: #80d2b6;
+  --td-success-color-9: #b4e1d3;
+  --td-success-color-10: #deede8;
+  --td-gray-color-1: #f3f3f3;
+  --td-gray-color-2: #eee;
+  --td-gray-color-3: #e7e7e7;
+  --td-gray-color-4: #dcdcdc;
+  --td-gray-color-5: #c5c5c5;
+  --td-gray-color-6: #a6a6a6;
+  --td-gray-color-7: #8b8b8b;
+  --td-gray-color-8: #777;
+  --td-gray-color-9: #5e5e5e;
+  --td-gray-color-10: #4b4b4b;
+  --td-gray-color-11: #383838;
+  --td-gray-color-12: #2c2c2c;
+  --td-gray-color-13: #242424;
+  --td-gray-color-14: #181818;
+  --td-bg-color-page: var(--td-gray-color-14);
+  --td-bg-color-container: var(--td-gray-color-13);
+  --td-bg-color-container-hover: var(--td-gray-color-12);
+  --td-bg-color-container-active: var(--td-gray-color-10);
+  --td-bg-color-container-select: var(--td-gray-color-9);
+  --td-bg-color-secondarycontainer: var(--td-gray-color-12);
+  --td-bg-color-secondarycontainer-hover: var(--td-gray-color-11);
+  --td-bg-color-secondarycontainer-active: var(--td-gray-color-9);
+  --td-bg-color-component: var(--td-gray-color-11);
+  --td-bg-color-component-hover: var(--td-gray-color-10);
+  --td-bg-color-component-active: var(--td-gray-color-9);
+  --td-bg-color-component-disabled: var(--td-gray-color-12);
+  --td-component-stroke: var(--td-gray-color-11);
+  --td-component-border: var(--td-gray-color-9);
+  --td-font-white-1: rgba(255, 255, 255, 0.9);
+  --td-font-white-2: rgba(255, 255, 255, 0.55);
+  --td-font-white-3: rgba(255, 255, 255, 0.35);
+  --td-font-white-4: rgba(255, 255, 255, 0.22);
+  --td-font-gray-1: rgba(0, 0, 0, 0.9);
+  --td-font-gray-2: rgba(0, 0, 0, 0.6);
+  --td-font-gray-3: rgba(0, 0, 0, 0.4);
+  --td-font-gray-4: rgba(0, 0, 0, 0.26);
+  --td-text-color-primary: var(--td-font-white-1);
+  --td-text-color-secondary: var(--td-font-white-2);
+  --td-text-color-placeholder: var(--td-font-white-3);
+  --td-text-color-disabled: var(--td-font-white-4);
+  --td-text-color-anti: #fff;
+  --td-text-color-brand: var(--td-brand-color);
+  --td-text-color-link: var(--td-brand-color);
+  --td-shadow-1:
+    0 4px 6px rgba(0, 0, 0, 0.06), 0 1px 10px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.12);
+  --td-shadow-2:
+    0 8px 10px rgba(0, 0, 0, 0.12), 0 3px 14px rgba(0, 0, 0, 0.1), 0 5px 5px rgba(0, 0, 0, 0.16);
+  --td-shadow-3:
+    0 16px 24px rgba(0, 0, 0, 0.14), 0 6px 30px rgba(0, 0, 0, 0.12), 0 8px 10px rgba(0, 0, 0, 0.2);
+  --td-shadow-inset-top: inset 0 0.5px 0 #5e5e5e;
+  --td-shadow-inset-right: inset 0.5px 0 0 #5e5e5e;
+  --td-shadow-inset-bottom: inset 0 -0.5px 0 #5e5e5e;
+  --td-shadow-inset-left: inset -0.5px 0 0 #5e5e5e;
+  --td-table-shadow-color: rgba(0, 0, 0, 55%);
+  --td-scrollbar-color: rgba(255, 255, 255, 10%);
+  --td-scrollbar-hover-color: rgba(255, 255, 255, 30%);
+  --td-scroll-track-color: #333;
+  --td-bg-color-specialcomponent: transparent;
+  --td-border-level-1-color: var(--td-gray-color-11);
+  --td-border-level-2-color: var(--td-gray-color-9);
+  --td-mask-active: rgba(0, 0, 0, 0.4);
+  --td-mask-disabled: rgba(0, 0, 0, 0.6);
+
+  /* 通用颜色变量 - 暗色主题 */
+  --theme-bg-primary: #2d2d2d;
+  --theme-bg-secondary: #1a1a1a;
+  --theme-bg-tertiary: #1a1a1a;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #b3b3b3;
+  --theme-text-tertiary: #8a8a8a;
+  --theme-text-muted: #8a8a8a;
+  --theme-text-disabled: #b3b3b3;
+  --theme-border-light: #404040;
+  --theme-border-medium: #404040;
+  --theme-border-strong: #404040;
+  --theme-border: #404040;
+  --theme-hover-bg: #3a3a3a;
+  --theme-overlay: rgba(0, 0, 0, 0.8);
+  --theme-shadow-light: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --theme-shadow-medium: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --theme-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.3);
+  --theme-card-bg: #2d2d2d;
+  --theme-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --theme-card-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.4);
+  --theme-header-bg: #2a2a2a;
+  --theme-badge-bg: #404040;
+  --theme-tips-bg: linear-gradient(135deg, #2a2a2a, #333333);
+  --theme-warning-bg: #4a3a2a;
+  --theme-warning-text: #ffa726;
+  --theme-code-bg: rgba(255, 255, 255, 0.1);
+  --theme-code-hover-bg: rgba(255, 255, 255, 0.15);
+  --theme-note-bg: rgba(255, 255, 255, 0.08);
+
+  /* Find 页面专用变量 - 暗色主题 */
+  --find-bg-primary: var(--theme-bg-secondary);
+  --find-bg-secondary: var(--theme-bg-primary);
+  --find-text-primary: var(--theme-text-primary);
+  --find-text-secondary: var(--theme-text-secondary);
+  --find-text-muted: var(--theme-text-muted);
+  --find-card-bg: var(--theme-bg-primary);
+  --find-song-count-bg: rgba(255, 255, 255, 0.1);
+  --find-card-info-bg: rgba(45, 45, 45, 0.95);
+  --find-card-shadow: var(--theme-shadow-medium), 0 1px 4px rgba(0, 0, 0, 0.2);
+  --find-card-shadow-hover: var(--theme-shadow-hover);
+  --find-song-bg: var(--theme-bg-primary);
+  --find-song-hover-bg: var(--theme-hover-bg);
+  --find-border-color: var(--theme-border-light);
+  --find-meta-border: rgba(64, 64, 64, 0.5);
+
+  /* HomeLayout 页面专用变量 - 暗色主题 */
+  --home-nav-btn-color: var(--theme-text-secondary);
+  --home-nav-btn-hover: var(--theme-text-primary);
+  --home-source-selector-hover: var(--theme-hover-bg);
+  --home-source-list-bg: var(--theme-bg-primary);
+  --home-source-list-border: var(--theme-border-light);
+  --home-source-list-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --home-source-item-hover: var(--theme-hover-bg);
+  --home-scrollbar-track: var(--theme-bg-primary);
+  --home-scrollbar-thumb: #4a4a4a;
+  --home-scrollbar-thumb-hover: #5a5a5a;
+  --home-scrollbar-color: #4a4a4a var(--theme-bg-primary);
+
+  /* List 页面专用变量 - 暗色主题 */
+  --list-bg-primary: var(--theme-bg-tertiary);
+  --list-content-bg: var(--theme-bg-primary);
+  --list-header-bg: var(--theme-bg-primary);
+  --list-header-shadow: var(--theme-shadow-medium);
+  --list-content-shadow: var(--theme-shadow-light);
+  --list-title-color: var(--theme-text-primary);
+  --list-author-color: var(--theme-text-secondary);
+  --list-stats-color: var(--theme-text-muted);
+  --list-loading-text: var(--theme-text-disabled);
+  --list-loading-border: var(--theme-border-strong);
+  --list-loading-spinner: var(--td-brand-color);
+  --list-cover-overlay: var(--theme-overlay);
+
+  /* SongVirtualList 组件专用变量 - 暗色主题 */
+  --song-list-header-bg: #2a2a2a;
+  --song-list-header-border: #404040;
+  --song-list-header-text: #8a8a8a;
+  --song-list-content-bg: var(--theme-bg-primary);
+  --song-list-item-border: #3a3a3a;
+  --song-list-item-hover: var(--theme-hover-bg);
+  --song-list-item-current: #1a3a5a;
+  --song-list-item-playing: #1a4a6a;
+  --song-list-track-number: #8a8a8a;
+  --song-list-title-color: var(--theme-text-primary);
+  --song-list-title-hover: var(--td-brand-color);
+  --song-list-artist-color: var(--theme-text-muted);
+  --song-list-album-color: var(--theme-text-muted);
+  --song-list-album-hover: var(--td-brand-color);
+  --song-list-duration-color: var(--theme-text-muted);
+  --song-list-btn-color: #666666;
+  --song-list-btn-hover: var(--td-brand-color);
+  --song-list-btn-bg-hover: var(--td-brand-color-light);
+  --song-list-quality-bg: #3a2a1a;
+  --song-list-quality-color: #fa8c16;
+  --song-list-source-bg: #343939;
+  --song-list-source-color: #00eeff;
+
+  /* Search 页面专用变量 - 暗色主题 */
+  --search-bg: var(--theme-bg-tertiary);
+  --search-title-color: var(--theme-text-primary);
+  --search-keyword-color: var(--td-brand-color);
+  --search-info-color: var(--theme-text-muted);
+  --search-content-bg: var(--theme-bg-primary);
+  --search-content-shadow: var(--theme-shadow-light);
+  --search-empty-title: var(--theme-text-primary);
+  --search-empty-text: var(--theme-text-muted);
+  --search-loading-text: var(--theme-text-secondary);
+  --search-loading-border: var(--theme-border-light);
+  --search-loading-spinner: var(--td-brand-color);
+
+  /* Recent 页面专用变量 - 暗色主题 */
+  --recent-bg: var(--theme-bg-tertiary);
+  --recent-title-color: var(--theme-text-primary);
+  --recent-subtitle-color: var(--theme-text-secondary);
+  --recent-section-title: var(--theme-text-primary);
+  --recent-card-bg: var(--theme-bg-primary);
+  --recent-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --recent-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --recent-playlist-title: var(--theme-text-primary);
+  --recent-playlist-desc: var(--theme-text-secondary);
+  --recent-playlist-meta: var(--theme-text-muted);
+  --recent-song-item-border: var(--theme-border-light);
+  --recent-song-item-hover: var(--theme-hover-bg);
+  --recent-song-index: var(--theme-text-secondary);
+  --recent-song-title: var(--theme-text-primary);
+  --recent-song-artist: var(--theme-text-secondary);
+  --recent-song-stats: var(--theme-text-secondary);
+  --recent-song-duration: var(--theme-text-secondary);
+  --recent-empty-icon: #666666;
+  --recent-empty-title: var(--theme-text-primary);
+  --recent-empty-text: var(--theme-text-secondary);
+
+  /* Local 页面专用变量 - 暗色主题 */
+  --local-bg: var(--theme-bg-tertiary);
+  --local-text-primary: var(--theme-text-primary);
+  --local-text-secondary: var(--theme-text-secondary);
+  --local-text-tertiary: var(--theme-text-tertiary);
+  --local-card-bg: var(--theme-card-bg);
+  --local-card-shadow: var(--theme-card-shadow);
+  --local-card-shadow-hover: var(--theme-card-shadow-hover);
+  --local-border: var(--theme-border);
+  --local-hover-bg: var(--theme-hover-bg);
+  --local-header-bg: var(--theme-header-bg);
+  --local-badge-bg: var(--theme-badge-bg);
+  --local-tips-bg: var(--theme-tips-bg);
+  --local-warning-bg: var(--theme-warning-bg);
+  --local-warning-text: var(--theme-warning-text);
+  --local-code-bg: var(--theme-code-bg);
+  --local-code-hover-bg: var(--theme-code-hover-bg);
+  --local-note-bg: var(--theme-note-bg);
+
+  /* Welcome 页面专用变量 - 暗色主题 */
+  --welcome-bg: #1a1a1a;
+  --welcome-subtitle-color: #999999;
+  --welcome-loading-text: #aaaaaa;
+  --welcome-progress-bg: #333333;
+  --welcome-tag-bg: #2d2d2d;
+  --welcome-tag-border: #404040;
+  --welcome-tag-color: #cccccc;
+  --welcome-version-color: #666666;
+
+  /* TitleBarControls 组件专用变量 - 暗色主题 */
+  --titlebar-icon-color: #ffffff;
+  --titlebar-icon-hover: #ffffff;
+  --titlebar-btn-hover-bg: #3a3a3a;
+  --titlebar-close-hover-bg: #4a2a2a;
+  --titlebar-close-hover-color: #ff6b6b;
+
+  /* Settings 页面专用变量 - 暗色主题 */
+  --settings-main-bg: #1a1a1a;
+  --settings-header-bg: #2d2d2d;
+  --settings-sidebar-bg: #2d2d2d;
+  --settings-sidebar-border: #404040;
+  --settings-nav-hover-bg: #3a3a3a;
+  --settings-nav-active-bg: var(--td-brand-color-1);
+  --settings-nav-active-border: var(--td-brand-color-5);
+  --settings-nav-icon-color: #8a8a8a;
+  --settings-nav-icon-active: var(--td-brand-color-5);
+  --settings-nav-label-color: #ffffff;
+  --settings-nav-label-active: var(--td-brand-color-6);
+  --settings-nav-desc-color: #8a8a8a;
+  --settings-content-bg: #1a1a1a;
+  --settings-group-bg: #2d2d2d;
+  --settings-group-border: #404040;
+  --settings-group-shadow: rgba(0, 0, 0, 0.3);
+  --settings-text-primary: #ffffff;
+  --settings-text-secondary: #b3b3b3;
+  --settings-text-tertiary: #8a8a8a;
+  --settings-footer-bg: #2d2d2d;
+  --settings-version-bg: #404040;
+  --settings-preview-bg: #2a2a2a;
+  --settings-preview-border: #404040;
+  --settings-mock-titlebar-bg: #333333;
+  --settings-mock-titlebar-border: #555555;
+  --settings-feature-bg: #2a2a2a;
+  --settings-feature-border: #404040;
+  --settings-api-tips-bg: #2a2a2a;
+  --settings-api-tips-border: #404040;
+  --settings-source-card-bg: #2d2d2d;
+  --settings-source-card-border: #404040;
+  --settings-source-card-hover-border: var(--td-brand-color-3);
+  --settings-source-card-active-border: var(--td-brand-color-5);
+  --settings-source-card-active-bg: var(--td-brand-color-1);
+  --settings-source-icon-bg: #3a3a3a;
+  --settings-quality-container-bg: #2a2a2a;
+  --settings-quality-container-border: #404040;
+  --settings-status-item-bg: #2a2a2a;
+  --settings-status-item-border: #404040;
+  --settings-plugin-prompt-bg: linear-gradient(135deg, #2a2a2a 0%, #333333 100%);
+  --settings-plugin-prompt-border: #555555;
+  --settings-tech-item-bg: #2a2a2a;
+  --settings-tech-item-border: #404040;
+  --settings-developer-item-bg: #2a2a2a;
+  --settings-developer-item-border: #404040;
+  --settings-tag-option-bg: #2a2a2a;
+  --settings-tag-option-border: #404040;
+  --settings-tag-status-bg: #2a2a2a;
+  --settings-tag-status-border: #404040;
+
+  /* Plugins 组件专用变量 - 暗色主题 */
+  --plugins-bg: var(--theme-bg-tertiary);
+  --plugins-container-bg: var(--theme-bg-primary);
+  --plugins-header-bg: var(--theme-bg-primary);
+  --plugins-text-primary: var(--theme-text-primary);
+  --plugins-text-secondary: var(--theme-text-secondary);
+  --plugins-text-muted: var(--theme-text-muted);
+  --plugins-border: var(--theme-border);
+  --plugins-card-bg: var(--theme-card-bg);
+  --plugins-card-shadow: var(--theme-card-shadow);
+  --plugins-card-shadow-hover: var(--theme-card-shadow-hover);
+  --plugins-card-selected-bg: #1a3a1a;
+  --plugins-card-selected-border: #28a745;
+  --plugins-loading-spinner: var(--td-brand-color);
+  --plugins-error-color: #ff6b6b;
+  --plugins-success-color: #4ade80;
+  --plugins-console-bg: #0d1117;
+  --plugins-console-header-bg: #161b22;
+  --plugins-console-border: #30363d;
+  --plugins-console-text: #f0f6fc;
+  --plugins-console-prompt: var(--td-brand-color);
+  --plugins-console-path: #7d8590;
+  --plugins-console-time: #6e7681;
+  --plugins-console-scrollbar-track: #161b22;
+  --plugins-console-scrollbar-thumb: #30363d;
+  --plugins-console-scrollbar-thumb-hover: #484f58;
+  --plugins-log-error: #ff7b72;
+  --plugins-log-warn: #f0d852;
+  --plugins-log-info: #79c0ff;
+  --plugins-log-debug: #d2a8ff;
+  --plugins-mac-close: #ff5f57;
+  --plugins-mac-minimize: #ffbd2e;
+  --plugins-mac-maximize: #28ca42;
+
+  /* Player 组件专用变量 - 暗色主题 */
+  --player-bg-default: rgba(0, 0, 0, 0.2);
+  --player-bg-idle: #2d2d2d;
+  --player-text-idle: rgba(255, 255, 255, 0.9);
+  --player-text-hover-idle: var(--td-brand-color-7);
+  --player-btn-bg-idle: rgba(255, 255, 255, 0.1);
+  --player-btn-bg-hover-idle: rgba(255, 255, 255, 0.2);
+}
+
+:root {
+  --td-font-family: pingfang sc, microsoft yahei, arial regular;
+  --td-font-family-medium: pingfang sc, microsoft yahei, arial medium;
+  --td-font-size-link-small: 12px;
+  --td-font-size-link-medium: 14px;
+  --td-font-size-link-large: 16px;
+  --td-font-size-mark-small: 12px;
+  --td-font-size-mark-medium: 14px;
+  --td-font-size-body-small: 12px;
+  --td-font-size-body-medium: 14px;
+  --td-font-size-body-large: 16px;
+  --td-font-size-title-small: 14px;
+  --td-font-size-title-medium: 16px;
+  --td-font-size-title-large: 20px;
+  --td-font-size-headline-small: 24px;
+  --td-font-size-headline-medium: 28px;
+  --td-font-size-headline-large: 36px;
+  --td-font-size-display-medium: 48px;
+  --td-font-size-display-large: 64px;
+  --td-line-height-link-small: 20px;
+  --td-line-height-link-medium: 22px;
+  --td-line-height-link-large: 24px;
+  --td-line-height-mark-small: 20px;
+  --td-line-height-mark-medium: 22px;
+  --td-line-height-body-small: 20px;
+  --td-line-height-body-medium: 22px;
+  --td-line-height-body-large: 24px;
+  --td-line-height-title-small: 22px;
+  --td-line-height-title-medium: 24px;
+  --td-line-height-title-large: 28px;
+  --td-line-height-headline-small: 32px;
+  --td-line-height-headline-medium: 36px;
+  --td-line-height-headline-large: 44px;
+  --td-line-height-display-medium: 56px;
+  --td-line-height-display-large: 72px;
+  --td-font-link-small: var(--td-font-size-link-small) / var(--td-line-height-link-small)
+    var(--td-font-family);
+  --td-font-link-medium: var(--td-font-size-link-medium) / var(--td-line-height-link-medium)
+    var(--td-font-family);
+  --td-font-link-large: var(--td-font-size-link-large) / var(--td-line-height-link-large)
+    var(--td-font-family);
+  --td-font-mark-small: 600 var(--td-font-size-mark-small) / var(--td-line-height-mark-small)
+    var(--td-font-family);
+  --td-font-mark-medium: 600 var(--td-font-size-mark-medium) / var(--td-line-height-mark-medium)
+    var(--td-font-family);
+  --td-font-body-small: var(--td-font-size-body-small) / var(--td-line-height-body-small)
+    var(--td-font-family);
+  --td-font-body-medium: var(--td-font-size-body-medium) / var(--td-line-height-body-medium)
+    var(--td-font-family);
+  --td-font-body-large: var(--td-font-size-body-large) / var(--td-line-height-body-large)
+    var(--td-font-family);
+  --td-font-title-small: 600 var(--td-font-size-title-small) / var(--td-line-height-title-small)
+    var(--td-font-family);
+  --td-font-title-medium: 600 var(--td-font-size-title-medium) / var(--td-line-height-title-medium)
+    var(--td-font-family);
+  --td-font-title-large: 600 var(--td-font-size-title-large) / var(--td-line-height-title-large)
+    var(--td-font-family);
+  --td-font-headline-small: 600 var(--td-font-size-headline-small) /
+    var(--td-line-height-headline-small) var(--td-font-family);
+  --td-font-headline-medium: 600 var(--td-font-size-headline-medium) /
+    var(--td-line-height-headline-medium) var(--td-font-family);
+  --td-font-headline-large: 600 var(--td-font-size-headline-large) /
+    var(--td-line-height-headline-large) var(--td-font-family);
+  --td-font-display-medium: 600 var(--td-font-size-display-medium) /
+    var(--td-line-height-display-medium) var(--td-font-family);
+  --td-font-display-large: 600 var(--td-font-size-display-large) /
+    var(--td-line-height-display-large) var(--td-font-family);
+  --td-radius-small: 2px;
+  --td-radius-default: 3px;
+  --td-radius-medium: 6px;
+  --td-radius-large: 9px;
+  --td-radius-extraLarge: 12px;
+  --td-radius-round: 999px;
+  --td-radius-circle: 50%;
+  --td-size-1: 2px;
+  --td-size-2: 4px;
+  --td-size-3: 6px;
+  --td-size-4: 8px;
+  --td-size-5: 12px;
+  --td-size-6: 16px;
+  --td-size-7: 20px;
+  --td-size-8: 24px;
+  --td-size-9: 28px;
+  --td-size-10: 32px;
+  --td-size-11: 36px;
+  --td-size-12: 40px;
+  --td-size-13: 48px;
+  --td-size-14: 56px;
+  --td-size-15: 64px;
+  --td-size-16: 72px;
+  --td-comp-size-xxxs: var(--td-size-6);
+  --td-comp-size-xxs: var(--td-size-7);
+  --td-comp-size-xs: var(--td-size-8);
+  --td-comp-size-s: var(--td-size-9);
+  --td-comp-size-m: var(--td-size-10);
+  --td-comp-size-l: var(--td-size-11);
+  --td-comp-size-xl: var(--td-size-12);
+  --td-comp-size-xxl: var(--td-size-13);
+  --td-comp-size-xxxl: var(--td-size-14);
+  --td-comp-size-xxxxl: var(--td-size-15);
+  --td-comp-size-xxxxxl: var(--td-size-16);
+  --td-pop-padding-s: var(--td-size-2);
+  --td-pop-padding-m: var(--td-size-3);
+  --td-pop-padding-l: var(--td-size-4);
+  --td-pop-padding-xl: var(--td-size-5);
+  --td-pop-padding-xxl: var(--td-size-6);
+  --td-comp-paddingLR-xxs: var(--td-size-1);
+  --td-comp-paddingLR-xs: var(--td-size-2);
+  --td-comp-paddingLR-s: var(--td-size-4);
+  --td-comp-paddingLR-m: var(--td-size-5);
+  --td-comp-paddingLR-l: var(--td-size-6);
+  --td-comp-paddingLR-xl: var(--td-size-8);
+  --td-comp-paddingLR-xxl: var(--td-size-10);
+  --td-comp-paddingTB-xxs: var(--td-size-1);
+  --td-comp-paddingTB-xs: var(--td-size-2);
+  --td-comp-paddingTB-s: var(--td-size-4);
+  --td-comp-paddingTB-m: var(--td-size-5);
+  --td-comp-paddingTB-l: var(--td-size-6);
+  --td-comp-paddingTB-xl: var(--td-size-8);
+  --td-comp-paddingTB-xxl: var(--td-size-10);
+  --td-comp-margin-xxs: var(--td-size-1);
+  --td-comp-margin-xs: var(--td-size-2);
+  --td-comp-margin-s: var(--td-size-4);
+  --td-comp-margin-m: var(--td-size-5);
+  --td-comp-margin-l: var(--td-size-6);
+  --td-comp-margin-xl: var(--td-size-7);
+  --td-comp-margin-xxl: var(--td-size-8);
+  --td-comp-margin-xxxl: var(--td-size-10);
+  --td-comp-margin-xxxxl: var(--td-size-12);
+}
+html[data-theme="dark"],
+html[data-theme="dark"] body{
+  background-color: var(--td-bg-color-container);
+}

@@ -9,10 +9,83 @@
           :style="{ marginRight: hasScroll ? '10px' : '0' }"
         >
           <div v-if="showIndex" class="col-index">#</div>
-          <div class="col-title">标题</div>
-          <div v-if="showAlbum" class="col-album">专辑</div>
+          <div
+            class="col-title"
+            :class="{ sortable: enableSort }"
+            @mouseenter="enableSort && (hoveredHeader = 'title')"
+            @mouseleave="hoveredHeader = null"
+            @click="enableSort && handleSort('title')"
+          >
+            标题
+            <div
+              v-if="enableSort"
+              v-show="hoveredHeader === 'title' || isTitleSortActive"
+              class="sort-icon-container"
+            >
+              <span v-if="sortType === 'title_asc'" class="sort-icon active"
+                ><ArrowUpIcon class="sort-icon-arrow" /> 标题升序</span
+              >
+              <span v-else-if="sortType === 'title_desc'" class="sort-icon active"
+                ><ArrowDownIcon class="sort-icon-arrow" /> 标题降序</span
+              >
+              <span v-else-if="sortType === 'artist_asc'" class="sort-icon active"
+                ><ArrowUpIcon class="sort-icon-arrow" /> 歌手升序</span
+              >
+              <span v-else-if="sortType === 'artist_desc'" class="sort-icon active"
+                ><ArrowDownIcon class="sort-icon-arrow" /> 歌手降序</span
+              >
+              <span v-else class="sort-icon default"
+                ><TimeIcon class="sort-icon-arrow" /> 默认排序</span
+              >
+            </div>
+          </div>
+          <div
+            v-if="showAlbum"
+            class="col-album"
+            :class="{ sortable: enableSort }"
+            @mouseenter="enableSort && (hoveredHeader = 'album')"
+            @mouseleave="hoveredHeader = null"
+            @click="enableSort && handleSort('album')"
+          >
+            专辑
+            <div
+              v-if="enableSort"
+              v-show="hoveredHeader === 'album' || isAlbumSortActive"
+              class="sort-icon-container"
+            >
+              <span v-if="sortType === 'album_asc'" class="sort-icon active"><ArrowUpIcon /></span>
+              <span v-else-if="sortType === 'album_desc'" class="sort-icon active"
+                ><ArrowDownIcon
+              /></span>
+              <span v-else class="sort-icon default"
+                ><TimeIcon class="sort-icon-arrow" /> 默认排序</span
+              >
+            </div>
+          </div>
           <div class="col-like">喜欢</div>
-          <div v-if="showDuration" class="col-duration">时长</div>
+          <div
+            v-if="showDuration"
+            class="col-duration"
+            :class="{ sortable: enableSort }"
+            @mouseenter="enableSort && (hoveredHeader = 'duration')"
+            @mouseleave="hoveredHeader = null"
+            @click="enableSort && handleSort('duration')"
+          >
+            时长
+            <div
+              v-if="enableSort"
+              v-show="hoveredHeader === 'duration' || isDurationSortActive"
+              class="sort-icon-container"
+            >
+              <span v-if="sortType === 'duration_asc'" class="sort-icon active"
+                ><ArrowUpIcon
+              /></span>
+              <span v-else-if="sortType === 'duration_desc'" class="sort-icon active"
+                ><ArrowDownIcon
+              /></span>
+              <span v-else class="sort-icon default"><TimeIcon /></span>
+            </div>
+          </div>
         </div>
         <div v-else class="list-header multi">
           <div class="multi-left">
@@ -234,7 +307,10 @@ import {
   AddIcon,
   FolderIcon,
   DeleteIcon,
-  HeartIcon
+  HeartIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  TimeIcon
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '../ContextMenu/ContextMenu.vue'
 import { createMenuItem, createSeparator, calculateMenuPosition } from '../ContextMenu/utils'
@@ -274,6 +350,7 @@ interface Props {
   showAlbum?: boolean
   showDuration?: boolean
   isLocalPlaylist?: boolean
+  enableSort?: boolean
   playlistId?: string
   multiSelect?: boolean
   bufferSize?: number
@@ -291,6 +368,7 @@ const props = withDefaults(defineProps<Props>(), {
   showAlbum: true,
   showDuration: true,
   isLocalPlaylist: false,
+  enableSort: false,
   playlistId: '',
   multiSelect: false,
   bufferSize: 10,
@@ -334,6 +412,125 @@ const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
 const contextMenuSong = ref<Song | null>(null)
 
+// 排序相关状态
+type SortType =
+  | 'default'
+  | 'title_asc'
+  | 'title_desc'
+  | 'artist_asc'
+  | 'artist_desc'
+  | 'album_asc'
+  | 'album_desc'
+  | 'duration_asc'
+  | 'duration_desc'
+const sortType = ref<SortType>('default')
+const hoveredHeader = ref<'title' | 'album' | 'duration' | null>(null)
+
+const parseDuration = (interval: string | number): number => {
+  if (typeof interval === 'number') return interval
+  if (!interval) return 0
+  if (interval.includes(':')) {
+    const parts = interval.split(':')
+    return parseInt(parts[0]) * 60 + parseInt(parts[1])
+  }
+  return parseInt(interval) || 0
+}
+
+const isTitleSortActive = computed(() =>
+  ['title_asc', 'title_desc', 'artist_asc', 'artist_desc'].includes(sortType.value)
+)
+const isAlbumSortActive = computed(() => ['album_asc', 'album_desc'].includes(sortType.value))
+const isDurationSortActive = computed(() =>
+  ['duration_asc', 'duration_desc'].includes(sortType.value)
+)
+
+const handleSort = (column: 'title' | 'album' | 'duration') => {
+  if (column === 'title') {
+    if (sortType.value === 'title_asc') sortType.value = 'title_desc'
+    else if (sortType.value === 'title_desc') sortType.value = 'artist_asc'
+    else if (sortType.value === 'artist_asc') sortType.value = 'artist_desc'
+    else if (sortType.value === 'artist_desc') sortType.value = 'default'
+    else sortType.value = 'title_asc'
+  } else if (column === 'album') {
+    if (sortType.value === 'album_asc') sortType.value = 'album_desc'
+    else if (sortType.value === 'album_desc') sortType.value = 'default'
+    else sortType.value = 'album_asc'
+  } else if (column === 'duration') {
+    if (sortType.value === 'duration_asc') sortType.value = 'duration_desc'
+    else if (sortType.value === 'duration_desc') sortType.value = 'default'
+    else sortType.value = 'duration_asc'
+  }
+}
+
+const sortedSongs = computed(() => {
+  if (!props.enableSort) {
+    return props.songs
+  }
+
+  const list = [...props.songs]
+
+  if (sortType.value === 'default') {
+    return list // 默认排序按添加入歌单时间倒序
+  }
+
+  list.sort((a, b) => {
+    // 移除特殊字符并进行优先级排序：数字 > A-Z > a-z > 其他（中文按拼音）
+    const customCompare = (str1: string | undefined, str2: string | undefined, asc: boolean) => {
+      const cleanStr = (s: string | undefined) =>
+        (s || '').replace(/[^\w\s\u4e00-\u9fa5]/g, '').trim()
+      const c1 = cleanStr(str1)
+      const c2 = cleanStr(str2)
+
+      const getPriority = (s: string) => {
+        if (!s) return 4
+        const first = s.charAt(0)
+        if (/[0-9]/.test(first)) return 0
+        if (/[A-Z]/.test(first)) return 1
+        if (/[a-z]/.test(first)) return 2
+        return 3
+      }
+
+      const p1 = getPriority(c1)
+      const p2 = getPriority(c2)
+
+      if (p1 !== p2) {
+        return asc ? p1 - p2 : p2 - p1
+      }
+
+      return asc ? c1.localeCompare(c2, 'zh-CN') : c2.localeCompare(c1, 'zh-CN')
+    }
+
+    switch (sortType.value) {
+      case 'title_asc':
+        return customCompare(a.name, b.name, true)
+      case 'title_desc':
+        return customCompare(a.name, b.name, false)
+      case 'artist_asc':
+        return customCompare(a.singer, b.singer, true)
+      case 'artist_desc':
+        return customCompare(a.singer, b.singer, false)
+      case 'album_asc':
+        return customCompare(a.albumName, b.albumName, true)
+      case 'album_desc':
+        return customCompare(a.albumName, b.albumName, false)
+      case 'duration_asc': {
+        const durA = parseDuration(a.interval)
+        const durB = parseDuration(b.interval)
+        return durA - durB
+      }
+      case 'duration_desc': {
+        const durA = parseDuration(a.interval)
+        const durB = parseDuration(b.interval)
+        return durB - durA
+      }
+      default:
+        return 0
+    }
+  })
+
+  return list
+})
+
 // 歌单列表
 const playlists = ref<SongList[]>([])
 
@@ -345,17 +542,17 @@ const hasScroll = computed(() => {
 })
 
 // 计算总高度
-const totalHeight = computed(() => props.songs.length * itemHeight)
+const totalHeight = computed(() => sortedSongs.value.length * itemHeight)
 
 // 计算偏移量
 const offsetY = computed(() => visibleStartIndex.value * itemHeight)
 
 // 计算可见项目
 const visibleItems = computed(() => {
-  const totalItems = props.songs.length
+  const totalItems = sortedSongs.value.length
   if (totalItems === 0) return []
 
-  if (!scrollContainer.value) return props.songs.slice(0, Math.min(10, totalItems))
+  if (!scrollContainer.value) return sortedSongs.value.slice(0, Math.min(10, totalItems))
 
   const containerRect = scrollContainer.value.getBoundingClientRect()
   const containerHeight = containerRect.height || 400
@@ -367,7 +564,7 @@ const visibleItems = computed(() => {
   visibleStartIndex.value = Math.max(0, startIndex - buffer.value)
   visibleEndIndex.value = endIndex
 
-  return props.songs.slice(visibleStartIndex.value, visibleEndIndex.value)
+  return sortedSongs.value.slice(visibleStartIndex.value, visibleEndIndex.value)
 })
 
 // 封面懒加载
@@ -1046,6 +1243,23 @@ watch(
   },
   { deep: true }
 )
+
+const scrollToSong = (songmid: string | number, source: string) => {
+  if (!scrollContainer.value) return
+  const index = sortedSongs.value.findIndex(
+    (s) => String(s.songmid) === String(songmid) && s.source === source
+  )
+  if (index === -1) return
+  const targetScrollTop = index * itemHeight
+  scrollContainer.value.scrollTo({
+    top: targetScrollTop,
+    behavior: 'smooth'
+  })
+}
+
+defineExpose({
+  scrollToSong
+})
 </script>
 
 <style scoped>
@@ -1132,6 +1346,37 @@ watch(
   overflow: hidden;
   box-sizing: border-box;
   align-items: center;
+
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+    &:hover {
+      color: var(--song-list-title-hover, #333);
+    }
+  }
+
+  .sort-icon-container {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    height: 100%;
+
+    .sort-icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 12px;
+      color: var(--song-list-header-text);
+
+      &.active {
+        color: var(--song-list-title-hover, #18a058);
+      }
+
+      .t-icon {
+        font-size: 14px;
+      }
+    }
+  }
 
   .col-index {
     text-align: center;
@@ -1576,5 +1821,9 @@ watch(
 .header-fade-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+.sort-icon-arrow {
+  font-size: 12px;
+  margin-right: 0.2em;
 }
 </style>
