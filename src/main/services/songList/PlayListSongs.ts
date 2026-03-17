@@ -171,7 +171,7 @@ export default class PlayListSongs {
   /**
    * 添加歌曲到歌单
    */
-  addSongs(songs: SongItem[]): number {
+  addSongs(songs: SongItem[], desc: boolean = false): number {
     if (!Array.isArray(songs) || songs.length === 0) {
       return 0
     }
@@ -194,7 +194,10 @@ export default class PlayListSongs {
     }
 
     if (newSongs.length > 0) {
-      this.list.push(...newSongs)
+      if (desc) {
+        newSongs.reverse()
+      }
+      this.list.unshift(...newSongs)
       this.isDirty = true
       this.saveToFile()
 

@@ -262,8 +262,17 @@ onUnmounted(() => {
 })
 
 // 全局事件处理
+const isInAnyContextMenu = (target: EventTarget | null) => {
+  if (!(target instanceof Node)) return false
+  if (menuRef.value?.contains(target)) return true
+  if (target instanceof Element) {
+    return !!target.closest('.context-menu')
+  }
+  return !!target.parentElement?.closest('.context-menu')
+}
+
 const handleGlobalMouseDown = (event: MouseEvent) => {
-  if (menuRef.value && !menuRef.value.contains(event.target as Node)) {
+  if (!isInAnyContextMenu(event.target)) {
     // 点击菜单外部，关闭菜单
     // 注意：这里不阻止事件传播，允许点击穿透（如点击按钮）
     closeMenu()
@@ -271,7 +280,7 @@ const handleGlobalMouseDown = (event: MouseEvent) => {
 }
 
 const handleGlobalWheel = (event: WheelEvent) => {
-  if (menuRef.value && !menuRef.value.contains(event.target as Node)) {
+  if (!isInAnyContextMenu(event.target)) {
     // 滚动菜单外部，关闭菜单
     // 不阻止滚动，允许页面自然滚动
     closeMenu()
@@ -279,7 +288,7 @@ const handleGlobalWheel = (event: WheelEvent) => {
 }
 
 const handleGlobalContextMenu = (event: MouseEvent) => {
-  if (menuRef.value && !menuRef.value.contains(event.target as Node)) {
+  if (!isInAnyContextMenu(event.target)) {
     // 右键点击外部，关闭当前菜单
     // 不阻止事件传播，允许触发新的右键菜单
     closeMenu()
