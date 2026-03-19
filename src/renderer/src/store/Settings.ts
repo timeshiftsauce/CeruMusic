@@ -30,6 +30,7 @@ export interface SettingsState {
   theme?: string // 主题
   isDarkMode?: boolean // 暗色模式
   springFestivalDisabled?: boolean
+  routePreloadEnabled?: boolean
 }
 
 export const useSettingsStore = defineStore(
@@ -57,7 +58,8 @@ export const useSettingsStore = defineStore(
       hasConfiguredCloseBehavior: false,
       theme: 'default',
       isDarkMode: false,
-      springFestivalDisabled: false
+      springFestivalDisabled: false,
+      routePreloadEnabled: true
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -129,6 +131,9 @@ export const useSettingsStore = defineStore(
       }
       if (typeof settings.value.springFestivalDisabled === 'undefined') {
         settings.value.springFestivalDisabled = false
+      }
+      if (typeof settings.value.routePreloadEnabled === 'undefined') {
+        settings.value.routePreloadEnabled = true
       }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {

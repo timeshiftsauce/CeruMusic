@@ -46,7 +46,7 @@ function getOrCreateWorkerWindow(): Promise<BrowserWindow> {
     ipcMain.once('worker:ready', onReady)
 
     // Fallback
-    workerWindow.webContents.once('did-finish-load', () => { })
+    workerWindow.webContents.once('did-finish-load', () => {})
   })
 }
 
@@ -58,7 +58,7 @@ async function readHeader(filePath: string): Promise<Buffer> {
     const f = await fsp.open(filePath, 'r')
     await f.read(h, 0, 64, 0)
     await f.close()
-  } catch { }
+  } catch {}
   return h
 }
 
@@ -118,7 +118,7 @@ async function walkDir(dir: string, results: string[]) {
         if (AUDIO_EXTS.has(ext)) results.push(full)
       }
     }
-  } catch { }
+  } catch {}
 }
 
 ipcMain.handle('local-music:select-dirs', async () => {
@@ -168,7 +168,7 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
         }
         try {
           tags = readTags(p, false) // 扫描时不读取歌词
-        } catch { }
+        } catch {}
 
         const base = path.basename(p)
         const noExt = base.replace(path.extname(base), '')
@@ -304,7 +304,7 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       try {
         taglib.Id3v2Settings.forceDefaultVersion = true
         taglib.Id3v2Settings.defaultVersion = 3
-      } catch { }
+      } catch {}
     }
     songFile.tag.title = songInfo?.name || '未知曲目'
     songFile.tag.album = songInfo?.albumName || '未知专辑'
@@ -331,16 +331,16 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
             songFile.tag.pictures = [pic]
             try {
               await fsp.unlink(tmp)
-            } catch { }
+            } catch {}
           }
         }
-      } catch { }
+      } catch {}
     }
     try {
       if (typeof songInfo?.year === 'number' && songInfo.year > 0) {
         songFile.tag.year = songInfo.year
       }
-    } catch { }
+    } catch {}
     songFile.save()
     songFile.dispose()
 
@@ -352,17 +352,17 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       // 恢复备份并返回失败
       try {
         await fsp.copyFile(backupPath, targetFilePath)
-      } catch { }
+      } catch {}
       try {
         await fsp.unlink(backupPath)
-      } catch { }
+      } catch {}
       return { success: false, message: '写入后校验失败，已回滚' }
     }
 
     // 写入成功，清理备份
     try {
       await fsp.unlink(backupPath)
-    } catch { }
+    } catch {}
 
     // Fix: Use normalized path to find the correct existing song ID
     const normalizedPath = normPath(targetFilePath)
@@ -388,8 +388,8 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     // 通知 renderer 刷新列表（复用 scan-finished 通道）
     try {
       const all = localMusicIndexService.getAllSongs()
-        ; (_e as any)?.sender?.send?.('local-music:scan-finished', all)
-    } catch { }
+      ;(_e as any)?.sender?.send?.('local-music:scan-finished', all)
+    } catch {}
     return { success: true }
   } catch (e: any) {
     // 失败时尝试回滚
@@ -407,12 +407,12 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       if (latestBak) {
         try {
           await fsp.copyFile(latestBak, filePath)
-        } catch { }
+        } catch {}
         try {
           await fsp.unlink(latestBak)
-        } catch { }
+        } catch {}
       }
-    } catch { }
+    } catch {}
     const msg: string = e?.message || '写入失败'
     const mapped = /MPEG audio header not found/i.test(msg)
       ? '文件不是有效的 MP3，或扩展名与实际格式不匹配'
@@ -479,7 +479,7 @@ ipcMain.handle('local-music:get-covers', async (_e, trackIds: string[]) => {
     try {
       const data = await coverCacheService.getCoverByFile(s.path, genCoverKey(s.path))
       if (data) res[id] = data
-    } catch { }
+    } catch {}
   }
   return res
 })
@@ -587,7 +587,7 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
           if (coverPath) {
             try {
               await fsp.unlink(coverPath)
-            } catch { }
+            } catch {}
           }
 
           // Update Index
@@ -608,7 +608,7 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
           if (coverPath) {
             try {
               await fsp.unlink(coverPath)
-            } catch { }
+            } catch {}
           }
         }
       }

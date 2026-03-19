@@ -1,12 +1,5 @@
 <template>
   <Teleport v-if="visible" to="body">
-    <!-- 遮罩层 -->
-    <div
-      class="context-menu-backdrop"
-      @click="handleBackdropClick"
-      @contextmenu="handleBackdropContextMenu"
-    ></div>
-
     <!-- 右键菜单容器 -->
     <div
       ref="menuRef"
@@ -135,7 +128,7 @@ const props = withDefaults(defineProps<ContextMenuProps>(), {
   className: '',
   width: 200,
   maxHeight: 400,
-  zIndex: 1000
+  zIndex: 999999
 })
 
 const emit = defineEmits<{
@@ -223,10 +216,21 @@ watch(
       nextTick(() => {
         initializeScroll()
         updateSubmenuPosition()
+
+        // 延迟添加全局监听，避免当前的触发事件（如contextmenu）立即被捕获
+        requestAnimationFrame(() => {
+          window.addEventListener('mousedown', handleGlobalMouseDown, true)
+          window.addEventListener('wheel', handleGlobalWheel, true)
+          window.addEventListener('contextmenu', handleGlobalContextMenu, true)
+        })
       })
     } else {
       closeSubmenu()
       resetScroll()
+
+      window.removeEventListener('mousedown', handleGlobalMouseDown, true)
+      window.removeEventListener('wheel', handleGlobalWheel, true)
+      window.removeEventListener('contextmenu', handleGlobalContextMenu, true)
     }
   }
 )
@@ -249,8 +253,47 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize', handleWindowResize)
+
+  window.removeEventListener('mousedown', handleGlobalMouseDown, true)
+  window.removeEventListener('wheel', handleGlobalWheel, true)
+  window.removeEventListener('contextmenu', handleGlobalContextMenu, true)
+
   clearTimeout(submenuTimer.value)
 })
+
+// 全局事件处理
+const isInAnyContextMenu = (target: EventTarget | null) => {
+  if (!(target instanceof Node)) return false
+  if (menuRef.value?.contains(target)) return true
+  if (target instanceof Element) {
+    return !!target.closest('.context-menu')
+  }
+  return !!target.parentElement?.closest('.context-menu')
+}
+
+const handleGlobalMouseDown = (event: MouseEvent) => {
+  if (!isInAnyContextMenu(event.target)) {
+    // 点击菜单外部，关闭菜单
+    // 注意：这里不阻止事件传播，允许点击穿透（如点击按钮）
+    closeMenu()
+  }
+}
+
+const handleGlobalWheel = (event: WheelEvent) => {
+  if (!isInAnyContextMenu(event.target)) {
+    // 滚动菜单外部，关闭菜单
+    // 不阻止滚动，允许页面自然滚动
+    closeMenu()
+  }
+}
+
+const handleGlobalContextMenu = (event: MouseEvent) => {
+  if (!isInAnyContextMenu(event.target)) {
+    // 右键点击外部，关闭当前菜单
+    // 不阻止事件传播，允许触发新的右键菜单
+    closeMenu()
+  }
+}
 
 // 方法定义
 const adjustMenuPosition = (position: ContextMenuPosition): ContextMenuPosition => {
@@ -498,15 +541,6 @@ const adjustSubmenuPosition = (submenuWidth: number) => {
   console.log('Final position:', { x: adjustedX, y })
   // 更新最终位置
   submenuPosition.value = { x: adjustedX, y }
-}
-
-const handleBackdropClick = () => {
-  closeMenu()
-}
-
-const handleBackdropContextMenu = (event: MouseEvent) => {
-  event.preventDefault()
-  closeMenu()
 }
 
 const handleMouseLeave = () => {

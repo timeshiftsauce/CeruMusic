@@ -182,10 +182,10 @@ ipcMain.handle('songlist:exists', async (_, hashId: string) => {
 // === 歌曲管理相关 IPC 事件 ===
 
 // 添加歌曲到歌单
-ipcMain.handle('songlist:add-songs', async (_, hashId: string, songs: Songs[]) => {
+ipcMain.handle('songlist:add-songs', async (_, hashId: string, songs: Songs[], desc?: boolean) => {
   try {
     const instance = new ManageSongList(hashId)
-    const added = instance.addSongs(songs)
+    const added = instance.addSongs(songs, desc)
     const skipped = Math.max(0, (Array.isArray(songs) ? songs.length : 0) - added)
     return {
       success: true,

@@ -497,6 +497,7 @@ function createWindow(): void {
     shell.openExternal(details.url).then()
     return { action: 'deny' }
   })
+
   InitEventServices(mainWindow)
   initPluginNotice(mainWindow)
   // 设置背景节流

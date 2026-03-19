@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { playSetting as usePlaySetting } from '@renderer/store/playSetting'
+import { useSettingsStore } from '@renderer/store/Settings'
 import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import EqualizerSettings from '@renderer/components/Settings/EqualizerSettings.vue'
@@ -8,6 +9,8 @@ import AudioEffectSettings from '@renderer/components/Settings/AudioEffectSettin
 
 const playSettingStore = usePlaySetting()
 const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingStore)
+const settingsStore = useSettingsStore()
+const { settings } = storeToRefs(settingsStore)
 </script>
 
 <template>
@@ -60,6 +63,17 @@ const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingSto
         <t-switch
           v-model="isAudioVisualizer"
           @change="playSettingStore.setIsAudioVisualizer(isAudioVisualizer)"
+        />
+      </div>
+
+      <div id="playback-route-preload" class="setting-item">
+        <div class="item-info">
+          <div class="item-title">路由预加载</div>
+          <div class="item-desc">空闲时预加载页面组件，提升页面切换速度</div>
+        </div>
+        <t-switch
+          :value="settings.routePreloadEnabled"
+          @change="(val) => settingsStore.updateSettings({ routePreloadEnabled: Boolean(val) })"
         />
       </div>
     </div>
