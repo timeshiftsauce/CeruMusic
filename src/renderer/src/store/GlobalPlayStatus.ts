@@ -5,9 +5,15 @@ import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
-import _ from 'lodash'
+import { debounce } from 'lodash'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { playSetting } from './playSetting'
+import { createCoverAnalysisCache, resolvePlayerCoverSrc } from '@renderer/utils/playerCover'
+import {
+  deserializeGlobalPlayerStateFromStorage,
+  GLOBAL_PLAY_STATUS_STORAGE_KEY,
+  serializeGlobalPlayerStateForStorage
+} from './globalPlayPersistence'
 
 interface Player {
   songId?: string
@@ -78,18 +84,6 @@ export interface CommentResponse {
   maxPage: number
 }
 
-// 辅助函数：将URL转换为 Blob URL
-async function getBlobUrlFromUrl(url: string): Promise<string> {
-  try {
-    const response = await fetch(url)
-    const blob = await response.blob()
-    return URL.createObjectURL(blob)
-  } catch (e) {
-    console.error('封面转Blob失败:', e)
-    return ''
-  }
-}
-
 // 辅助函数：清洗歌词
 const sanitizeLyricLines = (lines: LyricLine[]): LyricLine[] => {
   const defaultLineDuration = 3000
@@ -145,14 +139,21 @@ const DEFAULT_SONG_INFO = {
   typeUrl: {}
 }
 
+const playerCoverAnalysisCache = createCoverAnalysisCache(analyzeImageColors)
+
 export const useGlobalPlayStatusStore = defineStore(
   'globalPlayStatus',
   () => {
     const localUserStore = LocalUserDetailStore()
     const playSettingStore = playSetting()
+    const persistedPlayerState = deserializeGlobalPlayerStateFromStorage(
+      localStorage.getItem(GLOBAL_PLAY_STATUS_STORAGE_KEY)
+    )
     const player = reactive<Player>({
-      songId: void 0,
-      songInfo: DEFAULT_SONG_INFO,
+      songId: persistedPlayerState.songId as string | undefined,
+      songInfo: persistedPlayerState.songInfo
+        ? ({ ...DEFAULT_SONG_INFO, ...persistedPlayerState.songInfo } as any)
+        : DEFAULT_SONG_INFO,
       cover: void 0,
       coverDetail: {
         ColorObject: void 0,
@@ -187,6 +188,23 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     })
 
+    const persistPlayerState = debounce(() => {
+      localStorage.setItem(
+        GLOBAL_PLAY_STATUS_STORAGE_KEY,
+        JSON.stringify(serializeGlobalPlayerStateForStorage(player))
+      )
+    }, 250)
+
+    watch(
+      [() => player.songId, () => player.songInfo],
+      () => {
+        persistPlayerState()
+      },
+      {
+        deep: true
+      }
+    )
+
     // 同步 userInfo.lastPlaySongId
     watch(
       () => localUserStore.userInfo.lastPlaySongId,
@@ -202,35 +220,13 @@ export const useGlobalPlayStatusStore = defineStore(
       { immediate: true }
     )
 
-    // 记录当前的 Blob URL 以便清理
-    let currentBlobUrl: string | null = null
-
     // 监听 songInfo 变化，处理封面
     watch(
       () => player.songInfo,
       async (newVal) => {
-        // 清理旧的 Blob URL
-        if (currentBlobUrl) {
-          URL.revokeObjectURL(currentBlobUrl)
-          currentBlobUrl = null
-        }
-
         if (!newVal) return
 
-        // 处理封面 Blob URL
-        const coverUrl = newVal.img || defaultCover
-
-        if (coverUrl.startsWith('http')) {
-          const blobUrl = await getBlobUrlFromUrl(coverUrl)
-          if (blobUrl) {
-            currentBlobUrl = blobUrl
-            player.cover = blobUrl
-          } else {
-            player.cover = coverUrl
-          }
-        } else {
-          player.cover = coverUrl
-        }
+        player.cover = resolvePlayerCoverSrc(newVal.img || defaultCover, defaultCover)
       },
       { immediate: true }
     )
@@ -241,7 +237,7 @@ export const useGlobalPlayStatusStore = defineStore(
       async (newCover) => {
         if (!newCover) return
         try {
-          const { dominantColor, useBlackText } = await analyzeImageColors(newCover)
+          const { dominantColor, useBlackText } = await playerCoverAnalysisCache.get(newCover)
           player.coverDetail.ColorObject = dominantColor
           player.coverDetail.mainColor = `rgba(${dominantColor.r},${dominantColor.g},${dominantColor.b},1)`
 
@@ -556,8 +552,5 @@ export const useGlobalPlayStatusStore = defineStore(
       updatePlayerInfo,
       fetchComments
     }
-  },
-  {
-    persist: true
   }
 )

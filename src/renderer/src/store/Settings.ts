@@ -36,6 +36,8 @@ export interface SettingsState {
 export const useSettingsStore = defineStore(
   'settings',
   () => {
+    const hasStoredSettings = ref(false)
+    const hasStoredThemePreference = ref(false)
     // 默认设置
     const defaultSettings: SettingsState = {
       showFloatBall: true,
@@ -59,7 +61,7 @@ export const useSettingsStore = defineStore(
       theme: 'default',
       isDarkMode: false,
       springFestivalDisabled: false,
-      routePreloadEnabled: true
+      routePreloadEnabled: false
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -67,7 +69,11 @@ export const useSettingsStore = defineStore(
       try {
         const saved = localStorage.getItem('appSettings')
         if (saved) {
+          hasStoredSettings.value = true
           const parsed = JSON.parse(saved) as SettingsState
+          hasStoredThemePreference.value =
+            Object.prototype.hasOwnProperty.call(parsed, 'theme') ||
+            Object.prototype.hasOwnProperty.call(parsed, 'isDarkMode')
           return {
             ...defaultSettings,
             ...parsed,
@@ -133,7 +139,7 @@ export const useSettingsStore = defineStore(
         settings.value.springFestivalDisabled = false
       }
       if (typeof settings.value.routePreloadEnabled === 'undefined') {
-        settings.value.routePreloadEnabled = true
+        settings.value.routePreloadEnabled = false
       }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {
@@ -144,11 +150,18 @@ export const useSettingsStore = defineStore(
           lyricFormat: 'word-by-word'
         }
       }
+      hasStoredSettings.value = true
       localStorage.setItem('appSettings', JSON.stringify(settings.value))
     }
 
     // 更新设置
     const updateSettings = (newSettings: Partial<SettingsState>) => {
+      if (
+        Object.prototype.hasOwnProperty.call(newSettings, 'theme') ||
+        Object.prototype.hasOwnProperty.call(newSettings, 'isDarkMode')
+      ) {
+        hasStoredThemePreference.value = true
+      }
       settings.value = { ...settings.value, ...newSettings }
       if (
         settings.value.FullPlayLyricFontRate &&
@@ -189,6 +202,8 @@ export const useSettingsStore = defineStore(
 
     return {
       settings,
+      hasStoredSettings,
+      hasStoredThemePreference,
       updateSettings,
       toggleFloatBall,
       isSpringFestivalWindow,
@@ -196,9 +211,5 @@ export const useSettingsStore = defineStore(
       disableSpringFestivalTheme,
       enableSpringFestivalTheme
     }
-  },
-  {
-    // @ts-ignore
-    persist: true
   }
 )

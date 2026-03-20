@@ -8,6 +8,14 @@ import type {
 } from '../common/types/hotkeys'
 // 自定义 API 接口
 interface CustomAPI {
+  appInfo: {
+    getVersion: () => Promise<string>
+    getFontList: () => Promise<string[]>
+    getPendingOpenPlaylistFiles: () => Promise<string[]>
+  }
+  appEvents: {
+    on: (channel: string, callback: (...args: any[]) => void) => () => void
+  }
   autoUpdater: any
   minimize: () => void
   maximize: () => void
@@ -96,10 +104,9 @@ interface CustomAPI {
   ai: {
     ask: (prompt: string) => Promise<any>
     askStream: (prompt: string, streamId: string) => Promise<any>
-    onStreamChunk: (callback: (data: { streamId: string; chunk: string }) => void) => void
-    onStreamEnd: (callback: (data: { streamId: string }) => void) => void
-    onStreamError: (callback: (data: { streamId: string; error: string }) => void) => void
-    removeStreamListeners: () => void
+    onStreamChunk: (callback: (data: { streamId: string; chunk: string }) => void) => () => void
+    onStreamEnd: (callback: (data: { streamId: string }) => void) => () => void
+    onStreamError: (callback: (data: { streamId: string; error: string }) => void) => () => void
   }
 
   // 插件管理API
@@ -108,6 +115,7 @@ interface CustomAPI {
     downloadAndAddPlugin: (url: string, type: 'lx' | 'cr') => Promise<any>
     uninstallPlugin(pluginId: string): ApiResult | PromiseLike<ApiResult>
     addPlugin: (pluginCode: string, pluginName: string) => Promise<any>
+    initializeSystem: () => Promise<any>
     getPluginById: (id: string) => Promise<any>
     loadAllPlugins: () => Promise<any>
     getPluginLog: (pluginId: string) => Promise<any>
@@ -180,20 +188,52 @@ interface CustomAPI {
     onPluginNotice: (listener: (...args: any[]) => void) => () => void
   }
 
+  desktopLyric: {
+    getOption: () => Promise<any>
+    getOpenState: () => Promise<boolean>
+    getLockState: () => Promise<boolean>
+    getWindowBounds: () => Promise<any>
+    getAllWorkArea: () => Promise<any[]>
+    changeOpen: (open: boolean) => void
+    toggleLock: (lock: boolean) => void
+    setOption: (payload: any, callback?: boolean) => void
+    setFont: (font: string) => void
+    moveWindow: (x: number, y: number, width: number, height: number) => void
+    updateWindowHeight: (height: number) => void
+    sendWindowEvent: (eventName: string, ...args: any[]) => void
+    sendMainEvent: (eventName: string, ...args: any[]) => void
+    lyricWindowReady: () => void
+    onOpenChange: (callback: (open: boolean) => void) => () => void
+    onSongChange: (callback: (data: { name?: string; artist?: string }) => void) => () => void
+    onLyricChange: (callback: (lines: any[]) => void) => () => void
+    onLyricIndexChange: (callback: (index: number) => void) => () => void
+    onLyricProgress: (callback: (payload: any) => void) => () => void
+    onPlayStatusChange: (callback: (status: boolean) => void) => () => void
+    onOptionChange: (callback: (option: any) => void) => () => void
+    onFontChange: (callback: (font: string) => void) => () => void
+    onLockChange: (callback: (lock: boolean) => void) => () => void
+    onCloseRequest: (callback: () => void) => () => void
+  }
+
+  recognitionWorker: {
+    ready: () => void
+    sendGenerated: (payload: any) => void
+    sendError: (payload: any) => void
+    onStartTask: (callback: (payload: { id: string; filePath: string }) => void) => () => void
+  }
+
   localMusic: {
     [x: string]: any
     selectDirs: () => Promise<string[]>
-    scan: (dirs: string[]) => Promise<any[]>
+    scan: (dirs: string[]) => Promise<{ success: boolean; count: number }>
     writeTags: (
       filePath: string,
       songInfo: any,
       tagWriteOptions: any
     ) => Promise<{ success: boolean; message?: string }>
     getLyric: (songmid: string) => Promise<string>
-    onScanProgress: (callback: (processed: number, total: number) => void) => void
-    onScanFinished: (callback: (resList: any[]) => void) => void
-    removeScanProgress: () => void
-    removeScanFinished: () => void
+    onScanProgress: (callback: (processed: number, total: number) => void) => () => void
+    onScanFinished: (callback: (resList: any[]) => void) => () => void
   }
 }
 

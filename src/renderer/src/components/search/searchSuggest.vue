@@ -163,12 +163,13 @@ watchDebounced(
 .search-suggest {
   position: absolute;
   left: 0;
-  top: 50px;
+  top: calc(100% + 0.7rem);
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
   max-height: calc(100vh - 160px);
-  z-index: 101;
+  z-index: 1400;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
   transition:
     height 0.3s ease,
     opacity 0.3s ease,

@@ -204,6 +204,14 @@ const generateStreamId = () => {
   return 'stream_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9)
 }
 
+const aiStreamDisposers: Array<() => void> = []
+
+const clearAiStreamListeners = () => {
+  while (aiStreamDisposers.length > 0) {
+    aiStreamDisposers.pop()?.()
+  }
+}
+
 // 发送消息（流式版本）
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
@@ -250,7 +258,7 @@ const sendMessage = async () => {
     const handleStreamEnd = (data: { streamId: string }) => {
       if (data.streamId === streamId) {
         isLoading.value = false
-        window.api.ai.removeStreamListeners()
+        clearAiStreamListeners()
       }
     }
 
@@ -265,13 +273,14 @@ const sendMessage = async () => {
           }
         }
         isLoading.value = false
-        window.api.ai.removeStreamListeners()
+        clearAiStreamListeners()
       }
     }
 
-    window.api.ai.onStreamChunk(handleStreamChunk)
-    window.api.ai.onStreamEnd(handleStreamEnd)
-    window.api.ai.onStreamError(handleStreamError)
+    clearAiStreamListeners()
+    aiStreamDisposers.push(window.api.ai.onStreamChunk(handleStreamChunk))
+    aiStreamDisposers.push(window.api.ai.onStreamEnd(handleStreamEnd))
+    aiStreamDisposers.push(window.api.ai.onStreamError(handleStreamError))
 
     await window.api.ai.askStream(userMessage, streamId)
   } catch (error: any) {
@@ -286,7 +295,7 @@ const sendMessage = async () => {
       }
     }
     isLoading.value = false
-    window.api.ai.removeStreamListeners()
+    clearAiStreamListeners()
   }
 
   scrollToBottom()
@@ -417,7 +426,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
   window.removeEventListener('resize', handleResize)
-  window.api.ai.removeStreamListeners()
+  clearAiStreamListeners()
   saveBallPosition() // 保存位置
 })
 </script>
@@ -637,9 +646,9 @@ video {
 }
 
 .close-btn {
-  background: none;
-  border: none;
-  color: #fff;
+  background: var(--custom-btn-bg);
+  border: 1px solid var(--custom-btn-border-soft);
+  color: var(--custom-btn-text);
   font-size: 24px;
   cursor: pointer;
   padding: 0;
@@ -649,11 +658,19 @@ video {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: background-color 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--custom-btn-shadow);
 }
 
 .close-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--custom-btn-bg-hover);
+  border-color: var(--custom-btn-border);
+  box-shadow: var(--custom-btn-shadow-hover);
 }
 
 .ask-content {
@@ -749,22 +766,31 @@ video {
 
 .send-btn {
   padding: 12px 24px;
-  background: #409eff;
-  color: #fff;
-  border: none;
+  background: var(--custom-btn-accent-bg);
+  color: var(--custom-btn-accent-text);
+  border: 1px solid var(--custom-btn-accent-border);
   border-radius: 24px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: background-color 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s,
+    color 0.2s;
+  box-shadow: var(--custom-btn-shadow);
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #3a8ee6;
+  background: var(--custom-btn-accent-bg-hover);
+  border-color: var(--custom-btn-accent-border);
+  box-shadow: var(--custom-btn-shadow-hover);
 }
 
 .send-btn:disabled {
-  background: #c0c4cc;
+  background: var(--custom-btn-bg-soft);
+  color: var(--theme-text-disabled);
+  border-color: var(--custom-btn-border-soft);
   cursor: not-allowed;
   opacity: 0.6;
 }

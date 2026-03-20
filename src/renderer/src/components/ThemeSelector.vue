@@ -27,138 +27,57 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import { useSettingsStore } from '@renderer/store/Settings'
+import {
+  THEME_OPTIONS,
+  normalizeThemeName,
+  resolveThemeState
+} from '@renderer/utils/theme/themeState'
 
 const settingsStore = useSettingsStore()
 
-// 主题配置
-const themes = [
-  { name: 'default', label: '默认', color: '#2ba55b' },
-  { name: 'pink', label: '粉色', color: '#fc5e7e' },
-  { name: 'blue', label: '蓝色', color: '#57b4ff' },
-  { name: 'cyan', label: '青色', color: '#3ac2b8' },
-  { name: 'orange', label: '橙色', color: '#fb9458' }
-]
+const themes = THEME_OPTIONS
 
-const currentTheme = ref('default')
-const isDarkMode = ref(false)
-
-// 应用主题
-const applyTheme = (themeName: string, darkMode: boolean = false) => {
-  const documentElement = document.documentElement
-
-  // 移除之前的主题属性
-  documentElement.removeAttribute('theme-mode')
-  documentElement.removeAttribute('data-theme')
-
-  // 应用主题色彩
-  if (themeName !== 'default') {
-    documentElement.setAttribute('theme-mode', themeName)
-  }
-
-  // 应用明暗模式
-  if (darkMode) {
-    documentElement.setAttribute('data-theme', 'dark')
-  } else {
-    documentElement.setAttribute('data-theme', 'light')
-  }
-
-  // 保存到本地存储
-  localStorage.setItem('selected-theme', themeName)
-  localStorage.setItem('dark-mode', darkMode.toString())
-
-  // 同步到 Store
-  settingsStore.updateSettings({
-    theme: themeName,
-    isDarkMode: darkMode
-  })
-
-  // 通知全局（App.vue）同步 Naive UI 主题
-  window.dispatchEvent(new CustomEvent('theme-changed'))
-}
+const currentTheme = computed(() =>
+  resolveThemeState({
+    theme: settingsStore.settings.theme,
+    isDarkMode: settingsStore.hasStoredThemePreference
+      ? settingsStore.settings.isDarkMode
+      : undefined,
+    systemDarkMode:
+      typeof window !== 'undefined' &&
+      !!window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+  }).themeName
+)
+const isDarkMode = computed(
+  () =>
+    resolveThemeState({
+      theme: settingsStore.settings.theme,
+      isDarkMode: settingsStore.hasStoredThemePreference
+        ? settingsStore.settings.isDarkMode
+        : undefined,
+      systemDarkMode:
+        typeof window !== 'undefined' &&
+        !!window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches
+    }).isDarkMode
+)
 
 // 选择主题
 const selectTheme = (themeName: string) => {
-  currentTheme.value = themeName
-  applyTheme(themeName, isDarkMode.value)
+  settingsStore.updateSettings({
+    theme: normalizeThemeName(themeName)
+  })
 }
 
 // 切换暗色模式
 const toggleDarkMode = () => {
-  isDarkMode.value = !isDarkMode.value
-  applyTheme(currentTheme.value, isDarkMode.value)
+  settingsStore.updateSettings({
+    isDarkMode: !isDarkMode.value
+  })
 }
-
-// 检测系统主题偏好
-const detectSystemTheme = () => {
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return true
-  }
-  return false
-}
-
-// 加载保存的设置
-const loadSavedSettings = () => {
-  const savedTheme = localStorage.getItem('selected-theme')
-  const savedDarkMode = localStorage.getItem('dark-mode')
-
-  if (savedTheme && themes.some((t) => t.name === savedTheme)) {
-    currentTheme.value = savedTheme
-  }
-
-  if (savedDarkMode !== null) {
-    isDarkMode.value = savedDarkMode === 'true'
-  } else {
-    // 如果没有保存的设置，检测系统偏好
-    isDarkMode.value = detectSystemTheme()
-  }
-
-  // 优先从 Store 读取（如果已同步）
-  if (settingsStore.settings.theme) {
-    currentTheme.value = settingsStore.settings.theme
-  }
-  if (typeof settingsStore.settings.isDarkMode !== 'undefined') {
-    isDarkMode.value = settingsStore.settings.isDarkMode
-  }
-
-  applyTheme(currentTheme.value, isDarkMode.value)
-}
-
-// 监听 Store 变化（云同步）
-watch(
-  () => [settingsStore.settings.theme, settingsStore.settings.isDarkMode],
-  ([newTheme, newMode]) => {
-    if (newTheme && newTheme !== currentTheme.value) {
-      currentTheme.value = newTheme as string
-      applyTheme(newTheme as string, isDarkMode.value)
-    }
-    if (typeof newMode !== 'undefined' && newMode !== isDarkMode.value) {
-      isDarkMode.value = newMode as boolean
-      applyTheme(currentTheme.value, newMode as boolean)
-    }
-  }
-)
-
-// 监听系统主题变化
-const setupSystemThemeListener = () => {
-  if (window.matchMedia) {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    mediaQuery.addEventListener('change', (e) => {
-      const savedDarkMode = localStorage.getItem('dark-mode')
-      // 如果用户没有手动设置暗色模式，则跟随系统主题
-      if (savedDarkMode === null) {
-        isDarkMode.value = e.matches
-        applyTheme(currentTheme.value, isDarkMode.value)
-      }
-    })
-  }
-}
-
-onMounted(() => {
-  setupSystemThemeListener()
-  loadSavedSettings()
-})
 </script>
 
 <style scoped>

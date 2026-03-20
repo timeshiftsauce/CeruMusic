@@ -11,8 +11,24 @@ import { is } from '@electron-toolkit/utils'
 import wy from '../utils/musicSdk/wy/recognize'
 import getLyric from '../utils/musicSdk/wy/lyric'
 import { httpFetch } from '../utils/request'
+import { createIdleLeaseManager } from './localMusicWorkerLifecycle'
 
 let workerWindow: BrowserWindow | null = null
+
+const disposeWorkerWindow = () => {
+  const currentWindow = workerWindow
+  workerWindow = null
+  if (currentWindow && !currentWindow.isDestroyed()) {
+    currentWindow.close()
+  }
+}
+
+const workerLeaseManager = createIdleLeaseManager({
+  idleMs: 60_000,
+  onDispose: () => {
+    disposeWorkerWindow()
+  }
+})
 
 function getOrCreateWorkerWindow(): Promise<BrowserWindow> {
   return new Promise((resolve) => {
@@ -39,6 +55,10 @@ function getOrCreateWorkerWindow(): Promise<BrowserWindow> {
         hash: 'recognition-worker'
       })
     }
+
+    workerWindow.on('closed', () => {
+      workerWindow = null
+    })
 
     const onReady = () => {
       resolve(workerWindow!)
@@ -243,15 +263,11 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
     // 通知 renderer 扫描完成
     sender.send('local-music:scan-finished', allSongs)
 
-    try {
-      return JSON.stringify(allSongs)
-    } catch {
-      return '[]'
-    }
+    return { success: true, count: allSongs.length }
   } catch (e) {
     // 出错也要通知完成，避免界面一直转
     sender.send('local-music:scan-finished', [])
-    return '[]'
+    return { success: false, count: 0 }
   }
 })
 
@@ -524,9 +540,7 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
 
   if (songs.length === 0) return { success: false, message: '未找到歌曲' }
 
-  // Prepare worker
-  const win = await getOrCreateWorkerWindow()
-
+  const releaseWorkerLease = workerLeaseManager.acquire()
   const total = songs.length
   let processed = 0
   let matched = 0
@@ -543,7 +557,6 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
       if (results && results.length > 0) {
         const best = results[0]
 
-        // Fetch Lyric
         let lrc = ''
         try {
           const lrcRes = await getLyric(best.songmid).promise
@@ -552,7 +565,6 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
           console.error('Fetch lyric failed', e)
         }
 
-        // Fetch Cover
         let coverPath = ''
         if (best.img) {
           try {
@@ -569,7 +581,6 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
           }
         }
 
-        // Update Tags
         try {
           const taglib = require('node-taglib-sharp')
           const file = taglib.File.createFromPath(task.song.path)
@@ -590,7 +601,6 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
             } catch {}
           }
 
-          // Update Index
           task.song.name = best.name
           task.song.singer = best.singer
           task.song.albumName = best.albumName
@@ -634,25 +644,32 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
   ipcMain.on('worker:fp-generated', onResult)
   ipcMain.on('worker:fp-error', onError)
 
-  const CONCURRENCY = 3
-  for (let i = 0; i < songs.length; i += CONCURRENCY) {
-    const chunk = songs.slice(i, i + CONCURRENCY)
-    const promises = chunk.map((song) => {
-      return new Promise<void>((resolve) => {
-        const id = String(song!.songmid)
-        pendingTasks.set(id, { resolve, song })
-        win.webContents.send('worker:start-task', { id, filePath: song!.path })
+  try {
+    const win = await getOrCreateWorkerWindow()
+    const CONCURRENCY = 3
+    for (let i = 0; i < songs.length; i += CONCURRENCY) {
+      const chunk = songs.slice(i, i + CONCURRENCY)
+      const promises = chunk.map((song) => {
+        return new Promise<void>((resolve) => {
+          const id = String(song!.songmid)
+          pendingTasks.set(id, { resolve, song })
+          win.webContents.send('worker:start-task', { id, filePath: song!.path })
+        })
       })
-    })
-    await Promise.all(promises)
+      await Promise.all(promises)
+    }
+
+    const finalSongs = localMusicIndexService.getAllSongs()
+    sender.send('local-music:batch-match-finished', { matched })
+    sender.send('local-music:scan-finished', finalSongs)
+
+    return { success: true, matched }
+  } finally {
+    ipcMain.removeListener('worker:fp-generated', onResult)
+    ipcMain.removeListener('worker:fp-error', onError)
+    releaseWorkerLease()
   }
-
-  ipcMain.removeListener('worker:fp-generated', onResult)
-  ipcMain.removeListener('worker:fp-error', onError)
-
-  const finalSongs = localMusicIndexService.getAllSongs()
-  sender.send('local-music:batch-match-finished', { matched })
-  sender.send('local-music:scan-finished', finalSongs)
-
-  return { success: true, matched }
 })
+
+
+

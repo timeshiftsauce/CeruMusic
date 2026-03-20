@@ -1,4 +1,5 @@
 import { createWebHashHistory, createRouter, RouteRecordRaw, RouterOptions } from 'vue-router'
+import { createRoutePreloadQueue, getRoutePreloadEnabled } from './preloadPolicy'
 
 const appRouter: RouteRecordRaw[] = [
   {
@@ -9,6 +10,9 @@ const appRouter: RouteRecordRaw[] = [
   {
     path: '/home',
     name: 'home',
+    meta: {
+      keepAlive: true
+    },
     redirect: '/home/find',
     component: () => import('@renderer/views/home/index.vue'),
     children: [
@@ -113,58 +117,14 @@ const option: RouterOptions = {
 
 const router = createRouter(option)
 
-// 路由预加载优化
-const preloadRoutes = (routes: RouteRecordRaw[]) => {
-  for (const route of routes) {
-    if (route.component && typeof route.component === 'function') {
-      try {
-        // 触发 import()，忽略结果，利用浏览器缓存机制实现预加载
-        ;(route.component as () => Promise<any>)()
-      } catch (e) {
-        console.warn(`Failed to preload route: ${route.path}`, e)
-      }
-    }
-    if (route.children) {
-      preloadRoutes(route.children)
-    }
-  }
-}
-
-const flattenRoutes = (routes: RouteRecordRaw[], list: RouteRecordRaw[] = []) => {
-  for (const route of routes) {
-    list.push(route)
-    if (route.children) {
-      flattenRoutes(route.children, list)
-    }
-  }
-  return list
-}
-
-const getRoutePreloadEnabled = () => {
-  try {
-    const saved = localStorage.getItem('appSettings')
-    if (saved) {
-      const parsed = JSON.parse(saved) as { routePreloadEnabled?: boolean }
-      if (typeof parsed.routePreloadEnabled === 'boolean') {
-        return parsed.routePreloadEnabled
-      }
-    }
-  } catch {
-    return true
-  }
-  return true
-}
-
 // 在浏览器空闲时进行预加载
 const startPreload = () => {
-  if (!getRoutePreloadEnabled()) return
+  if (!getRoutePreloadEnabled(window.localStorage)) return
   const idleCallback =
     window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(cb, 200))
-  const queue = flattenRoutes(routes).filter(
-    (route) => route.component && typeof route.component === 'function'
-  )
+  const queue = createRoutePreloadQueue(routes)
   const runBatch = () => {
-    if (!getRoutePreloadEnabled()) return
+    if (!getRoutePreloadEnabled(window.localStorage)) return
     const route = queue.shift()
     if (!route) return
     try {
@@ -189,6 +149,8 @@ const startPreload = () => {
 }
 
 // 启动预加载
-startPreload()
+if (typeof window !== 'undefined') {
+  startPreload()
+}
 
 export default router

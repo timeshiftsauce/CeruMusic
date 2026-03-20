@@ -7,10 +7,17 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import defaultCoverImg from '/default-cover.png'
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
 import {
+  addSongsToPlaylistEnd,
+  addToPlaylistAndPlay as addToPlaylistAndPlayAction,
   getSongRealUrl,
-  initPlaylistEventListeners,
-  destroyPlaylistEventListeners
+  replacePlaylist as replacePlaylistAction
 } from '@renderer/utils/playlist/playlistManager'
+import {
+  registerAddToPlaylistAndPlayCommand,
+  registerAppendToPlaylistCommand,
+  registerPausePlaybackCommand,
+  registerReplacePlaylistCommand
+} from './playbackCommands'
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
 
 const controlAudio = ControlAudioStore()
@@ -570,7 +577,6 @@ const initPlayback = async () => {
   if (playbackInstalled) return
   playbackInstalled = true
 
-  initPlaylistEventListeners(localUserStore, playSong)
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
     const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
     if (lastPlayedSong) {
@@ -619,11 +625,17 @@ const initPlayback = async () => {
 }
 window.addEventListener('global-music-control', onGlobalCtrl)
 
+registerAddToPlaylistAndPlayCommand((song) =>
+  addToPlaylistAndPlayAction(song, localUserStore, playSong)
+)
+registerAppendToPlaylistCommand((songs) => addSongsToPlaylistEnd(songs, localUserStore))
+registerPausePlaybackCommand(() => handlePause())
+registerReplacePlaylistCommand((songs) => replacePlaylistAction(songs, localUserStore, playSong))
+
 const uninstallPlayback = () => {
   if (!playbackInstalled) return
   playbackInstalled = false
 
-  destroyPlaylistEventListeners()
   window.removeEventListener('global-music-control', onGlobalCtrl)
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)

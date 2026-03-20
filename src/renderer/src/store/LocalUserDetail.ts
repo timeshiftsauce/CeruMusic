@@ -1,9 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { debounce } from 'lodash'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import {
+  deserializeSongListFromStorage,
+  serializeSongListForStorage
+} from './localUserPersistence'
 
 import type { SongList } from '@renderer/types/audio'
 import type { UserInfo } from '@renderer/types/userInfo'
+
+const USER_INFO_STORAGE_KEY = 'userInfo'
+const SONG_LIST_STORAGE_KEY = 'songList'
 
 export const LocalUserDetailStore = defineStore(
   'Local',
@@ -14,8 +22,8 @@ export const LocalUserDetailStore = defineStore(
     const isWatchStarted = ref(false) // 防止重复创建 watch
 
     function init(): void {
-      const UserInfoLocal = localStorage.getItem('userInfo')
-      const ListLocal = localStorage.getItem('songList')
+      const UserInfoLocal = localStorage.getItem(USER_INFO_STORAGE_KEY)
+      const ListLocal = localStorage.getItem(SONG_LIST_STORAGE_KEY)
       if (UserInfoLocal) {
         userInfo.value = JSON.parse(UserInfoLocal) as UserInfo
         if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
@@ -30,13 +38,13 @@ export const LocalUserDetailStore = defineStore(
           sourceQualityMap: {},
           hasGuide: false
         }
-        localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
+        localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify(userInfo.value))
       }
       if (ListLocal) {
-        list.value = JSON.parse(ListLocal) as SongList[]
+        list.value = deserializeSongListFromStorage(ListLocal)
       } else {
         list.value = []
-        localStorage.setItem('songList', JSON.stringify([]))
+        localStorage.setItem(SONG_LIST_STORAGE_KEY, JSON.stringify([]))
       }
       console.log('init local user detail')
       initialization.value = true
@@ -52,10 +60,16 @@ export const LocalUserDetailStore = defineStore(
       }
       isWatchStarted.value = true
       console.log('startWatch')
+      const persistSongList = debounce((newVal: SongList[]) => {
+        localStorage.setItem(SONG_LIST_STORAGE_KEY, JSON.stringify(serializeSongListForStorage(newVal)))
+      }, 250)
+      const persistUserInfo = debounce((newVal: UserInfo) => {
+        localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify(newVal))
+      }, 250)
       watch(
         list,
         (newVal) => {
-          localStorage.setItem('songList', JSON.stringify(newVal))
+          persistSongList(newVal)
         },
         {
           deep: true
@@ -64,7 +78,7 @@ export const LocalUserDetailStore = defineStore(
       watch(
         userInfo,
         (newVal) => {
-          localStorage.setItem('userInfo', JSON.stringify(newVal))
+          persistUserInfo(newVal)
         },
         {
           deep: true

@@ -1,9 +1,22 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { HotkeyConfigPayload } from '@common/types/hotkeys'
+import { normalizeLocalMusicScanResult } from './localMusicScan'
 
 // Custom APIs for renderer
 const api = {
+  appInfo: {
+    getVersion: () => ipcRenderer.invoke('get-app-version'),
+    getFontList: () => ipcRenderer.invoke('get-font-list'),
+    getPendingOpenPlaylistFiles: () => ipcRenderer.invoke('get-pending-open-playlist-files')
+  },
+  appEvents: {
+    on: (channel: string, callback: (...args: any[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, ...args: any[]) => callback(...args)
+      ipcRenderer.on(channel, handler)
+      return () => ipcRenderer.removeListener(channel, handler)
+    }
+  },
   // 窗口控制方法
   minimize: () => {
     console.log('preload: 发送 window-minimize 事件')
@@ -47,6 +60,7 @@ const api = {
       ipcRenderer.invoke('service-plugin-downloadAndAddPlugin', url, type),
     addPlugin: (pluginCode: string, pluginName: string) =>
       ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName),
+    initializeSystem: () => ipcRenderer.invoke('service-plugin-initialize-system'),
     getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),
     loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins'),
     uninstallPlugin: (pluginId: string) =>
@@ -59,18 +73,21 @@ const api = {
     askStream: (prompt: string, streamId: string) =>
       ipcRenderer.invoke('ai-ask-stream', prompt, streamId),
     onStreamChunk: (callback: (data: { streamId: string; chunk: string }) => void) => {
-      ipcRenderer.on('ai-stream-chunk', (_, data) => callback(data))
+      const handler = (_: Electron.IpcRendererEvent, data: { streamId: string; chunk: string }) =>
+        callback(data)
+      ipcRenderer.on('ai-stream-chunk', handler)
+      return () => ipcRenderer.removeListener('ai-stream-chunk', handler)
     },
     onStreamEnd: (callback: (data: { streamId: string }) => void) => {
-      ipcRenderer.on('ai-stream-end', (_, data) => callback(data))
+      const handler = (_: Electron.IpcRendererEvent, data: { streamId: string }) => callback(data)
+      ipcRenderer.on('ai-stream-end', handler)
+      return () => ipcRenderer.removeListener('ai-stream-end', handler)
     },
     onStreamError: (callback: (data: { streamId: string; error: string }) => void) => {
-      ipcRenderer.on('ai-stream-error', (_, data) => callback(data))
-    },
-    removeStreamListeners: () => {
-      ipcRenderer.removeAllListeners('ai-stream-chunk')
-      ipcRenderer.removeAllListeners('ai-stream-end')
-      ipcRenderer.removeAllListeners('ai-stream-error')
+      const handler = (_: Electron.IpcRendererEvent, data: { streamId: string; error: string }) =>
+        callback(data)
+      ipcRenderer.on('ai-stream-error', handler)
+      return () => ipcRenderer.removeListener('ai-stream-error', handler)
     }
   },
   // 音频缓存管理
@@ -195,36 +212,36 @@ const api = {
     // 监听更新事件
     onCheckingForUpdate: (callback: () => void) => {
       ipcRenderer.on('auto-updater:checking-for-update', callback)
+      return () => ipcRenderer.removeListener('auto-updater:checking-for-update', callback)
     },
     onUpdateAvailable: (callback: () => void) => {
       ipcRenderer.on('auto-updater:update-available', callback)
+      return () => ipcRenderer.removeListener('auto-updater:update-available', callback)
     },
     onUpdateNotAvailable: (callback: () => void) => {
       ipcRenderer.on('auto-updater:update-not-available', callback)
+      return () => ipcRenderer.removeListener('auto-updater:update-not-available', callback)
     },
     onDownloadProgress: (callback: (progress: any) => void) => {
-      ipcRenderer.on('auto-updater:download-progress', (_, progress) => callback(progress))
+      const handler = (_: Electron.IpcRendererEvent, progress: any) => callback(progress)
+      ipcRenderer.on('auto-updater:download-progress', handler)
+      return () => ipcRenderer.removeListener('auto-updater:download-progress', handler)
     },
     onUpdateDownloaded: (callback: () => void) => {
       ipcRenderer.on('auto-updater:update-downloaded', callback)
+      return () => ipcRenderer.removeListener('auto-updater:update-downloaded', callback)
     },
     onError: (callback: (error: string) => void) => {
-      ipcRenderer.on('auto-updater:error', (_, error) => callback(error))
+      const handler = (_: Electron.IpcRendererEvent, error: string) => callback(error)
+      ipcRenderer.on('auto-updater:error', handler)
+      return () => ipcRenderer.removeListener('auto-updater:error', handler)
     },
     onDownloadStarted: (callback: (updateInfo: any) => void) => {
-      ipcRenderer.on('auto-updater:download-started', (_, updateInfo) => callback(updateInfo))
+      const handler = (_: Electron.IpcRendererEvent, updateInfo: any) => callback(updateInfo)
+      ipcRenderer.on('auto-updater:download-started', handler)
+      return () => ipcRenderer.removeListener('auto-updater:download-started', handler)
     },
 
-    // 移除所有监听器
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('auto-updater:checking-for-update')
-      ipcRenderer.removeAllListeners('auto-updater:update-available')
-      ipcRenderer.removeAllListeners('auto-updater:update-not-available')
-      ipcRenderer.removeAllListeners('auto-updater:download-started')
-      ipcRenderer.removeAllListeners('auto-updater:download-progress')
-      ipcRenderer.removeAllListeners('auto-updater:update-downloaded')
-      ipcRenderer.removeAllListeners('auto-updater:error')
-    }
   },
   ping: (callbaack: Function) => ipcRenderer.on('song-ended', () => callbaack()),
   pingService: {
@@ -254,17 +271,7 @@ const api = {
   // 本地音乐管理
   localMusic: {
     selectDirs: () => ipcRenderer.invoke('local-music:select-dirs'),
-    scan: async (dirs: string[]) => {
-      const res = await ipcRenderer.invoke('local-music:scan', dirs)
-      if (typeof res === 'string') {
-        try {
-          return JSON.parse(res)
-        } catch {
-          return []
-        }
-      }
-      return Array.isArray(res) ? res : []
-    },
+    scan: async (dirs: string[]) => normalizeLocalMusicScanResult(await ipcRenderer.invoke('local-music:scan', dirs)),
     writeTags: (filePath: string, songInfo: any, tagWriteOptions: any) =>
       ipcRenderer.invoke('local-music:write-tags', { filePath, songInfo, tagWriteOptions }),
     getDirs: () => ipcRenderer.invoke('local-music:get-dirs'),
@@ -311,12 +318,6 @@ const api = {
       ipcRenderer.on('local-music:scan-finished', handler)
       return () => ipcRenderer.removeListener('local-music:scan-finished', handler)
     },
-    removeScanProgress: () => {
-      ipcRenderer.removeAllListeners('local-music:scan-progress')
-    },
-    removeScanFinished: () => {
-      ipcRenderer.removeAllListeners('local-music:scan-finished')
-    },
     batchMatch: (songmids: string[]) => ipcRenderer.invoke('local-music:batch-match', songmids),
     onBatchMatchProgress: (
       callback: (processed: number, total: number, matched: number) => void
@@ -330,10 +331,6 @@ const api = {
       const handler = (_event: any, res: any) => callback(res)
       ipcRenderer.on('local-music:batch-match-finished', handler)
       return () => ipcRenderer.removeListener('local-music:batch-match-finished', handler)
-    },
-    removeBatchMatchListeners: () => {
-      ipcRenderer.removeAllListeners('local-music:batch-match-progress')
-      ipcRenderer.removeAllListeners('local-music:batch-match-finished')
     }
   },
 
@@ -345,6 +342,90 @@ const api = {
       }
       ipcRenderer.on('plugin-notice', listener)
       return () => ipcRenderer.removeListener('plugin-notice', listener)
+    }
+  },
+  desktopLyric: {
+    getOption: () => ipcRenderer.invoke('get-desktop-lyric-option'),
+    getOpenState: () => ipcRenderer.invoke('get-lyric-open-state'),
+    getLockState: () => ipcRenderer.invoke('get-lyric-lock-state'),
+    getWindowBounds: () => ipcRenderer.invoke('get-window-bounds'),
+    getAllWorkArea: () => ipcRenderer.invoke('get-all-work-area'),
+    changeOpen: (open: boolean) => ipcRenderer.send('change-desktop-lyric', open),
+    toggleLock: (lock: boolean) => ipcRenderer.send('toogleDesktopLyricLock', lock),
+    setOption: (payload: any, callback: boolean = false) =>
+      ipcRenderer.send('set-desktop-lyric-option', payload, callback),
+    setFont: (font: string) => ipcRenderer.send('set-desktop-lyric-font', font),
+    moveWindow: (x: number, y: number, width: number, height: number) =>
+      ipcRenderer.send('move-window', x, y, width, height),
+    updateWindowHeight: (height: number) => ipcRenderer.send('update-window-height', height),
+    sendWindowEvent: (eventName: string, ...args: any[]) => ipcRenderer.send(eventName, ...args),
+    sendMainEvent: (eventName: string, ...args: any[]) =>
+      ipcRenderer.send('send-main-event', eventName, ...args),
+    lyricWindowReady: () => ipcRenderer.send('lyric-window-ready'),
+    onOpenChange: (callback: (open: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, open: boolean) => callback(open)
+      ipcRenderer.on('desktop-lyric-open-change', handler)
+      return () => ipcRenderer.removeListener('desktop-lyric-open-change', handler)
+    },
+    onSongChange: (callback: (data: { name?: string; artist?: string }) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        data: { name?: string; artist?: string }
+      ) => callback(data)
+      ipcRenderer.on('play-song-change', handler)
+      return () => ipcRenderer.removeListener('play-song-change', handler)
+    },
+    onLyricChange: (callback: (lines: any[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, lines: any[]) => callback(lines)
+      ipcRenderer.on('play-lyric-change', handler)
+      return () => ipcRenderer.removeListener('play-lyric-change', handler)
+    },
+    onLyricIndexChange: (callback: (index: number) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, index: number) => callback(index)
+      ipcRenderer.on('play-lyric-index', handler)
+      return () => ipcRenderer.removeListener('play-lyric-index', handler)
+    },
+    onLyricProgress: (callback: (payload: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: any) => callback(payload)
+      ipcRenderer.on('play-lyric-progress', handler)
+      return () => ipcRenderer.removeListener('play-lyric-progress', handler)
+    },
+    onPlayStatusChange: (callback: (status: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: boolean) => callback(status)
+      ipcRenderer.on('play-status-change', handler)
+      return () => ipcRenderer.removeListener('play-status-change', handler)
+    },
+    onOptionChange: (callback: (option: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, option: any) => callback(option)
+      ipcRenderer.on('desktop-lyric-option-change', handler)
+      return () => ipcRenderer.removeListener('desktop-lyric-option-change', handler)
+    },
+    onFontChange: (callback: (font: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, font: string) => callback(font)
+      ipcRenderer.on('set-desktop-lyric-font', handler)
+      return () => ipcRenderer.removeListener('set-desktop-lyric-font', handler)
+    },
+    onLockChange: (callback: (lock: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, lock: boolean) => callback(lock)
+      ipcRenderer.on('toogleDesktopLyricLock', handler)
+      return () => ipcRenderer.removeListener('toogleDesktopLyricLock', handler)
+    },
+    onCloseRequest: (callback: () => void) => {
+      ipcRenderer.on('closeDesktopLyric', callback)
+      return () => ipcRenderer.removeListener('closeDesktopLyric', callback)
+    }
+  },
+  recognitionWorker: {
+    ready: () => ipcRenderer.send('worker:ready'),
+    sendGenerated: (payload: any) => ipcRenderer.send('worker:fp-generated', payload),
+    sendError: (payload: any) => ipcRenderer.send('worker:fp-error', payload),
+    onStartTask: (callback: (payload: { id: string; filePath: string }) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: { id: string; filePath: string }
+      ) => callback(payload)
+      ipcRenderer.on('worker:start-task', handler)
+      return () => ipcRenderer.removeListener('worker:start-task', handler)
     }
   },
   // 系统音频采集
@@ -364,14 +445,14 @@ const api = {
 // just add to the DOM global.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', { ...electronAPI, ipcRenderer })
+    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
   // @ts-ignore (define in dts)
-  window.electron = { ...electronAPI, ipcRenderer }
+  window.electron = electronAPI
   // @ts-ignore (define in dts)
   window.api = api
 }

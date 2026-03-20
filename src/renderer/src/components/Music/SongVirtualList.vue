@@ -322,6 +322,7 @@ import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongLis
 import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import { useAuthStore } from '@renderer/store'
+import { useDisposables } from '@renderer/composables/useDisposables'
 
 interface Song {
   id?: number
@@ -341,6 +342,8 @@ interface Song {
   sampleRate?: number
   path?: string
 }
+
+const disposables = useDisposables()
 
 interface Props {
   songs: Song[]
@@ -372,7 +375,7 @@ const props = withDefaults(defineProps<Props>(), {
   playlistId: '',
   multiSelect: false,
   bufferSize: 10,
-  coverConcurrency: 30,
+  coverConcurrency: 12,
   hideLocalSource: false,
   enableDownload: true
 })
@@ -1214,15 +1217,12 @@ onMounted(async () => {
   await loadFavorites()
 
   // 监听歌单变化事件
-  window.addEventListener('playlist-updated', async () => {
+  const handlePlaylistUpdated = async () => {
     await loadPlaylists()
     await loadFavorites()
-  })
-})
-
-onUnmounted(() => {
-  // 清理事件监听器
-  window.removeEventListener('playlist-updated', loadPlaylists)
+  }
+  window.addEventListener('playlist-updated', handlePlaylistUpdated)
+  disposables.add(() => window.removeEventListener('playlist-updated', handlePlaylistUpdated))
 })
 
 // 切换到普通模式时清空选择

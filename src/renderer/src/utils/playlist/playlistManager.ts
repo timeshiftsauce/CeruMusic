@@ -1,21 +1,7 @@
-import mitt from 'mitt'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-
-// 事件类型定义
-type PlaylistEvents = {
-  addToPlaylistAndPlay: SongList
-  addToPlaylistEnd: SongList
-  replacePlaylist: SongList[]
-}
-
-// 创建全局事件总线
-const emitter = mitt<PlaylistEvents>()
-
-// 将事件总线挂载到全局
-;(window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -86,6 +72,8 @@ const PluginErrorMsgs = [
   '哥哥~ 你需要安装一个插件来播放歌曲哦~'
 ]
 
+const getSongKey = (song: Pick<SongList, 'songmid'>) => String(song.songmid)
+
 /**
  * 添加歌曲到播放列表第一项并播放
  * @param song 要添加的歌曲
@@ -147,21 +135,51 @@ export async function addToPlaylistAndPlay(
  * @param localUserStore LocalUserDetail store实例
  */
 export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
+  await addSongsToPlaylistEnd([song], localUserStore)
+}
+
+/**
+ * 批量添加歌曲到播放列表末尾
+ * @param songs 要添加的歌曲列表
+ * @param localUserStore LocalUserDetail store实例
+ */
+export async function addSongsToPlaylistEnd(songs: SongList[], localUserStore: any) {
   try {
-    // 检查歌曲是否已在播放列表中
-    const existingIndex = localUserStore.list.findIndex(
-      (item: SongList) => item.songmid === song.songmid
+    if (songs.length === 0) return
+
+    const existingSongKeys = new Set(
+      localUserStore.list.map((item: SongList) => getSongKey(item))
     )
 
-    if (existingIndex !== -1) {
-      await MessagePlugin.warning('歌曲已在播放列表中')
+    let added = 0
+    let skipped = 0
+
+    for (const song of songs) {
+      const songKey = getSongKey(song)
+      if (existingSongKeys.has(songKey)) {
+        skipped += 1
+        continue
+      }
+
+      localUserStore.addSong(song)
+      existingSongKeys.add(songKey)
+      added += 1
+    }
+
+    if (added === 0) {
+      await MessagePlugin.warning(
+        songs.length === 1 ? '歌曲已在播放列表中' : '所选歌曲已在播放列表中'
+      )
       return
     }
 
-    // 使用store的方法添加歌曲
-    localUserStore.addSong(song)
-
-    await MessagePlugin.success('已添加到播放列表')
+    await MessagePlugin.success(
+      songs.length === 1
+        ? '已添加到播放列表'
+        : skipped > 0
+          ? `已添加 ${added} 首歌曲到播放列表，跳过 ${skipped} 首重复`
+          : `已添加 ${added} 首歌曲到播放列表`
+    )
   } catch (error) {
     console.error('添加到播放列表失败:', error)
     await MessagePlugin.error('添加失败，请重试')
@@ -204,63 +222,6 @@ export async function replacePlaylist(
     }
     await MessagePlugin.error('替换播放列表失败，请重试')
   }
-}
-
-/**
- * 初始化播放列表事件监听器
- * @param localUserStore LocalUserDetail store实例
- * @param playSongCallback 播放歌曲的回调函数
- */
-export function initPlaylistEventListeners(
-  localUserStore: any,
-  playSongCallback: (song: SongList) => Promise<void>
-) {
-  // 监听添加到播放列表并播放的事件
-  emitter.on('addToPlaylistAndPlay', async (song: SongList) => {
-    await addToPlaylistAndPlay(song, localUserStore, playSongCallback)
-  })
-
-  // 监听添加到播放列表末尾的事件
-  emitter.on('addToPlaylistEnd', async (song: SongList) => {
-    await addToPlaylistEnd(song, localUserStore)
-  })
-
-  // 监听替换播放列表的事件
-  emitter.on('replacePlaylist', async (songs: SongList[]) => {
-    await replacePlaylist(songs, localUserStore, playSongCallback)
-  })
-}
-
-/**
- * 清理播放列表事件监听器
- */
-export function destroyPlaylistEventListeners() {
-  emitter.off('addToPlaylistAndPlay')
-  emitter.off('addToPlaylistEnd')
-  emitter.off('replacePlaylist')
-}
-
-/**
- * 触发添加歌曲到播放列表并播放的事件
- * @param song 要添加的歌曲
- */
-export function triggerAddToPlaylistAndPlay(song: SongList) {
-  emitter.emit('addToPlaylistAndPlay', song)
-}
-
-/**
- * 触发添加歌曲到播放列表末尾的事件
- * @param song 要添加的歌曲
- */
-export function triggerAddToPlaylistEnd(song: SongList) {
-  emitter.emit('addToPlaylistEnd', song)
-}
-
-/**
- * 获取全局事件总线实例
- */
-export function getPlaylistEmitter() {
-  return emitter
 }
 
 /**

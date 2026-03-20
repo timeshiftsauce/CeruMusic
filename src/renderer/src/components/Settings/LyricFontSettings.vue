@@ -104,15 +104,15 @@ const handleFontChange = () => {
   // We need to send an IPC message to desktop lyric window to update font family
 
   // Get current font family
-  const font = settings.value.lyricFontFamily
+  const font = settings.value.lyricFontFamily || 'PingFangSC-Semibold'
 
   // Send IPC to main process, which forwards to lyric window or updates config
-  window.electron.ipcRenderer.send('set-desktop-lyric-font', font)
+  window.api.desktopLyric.setFont(font)
 }
 
 onMounted(async () => {
   try {
-    const fonts = await window.electron.ipcRenderer.invoke('get-font-list')
+    const fonts = await window.api.appInfo.getFontList()
     fontList.value = fonts
   } catch (e) {
     console.error('Failed to get font list', e)

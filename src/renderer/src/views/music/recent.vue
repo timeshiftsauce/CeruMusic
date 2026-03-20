@@ -111,10 +111,9 @@ const formatPlayTime = (timeStr: string): string => {
 </script>
 
 <template>
-  <div class="recent-container">
-    <div>待开发 作者正在麻溜赶代码 奈何还有期中考 不要抽我呀！</div>
+  <div class="recent-container page-shell recent-page">
     <!-- 页面标题和操作 -->
-    <div class="page-header">
+    <div class="page-header page-hero">
       <div class="header-left">
         <h2>最近播放</h2>
         <p>您最近听过的音乐和歌单</p>
@@ -158,7 +157,7 @@ const formatPlayTime = (timeStr: string): string => {
     <!-- 最近播放的歌曲 -->
     <div class="section">
       <h3 class="section-title">最近播放的歌曲</h3>
-      <div class="song-list">
+      <div class="song-list panel-shell">
         <div
           v-for="(song, index) in recentSongs"
           :key="song.id"
@@ -207,12 +206,7 @@ const formatPlayTime = (timeStr: string): string => {
 
 <style lang="scss" scoped>
 .recent-container {
-  // background: var(--recent-bg);
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  // min-height: 100%;
-  height: 100%;
+  padding: 0;
   overflow-y: auto;
 }
 
@@ -220,7 +214,6 @@ const formatPlayTime = (timeStr: string): string => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2rem;
 
   .header-left {
     h2 {

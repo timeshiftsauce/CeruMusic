@@ -430,19 +430,27 @@ const onLeave = (el: Element) => {
 }
 
 .close-btn {
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.8);
+  background: var(--custom-btn-bg);
+  border: 1px solid var(--custom-btn-border-soft);
+  color: var(--custom-btn-text);
   cursor: pointer;
   padding: 8px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.3s;
+  transition:
+    background 0.3s,
+    border-color 0.3s,
+    box-shadow 0.3s;
+  box-shadow: var(--custom-btn-shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--custom-btn-bg-hover);
+    border-color: var(--custom-btn-border);
+    box-shadow: var(--custom-btn-shadow-hover);
   }
 }
 

@@ -197,9 +197,9 @@ const handleSearchSelect = async (item: SearchItem) => {
 </script>
 
 <template>
-  <div class="main-container">
+  <div class="main-container settings-page-shell">
     <!-- 标题栏 -->
-    <div class="header">
+    <div class="header page-hero settings-hero">
       <TitleBarControls title="设置" :show-back="true" :show-account="false">
         <template #extra>
           <div style="flex-shrink: 0">
@@ -212,7 +212,7 @@ const handleSearchSelect = async (item: SearchItem) => {
     <!-- 主要内容区域 -->
     <div class="settings-layout">
       <!-- 左侧导航栏 -->
-      <div class="sidebar">
+      <div class="sidebar panel-shell">
         <nav class="sidebar-nav">
           <div
             v-for="category in settingsCategories"
@@ -234,16 +234,18 @@ const handleSearchSelect = async (item: SearchItem) => {
       </div>
 
       <!-- 右侧内容面板 -->
-      <div class="content-panel">
+      <div class="content-panel panel-shell">
         <div ref="contentPanelRef" class="panel-content">
           <!-- 设置内容区域 -->
-          <KeepAlive>
-            <component
-              :is="currentComponent"
-              :key="activeCategory"
-              @switch-category="switchCategory"
-            />
-          </KeepAlive>
+          <Transition name="settings-panel">
+            <KeepAlive>
+              <component
+                :is="currentComponent"
+                :key="activeCategory"
+                @switch-category="switchCategory"
+              />
+            </KeepAlive>
+          </Transition>
         </div>
       </div>
     </div>
@@ -255,15 +257,15 @@ const handleSearchSelect = async (item: SearchItem) => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--settings-main-bg);
+  padding: 1rem;
+  gap: 1rem;
+  background: transparent;
 }
 
 .header {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
-  background: var(--settings-header-bg);
-  padding: 1.5rem;
   z-index: 1000;
 }
 
@@ -271,17 +273,17 @@ const handleSearchSelect = async (item: SearchItem) => {
   display: flex;
   flex: 1;
   overflow: hidden;
+  gap: 1rem;
 }
 
 // 左侧导航栏
 .sidebar {
   width: 280px;
-  background: var(--settings-sidebar-bg);
-  padding-right: 5px;
+  padding: 0.4rem;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding-left: 5px;
+  contain: layout paint;
 
   .sidebar-nav {
     flex: 1;
@@ -294,17 +296,22 @@ const handleSearchSelect = async (item: SearchItem) => {
     padding: 0.875rem 1.5rem;
     margin-top: 5px;
     cursor: pointer;
-    transition: all 0.2s ease;
-    border-left: 3px solid transparent;
-    border-radius: 5px;
+    transition:
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      border-color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
+    border: 1px solid transparent;
+    border-radius: 1rem;
 
     &:hover {
       background: var(--settings-nav-hover-bg);
+      border-color: rgba(255, 255, 255, 0.08);
     }
 
     &.active {
       background: var(--settings-nav-active-bg);
-      border-left-color: var(--settings-nav-active-border);
+      border-color: var(--settings-nav-active-border);
+      box-shadow: 0 6px 14px rgba(0, 137, 62, 0.1);
 
       .nav-icon {
         color: var(--settings-nav-icon-active);
@@ -359,17 +366,17 @@ const handleSearchSelect = async (item: SearchItem) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 10px;
+  padding: 0;
+  contain: layout paint;
 
   .panel-content {
     flex: 1;
     overflow-y: auto;
-    background: var(--settings-main-bg);
-    scroll-behavior: smooth; // Smooth scrolling might interfere with instant restore?
-    // Usually better to remove for instant restore, but let's test.
-    // Actually, for restoring exact position, smooth behavior might be annoying or slow.
-    // But for user clicking, smooth is nice.
-    // I will keep it for now.
+    background: transparent;
+    padding: 1rem;
+    scroll-behavior: auto;
+    overscroll-behavior: contain;
+    contain: layout paint;
   }
 }
 
@@ -382,8 +389,6 @@ const handleSearchSelect = async (item: SearchItem) => {
   .sidebar {
     width: 100%;
     max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid #e2e8f0;
 
     .sidebar-nav {
       display: flex;
@@ -408,7 +413,9 @@ const handleSearchSelect = async (item: SearchItem) => {
 // 过渡动画效果
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fade-slide-enter-from {
@@ -425,6 +432,23 @@ const handleSearchSelect = async (item: SearchItem) => {
 .fade-slide-leave-from {
   opacity: 1;
   transform: translateX(0);
+}
+
+.settings-panel-enter-active,
+.settings-panel-leave-active {
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.settings-panel-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.settings-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 
 // Scrollbar styling
@@ -445,6 +469,72 @@ const handleSearchSelect = async (item: SearchItem) => {
   scrollbar-width: none;
   // IE/Edge
   -ms-overflow-style: none;
+}
+
+:deep(.settings-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+:deep(.setting-group),
+:deep(.setting-card),
+:deep(.setting-group-item),
+:deep(.music-config-container > .setting-group),
+:deep(.plugin-prompt),
+:deep(.source-card),
+:deep(.tech-item),
+:deep(.developer-item),
+:deep(.tag-option),
+:deep(.status-item),
+:deep(.feature-card) {
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 30%),
+    var(--shell-panel-bg);
+  box-shadow: var(--shell-panel-shadow-soft);
+  backdrop-filter: none;
+  content-visibility: auto;
+  contain: layout paint style;
+  transition:
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+:deep(.setting-group:hover),
+:deep(.setting-card:hover),
+:deep(.source-card:hover),
+:deep(.tech-item:hover),
+:deep(.developer-item:hover),
+:deep(.tag-option:hover) {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+:deep(.setting-item),
+:deep(.setting-group-item) {
+  padding: 1rem 1.1rem;
+}
+
+:deep(.item-title),
+:deep(.setting-label),
+:deep(.nav-label),
+:deep(.tech-name) {
+  color: var(--settings-text-primary);
+  font-weight: 600;
+}
+
+:deep(.item-desc),
+:deep(.option-desc),
+:deep(.status-label),
+:deep(.status-value),
+:deep(.tech-desc) {
+  color: var(--settings-text-secondary);
+}
+
+:deep(.source-card.active) {
+  box-shadow: 0 14px 28px rgba(0, 137, 62, 0.12);
 }
 
 :deep(.highlight-flash) {

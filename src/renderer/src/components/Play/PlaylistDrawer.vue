@@ -1044,25 +1044,33 @@ defineExpose({
   justify-content: center;
   gap: 6px;
   padding: 8px 12px;
-  border: none;
+  border: 1px solid var(--custom-btn-border-soft);
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   -webkit-app-region: no-drag;
+  box-shadow: var(--custom-btn-shadow);
 }
 
 .locate-btn {
-  background: rgba(35, 115, 206, 0.1);
-  color: #2373ce;
-  border: 1px solid rgba(35, 115, 206, 0.2);
+  background: var(--custom-btn-accent-bg);
+  color: var(--custom-btn-accent-text);
+  border-color: var(--custom-btn-accent-border);
 }
 
 .locate-btn:hover:not(:disabled) {
-  background: rgba(35, 115, 206, 0.15);
-  border-color: rgba(35, 115, 206, 0.3);
+  background: var(--custom-btn-accent-bg-hover);
+  border-color: var(--custom-btn-accent-border);
+  box-shadow: var(--custom-btn-shadow-hover);
   transform: translateY(-1px);
 }
 
@@ -1070,19 +1078,20 @@ defineExpose({
   opacity: 0.5;
   cursor: not-allowed;
   color: #999;
-  background: rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 0, 0, 0.1);
+  background: var(--custom-btn-bg-soft);
+  border-color: var(--custom-btn-border-soft);
 }
 
 .clear-btn {
-  background: rgba(229, 72, 77, 0.1);
-  color: #e5484d;
-  border: 1px solid rgba(229, 72, 77, 0.2);
+  background: var(--custom-btn-danger-bg);
+  color: var(--custom-btn-danger-text);
+  border-color: var(--custom-btn-danger-border);
 }
 
 .clear-btn:hover {
-  background: rgba(229, 72, 77, 0.15);
-  border-color: rgba(229, 72, 77, 0.3);
+  background: var(--custom-btn-danger-bg-hover);
+  border-color: var(--custom-btn-danger-border);
+  box-shadow: var(--custom-btn-shadow-hover);
   transform: translateY(-1px);
 }
 

@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<Props>(), {
   showSettings: true,
   showBack: false,
   showAccount: false,
+  inline: false,
   title: '',
   color: ''
 })
@@ -27,6 +28,7 @@ interface Props {
   showSettings?: boolean
   showBack?: boolean
   showAccount?: boolean
+  inline?: boolean
   title?: string
   color?: string
 }
@@ -35,11 +37,18 @@ interface Props {
 
 // 计算样式类名
 const controlsClass = computed(() => {
-  if (props.controlStyle !== false) {
-    return `title-controls ${props.controlStyle}`
-  } else {
-    return userInfo.value.topBarStyle ? 'title-controls traffic-light' : 'title-controls windows'
-  }
+  const styleClass =
+    props.controlStyle !== false
+      ? props.controlStyle
+      : userInfo.value.topBarStyle
+        ? 'traffic-light'
+        : 'windows'
+
+  return ['title-controls', styleClass, props.inline ? 'inline' : ''].filter(Boolean).join(' ')
+})
+
+const showLeading = computed(() => {
+  return props.showBack || Boolean(props.title)
 })
 
 // 窗口控制方法
@@ -110,7 +119,7 @@ const handleBack = (): void => {
 
 <template>
   <div :class="controlsClass">
-    <div class="left">
+    <div v-if="showLeading" class="left">
       <div class="back-box">
         <t-button
           v-if="showBack"
@@ -260,8 +269,14 @@ const handleBack = (): void => {
   display: flex;
   align-items: center;
   width: 100%;
+  min-width: 0;
   gap: 0.25rem;
   -webkit-app-region: drag;
+
+  &.inline {
+    width: auto;
+    flex: 0 0 auto;
+  }
 
   .control-btn {
     -webkit-app-region: no-drag;
@@ -269,12 +284,28 @@ const handleBack = (): void => {
     height: 2.25rem;
     min-width: 2.25rem;
     padding: 0;
-    border: none;
-    background: transparent;
+    border: 1px solid var(--custom-btn-border-soft);
+    border-radius: 0.85rem;
+    background: var(--custom-btn-bg-soft);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--custom-btn-shadow);
+    transition:
+      transform var(--motion-duration-fast) var(--motion-ease-standard),
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      border-color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
 
     .iconfont {
       font-size: 1.125rem;
       color: v-bind(color);
+    }
+
+    &:hover {
+      transform: translateY(-1px);
+      background-color: var(--custom-btn-bg-hover);
+      border-color: var(--custom-btn-border);
+      box-shadow: var(--custom-btn-shadow-hover);
     }
 
     &:hover .iconfont {
@@ -298,7 +329,7 @@ const handleBack = (): void => {
         -webkit-app-region: no-drag;
         margin-right: 0.5rem;
         &:hover {
-          background-color: var(--titlebar-btn-hover-bg);
+          background-color: var(--custom-btn-bg-hover);
         }
       }
     }
@@ -319,7 +350,7 @@ const handleBack = (): void => {
     // margin-right: 0.5rem;
 
     &:hover {
-      background-color: var(--titlebar-btn-hover-bg);
+      background-color: var(--custom-btn-bg-hover);
     }
   }
 
@@ -328,8 +359,9 @@ const handleBack = (): void => {
 
     display: flex;
     align-items: center;
-    gap: 0.125rem;
+    gap: 0.25rem;
     flex-shrink: 0;
+    min-width: 0;
   }
 
   .account-module {
@@ -343,16 +375,16 @@ const handleBack = (): void => {
     }
 
     &:hover {
-      background-color: var(--titlebar-btn-hover-bg);
+      background-color: var(--custom-btn-bg-hover);
     }
   }
 
   .minimize-btn:hover {
-    background-color: var(--titlebar-btn-hover-bg);
+    background-color: var(--custom-btn-bg-hover);
   }
 
   .maximize-btn:hover {
-    background-color: var(--titlebar-btn-hover-bg);
+    background-color: var(--custom-btn-bg-hover);
   }
 
   .close-btn:hover {

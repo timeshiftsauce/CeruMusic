@@ -29,6 +29,7 @@ export const downloadState = reactive({
 export class AutoUpdateService {
   private static instance: AutoUpdateService
   private isListening = false
+  private cleanupFns: Array<() => void> = []
 
   constructor() {
     // 构造函数中自动开始监听
@@ -47,37 +48,38 @@ export class AutoUpdateService {
     if (this.isListening) return
 
     this.isListening = true
+    this.cleanupFns = []
 
     // 监听各种更新事件
-    window.api.autoUpdater.onCheckingForUpdate(() => {
+    this.cleanupFns.push(window.api.autoUpdater.onCheckingForUpdate(() => {
       this.showCheckingNotification()
-    })
+    }))
 
-    window.api.autoUpdater.onUpdateAvailable((_, updateInfo: UpdateInfo) => {
+    this.cleanupFns.push(window.api.autoUpdater.onUpdateAvailable((_, updateInfo: UpdateInfo) => {
       this.showUpdateAvailableDialog(updateInfo)
-    })
+    }))
 
-    window.api.autoUpdater.onUpdateNotAvailable(() => {
+    this.cleanupFns.push(window.api.autoUpdater.onUpdateNotAvailable(() => {
       this.showNoUpdateNotification()
-    })
+    }))
 
-    window.api.autoUpdater.onDownloadStarted((updateInfo: UpdateInfo) => {
+    this.cleanupFns.push(window.api.autoUpdater.onDownloadStarted((updateInfo: UpdateInfo) => {
       this.handleDownloadStarted(updateInfo)
-    })
+    }))
 
-    window.api.autoUpdater.onDownloadProgress((progress: DownloadProgress) => {
+    this.cleanupFns.push(window.api.autoUpdater.onDownloadProgress((progress: DownloadProgress) => {
       console.log(progress)
 
       this.showDownloadProgressNotification(progress)
-    })
+    }))
 
-    window.api.autoUpdater.onUpdateDownloaded(() => {
+    this.cleanupFns.push(window.api.autoUpdater.onUpdateDownloaded(() => {
       this.showUpdateDownloadedDialog()
-    })
+    }))
 
-    window.api.autoUpdater.onError((_, error: string) => {
+    this.cleanupFns.push(window.api.autoUpdater.onError((error: string) => {
       this.showUpdateErrorNotification(error)
-    })
+    }))
   }
 
   // 停止监听更新消息
@@ -85,7 +87,11 @@ export class AutoUpdateService {
     if (!this.isListening) return
 
     this.isListening = false
-    window.api.autoUpdater.removeAllListeners()
+    this.cleanupFns.splice(0).forEach((dispose) => {
+      try {
+        dispose()
+      } catch {}
+    })
   }
 
   // 检查更新

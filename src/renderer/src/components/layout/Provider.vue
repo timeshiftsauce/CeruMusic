@@ -19,7 +19,7 @@ import {
   NGlobalStyle,
   NMessageProvider,
   NDialogProvider
-} from 'naive-ui'
+} from '@renderer/ui/legacyNaive'
 import { useSettingsStore } from '@renderer/store/Settings'
 import songListAPI from '@renderer/api/songList'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -40,6 +40,13 @@ import { useAuthStore } from '@renderer/store'
 import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
+import { useDisposables } from '@renderer/composables/useDisposables'
+import {
+  THEME_OPTIONS,
+  applyThemeAttributes,
+  normalizeThemeName,
+  resolveThemeState
+} from '@renderer/utils/theme/themeState'
 
 const userInfo = LocalUserDetailStore()
 
@@ -49,10 +56,7 @@ const { settings } = settingsStore
 const processedPaths = new Set<string>()
 const authStore = useAuthStore()
 const audioSelectorVisible = ref(false)
-
-// 保存事件监听器清理函数
-let themeChangeHandler: (() => void) | null = null
-let mediaQueryChangeHandler: (() => void) | null = null
+const disposables = useDisposables()
 
 import '@renderer/assets/main.css'
 import '@renderer/assets/theme/blue.css'
@@ -316,13 +320,16 @@ const isDesktopLyricContext = () => {
   return false
 }
 
+const bindIpcListener = (channel: string, handler: (...args: any[]) => void) => {
+  disposables.add(window.api.appEvents.on(channel, handler))
+}
+
 onMounted(() => {
   if (isDesktopLyricContext()) return
   userInfo.init()
   settingsSyncService.init()
   setupSystemThemeListener()
   loadSavedTheme()
-  syncNaiveTheme()
 
   usageTotalMs.value = parseStoredNumber(localStorage.getItem(usageTotalMsKey))
   if (localStorage.getItem(sponsorPromptHiddenKey) === '1') {
@@ -336,31 +343,19 @@ onMounted(() => {
     usageInterval = window.setInterval(flushUsage, 15000)
   }
 
-  // 添加 theme-changed 事件监听器并保存清理函数
-  const handleThemeChange = () => syncNaiveTheme()
-  window.addEventListener('theme-changed', handleThemeChange)
-  themeChangeHandler = () => window.removeEventListener('theme-changed', handleThemeChange)
-
   // 监听 Store 变化，响应云同步
-  watch(
+  const stopThemeWatch = watch(
     () => [settingsStore.settings.theme, settingsStore.settings.isDarkMode],
     ([newTheme, newMode]) => {
-      // 只有当 Store 中的值与当前应用的值不同时才应用，避免死循环
-      // applyTheme 会更新 localStorage 并触发 theme-changed
-      const currentTheme = localStorage.getItem('selected-theme') || 'default'
-      const currentMode = localStorage.getItem('dark-mode') === 'true'
-
-      const targetTheme = (newTheme as string) || 'default'
-      const targetMode = (newMode as boolean) ?? false
-
-      if (targetTheme !== currentTheme || targetMode !== currentMode) {
-        applyTheme(targetTheme, targetMode)
-      }
+      const nextTheme = normalizeThemeName(newTheme as string)
+      const nextMode = Boolean(newMode)
+      applyTheme(nextTheme, nextMode)
     }
   )
+  disposables.add(stopThemeWatch)
 
   // 监听 Logto 回调
-  window.electron?.ipcRenderer?.on?.('logto-callback', (_: any, url: string) => {
+  bindIpcListener('logto-callback', (_: any, url: string) => {
     authStore.handleCallback(url)
   })
 
@@ -372,25 +367,17 @@ onMounted(() => {
     console.log('forward', name, val)
     window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
   }
-  window.electron?.ipcRenderer?.on?.('play', () => forward('play'))
-  window.electron?.ipcRenderer?.on?.('pause', () => forward('pause'))
-  window.electron?.ipcRenderer?.on?.('toggle', () => forward('toggle'))
-  window.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
-  window.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
-  window.electron?.ipcRenderer?.on?.('volumeDelta', (_: any, val: number) =>
-    forward('volumeDelta', val)
-  )
-  window.electron?.ipcRenderer?.on?.('seekDelta', (_: any, val: number) =>
-    forward('seekDelta', val)
-  )
-  window.electron?.ipcRenderer?.on?.('setPlayMode', (_: any, val: string) =>
-    forward('setPlayMode', val)
-  )
+  bindIpcListener('play', () => forward('play'))
+  bindIpcListener('pause', () => forward('pause'))
+  bindIpcListener('toggle', () => forward('toggle'))
+  bindIpcListener('playPrev', () => forward('playPrev'))
+  bindIpcListener('playNext', () => forward('playNext'))
+  bindIpcListener('volumeDelta', (_: any, val: number) => forward('volumeDelta', val))
+  bindIpcListener('seekDelta', (_: any, val: number) => forward('seekDelta', val))
+  bindIpcListener('setPlayMode', (_: any, val: string) => forward('setPlayMode', val))
 
   // Audio Output Selector Shortcut
-  // Remove existing listeners to prevent duplicates/HMR issues
-  window.electron?.ipcRenderer?.removeAllListeners?.('hotkeys:toggle-audio-output-selector')
-  window.electron?.ipcRenderer?.on?.('hotkeys:toggle-audio-output-selector', () => {
+  bindIpcListener('hotkeys:toggle-audio-output-selector', () => {
     // If device B is set and different from A, we prioritize toggling directly
     // This allows "Quick Comparison" as requested.
     if (
@@ -406,7 +393,7 @@ onMounted(() => {
   })
 
   // 全局监听打开歌单文件
-  window.electron?.ipcRenderer?.on?.('open-playlist-file', (_: any, filePath: string) => {
+  bindIpcListener('open-playlist-file', (_: any, filePath: string) => {
     const fileName = filePath.replace(/^.*[\\/]/, '')
     if (processedPaths.has(filePath)) return
     processedPaths.add(filePath)
@@ -418,8 +405,8 @@ onMounted(() => {
     confirmImportPromptPath(filePath, fileName, silent)
   })
   // 首次挂载时主动拉取待处理文件队列，防止事件在挂载前发送导致丢失
-  window.electron?.ipcRenderer
-    ?.invoke?.('get-pending-open-playlist-files')
+  window.api.appInfo
+    .getPendingOpenPlaylistFiles()
     .then((paths: string[]) => {
       paths?.forEach((p) => {
         if (processedPaths.has(p)) return
@@ -449,6 +436,7 @@ onMounted(() => {
   })
   // 教程初始化监听
   window.addEventListener('guide:init', handleGuideInit as any)
+  disposables.add(() => window.removeEventListener('guide:init', handleGuideInit as any))
 })
 
 watch([appInteractiveReady, isWelcomeRoute], () => {
@@ -467,28 +455,26 @@ const confirmImportPromptPath = (path: string, fileName: string, silent: boolean
 }
 
 // 基于现有主题文件的配置
-const themes = [
-  { name: 'default', label: '默认', color: '#2ba55b' },
-  { name: 'pink', label: '粉色', color: '#fc5e7e' },
-  { name: 'blue', label: '蓝色', color: '#57b4ff' },
-  { name: 'cyan', label: '青色', color: '#3ac2b8' },
-  { name: 'orange', label: '橙色', color: '#fb9458' }
-]
+const themes = THEME_OPTIONS
 
 const naiveTheme = ref<any>(null)
 const themeOverrides = ref<any>({})
 
 function syncNaiveTheme() {
   const docEl = document.documentElement
-  const savedDarkMode = localStorage.getItem('dark-mode')
-  const isDark = savedDarkMode === 'true'
-  naiveTheme.value = isDark ? darkTheme : null
+  const themeState = resolveThemeState({
+    theme: settingsStore.settings.theme,
+    isDarkMode: settingsStore.hasStoredThemePreference
+      ? settingsStore.settings.isDarkMode
+      : undefined,
+    systemDarkMode: detectSystemTheme()
+  })
+  naiveTheme.value = themeState.isDarkMode ? darkTheme : null
 
   const computed = getComputedStyle(docEl)
   const primary = (computed.getPropertyValue('--td-brand-color') || '').trim()
 
-  const savedThemeName = localStorage.getItem('selected-theme') || 'default'
-  const fallback = themes.find((t) => t.name === savedThemeName)?.color || '#2ba55b'
+  const fallback = themes.find((t) => t.name === themeState.themeName)?.color || '#2ba55b'
   const mainColor = primary || fallback
 
   themeOverrides.value = {
@@ -502,58 +488,21 @@ function syncNaiveTheme() {
 }
 
 const loadSavedTheme = () => {
-  // 优先尝试从 Store 读取（支持云同步）
-  if (settingsStore.settings.theme || typeof settingsStore.settings.isDarkMode !== 'undefined') {
-    const themeName = settingsStore.settings.theme || 'default'
-    const isDarkMode = settingsStore.settings.isDarkMode ?? false
-    applyTheme(themeName, isDarkMode)
-    return
-  }
-
-  const savedTheme = localStorage.getItem('selected-theme')
-  const savedDarkMode = localStorage.getItem('dark-mode')
-
-  let themeName = 'default'
-  let isDarkMode = false
-
-  if (savedTheme && themes.some((t) => t.name === savedTheme)) {
-    themeName = savedTheme
-  }
-
-  if (savedDarkMode !== null) {
-    isDarkMode = savedDarkMode === 'true'
-  } else {
-    // 如果没有保存的设置，检测系统偏好
-    isDarkMode = detectSystemTheme()
-  }
-
-  applyTheme(themeName, isDarkMode)
+  const themeState = resolveThemeState({
+    theme: settingsStore.settings.theme,
+    isDarkMode: settingsStore.hasStoredThemePreference
+      ? settingsStore.settings.isDarkMode
+      : undefined,
+    systemDarkMode: detectSystemTheme()
+  })
+  applyTheme(themeState.themeName, themeState.isDarkMode)
 }
 
-const applyTheme = (themeName, darkMode = false) => {
-  const documentElement = document.documentElement
-
-  // 移除之前的主题属性
-  documentElement.removeAttribute('theme-mode')
-  documentElement.removeAttribute('data-theme')
-
-  // 应用主题色彩
-  if (themeName !== 'default') {
-    documentElement.setAttribute('theme-mode', themeName)
-  }
-
-  // 应用明暗模式
-  if (darkMode) {
-    documentElement.setAttribute('data-theme', 'dark')
-  } else {
-    documentElement.setAttribute('data-theme', 'light')
-  }
-
-  // 保存到本地存储
-  localStorage.setItem('selected-theme', themeName)
-  localStorage.setItem('dark-mode', darkMode.toString())
-
-  // 同步 Naive UI 主题
+const applyTheme = (themeName: string, darkMode = false) => {
+  applyThemeAttributes(document.documentElement, {
+    themeName: normalizeThemeName(themeName),
+    isDarkMode: darkMode
+  })
   syncNaiveTheme()
 }
 
@@ -570,16 +519,12 @@ const setupSystemThemeListener = () => {
   if (window.matchMedia) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleMediaQueryChange = (e: MediaQueryListEvent) => {
-      const savedDarkMode = localStorage.getItem('dark-mode')
-      // 如果用户没有手动设置暗色模式，则跟随系统主题
-      if (savedDarkMode === null) {
-        const savedTheme = localStorage.getItem('selected-theme') || 'default'
-        applyTheme(savedTheme, e.matches)
+      if (!settingsStore.hasStoredThemePreference) {
+        applyTheme(normalizeThemeName(settingsStore.settings.theme), e.matches)
       }
     }
     mediaQuery.addEventListener('change', handleMediaQueryChange)
-    // 保存清理函数
-    mediaQueryChangeHandler = () => mediaQuery.removeEventListener('change', handleMediaQueryChange)
+    disposables.add(() => mediaQuery.removeEventListener('change', handleMediaQueryChange))
   }
 }
 
@@ -589,18 +534,6 @@ onUnmounted(() => {
 
   uninstallGlobalMusicControls()
   uninstallDesktopLyricBridge()
-
-  if (themeChangeHandler) {
-    themeChangeHandler()
-    themeChangeHandler = null
-  }
-  if (mediaQueryChangeHandler) {
-    mediaQueryChangeHandler()
-    mediaQueryChangeHandler = null
-  }
-  try {
-    window.removeEventListener('guide:init', handleGuideInit as any)
-  } catch {}
 })
 </script>
 
@@ -676,3 +609,4 @@ onUnmounted(() => {
   position: fixed;
 }
 </style>
+

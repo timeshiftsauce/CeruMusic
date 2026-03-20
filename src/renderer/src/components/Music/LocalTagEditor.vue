@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, reactive } from 'vue'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage, useDialog } from '@renderer/ui/legacyNaive'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 
 const props = defineProps<{
@@ -574,3 +574,4 @@ const applyResult = async (item: any) => {
   gap: 12px;
 }
 </style>
+

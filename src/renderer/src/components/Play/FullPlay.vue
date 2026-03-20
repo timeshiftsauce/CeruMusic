@@ -18,12 +18,15 @@ import _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { createLazyComponent } from '@renderer/utils/lazyComponent'
 
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
-import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
-import CommentsOverlay from './CommentsOverlay.vue'
+
+const PlaySettings = createLazyComponent(() => import('./PlaySettings.vue'))
+const CommentsOverlay = createLazyComponent(() => import('./CommentsOverlay.vue'))
+const AudioVisualizer = createLazyComponent(() => import('./AudioVisualizer.vue'))
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
@@ -679,31 +682,29 @@ onUnmounted(() => {
       style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
     ></div>
     <div v-if="showFestivalEffects" ref="festivalOverlay" class="festival-overlay"></div>
-    <!-- 全屏按钮 -->
-    <button
-      class="fullscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="toggleFullscreen"
-    >
-      <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
-      <FullscreenExit1Icon v-else class="icon" />
-    </button>
-    <button
-      class="putawayscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="emit('toggle-fullscreen')"
-    >
-      <ChevronDownIcon class="icon" />
-    </button>
-    <Transition name="fade-nav">
-      <TitleBarControls
-        v-if="props.show"
-        class="top"
-        style="-webkit-app-region: drag"
-        :color="useBlackText ? 'black' : 'white'"
-        :show-account="false"
-      />
-    </Transition>
+    <div class="top-controls" :class="{ 'black-text': useBlackText }">
+      <button class="fullscreen-btn" :class="{ 'black-text': useBlackText }" @click="toggleFullscreen">
+        <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
+        <FullscreenExit1Icon v-else class="icon" />
+      </button>
+      <button
+        class="putawayscreen-btn"
+        :class="{ 'black-text': useBlackText }"
+        @click="emit('toggle-fullscreen')"
+      >
+        <ChevronDownIcon class="icon" />
+      </button>
+      <Transition name="fade-nav">
+        <TitleBarControls
+          v-if="props.show"
+          class="top"
+          style="-webkit-app-region: drag"
+          :color="useBlackText ? 'black' : 'white'"
+          :show-account="false"
+          :inline="true"
+        />
+      </Transition>
+    </div>
     <div
       class="playbox"
       :style="{
@@ -836,6 +837,7 @@ onUnmounted(() => {
       </Transition>
     </div>
     <CommentsOverlay
+      v-if="props.showComments"
       :show="props.showComments"
       :main-color="lightMainColor"
       @close="emit('update:showComments', false)"
@@ -863,20 +865,32 @@ onUnmounted(() => {
   opacity: 0;
 }
 
+.top-controls {
+  position: absolute;
+  top: 24px;
+  right: 30px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  max-width: calc(100vw - 3rem);
+  -webkit-app-region: no-drag;
+  transition:
+    opacity 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 .fullscreen-btn,
 .putawayscreen-btn {
-  position: absolute;
-
+  position: static;
   -webkit-app-region: no-drag;
-  top: 25px;
-  left: 30px;
   padding: 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--custom-btn-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  // border: 1px solid rgba(255, 255, 255, 0.3);
-  border: none;
+  border: 1px solid var(--custom-btn-border-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -884,11 +898,19 @@ onUnmounted(() => {
   z-index: 10;
   color: white;
   font-size: 18px;
-  transition: all 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    background-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+  box-shadow: var(--custom-btn-shadow);
   // box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 
   &:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--custom-btn-bg-hover);
+    border-color: var(--custom-btn-border);
+    box-shadow: var(--custom-btn-shadow-hover);
     transform: scale(1.05);
   }
 
@@ -897,26 +919,22 @@ onUnmounted(() => {
   }
 
   .icon {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--custom-btn-text);
     width: 25px;
     height: 25px;
   }
 
   &.black-text {
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--custom-btn-bg);
 
     .icon {
-      color: rgba(0, 0, 0, 0.6);
+      color: var(--custom-btn-text);
     }
 
     &:hover {
-      background: rgba(0, 0, 0, 0.2);
+      background: var(--custom-btn-bg-hover);
     }
   }
-}
-
-.putawayscreen-btn {
-  left: 90px;
 }
 
 .full-play {
@@ -957,9 +975,7 @@ onUnmounted(() => {
       }
     }
 
-    .fullscreen-btn,
-    .putawayscreen-btn,
-    .top {
+    .top-controls {
       opacity: 0;
       pointer-events: none;
       transform: translateY(-100%);
@@ -967,13 +983,13 @@ onUnmounted(() => {
   }
 
   .top {
-    position: absolute;
-    width: calc(100% - 200px);
+    position: static;
+    width: auto;
     z-index: 1;
-    right: 0;
-    padding: 30px 30px;
-    padding-bottom: 10px;
-    transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    padding: 0;
+    transition:
+      opacity 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+      transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .playbox {
@@ -1437,12 +1453,12 @@ onUnmounted(() => {
   bottom: calc(var(--bottom-height) + var(--play-bottom-height));
   .skin-btn {
     backdrop-filter: blur(20px);
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--custom-btn-bg);
     // box-shadow:
     //   0 8px 32px 0 rgba(0, 0, 0, 0.1),
     //   0 0 20px v-bind(lightMainColor),
     //   inset 0 0 0 1px rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.628);
+    border: 1px solid var(--custom-btn-border);
     // border: none;
     height: 50px;
     width: 50px;
@@ -1455,18 +1471,18 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--custom-btn-text);
     font-size: 14px;
     font-weight: 500;
     letter-spacing: 1px;
 
     &:hover {
       // transform: translateY(-2px);
-      background-color: rgba(255, 255, 255, 0.25);
+      background-color: var(--custom-btn-bg-hover);
       box-shadow:
         0 12px 40px 0 rgba(0, 0, 0, 0.15),
         0 0 30px v-bind(lightMainColor),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+        inset 0 0 0 1px var(--custom-btn-border);
     }
 
     &:active {
@@ -1499,6 +1515,25 @@ onUnmounted(() => {
       0 0 0 1px rgba(255, 255, 255, 0.1);
     transform-origin: bottom right;
     z-index: 100;
+  }
+}
+
+@media (max-width: 900px) {
+  .top-controls {
+    top: 16px;
+    right: 16px;
+    gap: 0.5rem;
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .fullscreen-btn,
+  .putawayscreen-btn {
+    padding: 8px;
+
+    .icon {
+      width: 20px;
+      height: 20px;
+    }
   }
 }
 

@@ -13,11 +13,10 @@ import {
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { useSettingsStore } from '@renderer/store/Settings'
 import icons from '../../assets/icon_font/icons'
 const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
-import FullPlay from './FullPlay.vue'
-import PlaylistDrawer from './PlaylistDrawer.vue'
 import { PlayMode } from '@renderer/types/audio'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
@@ -42,13 +41,25 @@ import {
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
+import { useDisposables } from '@renderer/composables/useDisposables'
+import { createLazyComponent } from '@renderer/utils/lazyComponent'
+import { resolvePlayerControlTheme } from '@renderer/utils/playerControlTheme'
+
+const FullPlay = createLazyComponent(() => import('./FullPlay.vue'))
+const PlaylistDrawer = createLazyComponent(() => import('./PlaylistDrawer.vue'))
+type PlaylistDrawerExpose = {
+  scrollToCurrentSong: () => void
+}
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
+const settingsStore = useSettingsStore()
+const disposables = useDisposables()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { player } = storeToRefs(globalPlayStatus)
+const { settings } = storeToRefs(settingsStore)
 const songInfo = computed(() => player.value.songInfo || ({} as any))
 
 const {} = controlAudio
@@ -102,24 +113,24 @@ const desktopLyricLocked = ref(false)
 const toggleDesktopLyric = async () => {
   try {
     if (!desktopLyricOpen.value) {
-      window.electron?.ipcRenderer?.send?.('change-desktop-lyric', true)
+      window.api.desktopLyric.changeOpen(true)
       desktopLyricOpen.value = true
       // 恢复最新锁定状态
-      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+      const lock = await window.api.desktopLyric.getLockState()
       desktopLyricLocked.value = !!lock
       return
     }
     // 已打开
-    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+    const lock = await window.api.desktopLyric.getLockState()
     desktopLyricLocked.value = !!lock
     if (desktopLyricLocked.value) {
       // 先解锁，本次不关闭
-      window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', false)
+      window.api.desktopLyric.toggleLock(false)
       desktopLyricLocked.value = false
       return
     }
     // 未锁定则关闭
-    window.electron?.ipcRenderer?.send?.('change-desktop-lyric', false)
+    window.api.desktopLyric.changeOpen(false)
     desktopLyricOpen.value = false
   } catch (e) {
     console.error('切换桌面歌词失败:', e)
@@ -155,6 +166,7 @@ const playModeIconClass = computed(() => {
 // 音量控制相关
 const showVolumeSlider = ref(false)
 const volumeBarRef = ref<HTMLDivElement | null>(null)
+const volumeControlRef = ref<HTMLDivElement | null>(null)
 const isDraggingVolume = ref(false)
 
 const volumeValue = computed({
@@ -163,6 +175,27 @@ const volumeValue = computed({
     setVolume(val)
   }
 })
+
+const openVolumeSlider = () => {
+  showVolumeSlider.value = true
+}
+
+const closeVolumeSlider = () => {
+  if (!isDraggingVolume.value) {
+    showVolumeSlider.value = false
+  }
+}
+
+const toggleVolumeSlider = () => {
+  showVolumeSlider.value = !showVolumeSlider.value
+}
+
+const handleGlobalPointerDown = (event: MouseEvent) => {
+  if (!volumeControlRef.value) return
+  if (!volumeControlRef.value.contains(event.target as Node)) {
+    closeVolumeSlider()
+  }
+}
 
 // 音量控制拖动处理
 const handleVolumeClick = (event: MouseEvent) => {
@@ -213,7 +246,7 @@ const handleVolumeWheel = (event: WheelEvent) => {
 
 // 播放列表相关
 const showPlaylist = ref(false)
-const playlistDrawerRef = ref<InstanceType<typeof PlaylistDrawer> | null>(null)
+const playlistDrawerRef = ref<PlaylistDrawerExpose | null>(null)
 
 const togglePlaylist = (e: MouseEvent) => {
   e.stopPropagation()
@@ -251,31 +284,31 @@ function globalControls(e) {
 
 onMounted(async () => {
   // 监听来自主进程的锁定状态广播
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
+  const handleLyricLock = (lock: boolean) => {
     desktopLyricLocked.value = !!lock
-  })
-  window.electron?.ipcRenderer?.on?.(
-    'desktop-lyric-open-change',
-    async (_: any, visible: boolean) => {
-      desktopLyricOpen.value = !!visible
-      if (desktopLyricOpen.value) {
-        const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-        desktopLyricLocked.value = !!lock
-      } else {
-        desktopLyricLocked.value = false
-      }
+  }
+  const handleLyricOpenChange = async (visible: boolean) => {
+    desktopLyricOpen.value = !!visible
+    if (desktopLyricOpen.value) {
+      const lock = await window.api.desktopLyric.getLockState()
+      desktopLyricLocked.value = !!lock
+    } else {
+      desktopLyricLocked.value = false
     }
-  )
+  }
   // 监听主进程通知关闭桌面歌词
-  window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
+  const handleCloseDesktopLyric = () => {
     desktopLyricOpen.value = false
     desktopLyricLocked.value = false
-  })
+  }
+  disposables.add(window.api.desktopLyric.onLockChange(handleLyricLock))
+  disposables.add(window.api.desktopLyric.onOpenChange(handleLyricOpenChange))
+  disposables.add(window.api.desktopLyric.onCloseRequest(handleCloseDesktopLyric))
   // 初始化同步当前打开与锁定状态
   try {
-    const open = await window.electron?.ipcRenderer?.invoke?.('get-lyric-open-state')
+    const open = await window.api.desktopLyric.getOpenState()
     desktopLyricOpen.value = !!open
-    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+    const lock = await window.api.desktopLyric.getLockState()
     desktopLyricLocked.value = !!lock
   } catch {}
   window.addEventListener('global-music-control', globalControls)
@@ -290,26 +323,15 @@ onMounted(async () => {
   }
   window.addEventListener('open-playlist', openPlaylistHandler)
   window.addEventListener('close-playlist', closePlaylistHandler)
-  // stash handler for removal
-  ;(window as any).__open_playlist_handler__ = openPlaylistHandler
-  ;(window as any).__close_playlist_handler__ = closePlaylistHandler
+  window.addEventListener('mousedown', handleGlobalPointerDown)
+  disposables.add(() => window.removeEventListener('global-music-control', globalControls))
+  disposables.add(() => window.removeEventListener('open-playlist', openPlaylistHandler))
+  disposables.add(() => window.removeEventListener('close-playlist', closePlaylistHandler))
+  disposables.add(() => window.removeEventListener('mousedown', handleGlobalPointerDown))
 })
 
 // 组件卸载时清理
 onUnmounted(() => {
-  window.electron?.ipcRenderer?.removeAllListeners?.('toogleDesktopLyricLock')
-  window.electron?.ipcRenderer?.removeAllListeners?.('desktop-lyric-open-change')
-  window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
-  window.removeEventListener('global-music-control', globalControls)
-  try {
-    const h = (window as any).__open_playlist_handler__
-    if (h) window.removeEventListener('open-playlist', h)
-  } catch {}
-  try {
-    const h2 = (window as any).__close_playlist_handler__
-    if (h2) window.removeEventListener('close-playlist', h2)
-  } catch {}
-
   // 清理可能存在的拖动监听器
   window.removeEventListener('mousemove', handleVolumeDragMove)
   window.removeEventListener('mouseup', handleVolumeDragEnd)
@@ -527,10 +549,19 @@ const contrastTextColor = computed(
 const hoverColor = computed(
   () => player.value.coverDetail.hoverColor || 'var(--player-text-hover-idle)'
 )
-const playbg = computed(() => player.value.coverDetail.playBg || 'var(--player-btn-bg-idle)')
-const playbghover = computed(
-  () => player.value.coverDetail.playBgHover || 'var(--player-btn-bg-hover-idle)'
+const lightMaincolor = computed(
+  () => player.value.coverDetail.lightMainColor || 'rgba(255, 255, 255, 0.9)'
 )
+const playerControlTheme = computed(() => resolvePlayerControlTheme(!!settings.value.isDarkMode))
+const controlForegroundColor = computed(() =>
+  playerControlTheme.value.foreground
+)
+const controlForegroundHoverColor = computed(() =>
+  playerControlTheme.value.foregroundHover
+)
+const controlSurfaceBg = computed(() => playerControlTheme.value.surface)
+const controlSurfaceHoverBg = computed(() => playerControlTheme.value.surfaceHover)
+const timeDisplayColor = computed(() => playerControlTheme.value.timeForeground)
 
 const bg = ref('var(--player-bg-default)')
 
@@ -558,7 +589,6 @@ watch(showFullPlay, (val) => {
 <template>
   <div
     class="player-container"
-    :style="!showFullPlay && 'box-shadow: none'"
     :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay }"
     @click.stop="toggleFullPlay"
   >
@@ -599,7 +629,7 @@ watch(showFullPlay, (val) => {
             >
               <heart-icon
                 :fill-color="isLiked ? ['#FF7878', '#FF7878'] : ''"
-                :stroke-color="isLiked ? [] : [contrastTextColor, contrastTextColor]"
+                :stroke-color="isLiked ? [] : [controlForegroundColor, controlForegroundColor]"
                 :stroke-width="isLiked ? 0 : 2"
                 size="18"
               />
@@ -678,12 +708,14 @@ watch(showFullPlay, (val) => {
 
           <!-- 音量控制 -->
           <div
+            ref="volumeControlRef"
             class="volume-control"
-            @mouseenter="showVolumeSlider = true"
-            @mouseleave="showVolumeSlider = false"
+            @click.stop
+            @mouseenter="openVolumeSlider"
+            @mouseleave="closeVolumeSlider"
             @wheel.prevent="handleVolumeWheel"
           >
-            <button class="control-btn">
+            <button class="control-btn" @click.stop="toggleVolumeSlider">
               <shengyin style="width: 1.5em; height: 1.5em" />
             </button>
 
@@ -749,6 +781,7 @@ watch(showFullPlay, (val) => {
   </div>
   <div class="fullbox">
     <FullPlay
+      v-if="showFullPlay"
       v-model:show-comments="showComments"
       :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
       :show="showFullPlay"
@@ -762,6 +795,7 @@ watch(showFullPlay, (val) => {
 
   <!-- 播放列表组件 -->
   <PlaylistDrawer
+    v-if="showPlaylist"
     ref="playlistDrawerRef"
     :show="showPlaylist"
     :current-song-id="currentSongId"
@@ -773,21 +807,25 @@ watch(showFullPlay, (val) => {
 
 <style lang="scss" scoped>
 .fade-leave-active {
-  transition: all 0.2s ease-in-out;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .fade-enter-active {
-  transition: all 0.1s ease-in-out;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .fade-leave-to {
   opacity: 0;
-  transform: rotate(180deg);
+  transform: scale(0.84);
 }
 
 .fade-enter-from {
   opacity: 0;
-  transform: rotate(-180deg);
+  transform: scale(1.12);
 }
 
 .comment-btn-wrapper {
@@ -797,7 +835,9 @@ watch(showFullPlay, (val) => {
 
 .comment-fade-enter-active,
 .comment-fade-leave-active {
-  transition: all 0.2s ease-in-out;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .comment-fade-enter-from,
 .comment-fade-leave-to {
@@ -855,21 +895,64 @@ watch(showFullPlay, (val) => {
 }
 
 .player-container {
-  box-shadow: 0px -2px 20px 0px #00000039;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
+  overflow: visible;
   transition:
     transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
-    background 0.3s;
-  background: v-bind(bg);
-  // border-top: 1px solid #e5e7eb;
-  backdrop-filter: blur(1000px);
+    background-color 0.35s ease,
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08)),
+    v-bind(bg);
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 -12px 34px rgba(0, 0, 0, 0.22),
+    0 0 28px v-bind(lightMaincolor),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   z-index: 1000;
   height: var(--play-bottom-height);
   display: flex;
   flex-direction: column;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(120deg, rgba(255, 255, 255, 0.12), transparent 36%),
+      radial-gradient(circle at 22% 50%, v-bind(startmaincolor), transparent 42%);
+    opacity: 0.7;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 1.5rem;
+    right: 1.5rem;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.16),
+      v-bind(lightMaincolor),
+      rgba(255, 255, 255, 0.22),
+      transparent
+    );
+    opacity: 0.7;
+    pointer-events: none;
+    z-index: 2;
+  }
 
   &.full-play-idle {
     transform: translateY(100%);
@@ -886,6 +969,7 @@ watch(showFullPlay, (val) => {
   top: calc(var(--touch-range-height) / 2 * -1);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
+  z-index: 2;
 
   .progress-bar {
     width: 100%;
@@ -905,11 +989,13 @@ watch(showFullPlay, (val) => {
     }
 
     .progress-background {
-      background: transparent;
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
     }
 
     .progress-filled {
-      background: linear-gradient(to right, v-bind(startmaincolor), v-bind(maincolor) 80%);
+      background: linear-gradient(to right, v-bind(lightMaincolor), v-bind(maincolor) 80%);
+      box-shadow: 0 0 14px v-bind(lightMaincolor);
     }
 
     .progress-handle {
@@ -921,11 +1007,19 @@ watch(showFullPlay, (val) => {
       border-radius: 50%;
       transform: translate(-50%, -50%);
       opacity: 0;
+      box-shadow:
+        0 0 0 5px rgba(255, 255, 255, 0.08),
+        0 10px 20px rgba(0, 0, 0, 0.16),
+        0 0 14px v-bind(lightMaincolor);
+      transition:
+        opacity var(--motion-duration-fast) var(--motion-ease-standard),
+        transform var(--motion-duration-fast) var(--motion-ease-standard);
 
       &:hover,
       &:active,
       &.dragging {
         opacity: 1;
+        transform: translate(-50%, -50%) scale(1.08);
       }
     }
 
@@ -951,11 +1045,14 @@ watch(showFullPlay, (val) => {
 
 /* 播放器内容 */
 .player-content {
+  position: relative;
+  z-index: 1;
   user-select: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 40px;
+  gap: 1rem;
+  padding: 0 1.75rem 0 1.5rem;
   height: calc(100% - 4px);
 }
 
@@ -968,12 +1065,16 @@ watch(showFullPlay, (val) => {
   padding-top: 2px;
 
   .album-cover {
-    width: 50px;
-    height: 50px;
-    border-radius: 4px;
+    width: 3.4rem;
+    height: 3.4rem;
+    border-radius: 1.05rem;
     overflow: hidden;
-    margin-right: 12px;
+    margin-right: 0.9rem;
     flex-shrink: 0;
+    box-shadow:
+      0 14px 30px rgba(0, 0, 0, 0.18),
+      0 0 20px v-bind(lightMaincolor),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
 
     img {
       user-select: none;
@@ -988,17 +1089,19 @@ watch(showFullPlay, (val) => {
     min-width: 0;
 
     .song-name {
-      font-size: 14px;
+      font-size: 0.95rem;
       font-weight: 700;
       color: v-bind(hoverColor);
+      text-shadow: 0 0 16px rgba(255, 255, 255, 0.12);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-bottom: 4px;
+      margin-bottom: 0.24rem;
     }
 
     .artist-name {
-      font-size: 12px;
+      font-size: 0.76rem;
+      letter-spacing: 0.01em;
       color: v-bind(contrastTextColor);
       white-space: nowrap;
       overflow: hidden;
@@ -1015,21 +1118,29 @@ watch(showFullPlay, (val) => {
   margin-left: 12px;
 
   .control-btn {
-    background: transparent;
+    background: v-bind(controlSurfaceBg);
     border: none;
-    color: v-bind(contrastTextColor);
+    color: v-bind(controlForegroundColor);
     cursor: pointer;
-    padding: 4px;
+    padding: 0.35rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 999px;
+    transition:
+      transform var(--motion-duration-fast) var(--motion-ease-standard),
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
 
     .iconfont {
       font-size: 18px;
     }
 
     &:hover {
-      color: v-bind(hoverColor);
+      transform: scale(1.05);
+      background: v-bind(controlSurfaceHoverBg);
+      color: v-bind(controlForegroundHoverColor);
     }
 
     &:disabled {
@@ -1044,47 +1155,61 @@ watch(showFullPlay, (val) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 1rem;
   flex: 1;
+  min-width: 0;
 
   .control-btn {
-    background: transparent;
+    background: v-bind(controlSurfaceBg);
     border: none;
-    color: v-bind(contrastTextColor);
+    color: v-bind(controlForegroundColor);
     cursor: pointer;
-    padding: 5px;
+    width: 2.85rem;
+    height: 2.85rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 999px;
+    transition:
+      transform var(--motion-duration-fast) var(--motion-ease-standard),
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
 
     span {
       font-size: 28px;
     }
 
     &:hover {
-      color: v-bind(hoverColor);
+      transform: scale(1.05);
+      background: v-bind(controlSurfaceHoverBg);
+      color: v-bind(controlForegroundHoverColor);
     }
 
     &.play-btn {
-      background-color: v-bind(playbg);
-      transition: background-color 0.2s ease;
-
-      border-radius: 50%;
+      width: 5.6rem;
+      height: 5.6rem;
+      background: v-bind(controlSurfaceHoverBg);
+      border: none;
 
       span {
-        font-size: 28px;
+        font-size: 56px;
         font-weight: 800;
-        color: v-bind(hoverColor);
+        color: v-bind(controlForegroundHoverColor);
       }
 
       .play-icon {
-        width: 24px;
-        height: 24px;
+        width: 48px;
+        height: 48px;
       }
 
       &:hover {
-        background-color: v-bind(playbghover);
-        color: v-bind(contrastTextColor);
+        background: v-bind(controlSurfaceHoverBg);
+        color: v-bind(controlForegroundHoverColor);
+      }
+
+      &:active {
+        transform: translateY(1px) scale(0.92);
       }
     }
   }
@@ -1099,10 +1224,19 @@ watch(showFullPlay, (val) => {
   justify-content: flex-end;
 
   .time-display {
-    font-size: 12px;
-    line-height: 12px;
-    color: v-bind(contrastTextColor);
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    line-height: 1;
+    color: v-bind(timeDisplayColor);
     white-space: nowrap;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 58%),
+      var(--shell-panel-bg-strong);
+    border: 1px solid var(--shell-panel-border);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 18px v-bind(lightMaincolor);
   }
 
   .extra-controls {
@@ -1111,22 +1245,31 @@ watch(showFullPlay, (val) => {
     gap: 12px;
 
     .control-btn {
-      background: transparent;
+      background: v-bind(controlSurfaceBg);
       border: none;
-      color: v-bind(contrastTextColor);
+      color: v-bind(controlForegroundColor);
       cursor: pointer;
-      padding: 4px;
+      width: 2.5rem;
+      height: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
+      border-radius: 999px;
+      transition:
+        transform var(--motion-duration-fast) var(--motion-ease-standard),
+        background-color var(--motion-duration-fast) var(--motion-ease-standard),
+        color var(--motion-duration-fast) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
 
       .iconfont {
         font-size: 18px;
       }
 
       &:hover {
-        color: v-bind(hoverColor);
+        transform: scale(1.05);
+        background: v-bind(controlSurfaceHoverBg);
+        color: v-bind(controlForegroundHoverColor);
       }
 
       &.lyric-btn .lyric-check,
@@ -1146,28 +1289,34 @@ watch(showFullPlay, (val) => {
 /* 音量控制 */
 .volume-control {
   position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: -0.75rem;
+    right: -0.75rem;
+    bottom: 100%;
+    height: 0.85rem;
+  }
 }
 
 .volume-slider-container {
   position: absolute;
   bottom: calc(100% + 10px);
-  /* 向上偏移，留出间距 */
   right: -10px;
-  /* 位置微调 */
-  background: v-bind(contrastTextColor);
-  /* 毛玻璃背景 */
-  backdrop-filter: blur(60px);
-  border-radius: 8px;
+  background: var(--shell-panel-bg-strong);
+  backdrop-filter: blur(var(--shell-blur-soft));
+  border: 1px solid var(--shell-panel-border);
+  border-radius: 1rem;
   padding: 15px 10px;
   width: 40px;
   height: 150px;
-  z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1600;
+  box-shadow: var(--shell-panel-shadow-soft);
   display: flex;
   flex-direction: column;
   align-items: center;
   transform-origin: bottom center;
-  /* 设置变换原点，使弹出效果更自然 */
 }
 
 .volume-slider {
@@ -1182,7 +1331,7 @@ watch(showFullPlay, (val) => {
 
 .volume-value {
   font-size: 12px;
-  color: v-bind(maincolor);
+  color: v-bind(controlForegroundColor);
   margin-top: 8px;
 }
 
@@ -1199,7 +1348,7 @@ watch(showFullPlay, (val) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #ffffff71;
+  background: var(--player-progress-track);
   border-radius: 2px;
 }
 
@@ -1232,8 +1381,8 @@ watch(showFullPlay, (val) => {
 .volume-popup-enter-active,
 .volume-popup-leave-active {
   transition:
-    opacity 0.2s cubic-bezier(0.8, 0, 0.8, 0.43),
-    transform 0.2s cubic-bezier(0.8, 0, 0.8, 0.43);
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .volume-popup-enter-from,

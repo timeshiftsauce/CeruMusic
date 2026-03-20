@@ -468,12 +468,14 @@ const cachedBounds = reactive({
   screenMaxY: 99999
 })
 
+const desktopLyricDisposers: Array<() => void> = []
+
 const updateCachedBounds = async () => {
   try {
     const [winBounds, stored, workAreas] = await Promise.all([
-      window.electron?.ipcRenderer?.invoke?.('get-window-bounds'),
-      window.electron?.ipcRenderer?.invoke?.('get-desktop-lyric-option'),
-      window.electron?.ipcRenderer?.invoke?.('get-all-work-area')
+      window.api.desktopLyric.getWindowBounds(),
+      window.api.desktopLyric.getOption(),
+      window.api.desktopLyric.getAllWorkArea()
     ])
     cachedBounds.x = winBounds?.x ?? 0
     cachedBounds.y = winBounds?.y ?? 0
@@ -641,7 +643,7 @@ const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
       newX = Math.round(Math.max(dragState.minX, Math.min(dragState.maxX - newWidth, newX)))
       newY = Math.round(Math.max(dragState.minY, Math.min(dragState.maxY - newHeight, newY)))
     }
-    window.electron?.ipcRenderer?.send?.('move-window', newX, newY, newWidth, newHeight)
+    window.api.desktopLyric.moveWindow(newX, newY, newWidth, newHeight)
     cursorStyle.value =
       dragState.resizeEdge === 'top-left' || dragState.resizeEdge === 'bottom-right'
         ? 'nwse-resize'
@@ -664,8 +666,7 @@ const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
         Math.max(dragState.minY, Math.min(dragState.maxY - dragState.winHeight, newWinY))
       )
     }
-    window.electron?.ipcRenderer?.send?.(
-      'move-window',
+    window.api.desktopLyric.moveWindow(
       newWinX,
       newWinY,
       dragState.winWidth,
@@ -756,7 +757,7 @@ const fontSizeToHeight = (size: number) => {
 const pushWindowHeight = (nextHeight: number) => {
   if (!Number.isFinite(nextHeight)) return
   if (dragState.isDragging) return
-  window.electron?.ipcRenderer?.send?.('update-window-height', nextHeight)
+  window.api.desktopLyric.updateWindowHeight(nextHeight)
 }
 
 watch(
@@ -771,15 +772,15 @@ watch(
 )
 
 const sendToMain = (eventName: string, ...args: any[]) => {
-  window.electron?.ipcRenderer?.send?.(eventName, ...args)
+  window.api.desktopLyric.sendWindowEvent(eventName, ...args)
 }
 const sendToMainWin = (eventName: string, ...args: any[]) => {
-  window.electron?.ipcRenderer?.send?.('send-main-event', eventName, ...args)
+  window.api.desktopLyric.sendMainEvent(eventName, ...args)
 }
 
 const toggleLyricLock = async () => {
   const next = !lyricConfig.isLock
-  window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', next)
+  window.api.desktopLyric.toggleLock(next)
   lyricConfig.isLock = next
 }
 // const tempToggleLyricLock = (isLock: boolean) => {
@@ -788,14 +789,13 @@ const toggleLyricLock = async () => {
 // }
 
 onMounted(() => {
-  window.electron?.ipcRenderer?.on?.(
-    'play-song-change',
-    (_event, data: { name?: string; artist?: string }) => {
+  desktopLyricDisposers.push(
+    window.api.desktopLyric.onSongChange((data: { name?: string; artist?: string }) => {
       lyricData.playName = data?.name || ''
       lyricData.artistName = data?.artist || ''
-    }
+    })
   )
-  window.electron?.ipcRenderer?.on?.('play-lyric-change', (_event, lines: LyricLine[]) => {
+  desktopLyricDisposers.push(window.api.desktopLyric.onLyricChange((lines: LyricLine[]) => {
     lyricData.lrcData = lines || []
     // 优先把逐字歌词当作 yrcData（如果行 words 长度>1）
     lyricData.yrcData =
@@ -804,16 +804,17 @@ onMounted(() => {
         : []
     lyricData.lyricLoading = false
     if (isInitializing.value) isInitializing.value = false
-  })
-  window.electron?.ipcRenderer?.on?.('play-lyric-index', (_event, index: number) => {
+  }))
+  desktopLyricDisposers.push(window.api.desktopLyric.onLyricIndexChange((index: number) => {
     lyricData.lyricIndex = index
-  })
-  window.electron?.ipcRenderer?.on?.(
-    'play-lyric-progress',
-    (
-      _event,
-      payload: { index: number; progress: number; currentMs?: number; timestamp?: number }
-    ) => {
+  }))
+  desktopLyricDisposers.push(
+    window.api.desktopLyric.onLyricProgress((payload: {
+      index: number
+      progress: number
+      currentMs?: number
+      timestamp?: number
+    }) => {
       if (typeof payload?.currentMs === 'number') {
         const newBase = Math.floor(payload.currentMs)
         const drift = Math.abs(newBase - playSeekMs.value)
@@ -823,9 +824,9 @@ onMounted(() => {
           anchorTick = performance.now()
         }
       }
-    }
+    })
   )
-  window.electron?.ipcRenderer?.on?.('play-status-change', (_event, status: boolean) => {
+  desktopLyricDisposers.push(window.api.desktopLyric.onPlayStatusChange((status: boolean) => {
     lyricData.playStatus = !!status
     if (lyricData.playStatus) {
       resumeSeek()
@@ -834,8 +835,8 @@ onMounted(() => {
       anchorTick = performance.now()
       pauseSeek()
     }
-  })
-  window.electron?.ipcRenderer?.on?.('desktop-lyric-option-change', (_event, option: any) => {
+  }))
+  desktopLyricDisposers.push(window.api.desktopLyric.onOptionChange((option: any) => {
     if (!option) return
     const merged = { ...option }
     lyricConfig.fontSize = Number(merged.fontSize) || lyricConfig.fontSize
@@ -853,15 +854,15 @@ onMounted(() => {
     lyricConfig.alwaysShowPlayInfo = merged.alwaysShowPlayInfo ?? lyricConfig.alwaysShowPlayInfo
     const height = fontSizeToHeight(lyricConfig.fontSize)
     if (height) pushWindowHeight(height)
-  })
-  window.electron?.ipcRenderer?.on?.('set-desktop-lyric-font', (_event, font: string) => {
+  }))
+  desktopLyricDisposers.push(window.api.desktopLyric.onFontChange((font: string) => {
     lyricConfig.fontFamily = font || lyricConfig.fontFamily
-  })
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_event, lock: boolean) => {
+  }))
+  desktopLyricDisposers.push(window.api.desktopLyric.onLockChange((lock: boolean) => {
     lyricConfig.isLock = !!lock
-  })
-  window.electron?.ipcRenderer
-    ?.invoke?.('get-desktop-lyric-option')
+  }))
+  window.api.desktopLyric
+    .getOption()
     .then((opt: any) => {
       if (opt) {
         const merged = { ...opt }
@@ -897,7 +898,7 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseleave', handleMouseLeave)
   // 通知主进程：桌面歌词窗口已准备就绪，便于主窗口侧补发快照
-  window.electron?.ipcRenderer?.send?.('lyric-window-ready')
+  window.api.desktopLyric.lyricWindowReady()
 })
 
 onBeforeUnmount(() => {
@@ -905,6 +906,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown)
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseleave', handleMouseLeave)
+  while (desktopLyricDisposers.length > 0) {
+    desktopLyricDisposers.pop()?.()
+  }
   if (dragState.isDragging) onDocPointerUp()
 })
 </script>
@@ -964,12 +968,19 @@ onBeforeUnmount(() => {
       flex: 0 0 auto;
       padding: 6px;
       border-radius: 8px;
+      background: var(--custom-btn-bg-soft);
+      border: 1px solid var(--custom-btn-border-soft);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       will-change: transform;
       transition:
         opacity 0.3s,
         background-color 0.3s,
-        transform 0.3s;
+        transform 0.3s,
+        border-color 0.3s,
+        box-shadow 0.3s;
       cursor: pointer;
+      box-shadow: var(--custom-btn-shadow);
       .n-icon {
         font-size: 24px;
       }
@@ -980,7 +991,9 @@ onBeforeUnmount(() => {
       //   }
       // }
       &:hover {
-        background-color: rgba(255, 255, 255, 0.3);
+        background-color: var(--custom-btn-bg-hover);
+        border-color: var(--custom-btn-border);
+        box-shadow: var(--custom-btn-shadow-hover);
       }
       &:active {
         transform: scale(0.98);

@@ -43,6 +43,7 @@ describe('Settings Store', () => {
     expect(store.settings.closeToTray).toBe(true)
     expect(store.settings.hasConfiguredCloseBehavior).toBe(false)
     expect(store.settings.filenameTemplate).toBe('%t - %s')
+    expect(store.settings.routePreloadEnabled).toBe(false)
   })
 
   it('should load settings from localStorage', () => {

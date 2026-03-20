@@ -5,6 +5,8 @@ import songListAPI from '@renderer/api/songList'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { usePlaybackActions } from '@renderer/domains/playback'
+import { createSongCoverQuery } from '@renderer/domains/music'
 import { createQualityDialog, downloadSingleSong } from '@renderer/utils/audio/download'
 import { mapCloudSongToLocal, mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import type { SongList } from '@common/types/songList'
@@ -13,7 +15,7 @@ import {
   handleUploadToCloudHelper,
   syncLocalMetaWithCloudUpdate
 } from '@renderer/utils/playlist/cloudSyncHelper'
-import { NIcon } from 'naive-ui'
+import { renderLegacyIcon, type InputInst } from '@renderer/ui/legacyNaive'
 import { storeToRefs } from 'pinia'
 import {
   CloudDownloadIcon,
@@ -28,16 +30,13 @@ import {
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import {
   computed,
-  h,
   onMounted,
-  onBeforeUnmount,
   ref,
   toRaw,
-  type Component,
-  nextTick,
-  watch
+  nextTick
 } from 'vue'
 import { useRoute } from 'vue-router'
+import { useLocateCurrentSong } from '@renderer/composables/useLocateCurrentSong'
 
 interface MusicItem {
   singer: string
@@ -65,6 +64,16 @@ const songListRef = ref<any>(null)
 // 路由实例
 const route = useRoute()
 const LocalUserDetail = LocalUserDetailStore()
+const playbackActions = usePlaybackActions()
+const songCoverQuery = createSongCoverQuery<MusicItem>({
+  fetchCover: async (source, song) => {
+    const url = await window.api.music.requestSdk('getPic', {
+      source,
+      songInfo: toRaw(song)
+    })
+    return typeof url !== 'object' ? url : 'resources/logo.png'
+  }
+})
 
 // 响应式状态
 const songs = ref<MusicItem[]>([])
@@ -90,7 +99,6 @@ const playlistInfo = ref({
 // 搜索（聚焦时展开、失焦最小化）
 const searchQuery = ref('')
 const searchFocused = ref(false)
-import type { InputInst } from 'naive-ui'
 const searchInputRef = ref<InputInst | null>(null)
 const displaySongs = computed(() => {
   const q = (searchQuery.value || '').trim().toLowerCase()
@@ -100,118 +108,23 @@ const displaySongs = computed(() => {
 })
 
 const currentPlayingSongInfo = computed(() => globalPlayStatus.player.songInfo)
-
-const hasCurrentPlayingSong = computed(() => {
-  if (
-    !currentPlayingSongInfo.value ||
-    !currentPlayingSongInfo.value.songmid ||
-    !currentPlayingSongInfo.value.source
-  ) {
-    return false
-  }
-  return displaySongs.value.some(
-    (s) =>
-      String(s.songmid) === String(currentPlayingSongInfo.value!.songmid) &&
-      s.source === currentPlayingSongInfo.value!.source
-  )
+const {
+  hasCurrentPlayingSong,
+  showLocateCurrentBtn,
+  handleSongListScroll,
+  locateCurrentSong,
+  handleLocateBtnMouseEnter,
+  handleLocateBtnMouseLeave,
+  triggerLocateBtnVisible
+} = useLocateCurrentSong({
+  displaySongs,
+  currentPlayingSongInfo,
+  songListRef
 })
-
-const showLocateCurrentBtn = ref(false)
-const isHoveringLocateBtn = ref(false)
-let locateBtnTimer: ReturnType<typeof setTimeout> | null = null
-let waitingLocateScrollEnd = false
-let locateScrollSeen = false
-let locateScrollEndTimer: ReturnType<typeof setTimeout> | null = null
-let locateScrollFallbackTimer: ReturnType<typeof setTimeout> | null = null
-
-const clearLocateBtnTimer = () => {
-  if (locateBtnTimer) {
-    clearTimeout(locateBtnTimer)
-    locateBtnTimer = null
-  }
-}
-
-const clearLocateScrollTimers = () => {
-  if (locateScrollEndTimer) {
-    clearTimeout(locateScrollEndTimer)
-    locateScrollEndTimer = null
-  }
-  if (locateScrollFallbackTimer) {
-    clearTimeout(locateScrollFallbackTimer)
-    locateScrollFallbackTimer = null
-  }
-}
-
-const startLocateBtnHideTimer = () => {
-  clearLocateBtnTimer()
-  if (!showLocateCurrentBtn.value || isHoveringLocateBtn.value) return
-  locateBtnTimer = setTimeout(() => {
-    if (isHoveringLocateBtn.value) {
-      startLocateBtnHideTimer()
-      return
-    }
-    showLocateCurrentBtn.value = false
-    locateBtnTimer = null
-  }, 3000)
-}
-
-const triggerLocateBtnVisible = () => {
-  if (!hasCurrentPlayingSong.value) {
-    showLocateCurrentBtn.value = false
-    clearLocateBtnTimer()
-    return
-  }
-  showLocateCurrentBtn.value = true
-  startLocateBtnHideTimer()
-}
-
-const locateCurrentSong = () => {
-  if (hasCurrentPlayingSong.value && songListRef.value && currentPlayingSongInfo.value) {
-    waitingLocateScrollEnd = true
-    locateScrollSeen = false
-    clearLocateBtnTimer()
-    clearLocateScrollTimers()
-    locateScrollFallbackTimer = setTimeout(() => {
-      if (!waitingLocateScrollEnd || locateScrollSeen) return
-      waitingLocateScrollEnd = false
-      showLocateCurrentBtn.value = false
-      locateScrollFallbackTimer = null
-    }, 800)
-    songListRef.value.scrollToSong(
-      currentPlayingSongInfo.value.songmid,
-      currentPlayingSongInfo.value.source
-    )
-  }
-}
-
-const handleLocateBtnMouseEnter = () => {
-  isHoveringLocateBtn.value = true
-  clearLocateBtnTimer()
-}
-
-const handleLocateBtnMouseLeave = () => {
-  isHoveringLocateBtn.value = false
-  startLocateBtnHideTimer()
-}
 
 onMounted(() => {
   fetchPlaylistSongs()
   triggerLocateBtnVisible()
-})
-onBeforeUnmount(() => {
-  clearLocateScrollTimers()
-  clearLocateBtnTimer()
-})
-
-watch(hasCurrentPlayingSong, (value) => {
-  if (value) {
-    triggerLocateBtnVisible()
-  } else {
-    waitingLocateScrollEnd = false
-    showLocateCurrentBtn.value = false
-    clearLocateScrollTimers()
-    clearLocateBtnTimer()
-  }
 })
 
 function openSearch() {
@@ -509,6 +422,7 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
     if ((reset && !loading.value) || (!reset && loadingMore.value)) return
 
     if (reset) {
+      songCoverQuery.reset()
       currentPage.value = 1
       hasMore.value = true
       songs.value = []
@@ -559,7 +473,7 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       }
 
       // 获取新增歌曲封面
-      setPic((currentPage.value - 1) * limit, playlistInfo.value.source)
+      void setPic((currentPage.value - 1) * limit, playlistInfo.value.source)
 
       // 如果API返回了歌单详细信息，更新歌单信息
       if (result.info) {
@@ -599,25 +513,12 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
 // 获取歌曲封面
 async function setPic(offset: number, source: string) {
-  for (let i = offset; i < songs.value.length; i++) {
-    const tempImg = songs.value[i].img
-    if (tempImg) continue
-    try {
-      const url = await window.api.music.requestSdk('getPic', {
-        source,
-        songInfo: toRaw(songs.value[i])
-      })
-
-      if (typeof url !== 'object') {
-        songs.value[i].img = url
-      } else {
-        songs.value[i].img = 'resources/logo.png'
-      }
-    } catch (e) {
-      songs.value[i].img = 'logo.svg'
-      console.log('获取封面失败 index' + i, e)
-    }
-  }
+  await songCoverQuery.fill({
+    songs: songs.value,
+    source,
+    offset,
+    fallback: 'logo.svg'
+  })
 }
 
 // 组件事件处理函数
@@ -625,16 +526,12 @@ const handlePlay = (song: MusicItem) => {
   currentSong.value = song
   isPlaying.value = true
   console.log('播放歌曲:', song.name)
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
-  }
+  void playbackActions.playSong(toRaw(song) as any)
 }
 
 const handlePause = () => {
   isPlaying.value = false
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('pause')
-  }
+  void playbackActions.pause()
 }
 
 const handleDownload = (song: any) => {
@@ -751,9 +648,7 @@ const handleAddBatchToSongList = async (batchSongs: MusicItem[], playlist: SongL
 
 const handleAddToPlaylist = (song: MusicItem) => {
   console.log('添加到播放列表:', song.name)
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(song))
-  }
+  void playbackActions.appendSong(toRaw(song) as any)
 }
 
 // 从本地歌单移出歌曲
@@ -1033,12 +928,7 @@ const handleFileSelect = async (event: Event) => {
 }
 
 // 替换播放列表的通用函数
-const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => {
-  if (!(window as any).musicEmitter) {
-    MessagePlugin.error('播放器未初始化')
-    return
-  }
-
+const replacePlaylist = async (songsToReplace: MusicItem[], shouldShuffle = false) => {
   let finalSongs = toRaw(songsToReplace)
 
   if (shouldShuffle) {
@@ -1054,12 +944,12 @@ const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => 
   }
   const replaceData = finalSongs.map((song) => toRaw(song))
   console.log('replaceData', replaceData)
-  // 使用自定义事件替换整个播放列表
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('replacePlaylist', replaceData)
+  try {
+    await playbackActions.replaceSongs(replaceData as any)
+  } catch (error: any) {
+    console.error('替换播放列表失败:', error)
+    MessagePlugin.error(error?.message || '播放列表替换失败')
   }
-
-  MessagePlugin.success(`请稍等歌曲加载完成播放`)
 }
 
 const playAll = (shouldShuffle = false) => {
@@ -1085,7 +975,7 @@ const playAll = (shouldShuffle = false) => {
     console.log('songs', paserSongs)
     console.log('shouldShuffle', shouldShuffle)
     console.groupEnd()
-    replacePlaylist(paserSongs, shouldShuffle)
+    await replacePlaylist(paserSongs, shouldShuffle)
   }
 }
 
@@ -1373,22 +1263,7 @@ const setPicForPlaylist = async (songs: any[], source: string) => {
  * 滚动事件处理：更新头部紧凑状态，并在接近底部时触发分页加载
  */
 const handleScroll = (event?: Event) => {
-  if (waitingLocateScrollEnd) {
-    locateScrollSeen = true
-    clearLocateBtnTimer()
-    if (locateScrollFallbackTimer) {
-      clearTimeout(locateScrollFallbackTimer)
-      locateScrollFallbackTimer = null
-    }
-    if (locateScrollEndTimer) clearTimeout(locateScrollEndTimer)
-    locateScrollEndTimer = setTimeout(() => {
-      waitingLocateScrollEnd = false
-      showLocateCurrentBtn.value = false
-      locateScrollEndTimer = null
-    }, 140)
-  } else {
-    triggerLocateBtnVisible()
-  }
+  handleSongListScroll()
   let scrollTop = 0
   let scrollHeight = 0
   let clientHeight = 0
@@ -1425,9 +1300,7 @@ const handleScroll = (event?: Event) => {
   isHeaderCompact.value = scrollTop > 100
 }
 
-const renderIcon = (icon: Component) => {
-  return () => h(NIcon, null, { default: () => h(icon) })
-}
+const renderIcon = renderLegacyIcon
 
 const handleUploadToCloud = async () => {
   try {
@@ -1570,9 +1443,9 @@ const filteredMoreActions = computed(() =>
 </script>
 
 <template>
-  <div class="list-container">
+  <div class="list-container page-shell playlist-page">
     <!-- 固定头部区域 -->
-    <div class="fixed-header" :class="{ compact: isHeaderCompact }">
+    <div class="fixed-header page-hero" :class="{ compact: isHeaderCompact }">
       <!-- 歌单信息 -->
       <div class="playlist-header" :class="{ compact: isHeaderCompact }">
         <div
@@ -1682,7 +1555,7 @@ const filteredMoreActions = computed(() =>
     </div>
 
     <!-- 可滚动的歌曲列表区域 -->
-    <div class="scrollable-content">
+    <div class="scrollable-content panel-shell">
       <div v-if="loading" class="loading-container">
         <div class="loading-content">
           <div class="loading-spinner"></div>
@@ -1744,23 +1617,24 @@ const filteredMoreActions = computed(() =>
 }
 .list-container {
   box-sizing: border-box;
-  // background: var(--list-bg-primary);
-  width: 100%;
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
 
   .fixed-header {
-    margin-bottom: 20px;
     flex-shrink: 0;
+    position: relative;
+    z-index: 4;
+    overflow: visible;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .scrollable-content {
-    background: var(--list-content-bg);
-    border-radius: 8px;
+    position: relative;
+    z-index: 1;
     overflow: hidden;
-    box-shadow: var(--list-content-shadow);
     flex: 1;
     min-height: 0;
     display: flex;
@@ -1805,41 +1679,61 @@ const filteredMoreActions = computed(() =>
 }
 
 .playlist-header {
-  display: flex;
+  --playlist-cover-size: 12rem;
+  --playlist-header-min-height: 15rem;
+  display: grid;
+  grid-template-columns: var(--playlist-cover-size) minmax(0, 1fr);
   align-items: center;
   gap: 1.5rem;
   padding: 1.5rem;
-  height: 240px;
-  background: var(--list-header-bg);
-  border-radius: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  min-height: var(--playlist-header-min-height);
+  height: auto;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 45%),
+    var(--list-header-bg);
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: var(--list-header-shadow);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+  overflow: visible;
+  box-sizing: border-box;
+  transition:
+    min-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    gap 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.compact {
+    --playlist-cover-size: 6.75rem;
+    --playlist-header-min-height: 7.5rem;
     padding: 1rem;
     gap: 1rem;
-  }
-
-  &.compact {
-    height: 120px;
     .playlist-details .playlist-title {
       font-size: 25px;
     }
   }
   .playlist-cover {
-    height: 100%;
-    aspect-ratio: 1 / 1;
-    border-radius: 0.5rem;
+    width: var(--playlist-cover-size);
+    height: var(--playlist-cover-size);
+    border-radius: 1rem;
     overflow: hidden;
     flex-shrink: 0;
     position: relative;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    justify-self: start;
+    transition:
+      width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       transition: transform 0.2s ease;
+      will-change: transform;
     }
 
     // 本地歌单封面可点击样式
@@ -1889,20 +1783,35 @@ const filteredMoreActions = computed(() =>
   }
 
   .playlist-details {
-    font-family: lyricfont;
-
+    font-family: var(--td-font-family-medium);
     flex: 1;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     .playlist-title {
-      line-height: 1em;
-      font-size: 34px;
+      display: -webkit-box;
+      max-width: 100%;
+      line-height: 1.08;
+      font-size: clamp(1.9rem, 2.6vw, 2.5rem);
       font-weight: 800;
       color: var(--list-title-color);
       margin: 0 0 0.5rem 0;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      transition:
+        font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
       .playlist-header.compact & {
-        font-size: 1.25rem;
+        font-size: 1.2rem;
         margin: 0 0 0.25rem 0;
+        -webkit-line-clamp: 1;
       }
     }
 
@@ -1910,7 +1819,11 @@ const filteredMoreActions = computed(() =>
       font-size: 1rem;
       color: var(--list-author-color);
       // margin: 1.5rem 0 0.5rem 0;
-      transition: all 0.3s;
+      transition:
+        opacity 0.3s ease,
+        transform 0.3s ease,
+        margin 0.3s ease,
+        max-height 0.3s ease;
       opacity: 1;
       transform: translateY(0);
       display: -webkit-box;
@@ -1919,37 +1832,64 @@ const filteredMoreActions = computed(() =>
       text-overflow: ellipsis;
       overflow: hidden;
       width: 100%;
+      max-height: 3.4em;
+      line-height: 1.65;
       &.hidden {
         opacity: 0;
         transform: translateY(-10px);
         margin: 0;
-        height: 0;
+        max-height: 0;
         overflow: hidden;
       }
     }
 
     .playlist-stats {
-      font-size: 0.875rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      font-size: 0.8rem;
       color: var(--list-stats-color);
-      padding: 5px 0 0 0;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 0.6rem 0 0 0;
+      transition:
+        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       opacity: 1;
       transform: translateY(0);
+      max-height: 4rem;
+      overflow: hidden;
+
+      span {
+        padding: 0.3rem 0.72rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
 
       &.hidden {
         opacity: 0;
         transform: translateY(-10px);
         margin: 0;
-        height: 0;
+        padding-top: 0;
+        max-height: 0;
         overflow: hidden;
       }
     }
 
     .playlist-actions {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       gap: 0.75rem;
       margin-top: 1rem;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      transition:
+        gap 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
       &.compact {
         margin-top: 0.5rem;
@@ -1960,7 +1900,13 @@ const filteredMoreActions = computed(() =>
       .shuffle-btn,
       .sync-btn {
         min-width: 120px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition:
+          min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+          padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+          font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+          background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+          border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+          box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
         .playlist-actions.compact & {
           min-width: 100px;
@@ -1972,7 +1918,10 @@ const filteredMoreActions = computed(() =>
         .shuffle-icon {
           width: 16px;
           height: 16px;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          transition:
+            width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+            height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+            transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
           .playlist-actions.compact & {
             width: 14px;
@@ -1983,14 +1932,26 @@ const filteredMoreActions = computed(() =>
 
       .playlist-search {
         margin-left: auto;
-        width: 90px;
-        transition: width 0.2s;
+        width: min(220px, 100%);
+        max-width: 100%;
+        min-width: min(12rem, 100%);
+        flex: 1 1 12rem;
         position: relative;
+        z-index: 2;
+        transition:
+          box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+          border-color var(--motion-duration-fast) var(--motion-ease-standard);
+        position: relative;
+        padding: 0.12rem 0.18rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.06);
         :deep(.n-input) {
           width: 100%;
         }
         &.focused {
-          width: 250px;
+          border-color: rgba(3, 222, 109, 0.22);
+          box-shadow: 0 0 0 4px rgba(3, 222, 109, 0.12);
         }
         .collapsed-hint {
           position: absolute;
@@ -2011,11 +1972,30 @@ const filteredMoreActions = computed(() =>
   }
 }
 
+@media (max-width: 980px) {
+  .playlist-header {
+    align-items: flex-start;
+  }
+
+  .playlist-details {
+    width: 100%;
+  }
+
+  .playlist-actions {
+    .playlist-search {
+      margin-left: 0;
+      width: 100%;
+      flex-basis: 100%;
+    }
+  }
+}
+
 .song-list-wrapper {
   height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
 .locate-current-btn {
@@ -2025,15 +2005,18 @@ const filteredMoreActions = computed(() =>
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--td-bg-color-container);
+  background: var(--shell-panel-bg-strong);
   color: var(--td-text-color-primary);
-  border: 1px solid var(--td-border-level-2-color);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  box-shadow: var(--shell-panel-shadow-soft);
+  transition:
+    transform var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
   z-index: 10;
 
   &:hover {
@@ -2071,18 +2054,24 @@ const filteredMoreActions = computed(() =>
   }
 
   .playlist-header {
-    flex-direction: column;
+    --playlist-cover-size: 6.25rem;
+    --playlist-header-min-height: auto;
+    grid-template-columns: 1fr;
+    justify-items: center;
     text-align: center;
     gap: 1rem;
 
     .playlist-cover {
-      width: 100px;
-      height: 100px;
+      width: var(--playlist-cover-size);
+      height: var(--playlist-cover-size);
     }
 
     .playlist-details {
+      align-items: center;
+
       .playlist-actions {
         flex-direction: column;
+        align-items: stretch;
         gap: 0.5rem;
 
         .play-btn,
@@ -2090,6 +2079,13 @@ const filteredMoreActions = computed(() =>
         .sync-btn {
           width: 100%;
           min-width: auto;
+        }
+
+        .playlist-search {
+          margin-left: 0;
+          width: 100%;
+          min-width: 0;
+          flex-basis: 100%;
         }
       }
     }
@@ -2115,3 +2111,14 @@ const filteredMoreActions = computed(() =>
   }
 }
 </style>
+
+
+
+
+
+
+
+
+
+
+

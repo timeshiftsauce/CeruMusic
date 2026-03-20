@@ -215,6 +215,10 @@ const playPlaylist = (playlist: any): void => {
 // 获取 store 实例和响应式引用
 const LocalUserDetail = LocalUserDetailStore()
 const { userSource } = storeToRefs(LocalUserDetail)
+const onDocClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (!target.closest('.category-bar') && showMore.value) showMore.value = false
+}
 
 // 组件挂载时获取数据
 onMounted(() => {
@@ -234,18 +238,12 @@ onMounted(() => {
     },
     { deep: true, immediate: true }
   )
-  const onDocClick = (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (!target.closest('.category-bar') && showMore.value) showMore.value = false
-  }
   document.addEventListener('click', onDocClick)
-  onUnmounted(() => {
-    document.removeEventListener('click', onDocClick)
-  })
 })
 const backTop = ref(false)
 const scrollTop = ref(0)
 onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
   if (watchSource) {
     watchSource()
     watchSource = null
@@ -269,9 +267,9 @@ const songlistScrollRef = ref<HTMLDivElement>()
 </script>
 
 <template>
-  <div id="findContainerRef" class="find-container">
+  <div id="findContainerRef" class="find-container page-shell find-page">
     <!-- 页面标题 -->
-    <div class="page-header">
+    <div class="page-header page-hero">
       <h2>发现音乐</h2>
       <p>探索最新最热的音乐内容</p>
     </div>
@@ -289,71 +287,73 @@ const songlistScrollRef = ref<HTMLDivElement>()
           </n-back-top>
 
           <div ref="categoryBarRef" class="category-bar">
-            <div class="hot-tags">
-              <button
-                class="tag-chip"
-                :class="{ active: activeTagId === '' }"
-                @click="onSelectTag('', '热门')"
-              >
-                热门
-              </button>
-              <button
-                v-for="t in hotTag"
-                :key="t.id"
-                class="tag-chip"
-                :class="{ active: activeTagId === t.id }"
-                @click="onSelectTag(t.id, t.name)"
-              >
-                {{ t.name }}
-              </button>
+            <div class="tag-rail">
+              <div class="hot-tags">
+                <button
+                  class="tag-chip"
+                  :class="{ active: activeTagId === '' }"
+                  @click="onSelectTag('', '热门')"
+                >
+                  热门
+                </button>
+                <button
+                  v-for="t in hotTag"
+                  :key="t.id"
+                  class="tag-chip"
+                  :class="{ active: activeTagId === t.id }"
+                  @click="onSelectTag(t.id, t.name)"
+                >
+                  {{ t.name }}
+                </button>
+              </div>
+            </div>
 
-              <div
-                class="more-category-wrapper"
-                @mouseenter="showMore = true"
-                @mouseleave="showMore = false"
-              >
-                <t-button ref="moreBtnRef" class="tag-chip more" shape="round" variant="outline">
-                  更多分类
-                  <template #suffix>
-                    <i class="iconfont icon-arrow-down" :class="{ rotate: showMore }">
-                      <ChevronDownIcon />
-                    </i>
-                  </template>
-                </t-button>
+            <div
+              class="more-category-wrapper"
+              @mouseenter="showMore = true"
+              @mouseleave="showMore = false"
+            >
+              <t-button ref="moreBtnRef" class="tag-chip more" shape="round" variant="outline">
+                更多分类
+                <template #suffix>
+                  <i class="iconfont icon-arrow-down" :class="{ rotate: showMore }">
+                    <ChevronDownIcon />
+                  </i>
+                </template>
+              </t-button>
 
-                <transition name="dropdown">
-                  <div v-if="showMore" class="more-panel">
-                    <div class="panel-inner">
-                      <div class="panel-content">
-                        <t-tabs v-model:value="activeGroupName" size="medium">
-                          <t-tab-panel
-                            v-for="group in tags"
-                            :key="group.name"
-                            :value="group.name"
-                            :label="group.name"
-                          />
-                        </t-tabs>
-                        <div v-if="tags[activeGroupIndex]" class="panel-tags">
-                          <button
-                            v-for="t in tags[activeGroupIndex].list"
-                            :key="t.id"
-                            class="tag-chip"
-                            :class="{ active: activeTagId === t.id }"
-                            @click="onSelectTag(t.id, t.name)"
-                          >
-                            {{ t.name }}
-                          </button>
-                        </div>
+              <transition name="dropdown">
+                <div v-if="showMore" class="more-panel">
+                  <div class="panel-inner">
+                    <div class="panel-content">
+                      <t-tabs v-model:value="activeGroupName" size="medium">
+                        <t-tab-panel
+                          v-for="group in tags"
+                          :key="group.name"
+                          :value="group.name"
+                          :label="group.name"
+                        />
+                      </t-tabs>
+                      <div v-if="tags[activeGroupIndex]" class="panel-tags">
+                        <button
+                          v-for="t in tags[activeGroupIndex].list"
+                          :key="t.id"
+                          class="tag-chip"
+                          :class="{ active: activeTagId === t.id }"
+                          @click="onSelectTag(t.id, t.name)"
+                        >
+                          {{ t.name }}
+                        </button>
                       </div>
                     </div>
                   </div>
-                </transition>
-              </div>
+                </div>
+              </transition>
             </div>
           </div>
 
           <!-- 分类歌单 -->
-          <div class="section">
+          <div class="section panel-shell">
             <h3 class="section-title">{{ activeCategoryName }}歌单</h3>
 
             <!-- 加载状态 -->
@@ -436,7 +436,10 @@ const songlistScrollRef = ref<HTMLDivElement>()
   flex-direction: column;
   :deep(.find-tabs) {
     // padding: 0 2rem;
+    display: flex;
+    flex-direction: column;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
     & > *,
     .find-tab-pane {
@@ -446,12 +449,18 @@ const songlistScrollRef = ref<HTMLDivElement>()
       margin-bottom: 1rem;
     }
     .n-tabs-pane-wrapper {
+      flex: 1;
+      min-height: 0;
       padding: 0rem;
       .find-tab-pane {
+        min-height: 0;
         height: 100%;
         overflow-y: auto;
       }
       .songlist-tab-pane {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
         height: 100%;
         overflow: hidden;
         padding: 0 !important;
@@ -461,83 +470,127 @@ const songlistScrollRef = ref<HTMLDivElement>()
 }
 
 .scroll-container {
+  flex: 1 1 0;
+  min-height: 0;
   height: 100%;
+  position: relative;
   overflow-y: auto;
-  padding: 0 2rem;
+  overflow-x: hidden;
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .category-bar {
-  margin-bottom: 1rem;
   position: relative;
-  // position: sticky;
-  // top: 0;
-  // z-index: 2;
-  // padding: 6px;
-  // background: var(--find-card-bg);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 60%),
+    var(--shell-panel-bg);
+  box-shadow: var(--shell-panel-shadow-soft);
+  backdrop-filter: blur(var(--shell-blur-soft));
+  overflow: visible;
+
+  .tag-rail {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
 
   .hot-tags {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
+    width: max-content;
+    min-height: 2rem;
   }
   .more-category-wrapper {
-    position: static;
-    display: inline-block;
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    z-index: 8;
 
     .more-panel {
       position: absolute;
-      top: 100%;
-      left: 0;
+      top: calc(100% + 0.65rem);
       right: 0;
-      z-index: 100;
-      padding-top: 8px; /* Use padding instead of margin to bridge the gap */
-      margin-top: 0;
-      width: 100%;
-      min-width: unset;
-      transform-origin: top center;
+      z-index: 16;
+      width: min(44rem, calc(100vw - 3rem));
+      min-width: 18rem;
+      transform-origin: top right;
 
       /* Inner container for actual visual style */
       .panel-inner {
-        background: var(--td-bg-color-container);
-        border-radius: 12px;
-        box-shadow: 0 6px 30px rgba(0, 0, 0, 0.1);
-        border: 1px solid var(--td-border-level-1-color);
+        background: var(--shell-panel-bg-strong);
+        border-radius: 1rem;
+        box-shadow: var(--shell-panel-shadow-soft);
+        border: 1px solid var(--shell-content-border);
+        backdrop-filter: blur(var(--shell-blur-soft));
         padding: 8px 16px 16px;
       }
     }
   }
 
   .tag-chip {
-    padding: 4px 12px;
-    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-height: 2rem;
+    padding: 0.36rem 0.82rem;
+    border-radius: 999px;
     border: none;
-    background: transparent;
+    background: rgba(255, 255, 255, 0.05);
     color: var(--td-text-color-secondary);
     cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    transition:
+      transform var(--motion-duration-fast) var(--motion-ease-standard),
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
 
     &:hover {
+      transform: translateY(-1px);
       color: var(--td-text-color-primary);
-      background: var(--td-bg-color-secondarycontainer);
+      background: rgba(255, 255, 255, 0.12);
     }
 
     &.active {
-      background: var(--td-brand-color-light);
-      color: var(--td-brand-color);
+      background:
+        linear-gradient(135deg, var(--td-brand-color-5), rgba(14, 165, 233, 0.78)),
+        var(--td-brand-color-light);
+      color: var(--td-text-color-anti);
       font-weight: 600;
+      box-shadow: 0 10px 20px rgba(0, 137, 62, 0.18);
     }
 
     &.more {
       display: flex;
       align-items: center;
       gap: 4px;
-      background: var(--td-bg-color-secondarycontainer);
-      // color: var(--td-text-color-primary);
+      background: rgba(255, 255, 255, 0.08);
 
       &:hover {
-        background: var(--td-bg-color-component-hover);
+        background: rgba(255, 255, 255, 0.14);
       }
 
       .icon-arrow-down {
@@ -560,10 +613,28 @@ const songlistScrollRef = ref<HTMLDivElement>()
   }
 }
 
+@media (max-width: 860px) {
+  .category-bar {
+    padding: 0.8rem 0.85rem;
+    gap: 0.55rem;
+
+    .more-category-wrapper .more-panel {
+      width: min(34rem, calc(100vw - 2rem));
+    }
+
+    .tag-chip {
+      min-height: 1.9rem;
+      padding: 0.34rem 0.72rem;
+    }
+  }
+}
+
 /* 下拉淡入缩放动画 */
 .dropdown-enter-active,
 .dropdown-leave-active {
-  transition: all 0.16s ease;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
 }
 .dropdown-enter-from,
 .dropdown-leave-to {
@@ -577,27 +648,33 @@ const songlistScrollRef = ref<HTMLDivElement>()
 }
 
 .page-header {
-  margin: 0 2rem 1rem;
+  margin: 0;
+  padding-block: 0.88rem;
 
   h2 {
     border-left: 8px solid var(--td-brand-color-3);
     padding-left: 12px;
     border-radius: 8px;
-    line-height: 1.5em;
     color: var(--td-text-color-primary);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.28rem;
     font-size: 1.875rem;
     font-weight: 600;
+    line-height: 1.5em;
   }
 
   p {
     color: var(--find-text-secondary);
     font-size: 0.85rem;
+    line-height: 1.35;
   }
 }
 
 .section {
-  margin-bottom: 3rem;
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  position: relative;
+  z-index: 1;
+  overflow: visible;
 
   .section-title {
     color: var(--td-text-color-primary);
@@ -658,18 +735,25 @@ const songlistScrollRef = ref<HTMLDivElement>()
 }
 
 .playlist-card {
-  // 卡片样式
-  background: var(--find-card-bg);
-  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 28%),
+    var(--find-card-bg);
+  border-radius: 1.25rem;
   overflow: hidden;
   box-shadow: var(--find-card-shadow);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
+  will-change: transform, box-shadow;
 
   // 现代化悬浮效果
   &:hover {
-    transform: translateY(-4px) scale(1.02);
+    transform: translateY(-6px) scale(1.018);
     box-shadow: var(--find-card-shadow-hover);
 
     .playlist-cover::after {
@@ -740,9 +824,12 @@ const songlistScrollRef = ref<HTMLDivElement>()
     padding: 1.25rem 1rem;
     position: relative;
     background: var(--find-card-info-bg);
-
-    backdrop-filter: blur(4px);
-    transition: all 0.3s ease;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    transition:
+      backdrop-filter 0.3s ease,
+      background-color 0.3s ease,
+      color 0.3s ease;
 
     .playlist-title {
       font-size: 1rem;

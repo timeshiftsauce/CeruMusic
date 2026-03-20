@@ -91,7 +91,7 @@ const features = showNewYear.value
 onMounted(async () => {
   // 获取版本号
   try {
-    const appVersion = await window.electron.ipcRenderer.invoke('get-app-version')
+    const appVersion = await window.api.appInfo.getVersion()
     if (appVersion) version.value = appVersion
   } catch (error) {
     console.warn('Failed to get app version:', error)
@@ -113,7 +113,7 @@ onMounted(async () => {
   setTimeout(() => (loadingText.value = '加载插件系统...'), 500)
 
   try {
-    await window.electron.ipcRenderer.invoke('service-plugin-initialize-system')
+    await window.api.plugins.initializeSystem()
   } catch (e) {
     console.error('Plugin init failed', e)
     loadingText.value = '初始化遇到问题'

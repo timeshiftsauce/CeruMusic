@@ -21,7 +21,7 @@ const { checkForUpdates } = useAutoUpdate()
 
 const getAppVersion = async () => {
   try {
-    const version = await window.electron.ipcRenderer.invoke('get-app-version')
+    const version = await window.api.appInfo.getVersion()
     if (version) {
       appVersion.value = version
     }

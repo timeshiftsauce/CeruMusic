@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted } from 'vue'
+import { useDisposables } from '@renderer/composables/useDisposables'
+
+const disposables = useDisposables()
 
 function loadScript(src: string) {
   return new Promise<void>((resolve, reject) => {
@@ -80,7 +83,7 @@ async function processFile(id: string, filePath: string) {
       if (typeof gen === 'function') {
         const fp = await gen(slice)
         // Send back result
-        ;(window as any).electron.ipcRenderer.send('worker:fp-generated', {
+        ;(window as any).api.recognitionWorker.sendGenerated({
           id,
           fp,
           duration: slice.length / 8000,
@@ -94,7 +97,7 @@ async function processFile(id: string, filePath: string) {
     }
   } catch (e: any) {
     console.error('Worker processing failed:', e)
-    ;(window as any).electron.ipcRenderer.send('worker:fp-error', {
+    ;(window as any).api.recognitionWorker.sendError({
       id,
       error: e?.message || 'Unknown error'
     })
@@ -103,16 +106,13 @@ async function processFile(id: string, filePath: string) {
 
 onMounted(() => {
   console.log('Recognition Worker Mounted')
-  ;(window as any).electron.ipcRenderer.on('worker:start-task', (_e, { id, filePath }) => {
+  const handleStartTask = ({ id, filePath }: { id: string; filePath: string }) => {
     console.log('Worker received task:', id, filePath)
     processFile(id, filePath)
-  })
+  }
+  disposables.add((window as any).api.recognitionWorker.onStartTask(handleStartTask))
   // Notify main process that worker is ready
-  ;(window as any).electron.ipcRenderer.send('worker:ready')
-})
-
-onUnmounted(() => {
-  ;(window as any).electron.ipcRenderer.removeAllListeners('worker:start-task')
+  ;(window as any).api.recognitionWorker.ready()
 })
 </script>
 

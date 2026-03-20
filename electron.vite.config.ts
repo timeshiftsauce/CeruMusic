@@ -8,6 +8,8 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
+import { getRendererManualChunk } from './src/common/build/rendererManualChunks'
+
 export default defineConfig({
   main: {
     resolve: {
@@ -36,6 +38,11 @@ export default defineConfig({
     build: {
       chunkSizeWarningLimit: 1000,
       minify: 'terser',
+      rollupOptions: {
+        output: {
+          manualChunks: getRendererManualChunk
+        }
+      },
       terserOptions: {
         compress: {
           drop_console: true,

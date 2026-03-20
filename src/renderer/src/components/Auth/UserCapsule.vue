@@ -45,8 +45,7 @@ import { useRouter } from 'vue-router'
 import defaultAvatar from '@renderer/assets/user.webp'
 import { useAuthStore } from '@renderer/store/Auth'
 import { PoweroffIcon, UserIcon } from 'tdesign-icons-vue-next'
-import { NIcon } from 'naive-ui'
-import { h, type Component } from 'vue'
+import { renderLegacyIcon } from '@renderer/ui/legacyNaive'
 import displayName from '@renderer/utils/auth/displayName'
 
 interface Props {
@@ -62,9 +61,7 @@ const color = computed(() => props.color)
 const authStore = useAuthStore()
 const router = useRouter()
 
-const renderIcon = (icon: Component) => {
-  return () => h(NIcon, null, { default: () => h(icon) })
-}
+const renderIcon = renderLegacyIcon
 const dropdownTheme = {
   borderRadius: '8px'
 }
@@ -111,11 +108,17 @@ const Name = computed(() => {
     min-width: 2.25rem;
     padding: 0;
     border-radius: 50%;
-    background: transparent;
+    background: var(--custom-btn-bg-soft);
+    border: 1px solid var(--custom-btn-border-soft);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: v-bind(color);
+    box-shadow: var(--custom-btn-shadow);
 
     &:hover {
-      background-color: var(--titlebar-btn-hover-bg);
+      background-color: var(--custom-btn-bg-hover);
+      border-color: var(--custom-btn-border);
+      box-shadow: var(--custom-btn-shadow-hover);
     }
   }
 
@@ -132,7 +135,7 @@ const Name = computed(() => {
     box-sizing: border-box;
 
     &:hover {
-      background: rgba(125, 125, 125, 0.2);
+      background: var(--custom-btn-bg-soft);
     }
 
     .user-name {
@@ -148,3 +151,6 @@ const Name = computed(() => {
   }
 }
 </style>
+
+
+

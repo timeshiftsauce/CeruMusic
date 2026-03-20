@@ -9,6 +9,9 @@ import { useRouter } from 'vue-router'
 import songCover from '@assets/images/song.jpg'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
+import { useActivationState } from '@renderer/composables/useActivationState'
+import { usePlaybackActions } from '@renderer/domains/playback'
+import { createSongCoverQuery } from '@renderer/domains/music'
 
 interface MusicItem {
   id: number
@@ -50,65 +53,80 @@ const skeletonCount = playlistLimit
 const playlistTotal = ref(0)
 const search = searchValue()
 const router = useRouter()
-onActivated(async () => {
-  const localUserStore = LocalUserDetailStore()
-  console.log('sqjsqj', search.getValue)
-
-  if (search.getValue.trim() === '') {
-    console.log('跳转')
-    router.push({ name: 'find' })
+const localUserStore = LocalUserDetailStore()
+const isViewActive = useActivationState()
+const playbackActions = usePlaybackActions()
+const songCoverQuery = createSongCoverQuery<MusicItem>({
+  fetchCover: async (source, song) => {
+    const url = await window.api.music.requestSdk('getPic', {
+      source,
+      songInfo: toRaw(song)
+    })
+    return typeof url !== 'object' ? url : ''
   }
-  watch(
-    search,
-    async () => {
-      if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
-      if (search.getValue.trim() === '') {
-        router.push({ name: 'find' })
-        return
-      }
-      keyword.value = search.getValue
-      searchResults.value = []
-      playlistResults.value = []
-      currentPage.value = 1
-      playlistPage.value = 1
-      if (activeTab.value === 'songs') {
-        await performSearch(true)
-      } else {
-        await fetchPlaylists(true)
-      }
-    },
-    { immediate: true }
-  )
+})
 
-  // 监听 userSource 变化，重新加载页面
-  watch(
-    () => localUserStore.userSource,
-    async () => {
-      if (keyword.value.trim()) {
-        searchResults.value = []
-        playlistResults.value = []
-        currentPage.value = 1
-        playlistPage.value = 1
-        if (activeTab.value === 'songs') {
-          await performSearch(true)
-        } else {
-          await fetchPlaylists(true)
-        }
-      }
-    },
-    { deep: true }
-  )
+const resetSearchState = () => {
+  songCoverQuery.reset()
+  searchResults.value = []
+  playlistResults.value = []
+  currentPage.value = 1
+  playlistPage.value = 1
+  hasMore.value = true
+}
 
-  // 标签切换按需加载
-  watch(activeTab, async (val) => {
-    if (!keyword.value.trim()) return
-    if (val === 'songs' && searchResults.value.length === 0) {
+const syncSearchContext = async () => {
+  if (!isViewActive.value) return
+  if (search.getValue.trim() === '') {
+    router.push({ name: 'find' })
+    return
+  }
+  if (search.getFocus === true || search.getValue.trim() === keyword.value.trim()) return
+
+  keyword.value = search.getValue
+  resetSearchState()
+
+  if (activeTab.value === 'songs') {
+    await performSearch(true)
+  } else {
+    await fetchPlaylists(true)
+  }
+}
+
+watch(
+  () => [isViewActive.value, search.getValue, search.getFocus],
+  async ([active]) => {
+    if (!active) return
+    await syncSearchContext()
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [isViewActive.value, localUserStore.userSource],
+  async ([active]) => {
+    if (!active || !keyword.value.trim()) return
+    resetSearchState()
+    if (activeTab.value === 'songs') {
       await performSearch(true)
-    } else if (val === 'playlists' && playlistResults.value.length === 0) {
+    } else {
       await fetchPlaylists(true)
     }
-  })
-})
+  },
+  { deep: true }
+)
+
+watch(
+  () => [isViewActive.value, activeTab.value],
+  async ([active, tab]) => {
+    if (!active || !keyword.value.trim()) return
+    if (tab === 'songs' && searchResults.value.length === 0) {
+      await performSearch(true)
+    } else if (tab === 'playlists' && playlistResults.value.length === 0) {
+      await fetchPlaylists(true)
+    }
+  }
+)
 
 // 执行搜索
 const performSearch = async (reset = false) => {
@@ -149,7 +167,7 @@ const performSearch = async (reset = false) => {
       searchResults.value = [...searchResults.value, ...newSongs]
     }
 
-    setPic((currentPage.value - 1) * pageSize, source)
+    void setPic((currentPage.value - 1) * pageSize, source)
     currentPage.value += 1
     hasMore.value = searchResults.value.length <= totalItems.value
   } catch (error) {
@@ -160,24 +178,12 @@ const performSearch = async (reset = false) => {
 }
 
 async function setPic(offset: number, source: string) {
-  for (let i = offset; i < searchResults.value.length; i++) {
-    const tempImg = searchResults.value[i].img
-    if (tempImg) continue
-    try {
-      const url = await window.api.music.requestSdk('getPic', {
-        source,
-        songInfo: toRaw(searchResults.value[i])
-      })
-      if (typeof url !== 'object') {
-        searchResults.value[i].img = url
-      } else {
-        searchResults.value[i].img = ''
-      }
-    } catch (e) {
-      searchResults.value[i].img = ''
-      console.log('获取失败 index' + i, e)
-    }
-  }
+  await songCoverQuery.fill({
+    songs: searchResults.value,
+    source,
+    offset,
+    fallback: ''
+  })
 }
 // 计算是否有搜索结果
 const hasSongResults = computed(() => searchResults.value && searchResults.value.length > 0)
@@ -188,16 +194,12 @@ const handlePlay = (song: MusicItem) => {
   currentSong.value = song
   isPlaying.value = true
   console.log('播放歌曲:', song.name)
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
-  }
+  void playbackActions.playSong(toRaw(song) as any)
 }
 
 const handlePause = () => {
   isPlaying.value = false
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('pause')
-  }
+  void playbackActions.pause()
 }
 
 const handleDownload = (song: any) => {
@@ -209,9 +211,7 @@ const handleDownload = (song: any) => {
 
 const handleAddToPlaylist = (song: MusicItem) => {
   console.log('添加到播放列表:', song.name)
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(song))
-  }
+  void playbackActions.appendSong(toRaw(song) as any)
 }
 
 const handleScroll = (event: Event) => {
@@ -304,9 +304,9 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
 </script>
 
 <template>
-  <div class="search-container">
+  <div class="search-container page-shell search-page">
     <!-- 顶部：搜索标题与标签 -->
-    <div class="search-header">
+    <div class="search-header page-hero">
       <div class="header-row">
         <h2 class="search-title">
           搜索"<span class="keyword">{{ keyword }}</span
@@ -324,10 +324,10 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
     </div>
 
     <!-- 结果内容区 -->
-    <div class="result-content">
+    <div class="result-content panel-shell">
       <!-- 单曲列表 -->
       <div v-show="activeTab === 'songs'" class="song-tab">
-        <div v-if="hasSongResults" class="song-list-wrapper">
+        <div v-if="hasSongResults" class="song-list-wrapper panel-shell">
           <SongVirtualList
             :songs="searchResults"
             :current-song="currentSong"
@@ -419,17 +419,10 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
 <style lang="scss" scoped>
 .search-container {
   box-sizing: border-box;
-  // background: var(--search-bg);
-  width: 100%;
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  padding: 0;
 }
 
 .search-header {
-  // margin-bottom: 10px;
   flex-shrink: 0;
   .header-row {
     display: flex;
@@ -458,10 +451,7 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
 }
 
 .result-content {
-  background: var(--search-content-bg);
-  border-radius: 8px;
   overflow: hidden;
-  box-shadow: var(--search-content-shadow);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -469,10 +459,7 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
 }
 
 .song-list-wrapper {
-  background: var(--search-content-bg);
-  border-radius: 8px;
   overflow: hidden;
-  box-shadow: var(--search-content-shadow);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -672,3 +659,5 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
   }
 }
 </style>
+
+

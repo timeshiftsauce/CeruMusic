@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, toRaw } from 'vue'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage, useDialog } from '@renderer/ui/legacyNaive'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { convertLrcFormat, convertToStandardLrc } from '@renderer/utils/lrcParser'
@@ -652,3 +652,4 @@ const confirmLyricChoice = (choice: 'standard' | 'word-by-word') => {
   color: #999;
 }
 </style>
+

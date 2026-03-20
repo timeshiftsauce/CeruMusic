@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, toRaw, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, toRaw } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
   ChevronRightIcon,
@@ -17,6 +17,8 @@ import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
 import LocalTagEditor from '@renderer/components/Music/LocalTagEditor.vue'
 import { useRouter } from 'vue-router'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { useLocateCurrentSong } from '@renderer/composables/useLocateCurrentSong'
+import { usePlaybackActions } from '@renderer/domains/playback'
 
 type MusicItem = {
   hash?: string
@@ -51,12 +53,14 @@ const showMatchModal = ref(false)
 const matchResults = ref<any[]>([])
 const matchTargetSong = ref<MusicItem | null>(null)
 const sourcesOrder = ['wy', 'tx', 'kg', 'kw', 'mg']
+const localMusicDisposers: Array<() => void> = []
 // 保留占位，后续可扩展更多菜单
 // const showMoreDropdown = ref(false)
 const selectedPlaylistId = ref<string>('')
 const showDirModal = ref(false)
 // const newDirInput = ref('')
 const router = useRouter()
+const playbackActions = usePlaybackActions()
 
 const globalPlayStatus = useGlobalPlayStatusStore()
 const songListRef = ref<any>(null)
@@ -72,118 +76,19 @@ const displaySongs = computed(() => {
 })
 
 const currentPlayingSongInfo = computed(() => globalPlayStatus.player.songInfo)
-
-const hasCurrentPlayingSong = computed(() => {
-  if (
-    !currentPlayingSongInfo.value ||
-    !currentPlayingSongInfo.value.songmid ||
-    !currentPlayingSongInfo.value.source
-  ) {
-    return false
-  }
-  return displaySongs.value.some(
-    (s) =>
-      String(s.songmid) === String(currentPlayingSongInfo.value!.songmid) &&
-      s.source === currentPlayingSongInfo.value!.source
-  )
+const {
+  hasCurrentPlayingSong,
+  showLocateCurrentBtn,
+  handleSongListScroll,
+  locateCurrentSong,
+  handleLocateBtnMouseEnter,
+  handleLocateBtnMouseLeave,
+  triggerLocateBtnVisible
+} = useLocateCurrentSong({
+  displaySongs,
+  currentPlayingSongInfo,
+  songListRef
 })
-
-const showLocateCurrentBtn = ref(false)
-const isHoveringLocateBtn = ref(false)
-let locateBtnTimer: ReturnType<typeof setTimeout> | null = null
-let waitingLocateScrollEnd = false
-let locateScrollSeen = false
-let locateScrollEndTimer: ReturnType<typeof setTimeout> | null = null
-let locateScrollFallbackTimer: ReturnType<typeof setTimeout> | null = null
-
-const clearLocateBtnTimer = () => {
-  if (locateBtnTimer) {
-    clearTimeout(locateBtnTimer)
-    locateBtnTimer = null
-  }
-}
-
-const clearLocateScrollTimers = () => {
-  if (locateScrollEndTimer) {
-    clearTimeout(locateScrollEndTimer)
-    locateScrollEndTimer = null
-  }
-  if (locateScrollFallbackTimer) {
-    clearTimeout(locateScrollFallbackTimer)
-    locateScrollFallbackTimer = null
-  }
-}
-
-const startLocateBtnHideTimer = () => {
-  clearLocateBtnTimer()
-  if (!showLocateCurrentBtn.value || isHoveringLocateBtn.value) return
-  locateBtnTimer = setTimeout(() => {
-    if (isHoveringLocateBtn.value) {
-      startLocateBtnHideTimer()
-      return
-    }
-    showLocateCurrentBtn.value = false
-    locateBtnTimer = null
-  }, 3000)
-}
-
-const triggerLocateBtnVisible = () => {
-  if (!hasCurrentPlayingSong.value) {
-    showLocateCurrentBtn.value = false
-    clearLocateBtnTimer()
-    return
-  }
-  showLocateCurrentBtn.value = true
-  startLocateBtnHideTimer()
-}
-
-const handleSongListScroll = () => {
-  if (waitingLocateScrollEnd) {
-    locateScrollSeen = true
-    clearLocateBtnTimer()
-    if (locateScrollFallbackTimer) {
-      clearTimeout(locateScrollFallbackTimer)
-      locateScrollFallbackTimer = null
-    }
-    if (locateScrollEndTimer) clearTimeout(locateScrollEndTimer)
-    locateScrollEndTimer = setTimeout(() => {
-      waitingLocateScrollEnd = false
-      showLocateCurrentBtn.value = false
-      locateScrollEndTimer = null
-    }, 140)
-    return
-  }
-  triggerLocateBtnVisible()
-}
-
-const locateCurrentSong = () => {
-  if (hasCurrentPlayingSong.value && songListRef.value && currentPlayingSongInfo.value) {
-    waitingLocateScrollEnd = true
-    locateScrollSeen = false
-    clearLocateBtnTimer()
-    clearLocateScrollTimers()
-    locateScrollFallbackTimer = setTimeout(() => {
-      if (!waitingLocateScrollEnd || locateScrollSeen) return
-      waitingLocateScrollEnd = false
-      showLocateCurrentBtn.value = false
-      locateScrollFallbackTimer = null
-    }, 800)
-    songListRef.value.scrollToSong(
-      currentPlayingSongInfo.value.songmid,
-      currentPlayingSongInfo.value.source
-    )
-  }
-}
-
-const handleLocateBtnMouseEnter = () => {
-  isHoveringLocateBtn.value = true
-  clearLocateBtnTimer()
-}
-
-const handleLocateBtnMouseLeave = () => {
-  isHoveringLocateBtn.value = false
-  startLocateBtnHideTimer()
-}
 
 const moreActions = ref([
   {
@@ -389,26 +294,15 @@ const applyMatch = async (candidate: any) => {
 
 const playAll = () => {
   if (songs.value.length === 0) return
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('replacePlaylist', toRaw(songs.value) as any)
-  }
+  void playbackActions.replaceSongs(toRaw(songs.value) as any)
 }
 
 const addAllToPlaylist = () => {
   if (songs.value.length === 0) return
-  if ((window as any).musicEmitter) {
-    for (const s of songs.value) {
-      ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(s) as any)
-    }
-    MessagePlugin.success('已将全部加入播放列表')
-  }
+  void playbackActions.appendSongs(toRaw(songs.value) as any)
 }
 
-const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => {
-  if (!(window as any).musicEmitter) {
-    MessagePlugin.error('播放器未初始化')
-    return
-  }
+const replacePlaylist = async (songsToReplace: MusicItem[], shouldShuffle = false) => {
   let finalSongs: any[] = toRaw(songsToReplace)
   if (shouldShuffle) {
     const idx = Array.from({ length: finalSongs.length }, (_, i) => i)
@@ -419,8 +313,11 @@ const replacePlaylist = (songsToReplace: MusicItem[], shouldShuffle = false) => 
     finalSongs = idx.map((i) => songsToReplace[i])
   }
   const replaceData = finalSongs.map((song) => toRaw(song))
-  ;(window as any).musicEmitter.emit('replacePlaylist', replaceData)
-  MessagePlugin.success('批量歌曲已加入播放')
+  try {
+    await playbackActions.replaceSongs(replaceData as any)
+  } catch (error: any) {
+    console.error('播放列表替换失败:', error)
+  }
 }
 
 const scanLibrary = async () => {
@@ -452,15 +349,11 @@ const scanLibrary = async () => {
 }
 
 const addToPlaylistAndPlay = (song: MusicItem) => {
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song) as any)
-  }
+  void playbackActions.playSong(toRaw(song) as any)
 }
 
 const addToPlaylistEnd = (song: MusicItem) => {
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(song) as any)
-  }
+  void playbackActions.appendSong(toRaw(song) as any)
 }
 
 const handlePlay = (song: MusicItem) => {
@@ -577,51 +470,46 @@ onMounted(async () => {
   }
 
   // 监听扫描进度
-  window.api.localMusic.onScanProgress((processed: number, total: number) => {
-    scanProgress.value = { processed, total, running: true }
-  })
+  localMusicDisposers.push(
+    window.api.localMusic.onScanProgress((processed: number, total: number) => {
+      scanProgress.value = { processed, total, running: true }
+    })
+  )
 
   // 监听扫描完成
-  window.api.localMusic.onScanFinished((resList: any[]) => {
-    songs.value = Array.isArray(resList) ? resList : []
-    for (const s of songs.value) ensureDuration(s)
-    scanProgress.value.running = false
-    loading.value = false
-  })
+  localMusicDisposers.push(
+    window.api.localMusic.onScanFinished((resList: any[]) => {
+      songs.value = Array.isArray(resList) ? resList : []
+      for (const s of songs.value) ensureDuration(s)
+      scanProgress.value.running = false
+      loading.value = false
+    })
+  )
 
   // 监听批量匹配进度
-  window.api.localMusic.onBatchMatchProgress((processed: number, total: number) => {
-    batchState.value = { total, done: processed, running: true }
-  })
+  localMusicDisposers.push(
+    window.api.localMusic.onBatchMatchProgress((processed: number, total: number) => {
+      batchState.value = { total, done: processed, running: true }
+    })
+  )
 
-  window.api.localMusic.onBatchMatchFinished(async (res: any) => {
-    batchState.value.running = false
-    MessagePlugin.success(`批量匹配完成，成功匹配 ${res.matched} 首`)
-    const list = await (window as any).api.localMusic.getList()
-    if (Array.isArray(list)) {
-      songs.value = list
-      for (const s of songs.value) ensureDuration(s)
-    }
-  })
+  localMusicDisposers.push(
+    window.api.localMusic.onBatchMatchFinished(async (res: any) => {
+      batchState.value.running = false
+      MessagePlugin.success(`批量匹配完成，成功匹配 ${res.matched} 首`)
+      const list = await (window as any).api.localMusic.getList()
+      if (Array.isArray(list)) {
+        songs.value = list
+        for (const s of songs.value) ensureDuration(s)
+      }
+    })
+  )
   triggerLocateBtnVisible()
 })
 
 onBeforeUnmount(() => {
-  clearLocateScrollTimers()
-  clearLocateBtnTimer()
-  window.api.localMusic.removeScanProgress()
-  window.api.localMusic.removeScanFinished()
-  window.api.localMusic.removeBatchMatchListeners()
-})
-
-watch(hasCurrentPlayingSong, (value) => {
-  if (value) {
-    triggerLocateBtnVisible()
-  } else {
-    waitingLocateScrollEnd = false
-    showLocateCurrentBtn.value = false
-    clearLocateScrollTimers()
-    clearLocateBtnTimer()
+  while (localMusicDisposers.length > 0) {
+    localMusicDisposers.pop()?.()
   }
 })
 
@@ -694,8 +582,8 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
 </script>
 
 <template>
-  <div class="local-container">
-    <div class="local-header">
+  <div class="local-container page-shell local-page">
+    <div class="local-header page-hero">
       <div class="left-container">
         <h2 class="title">
           本地音乐库<span style="font-size: 12px; color: #999">共 {{ songs.length }} 首</span>
@@ -713,7 +601,7 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
         </t-button>
       </div>
     </div>
-    <div class="controls">
+    <div class="controls page-toolbar">
       <t-button theme="primary" class="local-btn play-all" @click="playAll">
         <span style="margin-left: 3px">播放全部</span>
         <template #icon>
@@ -806,7 +694,7 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
       </div>
     </n-modal>
 
-    <div v-if="songs.length > 0" class="list" style="position: relative">
+    <div v-if="songs.length > 0" class="list panel-shell" style="position: relative">
       <SongVirtualList
         ref="songListRef"
         style="flex: 1; min-height: 0; border-radius: 6px; overflow: hidden"
@@ -894,15 +782,8 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
 
 <style lang="scss" scoped>
 .local-container {
-  padding: 0 32px;
-  padding-top: 1rem;
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  padding: 0;
   .local-header {
-    // height: 70px;
-    margin-bottom: 1rem;
     display: flex;
     flex-direction: row;
     justify-content: space-between;
@@ -928,7 +809,6 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
   .local-btn {
     padding: 6px 9px;
     border-radius: 8px;
@@ -939,7 +819,6 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
   max-width: 360px;
 }
 .list {
-  margin-top: 0px;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1044,3 +923,4 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
   transform: scale(0.92);
 }
 </style>
+

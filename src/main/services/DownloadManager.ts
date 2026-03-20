@@ -7,13 +7,8 @@ const workerPath = path.join(__dirname, 'downloadWorker.js')
 
 import { app } from 'electron'
 import fs from 'fs/promises'
-
-const downloadsFilePath = path.join(app.getPath('userData'), 'downloads.json')
-
-import log from 'electron-log'
 import { DownloadStatus, DownloadTask } from '../types/download'
-
-log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'logs/main.log')
+import { downloadLog as log } from '../logger'
 
 import { ConfigManager } from './ConfigManager'
 
@@ -26,12 +21,43 @@ export default class DownloadManager extends EventEmitter {
   private urlFetcher: ((task: DownloadTask) => Promise<string>) | null = null
   private lyricFetcher: ((task: DownloadTask) => Promise<string | null>) | null = null
   private isStarted = false
+  private storageReadyPromise: Promise<void> | null = null
+  private loadTasksPromise: Promise<void>
+  private saveTasksPromise: Promise<void> | null = null
+  private hasPendingSave = false
 
   constructor() {
     super()
     const config = ConfigManager.getInstance()
     this.maxConcurrentDownloads = config.get('download.maxConcurrent', 1)
-    this.loadTasks()
+    this.loadTasksPromise = this.loadTasks()
+  }
+
+  private getDownloadsFilePath() {
+    return path.join(app.getPath('userData'), 'downloads.json')
+  }
+
+  private async initializeStorage() {
+    const downloadsFilePath = this.getDownloadsFilePath()
+    await fs.mkdir(path.dirname(downloadsFilePath), { recursive: true })
+    await fs.mkdir(app.getPath('logs'), { recursive: true })
+
+    try {
+      await fs.access(downloadsFilePath)
+    } catch {
+      await fs.writeFile(downloadsFilePath, '[]')
+    }
+  }
+
+  private async ensureStorageReady() {
+    if (!this.storageReadyPromise) {
+      this.storageReadyPromise = this.initializeStorage().catch((error) => {
+        this.storageReadyPromise = null
+        throw error
+      })
+    }
+
+    await this.storageReadyPromise
   }
 
   public start() {
@@ -47,8 +73,14 @@ export default class DownloadManager extends EventEmitter {
     this.lyricFetcher = fetcher
   }
 
+  public ready() {
+    return this.loadTasksPromise
+  }
+
   private async loadTasks() {
     try {
+      await this.ensureStorageReady()
+      const downloadsFilePath = this.getDownloadsFilePath()
       const data = await fs.readFile(downloadsFilePath, 'utf-8')
       const tasksArray = JSON.parse(data) as DownloadTask[]
       log.info(`Loaded ${tasksArray.length} tasks from history.`)
@@ -96,13 +128,36 @@ export default class DownloadManager extends EventEmitter {
     }
   }
 
-  private async saveTasks() {
-    const tasksArray = Array.from(this.tasks.values())
-    try {
-      await fs.writeFile(downloadsFilePath, JSON.stringify(tasksArray, null, 2))
-    } catch (error) {
-      log.error('Failed to save download history:', error)
+  private async flushTaskSaves() {
+    while (this.hasPendingSave) {
+      this.hasPendingSave = false
+
+      try {
+        await this.ensureStorageReady()
+        const downloadsFilePath = this.getDownloadsFilePath()
+        const tasksArray = Array.from(this.tasks.values())
+        await fs.writeFile(downloadsFilePath, JSON.stringify(tasksArray, null, 2))
+      } catch (error) {
+        log.error('Failed to save download history:', error)
+      }
     }
+  }
+
+  private saveTasks() {
+    this.hasPendingSave = true
+
+    if (!this.saveTasksPromise) {
+      this.saveTasksPromise = Promise.resolve()
+        .then(() => this.flushTaskSaves())
+        .finally(() => {
+          this.saveTasksPromise = null
+          if (this.hasPendingSave) {
+            this.saveTasks()
+          }
+        })
+    }
+
+    return this.saveTasksPromise
   }
 
   public getTask(taskId: string): DownloadTask | undefined {

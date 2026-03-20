@@ -41,6 +41,8 @@ import {
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
 import { useAuthStore } from '@renderer/store'
+import { usePlaybackActions } from '@renderer/domains/playback'
+import { createSongCoverQuery } from '@renderer/domains/music'
 
 // 扩展 Songs 类型以包含本地音乐的额外属性
 interface LocalSong extends Songs {
@@ -147,6 +149,16 @@ const localSongs = ref<LocalSong[]>([
 // 歌单列表
 const playlists = ref<SongList[]>([])
 const loading = ref(false)
+const playbackActions = usePlaybackActions()
+const songCoverQuery = createSongCoverQuery<any>({
+  fetchCover: async (source, song) => {
+    const url = await window.api.music.requestSdk('getPic', {
+      source,
+      songInfo: toRaw(song)
+    })
+    return typeof url !== 'object' ? url : ''
+  }
+})
 // 喜欢歌单ID（用于排序与标记）
 const favoritesId = ref<string | null>(null)
 
@@ -631,15 +643,8 @@ const playPlaylist = async (playlist: SongList) => {
       return
     }
 
-    // 调用播放器的方法替换播放列表
-    if ((window as any).musicEmitter) {
-      ;(window as any).musicEmitter.emit(
-        'replacePlaylist',
-        songs.map((song) => toRaw(song))
-      )
-    }
+    await playbackActions.replaceSongs(songs.map((song) => toRaw(song)) as any)
     console.log('播放歌单:', playlist.name, '共', songs.length, '首歌曲')
-    MessagePlugin.success(`已将播放列表替换为歌单"${playlist.name}"`)
   } catch (error) {
     console.error('播放歌单失败:', error)
     MessagePlugin.error('播放歌单失败')
@@ -657,7 +662,7 @@ const importFromPlaylist = async () => {
 
   // 获取当前播放列表
   const localUserStore = LocalUserDetailStore()
-  const currentPlaylist = JSON.parse(JSON.stringify(localUserStore.list))
+  const currentPlaylist = structuredClone(toRaw(localUserStore.list))
 
   if (!currentPlaylist || currentPlaylist.length === 0) {
     MessagePlugin.warning('当前播放列表为空，无法导入')
@@ -749,37 +754,10 @@ const cancelNetworkImport = () => {
 
 // 为歌单歌曲获取封面图片
 const setPicForPlaylist = async (songs: any[], source: string) => {
-  // 筛选出需要获取封面的歌曲
-  const songsNeedPic = songs.filter((song) => !song.img)
-
-  if (songsNeedPic.length === 0) return
-
-  // 批量请求封面
-  const picPromises = songsNeedPic.map(async (song, index) => {
-    try {
-      const url = await window.api.music.requestSdk('getPic', {
-        source,
-        songInfo: toRaw(song)
-      })
-      return {
-        song,
-        url: typeof url !== 'object' ? url : ''
-      }
-    } catch (e) {
-      console.log('获取封面失败 index' + index, e)
-      return {
-        song,
-        url: ''
-      }
-    }
-  })
-
-  // 等待所有请求完成
-  const results = await Promise.all(picPromises)
-
-  // 更新歌曲封面
-  results.forEach((result) => {
-    result.song.img = result.url
+  await songCoverQuery.fill({
+    songs,
+    source,
+    fallback: ''
   })
 }
 
@@ -1617,7 +1595,7 @@ onDeactivated(() => {
 </script>
 
 <template>
-  <div ref="scrollRef" class="page">
+  <div ref="scrollRef" class="page page-scroll-shell">
     <input
       ref="songlistFileInputRef"
       accept=".cmpl,.cpl"
@@ -1625,9 +1603,9 @@ onDeactivated(() => {
       type="file"
       @change="handleSonglistFileChange"
     />
-    <div class="local-container">
+    <div class="local-container page-shell songlist-page">
       <!-- 页面标题和操作 -->
-      <div class="page-header">
+      <div class="page-header page-hero">
         <div class="header-left">
           <h2>本地歌单</h2>
           <div class="stats">
@@ -1657,7 +1635,7 @@ onDeactivated(() => {
       </div>
 
       <!-- 歌单区域 -->
-      <div class="playlists-section">
+      <div class="playlists-section panel-shell">
         <div class="section-header">
           <h3>我的歌单 ({{ playlists.length }})</h3>
           <div class="section-actions">
@@ -2101,15 +2079,21 @@ onDeactivated(() => {
   width: 100%;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .local-container {
-  padding: 0 2rem;
-  padding-top: 1rem;
-  margin: 0 auto;
-  width: 100%;
+  padding: 0;
   position: relative;
-  // background: var(--local-bg);
   color: var(--local-text-primary);
+  overflow-x: hidden;
+}
+
+.songlist-page {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
 }
 
 // 编辑歌单对话框样式
@@ -2217,7 +2201,9 @@ onDeactivated(() => {
 
         .iconfont {
           font-size: 16px;
-          transition: all 0.2s ease;
+          transition:
+            transform 0.2s ease,
+            color 0.2s ease;
         }
       }
 
@@ -2294,7 +2280,9 @@ onDeactivated(() => {
           padding: 0.25rem 0.5rem;
           background: var(--local-code-bg);
           border-radius: 4px;
-          transition: all 0.2s ease;
+          transition:
+            background-color 0.2s ease,
+            transform 0.2s ease;
 
           &:hover {
             background: var(--local-code-hover-bg);
@@ -2326,7 +2314,9 @@ onDeactivated(() => {
   // 过渡动画
   .fade-slide-enter-active,
   .fade-slide-leave-active {
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .fade-slide-enter-from {
@@ -2350,7 +2340,6 @@ onDeactivated(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2rem;
   font-family: Arial, Helvetica, sans-serif;
 
   .header-left {
@@ -2367,16 +2356,16 @@ onDeactivated(() => {
 
     .stats {
       display: flex;
-      gap: 1rem;
+      flex-wrap: wrap;
+      gap: 0.65rem;
       font-size: 0.875rem;
       color: var(--local-text-secondary);
 
       span {
-        &:not(:last-child)::after {
-          content: '•';
-          margin-left: 1rem;
-          color: var(--local-border);
-        }
+        padding: 0.32rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
     }
   }
@@ -2389,7 +2378,11 @@ onDeactivated(() => {
 
 /* 歌单区域样式 */
 .playlists-section {
-  margin-bottom: 3rem;
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  overflow-x: hidden;
+  overflow-y: visible;
+  contain: layout paint;
 
   .section-header {
     display: flex;
@@ -2419,33 +2412,51 @@ onDeactivated(() => {
 
 .playlists-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(18.25rem, 1fr));
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  align-content: start;
 }
 
 .playlist-card {
-  display: flex;
-  flex-direction: column;
-  background: var(--local-card-bg);
-  border-radius: 0.75rem;
+  display: grid;
+  grid-template-columns: 10.8rem minmax(0, 1fr) auto;
+  align-items: stretch;
+  background:
+    radial-gradient(circle at top left, rgba(3, 222, 109, 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 28%),
+    var(--local-card-bg);
+  border-radius: 1.1rem;
   overflow: hidden;
+  min-width: 0;
+  min-height: 6.24rem;
   box-shadow: var(--local-card-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  content-visibility: auto;
+  contain: layout paint style;
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    transform var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard);
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--local-card-shadow-hover);
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.12);
 
     .playlist-cover .cover-overlay {
       opacity: 1;
     }
+
+    .playlist-cover .cover-image {
+      transform: scale(1.015);
+    }
   }
 
   .playlist-cover {
-    height: 180px;
-    background: #e4e4e4;
+    height: 100%;
+    min-height: 6.24rem;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.08));
     position: relative;
     cursor: pointer;
     overflow: hidden;
@@ -2454,6 +2465,7 @@ onDeactivated(() => {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
     }
 
     .cover-overlay {
@@ -2477,16 +2489,20 @@ onDeactivated(() => {
   }
 
   .playlist-info {
-    padding: 1rem;
+    min-width: 0;
+    padding: 0.58rem 0.9rem 0.56rem 0.95rem;
     flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+
     .playlist-name-row {
       display: flex;
       align-items: flex-start;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.14rem;
       cursor: pointer;
-      gap: 6px;
+      gap: 4px;
+      min-width: 0;
 
       &:hover .playlist-name-text {
         color: var(--td-brand-color);
@@ -2495,32 +2511,34 @@ onDeactivated(() => {
       .playlist-name-text {
         font-weight: 600;
         color: var(--local-text-primary);
-        font-size: 1rem;
+        font-size: 0.95rem;
+        min-width: 0;
 
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         overflow: hidden;
         text-overflow: ellipsis;
-        word-break: break-all;
-        line-height: 1.4;
+        word-break: break-word;
+        line-height: 1.24;
+        transition: color var(--motion-duration-fast) var(--motion-ease-standard);
       }
 
       .playlist-tags {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         flex-shrink: 0;
-        height: 1.4em;
-        margin-top: 1px;
+        height: 1.2em;
+        margin-top: 0;
       }
     }
 
     .playlist-description {
-      flex: 1;
-      font-size: 0.78rem;
+      flex: 0 0 auto;
+      font-size: 0.74rem;
       color: var(--local-text-secondary);
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.22rem;
       display: -webkit-box;
 
       -webkit-line-clamp: 2;
@@ -2529,20 +2547,30 @@ onDeactivated(() => {
       -webkit-box-orient: vertical;
 
       text-overflow: ellipsis;
+      line-height: 1.3;
     }
 
     .playlist-meta {
       display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      font-size: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.12rem 0.4rem;
+      font-size: 0.71rem;
       color: var(--local-text-tertiary);
 
       span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.2rem;
+        padding: 0.08rem 0.42rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+
         &:first-child {
           text-transform: uppercase;
           font-weight: 500;
           color: var(--td-brand-color);
+          letter-spacing: 0.06em;
         }
       }
     }
@@ -2550,9 +2578,62 @@ onDeactivated(() => {
 
   .playlist-actions {
     display: flex;
-    justify-content: flex-end;
-    padding: 0 1rem 1rem;
-    gap: 0.5rem;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 0.6rem;
+    gap: 0.35rem;
+    opacity: 0.88;
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent);
+  }
+
+  &:hover .playlist-actions {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .playlists-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .playlist-card {
+    grid-template-columns: 10.56rem minmax(0, 1fr);
+    min-height: 5.72rem;
+
+    .playlist-cover {
+      min-height: 5.72rem;
+    }
+
+    .playlist-actions {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      justify-content: flex-end;
+      border-left: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 0.62rem;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .playlist-card {
+    grid-template-columns: 1fr;
+
+    .playlist-cover {
+      min-height: 6.77rem;
+    }
+
+    .playlist-info {
+      padding: 0.58rem 0.85rem 0.44rem;
+    }
+
+    .playlist-actions {
+      padding: 0 0.85rem 0.6rem;
+      justify-content: flex-start;
+    }
   }
 }
 
@@ -2752,7 +2833,11 @@ onDeactivated(() => {
   border: 1px solid var(--local-border);
   border-radius: 0.5rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
   background: var(--local-card-bg);
 
   &:hover {
@@ -2805,3 +2890,4 @@ onDeactivated(() => {
   }
 }
 </style>
+
