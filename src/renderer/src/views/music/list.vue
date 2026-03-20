@@ -1079,8 +1079,13 @@ const playAll = (shouldShuffle = false) => {
       if (loadingMsg) {
         loadingMsg.then((res) => res.close())
       }
+      await nextTick()
     }
-    const paserSongs = toRaw(songs.value.map((song) => toRaw(song)))
+    let sourceSongs = songs.value
+    if (songListRef.value && songListRef.value.sortedSongs) {
+      sourceSongs = songListRef.value.sortedSongs
+    }
+    const paserSongs = toRaw(sourceSongs.map((song) => toRaw(song)))
     console.groupCollapsed('playAll:')
     console.log('songs', paserSongs)
     console.log('shouldShuffle', shouldShuffle)
