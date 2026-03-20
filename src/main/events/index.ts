@@ -6,11 +6,14 @@ import initFontEvents from '../services/font/index'
 import { app, powerSaveBlocker } from 'electron'
 import { type BrowserWindow, ipcMain } from 'electron'
 import lyricWindow from '../windows/lyric-window'
+import { initDlnaService } from './dlna'
+
 export default function InitEventServices(mainWindow: BrowserWindow) {
   InitPluginService()
   aiEvents(mainWindow)
   initFontEvents()
   // initLocalMusicEvents()
+  initDlnaService()
   basisEvent(mainWindow)
 }
 

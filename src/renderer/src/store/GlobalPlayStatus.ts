@@ -80,6 +80,8 @@ export interface CommentResponse {
 
 // 辅助函数：将URL转换为 Blob URL
 async function getBlobUrlFromUrl(url: string): Promise<string> {
+  if (!url) return ''
+  console.log('转换URL:', url)
   try {
     const response = await fetch(url)
     const blob = await response.blob()
@@ -207,18 +209,17 @@ export const useGlobalPlayStatusStore = defineStore(
 
     // 监听 songInfo 变化，处理封面
     watch(
-      () => player.songInfo,
-      async (newVal) => {
+      () => player.songInfo?.img,
+      async (newImg) => {
         // 清理旧的 Blob URL
         if (currentBlobUrl) {
           URL.revokeObjectURL(currentBlobUrl)
           currentBlobUrl = null
         }
 
-        if (!newVal) return
-
         // 处理封面 Blob URL
-        const coverUrl = newVal.img || defaultCover
+        const coverUrl = newImg ? newImg : defaultCover
+        console.log('coverUrl', coverUrl)
 
         if (coverUrl.startsWith('http')) {
           const blobUrl = await getBlobUrlFromUrl(coverUrl)
@@ -234,7 +235,6 @@ export const useGlobalPlayStatusStore = defineStore(
       },
       { immediate: true }
     )
-
     // 监听 cover 变化，提取颜色
     watch(
       () => player.cover,
@@ -413,7 +413,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
               parsedLyrics = ttmlLyrics as LyricLine[]
 
-              sdkPromise.catch(() => {})
+              sdkPromise.catch(() => { })
             } catch (ttmlError: any) {
               if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
                 return

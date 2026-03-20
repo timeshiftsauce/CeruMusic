@@ -1258,7 +1258,8 @@ const scrollToSong = (songmid: string | number, source: string) => {
 }
 
 defineExpose({
-  scrollToSong
+  scrollToSong,
+  sortedSongs
 })
 </script>
 
