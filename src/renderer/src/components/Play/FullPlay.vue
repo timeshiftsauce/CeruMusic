@@ -18,6 +18,8 @@ import _ from 'lodash'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { useDlnaStore } from '@renderer/store/dlna'
+import { MessagePlugin } from 'tdesign-vue-next'
 
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
@@ -27,6 +29,7 @@ import CommentsOverlay from './CommentsOverlay.vue'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
+const dlnaStore = useDlnaStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
 const showSettings = ref(false)
@@ -414,6 +417,10 @@ const actualCoverImage = computed(() => {
 })
 
 const jumpTime = (e) => {
+  if (dlnaStore.currentDevice) {
+    MessagePlugin.warning('投屏模式下不支持拖拽进度')
+    return
+  }
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
 // 监听封面图片变化
@@ -645,6 +652,31 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
+// --- 后台暂停动画逻辑 Start ---
+const isAppActive = ref(!document.hidden)
+
+const handleVisibilityChange = () => {
+  isAppActive.value = !document.hidden
+  if (document.hidden) {
+    bgRef.value?.pause()
+  } else {
+    bgRef.value?.resume()
+  }
+}
+
+const handleWindowBlur = () => {
+  isAppActive.value = false
+  bgRef.value?.pause()
+}
+
+const handleWindowFocus = () => {
+  isAppActive.value = !document.hidden
+  if (!document.hidden) {
+    bgRef.value?.resume()
+  }
+}
+// --- 后台暂停动画逻辑 End ---
+
 // 保存 debounce 函数引用以便后续移除
 const debouncedCheckOverflow = _.debounce(checkOverflow, 200)
 
@@ -652,12 +684,20 @@ onMounted(() => {
   window.addEventListener('resize', debouncedCheckOverflow)
   document.addEventListener('click', handleClickOutside)
   window.addEventListener('keydown', handleKeyDown)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('blur', handleWindowBlur)
+  window.addEventListener('focus', handleWindowFocus)
   // 初始检查
   setTimeout(checkOverflow, 500)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', debouncedCheckOverflow)
+  document.removeEventListener('click', handleClickOutside)
   window.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('blur', handleWindowBlur)
+  window.removeEventListener('focus', handleWindowFocus)
 })
 // removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---
@@ -810,7 +850,7 @@ onUnmounted(() => {
       :class="{ idle: isIdle }"
     >
       <AudioVisualizer
-        :show="Audio.isPlay"
+        :show="Audio.isPlay && isAppActive"
         :height="70"
         :bar-count="80"
         :color="mainColor"

@@ -42,7 +42,9 @@ import {
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
+import { useDlnaStore } from '@renderer/store/dlna'
 
+const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
@@ -52,6 +54,97 @@ const { player } = storeToRefs(globalPlayStatus)
 const songInfo = computed(() => player.value.songInfo || ({} as any))
 
 const {} = controlAudio
+
+watch(
+  () => dlnaStore.currentDevice,
+  (device) => {
+    if (Audio.value.audio) {
+      Audio.value.audio.muted = !!device
+    }
+  },
+  { immediate: true }
+)
+
+let dlnaSyncInterval: any = null
+
+watch(
+  () => dlnaStore.currentDevice,
+  (device) => {
+    if (device) {
+      if (!dlnaSyncInterval) {
+        dlnaSyncInterval = setInterval(async () => {
+          if (Audio.value.isPlay) {
+            const position = await dlnaStore.getPosition()
+            if (position && typeof position === 'number') {
+              // Only sync if the difference is more than 2 seconds to avoid jitter
+              if (Math.abs(Audio.value.currentTime - position) > 2) {
+                if (Audio.value.audio) {
+                  Audio.value.audio.currentTime = position
+                }
+              }
+            }
+          }
+        }, 1000)
+      }
+    } else {
+      if (dlnaSyncInterval) {
+        clearInterval(dlnaSyncInterval)
+        dlnaSyncInterval = null
+      }
+    }
+  }
+)
+
+watch(
+  () => Audio.value.audio,
+  (newAudio) => {
+    if (newAudio && dlnaStore.currentDevice) {
+      newAudio.muted = true
+    }
+  }
+)
+
+watch(
+  () => Audio.value.url,
+  (newUrl) => {
+    if (dlnaStore.currentDevice && newUrl) {
+      if (Audio.value.audio) {
+        Audio.value.audio.pause() // Pause locally while TV loads
+      }
+      dlnaStore.play(newUrl, songInfo.value.name || 'CeruMusic').then(() => {
+        // After loading on TV, sync and play
+        setTimeout(async () => {
+          if (Audio.value.audio) {
+            const pos = await dlnaStore.getPosition()
+            if (pos && typeof pos === 'number') {
+              Audio.value.audio.currentTime = pos
+            }
+            Audio.value.audio.play().catch(() => {})
+          }
+        }, 1500)
+      })
+    }
+  }
+)
+
+watch(
+  () => Audio.value.isPlay,
+  (isPlay) => {
+    if (dlnaStore.currentDevice) {
+      if (isPlay) dlnaStore.resume()
+      else dlnaStore.pause()
+    }
+  }
+)
+
+watch(
+  () => Audio.value.volume,
+  (newVol) => {
+    if (dlnaStore.currentDevice) {
+      dlnaStore.setVolume(newVol)
+    }
+  }
+)
 
 // 当前歌曲是否已在“我的喜欢”
 const likeState = ref(false)
@@ -461,6 +554,10 @@ const durationFormatted = computed(() => formatTime(Audio.value.duration))
 
 // 进度条拖动处理
 const handleProgressClick = (event: MouseEvent) => {
+  if (dlnaStore.currentDevice) {
+    MessagePlugin.warning('投屏模式下不支持拖拽进度')
+    return
+  }
   if (!progressRef.value) return
 
   const rect = progressRef.value.getBoundingClientRect()
@@ -470,8 +567,29 @@ const handleProgressClick = (event: MouseEvent) => {
   // 更新临时进度值，使UI立即响应
   tempProgressPercentage.value = percentage
 
+  const wasPlaying = Audio.value.isPlay
   const newTime = (percentage / 100) * Audio.value.duration
-  seekTo(newTime)
+  if (dlnaStore.currentDevice) {
+    // Pause local audio while DLNA seeks/buffers
+    if (Audio.value.audio && !Audio.value.audio.paused) {
+      Audio.value.audio.pause()
+    }
+    dlnaStore.seek(newTime).then(() => {
+      seekTo(newTime)
+      // Wait a bit for DLNA to buffer, then sync and resume
+      setTimeout(async () => {
+        if (wasPlaying && Audio.value.audio) {
+          const position = await dlnaStore.getPosition()
+          if (position && typeof position === 'number') {
+            Audio.value.audio.currentTime = position
+          }
+          Audio.value.audio.play().catch(() => {})
+        }
+      }, 1000)
+    })
+  } else {
+    seekTo(newTime)
+  }
 }
 
 const handleProgressDragMove = (event: MouseEvent) => {
@@ -497,8 +615,30 @@ const handleProgressDragEnd = (event: MouseEvent) => {
   const rect = progressRef.value.getBoundingClientRect()
   const offsetX = Math.max(0, Math.min(event.clientX - rect.left, rect.width))
   const percentage = (offsetX / rect.width) * 100
+  const wasPlaying = Audio.value.isPlay
   const newTime = (percentage / 100) * Audio.value.duration
-  seekTo(newTime)
+
+  if (dlnaStore.currentDevice) {
+    // Pause local audio while DLNA seeks/buffers
+    if (Audio.value.audio && !Audio.value.audio.paused) {
+      Audio.value.audio.pause()
+    }
+    dlnaStore.seek(newTime).then(() => {
+      seekTo(newTime)
+      // Wait a bit for DLNA to buffer, then sync and resume
+      setTimeout(async () => {
+        if (wasPlaying && Audio.value.audio) {
+          const position = await dlnaStore.getPosition()
+          if (position && typeof position === 'number') {
+            Audio.value.audio.currentTime = position
+          }
+          Audio.value.audio.play().catch(() => {})
+        }
+      }, 1000)
+    })
+  } else {
+    seekTo(newTime)
+  }
 
   isDraggingProgress.value = false
   window.removeEventListener('mousemove', handleProgressDragMove)
@@ -506,6 +646,10 @@ const handleProgressDragEnd = (event: MouseEvent) => {
 }
 
 const handleProgressDragStart = (event: MouseEvent) => {
+  if (dlnaStore.currentDevice) {
+    MessagePlugin.warning('投屏模式下不支持拖拽进度')
+    return
+  }
   event.preventDefault()
   document.querySelector('.progress-handle')?.classList.add('dragging')
 
