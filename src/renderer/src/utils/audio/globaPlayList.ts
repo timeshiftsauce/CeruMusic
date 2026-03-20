@@ -158,20 +158,6 @@ const playSong = async (song: SongList) => {
       Audio.value.audio.volume = Audio.value.volume / 100
     }
 
-    // 如果切歌了，这里先不更新 UI，等真正开始获取 URL 了再说？
-    // 不，UI 应该立即响应。
-    songInfo.value.name = song.name
-    songInfo.value.singer = song.singer
-    songInfo.value.albumName = song.albumName
-    songInfo.value.img = song.img
-    userInfo.value.lastPlaySongId = song.songmid
-    mediaSessionController.updateMetadata({
-      title: song.name,
-      artist: song.singer,
-      album: song.albumName || '未知专辑',
-      artworkUrl: song.img || defaultCoverImg
-    })
-
     let urlToPlay = ''
     // let usedAutoSwitch = false
     try {
@@ -224,7 +210,15 @@ const playSong = async (song: SongList) => {
                 MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                 playSuccess = true
                 urlToPlay = url
+                // 音频已就绪后再更新 UI，让用户看到新歌曲时音频已经在播放
                 songInfo.value = { ...song }
+                mediaSessionController.updateMetadata({
+                  title: song.name,
+                  artist: song.singer,
+                  album: song.albumName || '未知专辑',
+                  artworkUrl: song.img || defaultCoverImg
+                })
+                userInfo.value.lastPlaySongId = song.songmid
                 break
               } catch (e) {
                 continue
@@ -249,7 +243,7 @@ const playSong = async (song: SongList) => {
         return
       }
     } else {
-      // 原源 URL 获取成功，尝试播放
+      // 原源 URL 获取成功，先准备好音频
       if (Audio.value.audio) {
         const a = Audio.value.audio
         try {
@@ -293,6 +287,15 @@ const playSong = async (song: SongList) => {
 
                   MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                   playSuccess = true
+                  // 音频已就绪后再更新 UI
+                  songInfo.value = { ...song }
+                  mediaSessionController.updateMetadata({
+                    title: song.name,
+                    artist: song.singer,
+                    album: song.albumName || '未知专辑',
+                    artworkUrl: song.img || defaultCoverImg
+                  })
+                  userInfo.value.lastPlaySongId = song.songmid
                   break
                 } catch (e) {
                   continue
@@ -317,7 +320,15 @@ const playSong = async (song: SongList) => {
 
     if (currentPlayRequestId !== requestId) return
 
+    // 音频已就绪后再更新 UI
     songInfo.value = { ...song }
+    mediaSessionController.updateMetadata({
+      title: song.name,
+      artist: song.singer,
+      album: song.albumName || '未知专辑',
+      artworkUrl: song.img || defaultCoverImg
+    })
+    userInfo.value.lastPlaySongId = song.songmid
     isLoadingSong.value = false
     start()
       .catch(async () => {
@@ -574,18 +585,19 @@ const initPlayback = async () => {
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
     const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
     if (lastPlayedSong) {
-      songInfo.value = { ...lastPlayedSong }
-      mediaSessionController.updateMetadata({
-        title: lastPlayedSong.name,
-        artist: lastPlayedSong.singer,
-        album: lastPlayedSong.albumName || '未知专辑',
-        artworkUrl: lastPlayedSong.img || defaultCoverImg
-      })
       if (!Audio.value.isPlay) {
         try {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
+          // UI 和元数据应在音频准备好后再更新
+          songInfo.value = { ...lastPlayedSong }
+          mediaSessionController.updateMetadata({
+            title: lastPlayedSong.name,
+            artist: lastPlayedSong.singer,
+            album: lastPlayedSong.albumName || '未知专辑',
+            artworkUrl: lastPlayedSong.img || defaultCoverImg
+          })
         } catch {}
         if (userInfo.value.currentTime) {
           pendingRestorePosition = userInfo.value.currentTime
@@ -598,6 +610,14 @@ const initPlayback = async () => {
           }
         }
       } else {
+        // 如果已经在播放，只需更新 metadata
+        songInfo.value = { ...lastPlayedSong }
+        mediaSessionController.updateMetadata({
+          title: lastPlayedSong.name,
+          artist: lastPlayedSong.singer,
+          album: lastPlayedSong.albumName || '未知专辑',
+          artworkUrl: lastPlayedSong.img || defaultCoverImg
+        })
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(
             Audio.value.audio.paused ? 'paused' : 'playing'
