@@ -85,6 +85,20 @@ export const cloudSongListAPI = {
     formData.append('describe', data.describe || '')
 
     if (data.cover) {
+      // 鉴黄拦截
+      try {
+        const { checkImageIsSafe } = await import('@renderer/utils/nsfwCheck')
+        const isSafe = await checkImageIsSafe(data.cover)
+        if (!isSafe) {
+          throw new Error('歌单封面包含违规内容，请更换图片')
+        }
+      } catch (e: any) {
+        if (e.message && e.message.includes('违规内容')) {
+          return Promise.reject(e)
+        }
+        console.warn('NSFW 图片检测流程异常或跳过', e)
+      }
+
       if (typeof data.cover === 'string') {
         console.log('data.cover', data.cover, isBase64(data.cover))
         if (isBase64(data.cover)) {
@@ -121,6 +135,20 @@ export const cloudSongListAPI = {
     if (data.describe) formData.append('describe', data.describe)
 
     if (data.cover) {
+      // 鉴黄拦截
+      try {
+        const { checkImageIsSafe } = await import('@renderer/utils/nsfwCheck')
+        const isSafe = await checkImageIsSafe(data.cover)
+        if (!isSafe) {
+          throw new Error('歌单封面包含违规内容，请更换图片')
+        }
+      } catch (e: any) {
+        if (e.message && e.message.includes('违规内容')) {
+          return Promise.reject(e)
+        }
+        console.warn('NSFW 图片检测流程异常或跳过', e)
+      }
+
       if (typeof data.cover === 'string') {
         if (isBase64(data.cover)) {
           // Convert base64 to file and append

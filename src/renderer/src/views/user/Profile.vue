@@ -146,6 +146,24 @@ const handleFileSelect = async (event: Event) => {
     return
   }
 
+  // 验证图片安全内容（鉴黄）
+  try {
+    MessagePlugin.loading({ content: '正在检测图片安全...', duration: 0 })
+    const { checkImageIsSafe } = await import('@renderer/utils/nsfwCheck')
+    const isSafe = await checkImageIsSafe(file)
+    MessagePlugin.closeAll()
+
+    if (!isSafe) {
+      MessagePlugin.error('图片包含违规内容，请更换其他图片')
+      return
+    }
+  } catch (error: any) {
+    MessagePlugin.closeAll()
+    console.error('NSFW Check Error:', error)
+    MessagePlugin.error('图片安全检测失败，请检查网络或稍后重试')
+    return
+  }
+
   try {
     avatarUploading.value = true
     await authStore.uploadAvatar(file)
