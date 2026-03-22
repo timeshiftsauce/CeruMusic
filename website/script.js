@@ -249,7 +249,11 @@ async function resolveGithubProxy(onProgress = null) {
 
     for (let i = 0; i < probes.length; i += 1) {
       const candidate = probes[i]
-      const result = await probeProxySpeed(candidate, GITHUB_PROXY_TEST_URL, GITHUB_PROXY_TEST_TIMEOUT)
+      const result = await probeProxySpeed(
+        candidate,
+        GITHUB_PROXY_TEST_URL,
+        GITHUB_PROXY_TEST_TIMEOUT
+      )
       if (!result) {
         if (typeof onProgress === 'function') {
           onProgress({
