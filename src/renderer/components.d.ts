@@ -55,6 +55,7 @@ declare module 'vue' {
     NTag: typeof import('naive-ui')['NTag']
     NText: typeof import('naive-ui')['NText']
     NUpload: typeof import('naive-ui')['NUpload']
+    PerformanceBackground: typeof import('./src/components/Play/PerformanceBackground.vue')['default']
     PlaylistActions: typeof import('./src/components/Play/PlaylistActions.vue')['default']
     PlaylistDrawer: typeof import('./src/components/Play/PlaylistDrawer.vue')['default']
     PlaylistSettings: typeof import('./src/components/Settings/PlaylistSettings.vue')['default']

@@ -905,7 +905,7 @@
   --td-comp-margin-xxxl: var(--td-size-10);
   --td-comp-margin-xxxxl: var(--td-size-12);
 }
-html[data-theme="dark"],
-html[data-theme="dark"] body{
+html[data-theme='dark'],
+html[data-theme='dark'] body {
   background-color: var(--td-bg-color-container);
 }

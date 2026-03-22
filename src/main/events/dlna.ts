@@ -147,7 +147,7 @@ export function initDlnaService() {
           usn,
           location,
           address: rinfo.address,
-          name,
+          name
         }
       }
     })

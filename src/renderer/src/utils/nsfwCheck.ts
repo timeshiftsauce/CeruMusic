@@ -17,7 +17,7 @@ export class NsfwCheckTool {
     Sexy: 0.8
   }
 
-  private constructor() { }
+  private constructor() {}
 
   /**
    * 获取单例实例
