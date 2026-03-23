@@ -165,12 +165,7 @@ const playSong = async (song: SongList) => {
     songInfo.value.albumName = song.albumName
     songInfo.value.img = song.img
     userInfo.value.lastPlaySongId = song.songmid
-    mediaSessionController.updateMetadata({
-      title: song.name,
-      artist: song.singer,
-      album: song.albumName || '未知专辑',
-      artworkUrl: song.img || defaultCoverImg
-    })
+    // 注意：SMTC 的 updateMetadata 会在音频准备好后再调用，避免切换时空隙
 
     let urlToPlay = ''
     // let usedAutoSwitch = false
@@ -224,7 +219,13 @@ const playSong = async (song: SongList) => {
                 MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                 playSuccess = true
                 urlToPlay = url
-                songInfo.value = { ...song }
+                // 音频已就绪后再更新 SMTC，避免切换时空隙
+                mediaSessionController.updateMetadata({
+                  title: song.name,
+                  artist: song.singer,
+                  album: song.albumName || '未知专辑',
+                  artworkUrl: song.img || defaultCoverImg
+                })
                 break
               } catch (e) {
                 continue
@@ -293,6 +294,13 @@ const playSong = async (song: SongList) => {
 
                   MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                   playSuccess = true
+                  // 音频已就绪后再更新 SMTC，避免切换时空隙
+                  mediaSessionController.updateMetadata({
+                    title: song.name,
+                    artist: song.singer,
+                    album: song.albumName || '未知专辑',
+                    artworkUrl: song.img || defaultCoverImg
+                  })
                   break
                 } catch (e) {
                   continue
@@ -317,7 +325,13 @@ const playSong = async (song: SongList) => {
 
     if (currentPlayRequestId !== requestId) return
 
-    songInfo.value = { ...song }
+    // 音频已就绪后再更新 SMTC，避免切换时空隙
+    mediaSessionController.updateMetadata({
+      title: song.name,
+      artist: song.singer,
+      album: song.albumName || '未知专辑',
+      artworkUrl: song.img || defaultCoverImg
+    })
     isLoadingSong.value = false
     start()
       .catch(async () => {
@@ -574,18 +588,20 @@ const initPlayback = async () => {
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
     const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
     if (lastPlayedSong) {
+      // UI 立即更新
       songInfo.value = { ...lastPlayedSong }
-      mediaSessionController.updateMetadata({
-        title: lastPlayedSong.name,
-        artist: lastPlayedSong.singer,
-        album: lastPlayedSong.albumName || '未知专辑',
-        artworkUrl: lastPlayedSong.img || defaultCoverImg
-      })
       if (!Audio.value.isPlay) {
         try {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
+          // SMTC 元数据在音频准备好后再更新，避免切换时空隙
+          mediaSessionController.updateMetadata({
+            title: lastPlayedSong.name,
+            artist: lastPlayedSong.singer,
+            album: lastPlayedSong.albumName || '未知专辑',
+            artworkUrl: lastPlayedSong.img || defaultCoverImg
+          })
         } catch {}
         if (userInfo.value.currentTime) {
           pendingRestorePosition = userInfo.value.currentTime
@@ -598,6 +614,13 @@ const initPlayback = async () => {
           }
         }
       } else {
+        // 如果已经在播放，更新 SMTC
+        mediaSessionController.updateMetadata({
+          title: lastPlayedSong.name,
+          artist: lastPlayedSong.singer,
+          album: lastPlayedSong.albumName || '未知专辑',
+          artworkUrl: lastPlayedSong.img || defaultCoverImg
+        })
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(
             Audio.value.audio.paused ? 'paused' : 'playing'
