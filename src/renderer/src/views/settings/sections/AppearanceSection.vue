@@ -7,6 +7,7 @@ import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
 import LyricFontSettings from '@renderer/components/Settings/LyricFontSettings.vue'
 import DesktopLyricStyle from '@renderer/components/Settings/DesktopLyricStyle.vue'
+import GlobalBackgroundSettings from '@renderer/components/Settings/GlobalBackgroundSettings.vue'
 
 // Store initialization
 const userStore = LocalUserDetailStore()
@@ -128,6 +129,11 @@ const switchStyle = (style: 'windows' | 'traffic-light'): void => {
           </template>
         </div>
       </div>
+    </t-card>
+
+    <div class="setting-spacer"></div>
+    <t-card title="全局背景" class="setting-card" hover-shadow>
+      <GlobalBackgroundSettings />
     </t-card>
 
     <!-- 歌词设置 -->

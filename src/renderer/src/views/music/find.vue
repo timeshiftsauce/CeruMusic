@@ -6,6 +6,9 @@ import { storeToRefs } from 'pinia'
 import { extractDominantColor } from '../../utils/color/colorExtractor'
 import LeaderBord from '@renderer/components/Find/LeaderBord.vue'
 import { ChevronDownIcon } from 'tdesign-icons-vue-next'
+import { useSettingsStore } from '@renderer/store/Settings'
+
+const settingsStore = useSettingsStore()
 
 // 路由实例
 const router = useRouter()
@@ -379,6 +382,7 @@ const songlistScrollRef = ref<HTMLDivElement>()
                 v-for="(playlist, index) in recommendPlaylists"
                 :key="playlist.id"
                 class="playlist-card"
+                :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
                 @click="playPlaylist(playlist)"
               >
                 <div class="playlist-cover">
@@ -667,6 +671,16 @@ const songlistScrollRef = ref<HTMLDivElement>()
   cursor: pointer;
   position: relative;
 
+  &.custom-bg {
+    background-color: var(--td-bg-color-component);
+    backdrop-filter: blur(8px);
+
+    .playlist-info {
+      background-color: rgba(var(--td-bg-color-container-rgb), 0.2);
+      backdrop-filter: blur(4px);
+    }
+  }
+
   // 现代化悬浮效果
   &:hover {
     transform: translateY(-4px) scale(1.02);
@@ -740,8 +754,6 @@ const songlistScrollRef = ref<HTMLDivElement>()
     padding: 1.25rem 1rem;
     position: relative;
     background: var(--find-card-info-bg);
-
-    backdrop-filter: blur(4px);
     transition: all 0.3s ease;
 
     .playlist-title {

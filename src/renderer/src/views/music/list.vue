@@ -195,6 +195,25 @@ const handleLocateBtnMouseLeave = () => {
 }
 
 onMounted(() => {
+  // 尽早触发图片预加载，不等待歌曲数据请求
+  const coverUrl = (route.query.cover as string) || ''
+
+  // 提前设置 playlistInfo 的封面，让 DOM 渲染时直接有背景地址
+  if (coverUrl) {
+    playlistInfo.value.cover = coverUrl
+    bgImageFromRoute.value = true // 标记是从路由获取的封面
+    const img = new Image()
+    img.onload = () => {
+      bgImageLoaded.value = true
+    }
+    img.onerror = () => {
+      bgImageLoaded.value = true
+    }
+    img.src = coverUrl
+  } else {
+    bgImageLoaded.value = true
+  }
+
   fetchPlaylistSongs()
   triggerLocateBtnVisible()
 })
@@ -232,9 +251,18 @@ const isCloudUserPlaylist = computed(() => {
 })
 
 // 获取歌单歌曲列表
+const bgImageLoaded = ref(false)
+const bgImageFromRoute = ref(false)
+
 const fetchPlaylistSongs = async () => {
   try {
     loading.value = true
+    // 如果已经通过路由加载了背景，则不再重置加载状态
+    // 我们在这里完全不重置 bgImageLoaded
+    // 如果没有路由封面，才考虑将其重置为 false
+    if (!bgImageFromRoute.value && !playlistInfo.value.cover) {
+      bgImageLoaded.value = false
+    }
 
     // 从路由参数中获取歌单信息
     const parsedMeta = JSON.parse(<string>route.query.meta || '{}')
@@ -242,17 +270,20 @@ const fetchPlaylistSongs = async () => {
       parsedMeta.cloudId = route.query.cloudId
     }
 
-    playlistInfo.value = {
-      id: route.params.id as string,
-      title: (route.query.title as string) || '歌单',
-      author: (route.query.author as string) || '未知',
-      cover: (route.query.cover as string) || '',
-      total: Number(route.query.total) || 0,
-      source: (route.query.source as string) || (LocalUserDetail.userSource.source as any),
-      desc: (route.query.desc as string) || (route.query.description as string) || '',
-      isLeaderboard: route.query.isLeaderboard === 'true',
-      meta: parsedMeta
-    }
+    // 重点：不要直接用字面量对象覆盖 playlistInfo.value，这会导致整个对象被替换，可能引起相关的 computed 或 watch（甚至由于深层响应式解构）造成 DOM 的瞬时重新渲染。
+    // 我们应该逐个更新属性，并且只有在值确实不同的时候才更新。
+    const routeCover = (route.query.cover as string) || ''
+
+    if (route.params.id) playlistInfo.value.id = route.params.id as string
+    if (route.query.title) playlistInfo.value.title = route.query.title as string
+    if (route.query.author) playlistInfo.value.author = route.query.author as string
+    if (routeCover && playlistInfo.value.cover !== routeCover) playlistInfo.value.cover = routeCover
+    if (route.query.total) playlistInfo.value.total = Number(route.query.total)
+    if (route.query.source) playlistInfo.value.source = route.query.source as string
+    if (route.query.desc || route.query.description)
+      playlistInfo.value.desc = (route.query.desc as string) || (route.query.description as string)
+    playlistInfo.value.isLeaderboard = route.query.isLeaderboard === 'true'
+    playlistInfo.value.meta = parsedMeta
 
     // 检查是否是本地歌单
     const isLocalPlaylist = route.query.type === 'local' || route.query.source === 'local'
@@ -270,6 +301,19 @@ const fetchPlaylistSongs = async () => {
     } else {
       // 处理网络歌单（重置并加载第一页）
       await fetchNetworkPlaylistSongs(true)
+    }
+
+    // 完全移除请求完成后的重新加载逻辑，因为我们强制使用路由传过来的封面
+    // 如果最初因为没有路由封面而未能加载，并且后来通过本地数据库获取到了封面，这里只做最基本的后备处理
+    if (!bgImageFromRoute.value && playlistInfo.value.cover && !bgImageLoaded.value) {
+      const img = new Image()
+      img.onload = () => {
+        bgImageLoaded.value = true
+      }
+      img.onerror = () => {
+        bgImageLoaded.value = true
+      }
+      img.src = playlistInfo.value.cover
     }
   } catch (error) {
     console.error('获取歌单歌曲失败:', error)
@@ -487,7 +531,7 @@ const checkCloudSync = async () => {
       const syncMsg = MessagePlugin.info('正在后台同步本地歌单更新...', 0)
 
       try {
-        await handleUploadToCloud()
+        await handleSyncToCloud()
       } catch {
         MessagePlugin.error('同步到云端失败')
       } finally {
@@ -563,11 +607,14 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
       // 如果API返回了歌单详细信息，更新歌单信息
       if (result.info) {
+        // 忽略接口返回的封面，强制使用路由传递的封面
+        const currentCover = playlistInfo.value.cover
+
         playlistInfo.value = {
           ...playlistInfo.value,
           title: result.info.name || playlistInfo.value.title,
           author: result.info.author || playlistInfo.value.author,
-          cover: result.info.img || playlistInfo.value.cover,
+          cover: currentCover, // 始终保持原有封面（即路由传过来的）
           total: Number(apiTotal || result.info.total || playlistInfo.value.total || 0),
           desc: result.info.desc || ''
         }
@@ -1579,7 +1626,11 @@ const filteredMoreActions = computed(() =>
     <!-- 固定头部区域 -->
     <div class="fixed-header" :class="{ compact: isHeaderCompact }">
       <!-- 歌单信息 -->
-      <div class="playlist-header" :class="{ compact: isHeaderCompact }">
+      <div
+        class="playlist-header"
+        :class="{ compact: isHeaderCompact, 'bg-loaded': bgImageLoaded }"
+        :style="{ '--header-cover': `url(${playlistInfo.cover})` }"
+      >
         <div
           class="playlist-cover"
           :class="{ clickable: isLocalPlaylist || isCloudUserPlaylist }"
@@ -1809,8 +1860,18 @@ const filteredMoreActions = computed(() =>
   }
 }
 
+@keyframes fadeInBg {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .playlist-header {
   display: flex;
+  overflow: hidden;
   align-items: center;
   gap: 1.5rem;
   padding: 1.5rem;
@@ -1819,6 +1880,55 @@ const filteredMoreActions = computed(() =>
   border-radius: 0.75rem;
   box-shadow: var(--list-header-shadow);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 1;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: var(--header-cover);
+    background-size: cover;
+    background-position: top center;
+    background-repeat: no-repeat;
+    z-index: -1;
+    border-radius: inherit;
+    filter: blur(10px);
+    overflow: hidden;
+    transform: scale(1.1); /* 防止模糊边缘漏出底色 */
+
+    /* 适配暗色主题：增加灰度并降低亮度 */
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.8) 0%,
+      rgba(0, 0, 0, 0.05) 60%,
+      rgba(0, 0, 0, 0) 70%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.8) 0%,
+      rgba(0, 0, 0, 0.05) 60%,
+      rgba(0, 0, 0, 0) 70%
+    );
+    transition: opacity 0.8s ease-out;
+    opacity: 0;
+
+    @media (prefers-color-scheme: dark) {
+      filter: blur(10px) grayscale(0.5) brightness(0.6);
+    }
+
+    :root[data-theme='dark'] & {
+      filter: blur(10px) grayscale(0.5) brightness(0.6);
+    }
+  }
+
+  /* bg-loaded 类控制伪元素透明度变为 1 */
+  &.bg-loaded::before {
+    opacity: 1;
+  }
 
   &.compact {
     padding: 1rem;
