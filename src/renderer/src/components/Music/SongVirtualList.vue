@@ -1,7 +1,14 @@
 <template>
   <div class="song-virtual-list">
     <!-- 表头 -->
-    <div class="list-header-container" style="background-color: var(--song-list-header-bg)">
+    <div
+      class="list-header-container"
+      :style="
+        settingsStore.settings.globalBackground?.enable
+          ? 'background-color: var(--td-bg-color-component); backdrop-filter: blur(8px)'
+          : 'background-color: var(--song-list-header-bg)'
+      "
+    >
       <Transition name="header-fade" mode="out-in">
         <div
           v-if="!isMultiSelect"
@@ -169,7 +176,12 @@
     </div>
 
     <!-- 虚拟滚动容器 -->
-    <div ref="scrollContainer" class="virtual-scroll-container" @scroll="onScroll">
+    <div
+      ref="scrollContainer"
+      class="virtual-scroll-container"
+      :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
+      @scroll="onScroll"
+    >
       <div class="virtual-scroll-spacer" :style="{ height: totalHeight + 'px' }">
         <div class="virtual-scroll-content" :style="{ transform: `translateY(${offsetY}px)` }">
           <div
@@ -322,6 +334,9 @@ import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongLis
 import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import { useAuthStore } from '@renderer/store'
+import { useSettingsStore } from '@renderer/store/Settings'
+
+const settingsStore = useSettingsStore()
 
 interface Song {
   id?: number
@@ -1337,7 +1352,7 @@ defineExpose({
   display: grid;
   grid-template-columns: 50px 1fr 200px 60px 80px;
   padding: 0 10px;
-  background: var(--song-list-header-bg);
+  background-color: transparent;
   border-bottom: 1px solid var(--song-list-header-border);
   font-size: 12px;
   color: var(--song-list-header-text);
@@ -1421,6 +1436,11 @@ defineExpose({
   flex: 1;
   min-height: 0;
 
+  &.custom-bg {
+    background: var(--td-bg-color-component);
+    backdrop-filter: blur(8px);
+  }
+
   .virtual-scroll-spacer {
     position: relative;
   }
@@ -1440,10 +1460,11 @@ defineExpose({
     cursor: pointer;
     transition: background-color 0.2s ease;
     height: 64px;
+    background-color: transparent;
 
     &:hover,
     &.is-hovered {
-      background: var(--song-list-item-hover);
+      background-color: var(--song-list-item-hover);
 
       .col-title .song-info .song-title {
         color: var(--song-list-title-hover);

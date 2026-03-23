@@ -127,6 +127,12 @@ ipcMain.handle('local-music:select-dirs', async () => {
   return res.filePaths
 })
 
+ipcMain.handle('dialog:openFile', async (_e, options) => {
+  const res = await dialog.showOpenDialog(options)
+  if (res.canceled) return []
+  return res.filePaths
+})
+
 ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
   if (!Array.isArray(dirs) || dirs.length === 0) {
     return []

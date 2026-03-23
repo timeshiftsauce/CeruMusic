@@ -42,7 +42,7 @@ import {
 } from '@renderer/utils/playlist/cloudSyncHelper'
 import { useAuthStore } from '@renderer/store'
 
-// 扩展 Songs 类型以包含本地音乐的额外属性
+const settingsStore = useSettingsStore()
 interface LocalSong extends Songs {
   path?: string
   size?: string
@@ -1685,6 +1685,7 @@ onDeactivated(() => {
             v-for="playlist in playlists"
             :key="playlist.id"
             class="playlist-card"
+            :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
             @contextmenu="handlePlaylistContextMenu($event, playlist)"
           >
             <div class="playlist-cover" @click="viewPlaylist(playlist)">
@@ -2433,6 +2434,11 @@ onDeactivated(() => {
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
+
+  &.custom-bg {
+    background-color: var(--td-bg-color-component);
+    backdrop-filter: blur(8px);
+  }
 
   &:hover {
     transform: translateY(-4px);
