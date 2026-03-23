@@ -751,6 +751,7 @@ function checkGuide() {
         box-shadow: none;
         &.t-input--suffix {
           padding-right: 0 !important;
+          background-color: transparent;
         }
       }
 

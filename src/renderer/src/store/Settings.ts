@@ -9,6 +9,15 @@ export interface TagWriteOptions {
   lyricFormat: 'lrc' | 'word-by-word' // 歌词格式
 }
 
+export interface GlobalBackgroundSettings {
+  enable: boolean
+  type: 'image' | 'video' | 'none'
+  url: string
+  opacity: number // 0-1
+  blur: number // px
+  brightness: number // 0-2
+}
+
 export interface SettingsState {
   showFloatBall: boolean
   autoCacheMusic?: boolean
@@ -31,6 +40,7 @@ export interface SettingsState {
   isDarkMode?: boolean // 暗色模式
   springFestivalDisabled?: boolean
   routePreloadEnabled?: boolean
+  globalBackground?: GlobalBackgroundSettings
 }
 
 export const useSettingsStore = defineStore(
@@ -59,7 +69,15 @@ export const useSettingsStore = defineStore(
       theme: 'default',
       isDarkMode: false,
       springFestivalDisabled: false,
-      routePreloadEnabled: true
+      routePreloadEnabled: true,
+      globalBackground: {
+        enable: false,
+        type: 'none',
+        url: '',
+        opacity: 0.5,
+        blur: 10,
+        brightness: 0.8
+      }
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -134,6 +152,16 @@ export const useSettingsStore = defineStore(
       }
       if (typeof settings.value.routePreloadEnabled === 'undefined') {
         settings.value.routePreloadEnabled = true
+      }
+      if (!settings.value.globalBackground) {
+        settings.value.globalBackground = {
+          enable: false,
+          type: 'none',
+          url: '',
+          opacity: 0.5,
+          blur: 10,
+          brightness: 0.8
+        }
       }
       if (!settings.value.tagWriteOptions) {
         settings.value.tagWriteOptions = {
