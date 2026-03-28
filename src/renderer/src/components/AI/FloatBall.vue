@@ -6,6 +6,8 @@ import { Loading as TLoading } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
+import songListAPI from '@renderer/api/songList'
+import { MessagePlugin } from 'tdesign-vue-next'
 
 const userStore = LocalUserDetailStore()
 const settingsStore = useSettingsStore()
@@ -216,6 +218,39 @@ const sendMessage = async () => {
   inputText.value = ''
   isLoading.value = true
 
+  const intent = detectPlaylistIntent(userMessage)
+  if (intent) {
+    const idx = messages.value.length
+    messages.value.push({
+      type: 'loading',
+      content: '正在为您分析需求并生成歌单...',
+      html: ''
+    })
+    scrollToBottom()
+    try {
+      const res = await createAiPlaylistFromPrompt(userMessage, intent)
+      messages.value[idx] = {
+        type: 'ai',
+        content: res.msg,
+        html: DOMPurify.sanitize(await marked(res.msg))
+      }
+      isLoading.value = false
+      scrollToBottom()
+      return
+    } catch (e: any) {
+      messages.value[idx] = {
+        type: 'error',
+        content: e?.message ? `生成歌单失败: ${e.message}` : '生成歌单失败',
+        html: DOMPurify.sanitize(
+          await marked(e?.message ? `生成歌单失败: ${e.message}` : '生成歌单失败')
+        )
+      }
+      isLoading.value = false
+      scrollToBottom()
+      return
+    }
+  }
+
   messages.value.push({
     type: 'user',
     content: userMessage,
@@ -420,6 +455,103 @@ onBeforeUnmount(() => {
   window.api.ai.removeStreamListeners()
   saveBallPosition() // 保存位置
 })
+
+const detectPlaylistIntent = (text: string) => {
+  const hasPlaylist = /歌单|playlist/.test(text)
+  const askGenerate = /生成|创建|来一个|搞一个|build|make/i.test(text)
+  if (!hasPlaylist && !askGenerate) return null
+  if (/(学习|专注|静心|study|focus)/i.test(text)) {
+    return {
+      name: '学习专注',
+      keywords: ['学习', '专注', '轻音乐', '纯音乐', 'Lo-Fi', 'Ambient', '白噪音', '钢琴曲']
+    }
+  }
+  if (/(睡觉|助眠|放松|relax|sleep)/i.test(text)) {
+    return {
+      name: '助眠放松',
+      keywords: ['助眠', '放松', '环境氛围', 'Ambient', '白噪音', '轻音乐', 'Lo-Fi']
+    }
+  }
+  if (/(跑步|健身|运动|workout|跑步歌单)/i.test(text)) {
+    return {
+      name: '运动健身',
+      keywords: ['运动', '健身', '跑步', '动感', '电子', 'EDM', '节奏', '快节奏']
+    }
+  }
+  const m = text.match(/适合(.+?)的歌单/)
+  const theme = m ? m[1] : '主题精选'
+  return {
+    name: theme,
+    keywords: [theme, '精选', '热门', '推荐']
+  }
+}
+
+const uniqueBySongmid = (list: any[]) => {
+  const seen = new Set<string>()
+  const out: any[] = []
+  for (const s of list) {
+    const key =
+      String(s?.songmid ?? '') ||
+      `${String(s?.name ?? '').toLowerCase()}__${String(s?.singer ?? '').toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(s)
+  }
+  return out
+}
+
+const createAiPlaylistFromPrompt = async (
+  prompt: string,
+  intent: { name: string; keywords: string[] }
+) => {
+  const localUserStore = LocalUserDetailStore()
+  const source = localUserStore.userSource.source as unknown as string
+  if (!source) {
+    throw new Error('请先在设置中配置音源')
+  }
+  const kw = intent.keywords.slice(0, 6)
+  const tasks = kw.map((k) =>
+    window.api.music
+      .requestSdk('search', {
+        source,
+        keyword: k,
+        page: 1,
+        limit: 50
+      })
+      .catch(() => ({ list: [] }))
+  )
+  const results = await Promise.all(tasks)
+  const merged = uniqueBySongmid(
+    results
+      .map((r: any) => (Array.isArray(r?.list) ? r.list : []))
+      .flat()
+      .filter((s) => !!s)
+  )
+  const pick = merged.slice(0, 100)
+  const now = new Date()
+  const name = `AI·${intent.name}歌单 ${now
+    .toLocaleString('zh-CN', { hour12: false })
+    .replace(/\//g, '-')}`
+  const desc = `根据提示词自动生成：${prompt}；关键词：${kw.join('、')}`
+  const createRes = await songListAPI.createLocal(name, desc)
+  if (!createRes.success || !createRes.data) {
+    throw new Error(createRes.error || '创建本地歌单失败')
+  }
+  await new Promise((r) => setTimeout(r, 200))
+  const addRes = await songListAPI.addSongs(createRes.data.id, pick)
+  if (!addRes.success) {
+    throw new Error(addRes.error || '添加歌曲到歌单失败')
+  }
+  window.dispatchEvent(new Event('playlist-updated'))
+  const added = (addRes.data && (addRes.data as any).added) ?? pick.length
+  const skipped = (addRes.data && (addRes.data as any).skipped) ?? Math.max(0, pick.length - added)
+  const msg =
+    skipped > 0
+      ? `已为您创建歌单「${name}」，共加入 ${added} 首歌曲，跳过 ${skipped} 首重复。您可以在“歌单”页面查看与播放。`
+      : `已为您创建歌单「${name}」，共加入 ${added} 首歌曲。您可以在“歌单”页面查看与播放。`
+  MessagePlugin.success('AI歌单已创建')
+  return { id: createRes.data.id, msg }
+}
 </script>
 
 <!-- 下面 template + style 原封不动保持 -->
