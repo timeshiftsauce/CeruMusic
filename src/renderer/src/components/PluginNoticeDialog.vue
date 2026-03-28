@@ -54,16 +54,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useRoute } from 'vue-router'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
 const route = useRoute()
+const localUserStore = LocalUserDetailStore()
 
 interface DialogNotice {
   type: string
   data: any
   timestamp: number
   pluginName: string
+  pluginId?: string
   dialogType: 'update' | 'info' | 'error' | 'warning' | 'success'
   title: string
   message: string
@@ -148,13 +151,75 @@ const handleAction = async (actionType: string) => {
     console.log('[PluginNotice] 处理操作:', actionType, notice.value)
 
     if (actionType === 'update' && notice.value.updateUrl) {
-      window.open(notice.value.updateUrl)
-      handleClose()
+      // 尝试内部更新
+      try {
+        const result = await window.api.plugins.downloadAndAddPlugin(
+          notice.value.updateUrl,
+          notice.value.pluginType || 'cr',
+          notice.value.pluginId
+        )
+
+        if (result && typeof result === 'object' && 'error' in result) {
+          throw new Error(result.error)
+        }
+
+        MessagePlugin.success(`插件 "${notice.value.pluginName}" 更新成功！`)
+        handleClose()
+      } catch (err: any) {
+        console.error('[PluginNotice] 内部更新失败:', err)
+        // 内部更新失败，提示用户是否打开浏览器手动安装
+        DialogPlugin.confirm({
+          header: '自动更新失败',
+          body: `插件内部更新失败（${err.message}），是否打开浏览器手动下载安装？`,
+          confirmBtn: '打开浏览器',
+          cancelBtn: '取消',
+          onConfirm: () => {
+            window.open(notice.value!.updateUrl)
+            handleClose()
+          },
+          onCancel: () => {
+            handleClose()
+          }
+        })
+      }
     } else if (actionType === 'cancel') {
       // 取消操作直接关闭
       handleClose()
+    } else if (actionType === 'confirm' && notice.value.updateUrl) {
+      try {
+        const result = await window.api.plugins.downloadAndAddPlugin(
+          notice.value!.updateUrl!,
+          notice.value!.pluginType || 'cr'
+        )
+        if (result && typeof result === 'object' && 'error' in result) {
+          throw new Error(result.error)
+        }
+        const pluginId = result.pluginId
+        const pluginInfo = result.pluginInfo || {}
+        const sources = result.supportedSources || {}
+        let selectSources = Object.keys(sources)[0] || ''
+        if (
+          typeof localUserStore.userInfo.selectSources === 'string' &&
+          sources[localUserStore.userInfo.selectSources]
+        ) {
+          selectSources = localUserStore.userInfo.selectSources
+        }
+        let selectQuality = ''
+        if (selectSources && sources[selectSources]?.qualitys?.length) {
+          const qualitys = sources[selectSources].qualitys
+          selectQuality = qualitys[qualitys.length - 1]
+        }
+        localUserStore.userInfo.pluginId = pluginId
+        localUserStore.userInfo.pluginName = pluginInfo.name || ''
+        localUserStore.userInfo.supportedSources = sources
+        localUserStore.userInfo.selectSources = selectSources
+        localUserStore.userInfo.selectQuality = selectQuality
+        MessagePlugin.success(`插件 "${pluginInfo.name || '已安装插件'}" 安装成功并已设为当前使用`)
+        handleClose()
+      } catch (e: any) {
+        MessagePlugin.error(`安装插件失败: ${e.message || '未知错误'}`)
+      }
     } else {
-      // 其他操作直接关闭对话框
       handleClose()
     }
   } catch (error: any) {

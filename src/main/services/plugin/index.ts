@@ -60,7 +60,7 @@ const pluginService = {
     }
   },
 
-  async addPlugin(pluginCode: string, pluginName: string) {
+  async addPlugin(pluginCode: string, pluginName: string, targetPluginId?: string) {
     try {
       // 首先解析插件信息
       const tempPluginManager = new CeruMusicPluginHost(pluginCode, new Logger('temp'))
@@ -75,20 +75,47 @@ const pluginService = {
       const pluginsDir = path.join(getAppDirPath(), 'plugins')
       await fsPromise.mkdir(pluginsDir, { recursive: true })
 
-      // 检查是否已存在相同名称和版本的插件
-      const existingPlugins = (await this.getPluginsList()) || []
-      const duplicatePlugin = existingPlugins.find(
-        (plugin) =>
-          plugin.pluginInfo.name === pluginInfo.name &&
-          plugin.pluginInfo.version === pluginInfo.version
-      )
+      let pluginId = targetPluginId || randomUUID().replace(/-/g, '')
+      let isUpdate = false
 
-      if (duplicatePlugin) {
-        throw new Error(`插件 "${pluginInfo.name} v${pluginInfo.version}" 已存在，不能重复添加`)
+      if (targetPluginId && loadedPlugins[targetPluginId]) {
+        // 明确指定了要更新的插件
+        isUpdate = true
+      } else {
+        // 检查是否已存在相同名称的插件 (作为后备方案)
+        const existingPlugins = (await this.getPluginsList()) || []
+        const existingPlugin = existingPlugins.find(
+          (plugin) => plugin.pluginInfo.name === pluginInfo.name
+        )
+
+        if (existingPlugin) {
+          if (existingPlugin.pluginInfo.version === pluginInfo.version) {
+            throw new Error(`插件 "${pluginInfo.name} v${pluginInfo.version}" 已存在，不能重复添加`)
+          }
+          // 如果是更新，复用原来的 pluginId，这样前端当前使用的插件不会掉
+          pluginId = existingPlugin.pluginId
+          isUpdate = true
+        }
       }
 
-      // 生成插件ID和安全的文件名
-      const pluginId = randomUUID().replace(/-/g, '')
+      if (isUpdate) {
+        // 卸载旧插件文件
+        try {
+          const files = await fsPromise.readdir(pluginsDir)
+          const oldPluginFile = files.find((file) => file.startsWith(`${pluginId}-`))
+          if (oldPluginFile) {
+            await fsPromise.unlink(path.join(pluginsDir, oldPluginFile))
+          }
+        } catch (e) {
+          console.warn('删除旧插件文件失败:', e)
+        }
+
+        if (loadedPlugins[pluginId]) {
+          delete loadedPlugins[pluginId]
+        }
+      }
+
+      // 生成安全的插件文件名
       const safePluginName = (pluginName || pluginInfo.name).replace(/[^\w\d-]/g, '_')
       const filePath = path.join(pluginsDir, `${pluginId}-${safePluginName}`)
 
@@ -97,6 +124,7 @@ const pluginService = {
 
       // 重新加载插件以确保正确初始化
       const ceruPluginManager = new CeruMusicPluginHost()
+      ceruPluginManager.pluginId = pluginId
       await ceruPluginManager.loadPlugin(filePath, new Logger(pluginId))
 
       // 将插件添加到已加载插件列表
@@ -189,6 +217,7 @@ const pluginService = {
 
             // 加载插件
             const ceruPluginManager = new CeruMusicPluginHost()
+            ceruPluginManager.pluginId = pluginId
             await ceruPluginManager.loadPlugin(fullPath, new Logger(pluginId))
 
             // 获取插件信息
@@ -236,7 +265,7 @@ const pluginService = {
     })
   },
 
-  async downloadAndAddPlugin(url: string, type: 'lx' | 'cr') {
+  async downloadAndAddPlugin(url: string, type: 'lx' | 'cr', targetPluginId?: string) {
     try {
       // 验证URL
       if (!url || typeof url !== 'string') {
@@ -264,7 +293,7 @@ const pluginService = {
       const fileName = `downloaded_${Date.now()}.js`
 
       // 调用现有的添加插件方法
-      return await this.addPlugin(pluginCode, fileName)
+      return await this.addPlugin(pluginCode, fileName, targetPluginId)
     } catch (error: any) {
       console.error('下载并添加插件失败:', error)
       return { error: error.message || '下载插件失败' }

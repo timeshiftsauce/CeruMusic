@@ -34,6 +34,7 @@ export interface PluginNoticeData {
   currentVersion?: string
   timestamp?: number
   pluginName?: string
+  pluginId?: string
 }
 
 export interface DialogNotice {
@@ -41,6 +42,7 @@ export interface DialogNotice {
   data: any
   timestamp: number
   pluginName: string
+  pluginId?: string
   dialogType: 'update' | 'info' | 'error' | 'warning' | 'success'
   title: string
   message: string
@@ -116,7 +118,8 @@ export function sendPluginNotice(noticeData: PluginNoticeData, pluginName?: stri
       type: noticeData.type,
       data: noticeData.data,
       timestamp: noticeData.timestamp || Date.now(),
-      pluginName: pluginName || noticeData.pluginName || 'Unknown Plugin'
+      pluginName: pluginName || noticeData.pluginName || 'Unknown Plugin',
+      pluginId: noticeData.pluginId
     }
 
     // 根据通知类型处理不同的逻辑
@@ -155,7 +158,18 @@ export function sendPluginNotice(noticeData: PluginNoticeData, pluginName?: stri
           noticeData.data.message ||
           noticeData.data.content ||
           getDefaultMessage(noticeData.type, noticeData.data, baseNoticeData.pluginName),
-        actions: [{ text: '我知道了', type: 'confirm', primary: true }]
+        ...(noticeData.data.url
+          ? {
+              updateUrl: noticeData.data.url,
+              pluginType: noticeData.data.pluginInfo?.type
+            }
+          : {}),
+        actions: noticeData.data.url
+          ? [
+              { text: '取消', type: 'cancel' },
+              { text: '安装并使用', type: 'confirm', primary: true }
+            ]
+          : [{ text: '我知道了', type: 'confirm', primary: true }]
       }
       mainWindow.webContents.send('plugin-notice', infoNotice)
     }

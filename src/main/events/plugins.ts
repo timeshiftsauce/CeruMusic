@@ -12,23 +12,29 @@ function PluginEvent() {
     }
   })
 
-  ipcMain.handle('service-plugin-downloadAndAddPlugin', async (_, url, type): Promise<any> => {
-    try {
-      return await pluginService.downloadAndAddPlugin(url, type)
-    } catch (error: any) {
-      console.error('Error downloading and adding plugin:', error)
-      return { error: error.message }
+  ipcMain.handle(
+    'service-plugin-downloadAndAddPlugin',
+    async (_, url, type, targetPluginId): Promise<any> => {
+      try {
+        return await pluginService.downloadAndAddPlugin(url, type, targetPluginId)
+      } catch (error: any) {
+        console.error('Error downloading and adding plugin:', error)
+        return { error: error.message }
+      }
     }
-  })
+  )
 
-  ipcMain.handle('service-plugin-addPlugin', async (_, pluginCode, pluginName): Promise<any> => {
-    try {
-      return await pluginService.addPlugin(pluginCode, pluginName)
-    } catch (error: any) {
-      console.error('Error adding plugin:', error)
-      return { error: error.message }
+  ipcMain.handle(
+    'service-plugin-addPlugin',
+    async (_, pluginCode, pluginName, targetPluginId): Promise<any> => {
+      try {
+        return await pluginService.addPlugin(pluginCode, pluginName, targetPluginId)
+      } catch (error: any) {
+        console.error('Error adding plugin:', error)
+        return { error: error.message }
+      }
     }
-  })
+  )
 
   ipcMain.handle('service-plugin-getPluginById', async (_, id): Promise<any> => {
     try {
