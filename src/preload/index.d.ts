@@ -105,9 +105,12 @@ interface CustomAPI {
   // 插件管理API
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') => Promise<any>
-    downloadAndAddPlugin: (url: string, type: 'lx' | 'cr') => Promise<any>
+    downloadAndAddPlugin: (url: string, type: 'lx' | 'cr', targetPluginId?: string) => Promise<any>
     uninstallPlugin(pluginId: string): ApiResult | PromiseLike<ApiResult>
-    addPlugin: (pluginCode: string, pluginName: string) => Promise<any>
+    addPlugin: (pluginCode: string, pluginName: string, targetPluginId?: string) => Promise<any>
+    onDeepLinkAdd: (
+      callback: (payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }) => void
+    ) => () => void
     getPluginById: (id: string) => Promise<any>
     loadAllPlugins: () => Promise<any>
     getPluginLog: (pluginId: string) => Promise<any>
