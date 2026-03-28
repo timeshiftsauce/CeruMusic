@@ -29,7 +29,6 @@ export class DeepLinkRouter {
       // Construct a path-like string: host + pathname
       // e.g. cerumusic://oauth/callback -> host="oauth", pathname="/callback" -> "oauth/callback"
       const normalizedPath = `${parsed.host}${parsed.pathname}`.replace(/\/$/, '')
-
       for (const [route, handler] of this.routes.entries()) {
         // Match if the path equals the route or starts with it (for sub-paths)
         if (normalizedPath === route || normalizedPath.startsWith(route)) {

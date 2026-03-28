@@ -43,15 +43,23 @@ const api = {
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') =>
       ipcRenderer.invoke('service-plugin-selectAndAddPlugin', type),
-    downloadAndAddPlugin: (url: string, type: 'lx' | 'cr') =>
-      ipcRenderer.invoke('service-plugin-downloadAndAddPlugin', url, type),
-    addPlugin: (pluginCode: string, pluginName: string) =>
-      ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName),
+    downloadAndAddPlugin: (url: string, type: 'lx' | 'cr', targetPluginId?: string) =>
+      ipcRenderer.invoke('service-plugin-downloadAndAddPlugin', url, type, targetPluginId),
+    addPlugin: (pluginCode: string, pluginName: string, targetPluginId?: string) =>
+      ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName, targetPluginId),
     getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),
     loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins'),
     uninstallPlugin: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId),
-    getPluginLog: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPluginLog', pluginId)
+    getPluginLog: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPluginLog', pluginId),
+    onDeepLinkAdd: (
+      callback: (payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }) => void
+    ) => {
+      const handler = (_: any, payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }) =>
+        callback(payload)
+      ipcRenderer.on('plugin-add-link', handler)
+      return () => ipcRenderer.removeListener('plugin-add-link', handler)
+    }
   },
   // ai助手
   ai: {

@@ -133,6 +133,7 @@ class PluginError extends Error {
 class CeruMusicPluginHost {
   private pluginCode: string | null
   private plugin: CeruMusicPlugin | null
+  public pluginId?: string
 
   /**
    * 创建一个新的插件主机实例
@@ -631,7 +632,7 @@ class CeruMusicPluginHost {
       const sendNotice = () => {
         if (this.plugin?.pluginInfo) {
           sendPluginNotice(
-            { type: type as any, data, currentVersion: this.plugin.pluginInfo.version },
+            { type: type as any, data, currentVersion: this.plugin.pluginInfo.version, pluginId: this.pluginId },
             this.plugin.pluginInfo.name
           )
         } else {
