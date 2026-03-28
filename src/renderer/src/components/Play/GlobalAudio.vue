@@ -190,7 +190,7 @@ const forward = (name: string, val?: any) => {
 const handleEnded = (): void => {
   audioStore.Audio.isPlay = false
   audioStore.publish('ended')
-  forward('playNext')
+  forward('autoNext')
 }
 
 const handleSeeked = (): void => {

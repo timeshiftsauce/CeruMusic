@@ -55,8 +55,10 @@ const api = {
     onDeepLinkAdd: (
       callback: (payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }) => void
     ) => {
-      const handler = (_: any, payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }) =>
-        callback(payload)
+      const handler = (
+        _: any,
+        payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }
+      ) => callback(payload)
       ipcRenderer.on('plugin-add-link', handler)
       return () => ipcRenderer.removeListener('plugin-add-link', handler)
     }
