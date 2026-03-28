@@ -632,7 +632,12 @@ class CeruMusicPluginHost {
       const sendNotice = () => {
         if (this.plugin?.pluginInfo) {
           sendPluginNotice(
-            { type: type as any, data, currentVersion: this.plugin.pluginInfo.version, pluginId: this.pluginId },
+            {
+              type: type as any,
+              data,
+              currentVersion: this.plugin.pluginInfo.version,
+              pluginId: this.pluginId
+            },
             this.plugin.pluginInfo.name
           )
         } else {
