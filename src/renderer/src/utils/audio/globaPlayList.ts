@@ -1,4 +1,4 @@
-import { ref, toRaw } from 'vue'
+import { ref, toRaw, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -455,6 +455,36 @@ const isLoadingSong = ref(false)
 const autoNextCount = ref(0)
 const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
 
+const shuffleOrder = ref<Array<number | string>>([])
+const buildShuffleOrder = () => {
+  const ids = list.value.map((s) => s.songmid)
+  // Fisher-Yates
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+  }
+  shuffleOrder.value = ids
+}
+
+watch(
+  () => playMode.value,
+  (mode) => {
+    if (mode === PlayMode.RANDOM) {
+      buildShuffleOrder()
+    }
+  }
+)
+
+watch(
+  () => list.value,
+  () => {
+    if (playMode.value === PlayMode.RANDOM) {
+      buildShuffleOrder()
+    }
+  },
+  { deep: true }
+)
+
 const updatePlayMode = () => {
   const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
   const currentIndex = modes.indexOf(playMode.value)
@@ -469,12 +499,7 @@ const playPrevious = async () => {
     const currentIndex = list.value.findIndex(
       (song) => song.songmid === userInfo.value.lastPlaySongId
     )
-    let prevIndex
-    if (playMode.value === PlayMode.RANDOM) {
-      prevIndex = Math.floor(Math.random() * list.value.length)
-    } else {
-      prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
-    }
+    const prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
     if (prevIndex >= 0 && prevIndex < list.value.length) {
       await playSong(list.value[prevIndex])
     }
@@ -484,6 +509,21 @@ const playPrevious = async () => {
 }
 
 const playNext = async () => {
+  if (list.value.length === 0) return
+  try {
+    const currentIndex = list.value.findIndex(
+      (song) => song.songmid === userInfo.value.lastPlaySongId
+    )
+    const nextIndex = (currentIndex + 1) % list.value.length
+    if (nextIndex >= 0 && nextIndex < list.value.length) {
+      await playSong(list.value[nextIndex])
+    }
+  } catch {
+    MessagePlugin.error('播放下一首失败')
+  }
+}
+
+const playNextAuto = async () => {
   if (list.value.length === 0) return
   try {
     if (playMode.value === PlayMode.SINGLE && userInfo.value.lastPlaySongId) {
@@ -499,15 +539,29 @@ const playNext = async () => {
         return
       }
     }
+    if (playMode.value === PlayMode.RANDOM) {
+      if (shuffleOrder.value.length !== list.value.length) {
+        buildShuffleOrder()
+      }
+      const curId = userInfo.value.lastPlaySongId
+      let idx = shuffleOrder.value.findIndex((id) => id === curId)
+      if (idx < 0) idx = -1
+      let nextIdx = idx + 1
+      if (nextIdx >= shuffleOrder.value.length) {
+        buildShuffleOrder()
+        nextIdx = 0
+      }
+      const nextId = shuffleOrder.value[nextIdx]
+      const nextSong = list.value.find((s) => s.songmid === nextId)
+      if (nextSong) {
+        await playSong(nextSong)
+      }
+      return
+    }
     const currentIndex = list.value.findIndex(
       (song) => song.songmid === userInfo.value.lastPlaySongId
     )
-    let nextIndex: number | string
-    if (playMode.value === PlayMode.RANDOM) {
-      nextIndex = Math.floor(Math.random() * list.value.length)
-    } else {
-      nextIndex = (currentIndex + 1) % list.value.length
-    }
+    const nextIndex = (currentIndex + 1) % list.value.length
     if (nextIndex >= 0 && nextIndex < list.value.length) {
       await playSong(list.value[nextIndex])
     }
@@ -545,6 +599,9 @@ const onGlobalCtrl = (e: any) => {
     case 'playNext':
       void playNext()
       console.log('next')
+      break
+    case 'autoNext':
+      void playNextAuto()
       break
     case 'volumeDelta':
       {
@@ -662,6 +719,7 @@ export {
   uninstallPlayback,
   playSong,
   playNext,
+  playNextAuto,
   playPrevious,
   updatePlayMode,
   togglePlayPause,
