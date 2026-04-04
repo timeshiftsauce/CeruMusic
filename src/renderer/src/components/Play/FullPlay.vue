@@ -685,7 +685,7 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   window.addEventListener('keydown', handleKeyDown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  window.addEventListener('blur', handleWindowBlur)
+  // window.addEventListener('blur', handleWindowBlur)
   window.addEventListener('focus', handleWindowFocus)
   // 初始检查
   setTimeout(checkOverflow, 500)
@@ -696,7 +696,7 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
   window.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
-  window.removeEventListener('blur', handleWindowBlur)
+  // window.removeEventListener('blur', handleWindowBlur)
   window.removeEventListener('focus', handleWindowFocus)
 })
 // removed redundant onBeforeUnmount
@@ -850,7 +850,7 @@ onUnmounted(() => {
       :class="{ idle: isIdle }"
     >
       <AudioVisualizer
-        :show="Audio.isPlay && isAppActive"
+        :show="Audio.isPlay"
         :height="70"
         :bar-count="80"
         :color="mainColor"

@@ -388,16 +388,25 @@ const applyMatch = async (candidate: any) => {
 }
 
 const playAll = () => {
-  if (songs.value.length === 0) return
+  const sourceSongs =
+    songListRef.value && Array.isArray(songListRef.value.sortedSongs)
+      ? (songListRef.value.sortedSongs as MusicItem[])
+      : songs.value
+  if (sourceSongs.length === 0) return
   if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('replacePlaylist', toRaw(songs.value) as any)
+    const replaceData = sourceSongs.map((song) => toRaw(song))
+    ;(window as any).musicEmitter.emit('replacePlaylist', replaceData as any)
   }
 }
 
 const addAllToPlaylist = () => {
-  if (songs.value.length === 0) return
+  const sourceSongs =
+    songListRef.value && Array.isArray(songListRef.value.sortedSongs)
+      ? (songListRef.value.sortedSongs as MusicItem[])
+      : songs.value
+  if (sourceSongs.length === 0) return
   if ((window as any).musicEmitter) {
-    for (const s of songs.value) {
+    for (const s of sourceSongs) {
       ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(s) as any)
     }
     MessagePlugin.success('已将全部加入播放列表')
@@ -819,6 +828,7 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
         :cover-loader="coverLoader as any"
         :extra-menu-factory="extraMenuFactory as any"
         :hide-local-source="true"
+        :enable-sort="true"
         :enable-download="false"
         :multi-select="multiSelect"
         @play="(s: any) => handlePlay(s)"
