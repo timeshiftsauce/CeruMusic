@@ -3,6 +3,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
+import { calculateBestQuality } from '@common/utils/quality'
 
 // 事件类型定义
 type PlaylistEvents = {
@@ -14,8 +15,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-// 将事件总线挂载到全局
-;(window as any).musicEmitter = emitter
+  // 将事件总线挂载到全局
+  ; (window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -49,12 +50,8 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
 
-    if (
-      qualityKey.indexOf(quality) >
-      qualityKey.indexOf((song.types[song.types.length - 1] as unknown as { type: any }).type)
-    ) {
-      quality = (song.types[song.types.length - 1] as unknown as { type: any }).type
-    }
+
+    quality = calculateBestQuality(song.types, quality) || '128k'
 
     console.log(`使用音质: ${quality} - ${qualityMap[quality]}`)
     if (!LocalUserDetail.userSource.pluginId) throw new Error('插件都不配就想播放，想的倒挺美呢')
