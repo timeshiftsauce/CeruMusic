@@ -41,12 +41,66 @@ export interface PluginSource {
   [key: string]: any
 }
 
+// ==================== 服务插件类型定义 ====================
+export interface PluginConfigField {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'number' | 'select'
+  required?: boolean
+  default?: any
+  placeholder?: string
+  options?: { label: string; value: any }[]
+}
+
+export interface ServicePlaylist {
+  id: string
+  name: string
+  songCount: number
+  coverImg?: string
+  description?: string
+}
+
+export interface PlaylistSongResult {
+  songs: ImportableSong[]
+  total: number
+}
+
+export interface ImportableSong {
+  name: string
+  singer: string
+  albumName: string
+  albumId: string
+  interval: string
+  img: string
+  source: string
+  songmid: string
+  url?: string
+  types: string[]
+  _types: Record<string, any>
+  lrc: null | string
+}
+
+export type PluginType = 'music-source' | 'service'
+
 interface CeruMusicPlugin {
   pluginInfo: PluginInfo
   sources: PluginSource[]
   musicUrl: (source: string, musicInfo: MusicInfo, quality: string) => Promise<string>
   getPic?: (source: string, musicInfo: MusicInfo) => Promise<string>
   getLyric?: (source: string, musicInfo: MusicInfo) => Promise<string>
+  // 服务类插件扩展
+  pluginType?: PluginType
+  configSchema?: PluginConfigField[]
+  onConfigUpdate?: (config: Record<string, any>) => void
+  getPlaylists?: (config: Record<string, any>) => Promise<ServicePlaylist[]>
+  getPlaylistSongs?: (
+    config: Record<string, any>,
+    playlistId: string
+  ) => Promise<PlaylistSongResult>
+  testConnection?: (config: Record<string, any>) => Promise<{ success: boolean; message: string }>
+  getLyric?:
+    | ((source: string, musicInfo: MusicInfo) => Promise<string>)
+    | ((config: Record<string, any>, songInfo: any) => Promise<{ lyric: string }>)
 }
 
 interface MusicInfo extends MusicItem {
@@ -221,6 +275,100 @@ class CeruMusicPluginHost {
     return this._callPluginMethod('getLyric', source, musicInfo)
   }
 
+  // ==================== 服务插件方法 ====================
+
+  /**
+   * 获取插件类型
+   */
+  getPluginType(): PluginType {
+    this._ensurePluginInitialized()
+    return this.plugin!.pluginType || 'music-source'
+  }
+
+  /**
+   * 获取插件配置 schema
+   */
+  getConfigSchema(): PluginConfigField[] {
+    this._ensurePluginInitialized()
+    return this.plugin!.configSchema || []
+  }
+
+  /**
+   * 测试服务连接
+   */
+  async testConnection(
+    config: Record<string, any>
+  ): Promise<{ success: boolean; message: string }> {
+    this._ensurePluginInitialized()
+    if (typeof this.plugin!.testConnection !== 'function') {
+      throw new PluginError('Plugin does not implement testConnection.', 'testConnection')
+    }
+    try {
+      return await this.plugin!.testConnection.call({ cerumusic: this._getCerumusicApi() }, config)
+    } catch (error: any) {
+      throw new PluginError(`testConnection failed: ${error.message}`, 'testConnection')
+    }
+  }
+
+  /**
+   * 获取远程歌单列表
+   */
+  async getPlaylists(config: Record<string, any>): Promise<ServicePlaylist[]> {
+    this._ensurePluginInitialized()
+    if (typeof this.plugin!.getPlaylists !== 'function') {
+      throw new PluginError('Plugin does not implement getPlaylists.', 'getPlaylists')
+    }
+    try {
+      return await this.plugin!.getPlaylists.call({ cerumusic: this._getCerumusicApi() }, config)
+    } catch (error: any) {
+      throw new PluginError(`getPlaylists failed: ${error.message}`, 'getPlaylists')
+    }
+  }
+
+  /**
+   * 获取远程歌单歌曲
+   */
+  async getPlaylistSongs(
+    config: Record<string, any>,
+    playlistId: string
+  ): Promise<PlaylistSongResult> {
+    this._ensurePluginInitialized()
+    if (typeof this.plugin!.getPlaylistSongs !== 'function') {
+      throw new PluginError('Plugin does not implement getPlaylistSongs.', 'getPlaylistSongs')
+    }
+    try {
+      return await this.plugin!.getPlaylistSongs.call(
+        { cerumusic: this._getCerumusicApi() },
+        config,
+        playlistId
+      )
+    } catch (error: any) {
+      throw new PluginError(`getPlaylistSongs failed: ${error.message}`, 'getPlaylistSongs')
+    }
+  }
+
+  /**
+   * 获取服务插件歌词（异步，播放时按需调用）
+   */
+  async getServiceLyric(
+    config: Record<string, any>,
+    songInfo: any
+  ): Promise<{ lyric: string }> {
+    this._ensurePluginInitialized()
+    if (typeof this.plugin!.getLyric !== 'function') {
+      throw new PluginError('Plugin does not implement getLyric.', 'getLyric')
+    }
+    try {
+      return await (this.plugin!.getLyric as any).call(
+        { cerumusic: this._getCerumusicApi() },
+        config,
+        songInfo
+      )
+    } catch (error: any) {
+      throw new PluginError(`getServiceLyric failed: ${error.message}`, 'getLyric')
+    }
+  }
+
   // ==================== 私有方法 ====================
 
   /**
@@ -275,7 +423,16 @@ class CeruMusicPluginHost {
    * @private
    */
   private _validatePlugin(): void {
-    if (!this.plugin?.pluginInfo || !this.plugin.sources || !this.plugin.musicUrl) {
+    if (!this.plugin?.pluginInfo) {
+      throw new PluginError('Invalid plugin structure. Required field: pluginInfo.')
+    }
+
+    // 服务类插件不要求 musicUrl 和 sources
+    if (this.plugin.pluginType === 'service') {
+      return
+    }
+
+    if (!this.plugin.sources || !this.plugin.musicUrl) {
       throw new PluginError(
         'Invalid plugin structure. Required fields: pluginInfo, sources, musicUrl.'
       )

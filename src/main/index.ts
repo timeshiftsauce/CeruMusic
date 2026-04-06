@@ -8,7 +8,8 @@ import {
   Display,
   Tray,
   Menu,
-  desktopCapturer
+  desktopCapturer,
+  session
 } from 'electron'
 import { configManager } from './services/ConfigManager'
 import { join } from 'path'
@@ -553,6 +554,21 @@ app.whenReady().then(async () => {
   }
 
   createWindow()
+
+  // GitCode 防盗链：去掉对 gitcode.com 请求的 Referer
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      const referer = details.requestHeaders['Referer'] || details.requestHeaders['referer']
+      const baseUrl = new URL(details.url).origin
+      if (referer) {
+        details.requestHeaders['Referer'] = baseUrl
+        details.requestHeaders['referer'] = baseUrl
+      }
+      callback({ requestHeaders: details.requestHeaders })
+    }
+  )
+
   setupDownloadManager()
   downloadManager.start()
 

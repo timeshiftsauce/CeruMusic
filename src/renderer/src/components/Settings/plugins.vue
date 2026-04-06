@@ -107,6 +107,7 @@
               {{ plugin.pluginInfo.name }}
               <span class="version">{{ plugin.pluginInfo.version }}</span>
               <span v-if="isPluginSelected(plugin.pluginId)" class="current-tag">当前使用</span>
+              <span v-if="isServicePlugin(plugin)" class="service-tag">服务插件</span>
             </h3>
             <p class="author">作者: {{ plugin.pluginInfo.author }}</p>
             <p class="description">{{ plugin.pluginInfo.description || '无描述' }}</p>
@@ -130,7 +131,23 @@
               <template #icon><t-icon name="view-list" /></template> 日志
             </t-button>
             <t-button
-              v-if="!isPluginSelected(plugin.pluginId)"
+              v-if="isServicePlugin(plugin)"
+              theme="default"
+              size="small"
+              @click.stop="openConfigDialog(plugin)"
+            >
+              <template #icon><t-icon name="setting" /></template> 配置
+            </t-button>
+            <t-button
+              v-if="isServicePlugin(plugin)"
+              theme="primary"
+              size="small"
+              @click.stop="openImportDialog(plugin)"
+            >
+              <template #icon><t-icon name="download" /></template> 导入歌单
+            </t-button>
+            <t-button
+              v-if="!isPluginSelected(plugin.pluginId) && !isServicePlugin(plugin)"
               theme="primary"
               size="small"
               @click="selectPlugin(plugin)"
@@ -221,14 +238,96 @@
           </div>
         </template>
       </t-dialog>
+
+      <!-- 服务插件配置对话框 -->
+      <t-dialog
+        v-model:visible="configDialogVisible"
+        :close-btn="true"
+        attach="body"
+        width="500px"
+        :on-confirm="savePluginConfig"
+        confirm-btn="保存"
+        cancel-btn="取消"
+      >
+        <template #header>{{ configPluginName }} - 配置</template>
+        <template #body>
+          <div class="config-form">
+            <div v-for="field in configSchema" :key="field.key" class="config-field">
+              <label class="config-label">
+                {{ field.label }}
+                <span v-if="field.required" class="required-mark">*</span>
+              </label>
+              <t-input
+                v-if="field.type === 'text'"
+                v-model="configValues[field.key]"
+                :placeholder="field.placeholder || ''"
+                size="medium"
+              />
+              <t-input
+                v-else-if="field.type === 'password'"
+                v-model="configValues[field.key]"
+                type="password"
+                :placeholder="field.placeholder || ''"
+                size="medium"
+              />
+              <t-input-number
+                v-else-if="field.type === 'number'"
+                v-model="configValues[field.key]"
+                :placeholder="field.placeholder || ''"
+                size="medium"
+                style="width: 100%"
+              />
+              <t-select
+                v-else-if="field.type === 'select'"
+                v-model="configValues[field.key]"
+                :placeholder="field.placeholder || '请选择'"
+                size="medium"
+              >
+                <t-option
+                  v-for="opt in field.options"
+                  :key="opt.value"
+                  :value="opt.value"
+                  :label="opt.label"
+                />
+              </t-select>
+            </div>
+
+            <div class="config-test">
+              <t-button
+                theme="default"
+                size="small"
+                :loading="configTesting"
+                @click="testPluginConnection"
+              >
+                测试连接
+              </t-button>
+              <span
+                v-if="configTestResult"
+                class="test-result"
+                :class="{ success: configTestResult.success, fail: !configTestResult.success }"
+              >
+                {{ configTestResult.message }}
+              </span>
+            </div>
+          </div>
+        </template>
+      </t-dialog>
+
+      <!-- 导入歌单 -->
+      <ImportPlaylist
+        v-model:visible="importDialogVisible"
+        :plugin-id="importPluginId"
+        :plugin-name="importPluginName"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, toRaw } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import ImportPlaylist from '@renderer/components/ServicePlugin/ImportPlaylist.vue'
 
 interface PluginSource {
   name: string
@@ -243,11 +342,22 @@ interface PluginInfo {
   description?: string
 }
 
+interface PluginConfigField {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'number' | 'select'
+  required?: boolean
+  default?: any
+  placeholder?: string
+  options?: { label: string; value: any }[]
+}
+
 interface Plugin {
   pluginId: string
   pluginName: string
   pluginInfo: PluginInfo
   supportedSources: { [key: string]: PluginSource }
+  pluginType?: 'music-source' | 'service'
 }
 
 // 定义API返回结果的接口
@@ -274,6 +384,21 @@ const logs = ref<string[]>([])
 const logsLoading = ref(false)
 const logsError = ref<string | null>(null)
 const logContentRef = ref<HTMLElement | null>(null)
+
+// 服务插件配置相关
+const configDialogVisible = ref(false)
+const configPluginId = ref('')
+const configPluginName = ref('')
+const configSchema = ref<PluginConfigField[]>([])
+const configValues = ref<Record<string, any>>({})
+const configSaving = ref(false)
+const configTesting = ref(false)
+const configTestResult = ref<{ success: boolean; message: string } | null>(null)
+
+// 导入歌单相关
+const importDialogVisible = ref(false)
+const importPluginId = ref('')
+const importPluginName = ref('')
 
 // 获取store实例
 const localUserStore = LocalUserDetailStore()
@@ -362,6 +487,17 @@ async function getPlugins() {
       plugins.value = []
     } else if (Array.isArray(result)) {
       plugins.value = result
+      // 异步获取每个插件的类型
+      for (const p of plugins.value) {
+        try {
+          const typeRes = await window.api.plugins.getPluginType(p.pluginId)
+          if (typeRes?.data) {
+            p.pluginType = typeRes.data
+          }
+        } catch {
+          // 旧插件可能不支持，忽略
+        }
+      }
       console.log('插件列表加载完成', result)
     } else {
       // 处理意外的返回格式
@@ -553,6 +689,98 @@ async function refreshLogs() {
     console.error('刷新日志失败:', err)
     MessagePlugin.error(`刷新日志失败: ${err.message || '未知错误'}`)
   }
+}
+
+// ==================== 服务插件方法 ====================
+
+// 打开配置对话框
+async function openConfigDialog(plugin: Plugin) {
+  configPluginId.value = plugin.pluginId
+  configPluginName.value = plugin.pluginInfo.name
+  configTestResult.value = null
+
+  try {
+    // 获取配置 schema
+    const schemaRes = await window.api.plugins.getConfigSchema(plugin.pluginId)
+    configSchema.value = schemaRes?.data || []
+
+    // 获取已保存的配置
+    const configRes = await window.api.plugins.getConfig(plugin.pluginId)
+    const savedConfig = configRes?.data || {}
+
+    // 用 schema 默认值填充
+    const values: Record<string, any> = {}
+    for (const field of configSchema.value) {
+      values[field.key] = savedConfig[field.key] ?? field.default ?? ''
+    }
+    configValues.value = values
+
+    configDialogVisible.value = true
+  } catch (err: any) {
+    MessagePlugin.error(`获取插件配置失败: ${err.message}`)
+  }
+}
+
+// 保存配置
+async function savePluginConfig() {
+  configSaving.value = true
+  try {
+    // 验证必填字段
+    for (const field of configSchema.value) {
+      if (field.required && !configValues.value[field.key]) {
+        MessagePlugin.warning(`请填写 ${field.label}`)
+        configSaving.value = false
+        return
+      }
+    }
+
+    // toRaw + JSON round-trip 去除 Vue Proxy，避免 IPC structuredClone 报错
+    const plainConfig = JSON.parse(JSON.stringify(toRaw(configValues.value)))
+    await window.api.plugins.saveConfig(configPluginId.value, plainConfig)
+    MessagePlugin.success('配置已保存')
+    configDialogVisible.value = false
+  } catch (err: any) {
+    MessagePlugin.error(`保存配置失败: ${err.message}`)
+  } finally {
+    configSaving.value = false
+  }
+}
+
+// 测试连接
+async function testPluginConnection() {
+  configTesting.value = true
+  configTestResult.value = null
+
+  try {
+    // 先保存当前配置
+    const plainConfig = JSON.parse(JSON.stringify(toRaw(configValues.value)))
+    await window.api.plugins.saveConfig(configPluginId.value, plainConfig)
+
+    const result = await window.api.plugins.testConnection(configPluginId.value)
+    configTestResult.value = result
+    if (result?.success) {
+      MessagePlugin.success(result.message || '连接成功')
+    } else {
+      MessagePlugin.error(result?.message || '连接失败')
+    }
+  } catch (err: any) {
+    configTestResult.value = { success: false, message: err.message }
+    MessagePlugin.error(`测试连接失败: ${err.message}`)
+  } finally {
+    configTesting.value = false
+  }
+}
+
+// 打开导入歌单
+function openImportDialog(plugin: Plugin) {
+  importPluginId.value = plugin.pluginId
+  importPluginName.value = plugin.pluginInfo.name
+  importDialogVisible.value = true
+}
+
+// 检查插件是否是服务插件
+function isServicePlugin(plugin: Plugin): boolean {
+  return plugin.pluginType === 'service'
 }
 
 // 格式化时间
@@ -882,6 +1110,59 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 500;
   box-shadow: 0 1px 3px rgba(0, 167, 77, 0.2);
+}
+
+.service-tag {
+  background: linear-gradient(135deg, #5b8def, #3a6ed8);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(58, 110, 216, 0.2);
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--plugins-text-primary);
+
+  .required-mark {
+    color: #e34d59;
+    margin-left: 2px;
+  }
+}
+
+.config-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--plugins-border);
+
+  .test-result {
+    font-size: 13px;
+    &.success {
+      color: #2ba471;
+    }
+    &.fail {
+      color: #e34d59;
+    }
+  }
 }
 
 .plugin-actions {

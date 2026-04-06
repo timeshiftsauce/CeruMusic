@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe //c \"chcp 65001 >nul && echo 你好\")"
+    ]
+  }
+}
