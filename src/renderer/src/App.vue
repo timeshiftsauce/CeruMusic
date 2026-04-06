@@ -14,8 +14,3 @@
   <router-view v-else />
   <GlobalContextMenu />
 </template>
-
-<script setup lang="ts">
-import GlobalContextMenu from '@renderer/components/ContextMenu/GlobalContextMenu.vue'
-import GlobalBackground from '@renderer/components/GlobalBackground.vue'
-</script>

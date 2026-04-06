@@ -39,7 +39,8 @@ const sourceicon = {
   wy: 'wangyiyun',
   mg: 'mg',
   tx: 'tx',
-  kw: 'kw'
+  kw: 'kw',
+  git: 'git'
 }
 const source = ref('kugouyinle')
 interface MenuItem {
@@ -105,7 +106,8 @@ const sourceNames = {
   kg: '酷狗音乐',
   mg: '咪咕音乐',
   tx: 'QQ音乐',
-  kw: '酷我音乐'
+  kw: '酷我音乐',
+  git: 'GitCode'
 }
 
 // 动态音源列表数据，基于supportedSources

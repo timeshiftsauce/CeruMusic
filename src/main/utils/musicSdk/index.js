@@ -4,6 +4,7 @@ import kg from './kg/index'
 import tx from './tx/index'
 import wy from './wy/index'
 import mg from './mg/index'
+import git from './git/index'
 
 // 导入工具函数
 export {
@@ -44,6 +45,10 @@ const sources = {
     {
       name: '虾米音乐',
       id: 'xm'
+    },
+    {
+      name: 'Git音乐',
+      id: 'git'
     }
   ],
   kw,
@@ -51,7 +56,8 @@ const sources = {
   kg,
   tx,
   wy,
-  mg
+  mg,
+  git
 }
 export default {
   ...sources,

@@ -431,21 +431,55 @@ export const useGlobalPlayStatusStore = defineStore(
               }
             }
           } else if (source !== 'local') {
-            const lyricData = await window.api.music.requestSdk('getLyric', {
-              source,
-              songInfo: getCleanSongInfo(),
-              grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
-              useStrictMode: playSettingStore.getStrictGrep
-            })
-            if (!active) return
+            // 服务插件歌曲（如 navidrome）：优先使用歌曲自带的 lrc 字段
+            const servicePluginId = (player.songInfo as any)._servicePluginId as string | undefined
+            console.log('[歌词] 非本地歌曲, source:', source, 'servicePluginId:', servicePluginId)
+            if (servicePluginId) {
+              // 通过服务插件异步获取歌词（类似 wy/kg）
+              try {
+                const lyricResult = await window.api.plugins.getServiceLyric(
+                  servicePluginId,
+                  getCleanSongInfo()
+                )
+                console.log('[歌词] 服务插件歌词返回:', lyricResult)
+                if (!active) return
 
-            if (lyricData?.crlyric) {
-              parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
-            } else if (lyricData?.lyric) {
-              parsedLyrics = parseLrc(lyricData.lyric) as LyricLine[]
+                const lyricText = lyricResult?.data?.lyric
+                if (lyricText) {
+                  if (/^\[(\d+),\d+\]/.test(lyricText) || /\(\d+,\d+,\d+\)/.test(lyricText)) {
+                    parsedLyrics = parseYrc(lyricText) as any
+                  } else {
+                    parsedLyrics = parseLrc(lyricText) as any
+                  }
+                } else {
+                  parsedLyrics = []
+                }
+              } catch {
+                parsedLyrics = []
+              }
+            } else {
+              // 没有自带歌词也没有服务插件ID，尝试通过音源SDK获取
+              try {
+                const lyricData = await window.api.music.requestSdk('getLyric', {
+                  source,
+                  songInfo: getCleanSongInfo(),
+                  grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
+                  useStrictMode: playSettingStore.getStrictGrep
+                })
+                console.log('平台 Lyrics 获取成功', lyricData)
+                if (!active) return
+
+                if (lyricData?.crlyric) {
+                  parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
+                } else if (lyricData?.lyric) {
+                  parsedLyrics = parseLrc(lyricData.lyric) as LyricLine[]
+                }
+
+                parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
+              } catch {
+                parsedLyrics = []
+              }
             }
-
-            parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
           } else {
             let text = (player.songInfo as any).lrc as string | null
             if (!text) {
@@ -535,7 +569,8 @@ export const useGlobalPlayStatusStore = defineStore(
     }
 
     function updateCommon(songInfo: SongList) {
-      if (songInfo.source === 'local') return
+      const knownSources = ['wy', 'tx', 'mg', 'kg', 'kw', 'bd']
+      if (songInfo.source === 'local' || !knownSources.includes(songInfo.source)) return
       // Reset comments
       player.comments.hotList = []
       player.comments.latestList = []

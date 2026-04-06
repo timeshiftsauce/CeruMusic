@@ -84,7 +84,9 @@ export function buildQualityFormats(
   if (!input) return []
   let list: Array<{ type: string; size?: string }>
   if (Array.isArray(input)) {
-    list = input.map((i) => ({ type: i.type, size: i.size }))
+    list = input.map((i) =>
+      typeof i === 'string' ? { type: i } : { type: i.type, size: i.size }
+    )
   } else {
     list = Object.keys(input).map((k) => ({ type: k, size: input[k]?.size }))
   }
