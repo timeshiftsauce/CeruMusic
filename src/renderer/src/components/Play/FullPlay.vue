@@ -664,11 +664,6 @@ const handleVisibilityChange = () => {
   }
 }
 
-const handleWindowBlur = () => {
-  isAppActive.value = false
-  bgRef.value?.pause()
-}
-
 const handleWindowFocus = () => {
   isAppActive.value = !document.hidden
   if (!document.hidden) {

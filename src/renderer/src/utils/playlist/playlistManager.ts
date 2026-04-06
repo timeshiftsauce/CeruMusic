@@ -15,8 +15,8 @@ type PlaylistEvents = {
 // 创建全局事件总线
 const emitter = mitt<PlaylistEvents>()
 
-  // 将事件总线挂载到全局
-  ; (window as any).musicEmitter = emitter
+// 将事件总线挂载到全局
+;(window as any).musicEmitter = emitter
 const qualityMap: Record<string, string> = {
   '128k': '标准音质',
   '192k': '高品音质',
@@ -27,7 +27,6 @@ const qualityMap: Record<string, string> = {
   atmos: '全景环绕',
   master: '超清母带'
 }
-const qualityKey = Object.keys(qualityMap)
 /**
  * 获取歌曲真实播放URL
  * @param song 歌曲对象
@@ -53,7 +52,6 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     // 读取设置：是否启用缓存
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
-
 
     quality = calculateBestQuality(song.types, quality) || '128k'
 

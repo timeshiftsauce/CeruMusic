@@ -57,14 +57,12 @@ const api = {
       ipcRenderer.invoke('service-plugin-getPluginType', pluginId),
     getConfigSchema: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-getConfigSchema', pluginId),
-    getConfig: (pluginId: string) =>
-      ipcRenderer.invoke('service-plugin-getConfig', pluginId),
+    getConfig: (pluginId: string) => ipcRenderer.invoke('service-plugin-getConfig', pluginId),
     saveConfig: (pluginId: string, config: Record<string, any>) =>
       ipcRenderer.invoke('service-plugin-saveConfig', pluginId, config),
     testConnection: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-testConnection', pluginId),
-    getPlaylists: (pluginId: string) =>
-      ipcRenderer.invoke('service-plugin-getPlaylists', pluginId),
+    getPlaylists: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPlaylists', pluginId),
     getPlaylistSongs: (pluginId: string, playlistId: string) =>
       ipcRenderer.invoke('service-plugin-getPlaylistSongs', pluginId, playlistId),
     importToLocal: (pluginId: string, playlistId: string, playlistName?: string) =>

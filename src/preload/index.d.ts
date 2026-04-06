@@ -108,6 +108,15 @@ interface CustomAPI {
     downloadAndAddPlugin: (url: string, type: 'lx' | 'cr', targetPluginId?: string) => Promise<any>
     uninstallPlugin(pluginId: string): ApiResult | PromiseLike<ApiResult>
     addPlugin: (pluginCode: string, pluginName: string, targetPluginId?: string) => Promise<any>
+    getPluginType: (pluginId: string) => Promise<any>
+    getConfigSchema: (pluginId: string) => Promise<any>
+    getConfig: (pluginId: string) => Promise<any>
+    saveConfig: (pluginId: string, config: Record<string, any>) => Promise<any>
+    testConnection: (pluginId: string) => Promise<any>
+    getPlaylists: (pluginId: string) => Promise<any>
+    getPlaylistSongs: (pluginId: string, playlistId: string) => Promise<any>
+    importToLocal: (pluginId: string, playlistId: string, playlistName?: string) => Promise<any>
+    getServiceLyric: (pluginId: string, songInfo: any) => Promise<any>
     onDeepLinkAdd: (
       callback: (payload: { url: string; type: 'lx' | 'cr'; targetPluginId?: string }) => void
     ) => () => void

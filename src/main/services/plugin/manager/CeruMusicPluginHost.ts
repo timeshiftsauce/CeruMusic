@@ -87,7 +87,6 @@ interface CeruMusicPlugin {
   sources: PluginSource[]
   musicUrl: (source: string, musicInfo: MusicInfo, quality: string) => Promise<string>
   getPic?: (source: string, musicInfo: MusicInfo) => Promise<string>
-  getLyric?: (source: string, musicInfo: MusicInfo) => Promise<string>
   // 服务类插件扩展
   pluginType?: PluginType
   configSchema?: PluginConfigField[]
@@ -350,10 +349,7 @@ class CeruMusicPluginHost {
   /**
    * 获取服务插件歌词（异步，播放时按需调用）
    */
-  async getServiceLyric(
-    config: Record<string, any>,
-    songInfo: any
-  ): Promise<{ lyric: string }> {
+  async getServiceLyric(config: Record<string, any>, songInfo: any): Promise<{ lyric: string }> {
     this._ensurePluginInitialized()
     if (typeof this.plugin!.getLyric !== 'function') {
       throw new PluginError('Plugin does not implement getLyric.', 'getLyric')
