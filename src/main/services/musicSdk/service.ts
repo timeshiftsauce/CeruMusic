@@ -50,7 +50,10 @@ function main(source: string = 'wy') {
         }
 
         // 没有缓存时才发起网络请求
-        const originalUrl = await usePlugin.getMusicUrl(currentSource, songInfo, quality)
+        const originalUrl =
+          source === 'git'
+            ? await Api.getMusicUrl(songInfo, quality)
+            : await usePlugin.getMusicUrl(currentSource, songInfo, quality)
         // 按需异步缓存，不阻塞返回
         if (isCache !== false) {
           musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
@@ -204,11 +207,14 @@ function main(source: string = 'wy') {
       lazy
     }: DownloadSingleSongArgs) {
       let url = ''
-      if (!lazy) {
+      if (lazy && songInfo.typeUrl && songInfo.typeUrl[quality]) {
+        url = songInfo.typeUrl[quality]
+      } else if (!lazy) {
         const result = await this.getMusicUrl({ pluginId, songInfo, quality })
         if (typeof result === 'object') throw new Error('无法获取歌曲链接')
         url = result
       }
+      if (!url) throw new Error('无法获取歌曲下载链接')
       return await download(songInfo, url, tagWriteOptions, pluginId, quality)
     },
 

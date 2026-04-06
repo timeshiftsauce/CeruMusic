@@ -42,6 +42,10 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       if (typeof url === 'string') return url
       throw new Error('本地歌曲URL获取失败')
     }
+    // 服务插件歌曲（如 navidrome）：直接使用 url 字段
+    if ((song as any).url && typeof (song as any).url === 'string') {
+      return (song as any).url
+    }
     const LocalUserDetail = LocalUserDetailStore()
     let quality =
       (LocalUserDetail.userInfo.sourceQualityMap || {})[(song as any).source] ||
@@ -94,7 +98,7 @@ export async function addToPlaylistAndPlay(
   localUserStore: any,
   playSongCallback: (song: SongList) => Promise<void>
 ) {
-  if (!localUserStore.userSource.pluginId && song.source !== 'local') {
+  if (!localUserStore.userSource.pluginId && song.source !== 'local' && !(song as any).url) {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
   }

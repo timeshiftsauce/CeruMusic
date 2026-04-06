@@ -29,6 +29,7 @@ declare module 'vue' {
     GlobalContextMenu: typeof import('./src/components/ContextMenu/GlobalContextMenu.vue')['default']
     HomeLayout: typeof import('./src/components/layout/HomeLayout.vue')['default']
     HotkeySettings: typeof import('./src/components/Settings/HotkeySettings.vue')['default']
+    ImportPlaylist: typeof import('./src/components/ServicePlugin/ImportPlaylist.vue')['default']
     LeaderBord: typeof import('./src/components/Find/LeaderBord.vue')['default']
     LeaderBordCard: typeof import('./src/components/Card/LeaderBordCard.vue')['default']
     LocalTagEditor: typeof import('./src/components/Music/LocalTagEditor.vue')['default']

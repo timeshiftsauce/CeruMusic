@@ -9,6 +9,7 @@ import axios from 'axios'
 import CeruMusicPluginHost from './manager/CeruMusicPluginHost'
 import convertEventDrivenPlugin from './manager/converter-event-driven'
 import Logger, { getLog } from './logger'
+import { getPluginConfig, savePluginConfig, deletePluginConfig } from './pluginConfig'
 
 // 导出类型以解决TypeScript错误
 
@@ -333,6 +334,60 @@ const pluginService = {
 
   async getPluginLog(pluginId: string) {
     return await getLog(pluginId)
+  },
+
+  // ==================== 服务插件方法 ====================
+
+  getPluginType(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    return plugin.getPluginType()
+  },
+
+  getConfigSchema(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    return plugin.getConfigSchema()
+  },
+
+  getConfig(pluginId: string) {
+    return getPluginConfig(pluginId)
+  },
+
+  saveConfig(pluginId: string, config: Record<string, any>) {
+    savePluginConfig(pluginId, config)
+  },
+
+  deleteConfig(pluginId: string) {
+    deletePluginConfig(pluginId)
+  },
+
+  async testConnection(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    const config = getPluginConfig(pluginId)
+    return await plugin.testConnection(config)
+  },
+
+  async getPlaylists(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    const config = getPluginConfig(pluginId)
+    return await plugin.getPlaylists(config)
+  },
+
+  async getPlaylistSongs(pluginId: string, playlistId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    const config = getPluginConfig(pluginId)
+    return await plugin.getPlaylistSongs(config, playlistId)
+  },
+
+  async getServiceLyric(pluginId: string, songInfo: any) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    const config = getPluginConfig(pluginId)
+    return await plugin.getServiceLyric(config, songInfo)
   }
 }
 
