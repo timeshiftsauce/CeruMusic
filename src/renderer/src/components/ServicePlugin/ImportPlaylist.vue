@@ -5,7 +5,7 @@
     attach="body"
     :footer="false"
     width="700px"
-    @close="$emit('update:visible', false)"
+    @close="emit('update:visible', false)"
   >
     <template #header>
       <div class="import-header">
@@ -28,11 +28,7 @@
 
         <!-- 歌单列表 -->
         <div v-else-if="playlists.length > 0" class="playlist-list">
-          <div
-            v-for="pl in playlists"
-            :key="pl.id"
-            class="playlist-item"
-          >
+          <div v-for="pl in playlists" :key="pl.id" class="playlist-item">
             <div class="playlist-cover">
               <img v-if="pl.coverImg" :src="pl.coverImg" alt="cover" />
               <div v-else class="cover-placeholder">

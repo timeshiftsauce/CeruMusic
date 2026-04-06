@@ -36,7 +36,7 @@ export default {
       const start = (page - 1) * limit
       return {
         data: filtered.slice(start, start + limit),
-        total: filtered.length,
+        total: filtered.length
       }
     })
   },
@@ -56,8 +56,8 @@ export default {
         allPage: this.allPage,
         limit,
         total: this.total,
-        source: 'git',
+        source: 'git'
       }
     })
-  },
+  }
 }
