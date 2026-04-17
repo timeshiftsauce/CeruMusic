@@ -89,6 +89,8 @@ interface CustomAPI {
     validateIntegrity: (hashId: string) => Promise<any>
     repairData: (hashId: string) => Promise<any>
     forceSave: (hashId: string) => Promise<any>
+    reorderSongs: (hashId: string, songmids: (string | number)[]) => Promise<any>
+    moveSong: (hashId: string, songmid: string | number, toIndex: number) => Promise<any>
     getFavoritesId: () => Promise<any>
     setFavoritesId: (favoritesId: string) => Promise<any>
   }

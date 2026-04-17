@@ -209,7 +209,8 @@ function main(source: string = 'wy') {
       let url = ''
       if (lazy && songInfo.typeUrl && songInfo.typeUrl[quality]) {
         url = songInfo.typeUrl[quality]
-      } else if (!lazy) {
+      }
+      if (!url) {
         const result = await this.getMusicUrl({ pluginId, songInfo, quality })
         if (typeof result === 'object') throw new Error('无法获取歌曲链接')
         url = result

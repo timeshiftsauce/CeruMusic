@@ -1,0 +1,76 @@
+import { defineStore } from 'pinia'
+
+export const playSetting = defineStore('playSetting', {
+  state: () => ({
+    isJumpLyric: true, // 是否使用跳动歌词
+    bgPlaying: true, // 是否播放背景动画 布朗运动
+    isAudioVisualizer: true, // 音频可视化
+    layoutMode: 'cd', // 播放页布局模式: 'cd' | 'cover'
+    showLeftPanel: true, // 是否显示左侧面板
+    isImmersiveLyricColor: true, // 是否开启沉浸色歌词
+    isBlurLyric: false, // 是否开启模糊歌词
+    autoHideBottom: true, // 是否自动隐藏底部控制栏
+    isPauseTransition: true, // 是否开启暂停播放过渡
+    isSeamlessTransition: false, // 是否开启无感过渡（智能交叉淡化）
+    useAmlLyricRenderer: true, // 使用 AppleMusicLike 的歌词组件渲染
+    isGrepLyricInfo: false, // 是否开启歌词信息 grep
+    strictGrep: false // 是否开启严格歌词信息 grep
+  }),
+  getters: {
+    getisJumpLyric: (state) => state.isJumpLyric,
+    getBgPlaying: (state) => state.bgPlaying,
+    getIsAudioVisualizer: (state) => state.isAudioVisualizer,
+    getLayoutMode: (state) => state.layoutMode,
+    getShowLeftPanel: (state) => state.showLeftPanel,
+    getIsImmersiveLyricColor: (state) => state.isImmersiveLyricColor,
+    getIsBlurLyric: (state) => state.isBlurLyric,
+    getAutoHideBottom: (state) => state.autoHideBottom,
+    getIsPauseTransition: (state) => state.isPauseTransition,
+    getIsSeamlessTransition: (state) => state.isSeamlessTransition,
+    getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer,
+    getIsGrepLyricInfo: (state) => state.isGrepLyricInfo,
+    getStrictGrep: (state) => state.strictGrep
+  },
+  actions: {
+    setIsDumpLyric(isDumpLyric: boolean) {
+      this.isJumpLyric = isDumpLyric
+    },
+    setIsBlurLyric(isBlurLyric: boolean) {
+      this.isBlurLyric = isBlurLyric
+    },
+    setBgPlaying(bgPlaying: boolean) {
+      this.bgPlaying = bgPlaying
+    },
+    setIsAudioVisualizer(isAudioVisualizer: boolean) {
+      this.isAudioVisualizer = isAudioVisualizer
+    },
+    setLayoutMode(mode: string) {
+      this.layoutMode = mode
+    },
+    setShowLeftPanel(show: boolean) {
+      this.showLeftPanel = show
+    },
+    setIsImmersiveLyricColor(isImmersiveLyricColor: boolean) {
+      this.isImmersiveLyricColor = isImmersiveLyricColor
+    },
+    setAutoHideBottom(autoHideBottom: boolean) {
+      this.autoHideBottom = autoHideBottom
+    },
+    setIsPauseTransition(isPauseTransition: boolean) {
+      this.isPauseTransition = isPauseTransition
+    },
+    setIsSeamlessTransition(isSeamlessTransition: boolean) {
+      this.isSeamlessTransition = isSeamlessTransition
+    },
+    setUseAmlLyricRenderer(use: boolean) {
+      this.useAmlLyricRenderer = use
+    },
+    setIsGrepLyricInfo(isGrepLyricInfo: boolean) {
+      this.isGrepLyricInfo = isGrepLyricInfo
+    },
+    setStrictGrep(strictGrep: boolean) {
+      this.strictGrep = strictGrep
+    }
+  },
+  persist: true
+})

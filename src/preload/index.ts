@@ -198,6 +198,10 @@ const api = {
       ipcRenderer.invoke('songlist:validate-integrity', hashId),
     repairData: (hashId: string) => ipcRenderer.invoke('songlist:repair-data', hashId),
     forceSave: (hashId: string) => ipcRenderer.invoke('songlist:force-save', hashId),
+    reorderSongs: (hashId: string, songmids: (string | number)[]) =>
+      ipcRenderer.invoke('songlist:reorder-songs', hashId, songmids),
+    moveSong: (hashId: string, songmid: string | number, toIndex: number) =>
+      ipcRenderer.invoke('songlist:move-song', hashId, songmid, toIndex),
 
     // 喜欢歌单ID持久化
     getFavoritesId: () => ipcRenderer.invoke('songlist:get-favorites-id'),

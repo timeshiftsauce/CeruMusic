@@ -16,6 +16,7 @@ declare module 'vue' {
     BaseDialog: typeof import('./src/components/BaseDialog.vue')['default']
     CommentsOverlay: typeof import('./src/components/Play/CommentsOverlay.vue')['default']
     ContextMenu: typeof import('./src/components/ContextMenu/ContextMenu.vue')['default']
+    CrossfadeHint: typeof import('./src/components/Play/CrossfadeHint.vue')['default']
     Demo: typeof import('./src/components/ContextMenu/demo.vue')['default']
     DesktopLyricStyle: typeof import('./src/components/Settings/DesktopLyricStyle.vue')['default']
     DirectorySettings: typeof import('./src/components/Settings/DirectorySettings.vue')['default']
