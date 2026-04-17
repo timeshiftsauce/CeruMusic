@@ -1,5 +1,10 @@
 {
   "permissions": {
-    "allow": ["Bash(cmd.exe //c \"chcp 65001 >nul && echo 你好\")"]
+    "allow": [
+      "Bash(cmd.exe //c \"chcp 65001 >nul && echo 你好\")",
+      "Bash(yarn typecheck:*)",
+      "Bash(yarn typecheck:node)",
+      "Bash(yarn typecheck:web)"
+    ]
   }
 }

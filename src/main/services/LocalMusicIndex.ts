@@ -1,8 +1,8 @@
 import path from 'node:path'
 import fs from 'fs'
-import fsp from 'fs/promises'
 import { app } from 'electron'
 import { md5, normPath } from '../utils/fileUtils'
+import { getMusicDatabase, TrackRow } from './MusicDatabase'
 
 export interface MusicItem {
   hash?: string
@@ -26,170 +26,179 @@ export interface MusicItem {
   bitrate?: number
   sampleRate?: number
   channels?: number
+  duration?: number
 }
 
-type IndexSchema = {
-  songs: Record<string, MusicItem>
-  dirs: string[]
-  updatedAt: number
+function safeJsonParse<T>(s: string | null | undefined, fallback: T): T {
+  if (!s) return fallback
+  try {
+    return JSON.parse(s) as T
+  } catch {
+    return fallback
+  }
+}
+
+function rowToItem(row: TrackRow): MusicItem {
+  return {
+    songmid: row.songmid,
+    path: row.path,
+    url: row.url || undefined,
+    singer: row.singer,
+    name: row.name,
+    albumName: row.albumName,
+    albumId: row.albumId,
+    source: row.source,
+    interval: row.interval,
+    img: '',
+    hasCover: !!row.hasCover,
+    coverKey: row.coverKey || undefined,
+    year: row.year,
+    lrc: row.lrc,
+    types: safeJsonParse<string[]>(row.types, []),
+    _types: safeJsonParse<Record<string, any>>(row._types, {}),
+    typeUrl: safeJsonParse<Record<string, any>>(row.typeUrl, {}),
+    bitrate: row.bitrate,
+    sampleRate: row.sampleRate,
+    channels: row.channels,
+    duration: row.duration,
+    hash: row.hash || undefined
+  }
+}
+
+function itemToRow(
+  item: MusicItem,
+  size: number,
+  mtimeMs: number,
+  existing?: TrackRow | null
+): TrackRow {
+  const pick = <T>(a: T, b: T): T => (a !== undefined && a !== null && (a as any) !== '' ? a : b)
+  const path = String(pick(item.path, existing?.path || '')) || ''
+  const url = pick(item.url, existing?.url || `file://${path}`) || `file://${path}`
+  return {
+    songmid: String(item.songmid),
+    path,
+    url,
+    singer: String(pick(item.singer, existing?.singer) || '未知艺术家'),
+    name: String(pick(item.name, existing?.name) || '未知曲目'),
+    albumName: String(pick(item.albumName, existing?.albumName) || '未知专辑'),
+    albumId: Number(pick(item.albumId, existing?.albumId) || 0),
+    source: String(pick(item.source, existing?.source) || 'local'),
+    interval: String(pick(item.interval, existing?.interval) || ''),
+    hasCover: (item.hasCover ?? (existing ? !!existing.hasCover : false)) ? 1 : 0,
+    coverKey: (pick(item.coverKey, existing?.coverKey) as string) || null,
+    year: Number(pick(item.year, existing?.year) || 0),
+    lrc: (pick(item.lrc, existing?.lrc) as string | null) ?? null,
+    types: JSON.stringify(
+      (item.types && item.types.length ? item.types : safeJsonParse(existing?.types, [])) || []
+    ),
+    _types: JSON.stringify(
+      (item._types && Object.keys(item._types).length
+        ? item._types
+        : safeJsonParse(existing?._types, {})) || {}
+    ),
+    typeUrl: JSON.stringify(
+      (item.typeUrl && Object.keys(item.typeUrl).length
+        ? item.typeUrl
+        : safeJsonParse(existing?.typeUrl, {})) || {}
+    ),
+    bitrate: Number(pick(item.bitrate, existing?.bitrate) || 0),
+    sampleRate: Number(pick(item.sampleRate, existing?.sampleRate) || 0),
+    channels: Number(pick(item.channels, existing?.channels) || 0),
+    duration: Number(pick(item.duration as any, existing?.duration) || 0),
+    size: size || existing?.size || 0,
+    mtime_ms: mtimeMs || existing?.mtime_ms || 0,
+    hash: item.hash || existing?.hash || md5(`${item.name}-${item.singer}-${item.source}`),
+    updated_at: Date.now()
+  }
 }
 
 export class LocalMusicIndexService {
-  private indexFile: string
-  private data: IndexSchema = { songs: {}, dirs: [], updatedAt: Date.now() }
+  private jsonMigrationPath: string
 
   constructor() {
     const userData = app.getPath('userData')
-    this.indexFile = path.join(userData, 'local-music-index.json')
-    this.load()
-    this.migrateAndDedup().catch(() => {})
+    this.jsonMigrationPath = path.join(userData, 'local-music-index.json')
+    // Ensure DB is initialized before migration attempts.
+    getMusicDatabase()
+    this.migrateFromJsonIfNeeded()
   }
 
-  private load() {
+  private migrateFromJsonIfNeeded() {
     try {
-      if (fs.existsSync(this.indexFile)) {
-        const raw = fs.readFileSync(this.indexFile, 'utf-8')
-        const obj = JSON.parse(raw)
-        if (obj && typeof obj === 'object') this.data = obj as IndexSchema
+      if (!fs.existsSync(this.jsonMigrationPath)) return
+      const raw = fs.readFileSync(this.jsonMigrationPath, 'utf-8')
+      const obj = JSON.parse(raw)
+      if (!obj || typeof obj !== 'object') return
+      const db = getMusicDatabase()
+
+      if (Array.isArray(obj.dirs) && obj.dirs.length > 0) {
+        const existing = new Set(db.getDirs())
+        const merged = Array.from(new Set([...existing, ...obj.dirs.filter(Boolean)]))
+        db.setDirs(merged)
       }
-    } catch {
-      this.data = { songs: {}, dirs: [], updatedAt: Date.now() }
-    }
-  }
 
-  private async save() {
-    try {
-      const dir = path.dirname(this.indexFile)
-      await fsp.mkdir(dir, { recursive: true })
-      await fsp.writeFile(this.indexFile, JSON.stringify(this.data, null, 2))
-    } catch {}
-  }
+      const songs = obj.songs || {}
+      const rows: TrackRow[] = []
+      let missing = 0
+      for (const k of Object.keys(songs)) {
+        const it = songs[k] as MusicItem
+        if (!it || !it.path) continue
 
-  private mergePreferFilled(a: MusicItem, b: MusicItem): MusicItem {
-    const pick = (x: any, y: any) => (x !== undefined && x !== null && x !== '' ? x : y)
-    return {
-      songmid: String(pick(a.songmid, b.songmid)),
-      singer: pick(a.singer, b.singer) || '未知艺术家',
-      name: pick(a.name, b.name) || '未知曲目',
-      albumName: pick(a.albumName, b.albumName) || '未知专辑',
-      albumId: pick(a.albumId, b.albumId) || 0,
-      source: pick(a.source, b.source) || 'local',
-      interval: pick(a.interval, b.interval) || '',
-      img: '',
-      hasCover: !!(a.hasCover || b.hasCover),
-      coverKey: pick(a.coverKey, b.coverKey),
-      year: (a as any).year ?? (b as any).year ?? 0,
-      lrc: pick(a.lrc, b.lrc) ?? null,
-      types: (a.types && a.types.length ? a.types : b.types) || [],
-      _types: (a._types && Object.keys(a._types).length ? a._types : b._types) || {},
-      typeUrl: (a.typeUrl && Object.keys(a.typeUrl).length ? a.typeUrl : b.typeUrl) || {},
-      url: pick(a.url, b.url),
-      path: pick(a.path, b.path),
-      hash: pick(a.hash, b.hash),
-      bitrate: pick(a.bitrate, b.bitrate) || 0,
-      sampleRate: pick(a.sampleRate, b.sampleRate) || 0,
-      channels: pick(a.channels, b.channels) || 0
-    }
-  }
+        // 已存在则交给 upsert 的 merge 逻辑,不会回退已填充字段。
+        const existing = db.getTrackByPath(it.path)
 
-  private async migrateAndDedup() {
-    try {
-      const changed = await this.dedupInMemory()
-      if (changed) await this.save()
-    } catch {}
-  }
+        let size = 0
+        let mtimeMs = 0
+        try {
+          const st = fs.statSync(it.path)
+          size = st.size
+          mtimeMs = Math.floor(st.mtimeMs)
+        } catch {
+          // 文件已不存在;旧记录保留入库,下一次 scan 触发 pruneByScan 清理。
+          missing++
+        }
 
-  private keyForItem(it: MusicItem, fallbackKey: string): string {
-    const p = normPath(it.path || (typeof (it as any).url === 'string' ? (it as any).url : ''))
-    if (p) return md5(p)
-    return String(it.songmid ?? fallbackKey)
-  }
-
-  private async dedupInMemory(): Promise<boolean> {
-    const input = this.data.songs || {}
-    const out: Record<string, MusicItem> = {}
-    let changed = false
-    for (const k of Object.keys(input)) {
-      const it = input[k]
-      if (!it) continue
-      const key = this.keyForItem(it, k)
-      if (!out[key]) {
-        out[key] = it
-      } else {
-        out[key] = this.mergePreferFilled(out[key], it)
+        rows.push(itemToRow(it, size, mtimeMs, existing))
       }
-      if (key !== k) changed = true
-      out[key].songmid = key
+
+      if (rows.length) db.upsertTracks(rows)
+
+      const backup = this.jsonMigrationPath + '.migrated'
+      try {
+        if (fs.existsSync(backup)) fs.unlinkSync(backup)
+      } catch {}
+      try {
+        fs.renameSync(this.jsonMigrationPath, backup)
+      } catch {}
+
+      console.log(
+        `[LocalMusicIndex] migrated ${rows.length} tracks from JSON (missing files: ${missing})`
+      )
+    } catch (err) {
+      console.error('[LocalMusicIndex] JSON migration failed:', err)
     }
-    if (changed || Object.keys(out).length !== Object.keys(input).length) {
-      this.data.songs = out
-      this.data.updatedAt = Date.now()
-      return true
-    }
-    return false
   }
 
-  getDirs() {
-    return [...(this.data.dirs || [])]
+  private keyForPath(p: string): string {
+    const np = normPath(p) || p
+    return md5(np)
+  }
+
+  getDirs(): string[] {
+    return getMusicDatabase().getDirs()
   }
 
   async setDirs(dirs: string[]) {
-    this.data.dirs = Array.from(new Set(dirs.filter(Boolean)))
-    this.data.updatedAt = Date.now()
-    await this.save()
+    getMusicDatabase().setDirs(Array.isArray(dirs) ? dirs : [])
   }
 
   getAllSongs(): MusicItem[] {
-    // 读取时也进行一次内存去重，保证返回前没有重复
-    try {
-      // 同步方式去重，但仅更新内存并返回，避免频繁写盘
-      const input = this.data.songs || {}
-      // console.log('getAllSongs', input)
-      const out: Record<string, MusicItem> = {}
-      for (const k of Object.keys(input)) {
-        const it = input[k]
-        const key = this.keyForItem(it, k)
-        if (!out[key]) out[key] = it
-        else out[key] = this.mergePreferFilled(out[key], it)
-        out[key].songmid = key
-      }
-      this.data.songs = out
-    } catch {}
-    // console.log('getAllSongs', Object.values(this.data.songs))
-    return Object.values(this.data.songs)
-  }
-
-  async pruneByScan(dirs: string[], keepPaths: string[]) {
-    try {
-      const dirSet = new Set(
-        (dirs || []).map((d) => {
-          const np = normPath(d)
-          return np ? (np.endsWith('/') ? np : np + '/') : ''
-        })
-      )
-      const keepSet = new Set((keepPaths || []).map((p) => normPath(p) || ''))
-      let removed = false
-      const out: Record<string, MusicItem> = {}
-      for (const [k, it] of Object.entries(this.data.songs || {})) {
-        const np = normPath(it.path || (it as any).url || '') || ''
-        const underScannedDir = Array.from(dirSet).some((d) => np.startsWith(d))
-        if (underScannedDir && !keepSet.has(np)) {
-          removed = true
-          continue
-        }
-        out[k] = it
-      }
-      if (removed) {
-        this.data.songs = out
-        this.data.updatedAt = Date.now()
-        await this.save()
-      }
-    } catch {}
+    return getMusicDatabase().getAllTracks().map(rowToItem)
   }
 
   getSongById(id: string | number): MusicItem | null {
-    const key = String(id)
-    return this.data.songs[key] || null
+    const row = getMusicDatabase().getTrackById(String(id))
+    return row ? rowToItem(row) : null
   }
 
   getUrlById(id: string | number): string | null {
@@ -200,61 +209,60 @@ export class LocalMusicIndexService {
     return null
   }
 
-  async upsertSong(item: MusicItem) {
-    const key = this.keyForItem(item, String(item.songmid ?? ''))
-    item.songmid = key
-    item.hash = md5(`${item.name}-${item.singer}-${item.source}`)
-    const { img: _omitImg, ...rest } = item as any
-    const exists = this.data.songs[key]
-    this.data.songs[key] = exists
-      ? this.mergePreferFilled(rest as any, exists as any)
-      : (rest as MusicItem)
-    this.data.updatedAt = Date.now()
-    await this.save()
+  getStatByPath(p: string): { songmid: string; size: number; mtime_ms: number } | null {
+    const row = getMusicDatabase().getStatByPath(p)
+    if (!row) return null
+    return { songmid: row.songmid, size: row.size, mtime_ms: row.mtime_ms }
   }
 
-  async upsertSongs(items: MusicItem[]) {
+  getAllStats(): Map<string, { size: number; mtime_ms: number; songmid: string }> {
+    return getMusicDatabase().getAllStats()
+  }
+
+  async upsertSong(item: MusicItem, size = 0, mtimeMs = 0) {
+    const db = getMusicDatabase()
+    const p = item.path || ''
+    const key = p ? this.keyForPath(p) : String(item.songmid ?? '')
+    if (!key) return
+    item.songmid = key
+    const existing = p ? db.getTrackByPath(p) : db.getTrackById(key)
+    const row = itemToRow(item, size, mtimeMs, existing)
+    db.upsertTrack(row)
+  }
+
+  async upsertSongs(items: Array<MusicItem & { _size?: number; _mtime_ms?: number }>) {
+    const db = getMusicDatabase()
+    const rows: TrackRow[] = []
     for (const it of items) {
-      const key = this.keyForItem(it, String(it.songmid ?? ''))
+      const p = it.path || ''
+      const key = p ? this.keyForPath(p) : String(it.songmid ?? '')
+      if (!key) continue
       it.songmid = key
-      it.hash = md5(`${it.name}-${it.singer}-${it.source}`)
-      const { img: _omitImg, ...rest } = it as any
-      const exists = this.data.songs[key]
-      this.data.songs[key] = exists
-        ? this.mergePreferFilled(rest as any, exists as any)
-        : (rest as MusicItem)
+      const existing = p ? db.getTrackByPath(p) : db.getTrackById(key)
+      rows.push(itemToRow(it, Number(it._size || 0), Number(it._mtime_ms || 0), existing))
     }
-    this.data.updatedAt = Date.now()
-    await this.save()
+    if (rows.length) db.upsertTracks(rows)
   }
 
   async removeSongByPath(p: string) {
-    try {
-      const np = normPath(p) || ''
-      if (!np) return
-      const out: Record<string, MusicItem> = {}
-      let removed = false
-      for (const [k, it] of Object.entries(this.data.songs || {})) {
-        const ip = normPath(it.path || (it as any).url || '') || ''
-        if (ip === np) {
-          removed = true
-          continue
-        }
-        out[k] = it
-      }
-      if (removed) {
-        this.data.songs = out
-        this.data.updatedAt = Date.now()
-        await this.save()
-      }
-    } catch {}
+    const db = getMusicDatabase()
+    // Try both original and normalized path for compatibility with older entries.
+    db.deleteByPath(p)
+    const np = normPath(p)
+    if (np && np !== p) db.deleteByPath(np)
   }
 
-  // Method to clear index (was accessed via any previously)
+  async pruneByScan(dirs: string[], keepPaths: string[]) {
+    const prefixes = (dirs || [])
+      .map((d) => normPath(d) || '')
+      .filter(Boolean)
+      .map((d) => (d.endsWith('/') ? d : d + '/'))
+    const keeps = (keepPaths || []).map((p) => p || '')
+    getMusicDatabase().pruneOutsideKeep(prefixes, keeps)
+  }
+
   async clearSongs() {
-    this.data.songs = {}
-    this.data.updatedAt = Date.now()
-    await this.save()
+    getMusicDatabase().clearTracks()
   }
 }
 

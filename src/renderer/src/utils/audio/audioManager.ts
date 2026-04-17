@@ -15,6 +15,12 @@ class AudioManager {
   private surroundGainNodes = new WeakMap<HTMLAudioElement, GainNode>()
   private balanceNodes = new WeakMap<HTMLAudioElement, StereoPannerNode>()
 
+  // Crossfade Nodes (插在 splitter 和 destination 之间，供无感过渡使用)
+  private crossfadeGains = new WeakMap<HTMLAudioElement, GainNode>()
+  private crossfadeLowpasses = new WeakMap<HTMLAudioElement, BiquadFilterNode>()
+  // 过渡时机检测专用的 analyser，按需惰性创建，tap 在 splitter 上，与可视化分析器独立
+  private envelopeAnalysers = new WeakMap<HTMLAudioElement, AnalyserNode>()
+
   // 10 bands frequencies
   public readonly EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
@@ -166,7 +172,23 @@ class AudioManager {
           splitter.gain.value = 1.0
           // 连接最后一个滤波器到分流器
           lastNode.connect(splitter)
-          splitter.connect(context.destination)
+
+          // 无感过渡节点: splitter -> crossfadeLowpass -> crossfadeGain -> destination
+          // 默认 bypass 状态：lowpass 截止频率最高 (22050Hz)，gain 为 1.0
+          const crossfadeLowpass = context.createBiquadFilter()
+          crossfadeLowpass.type = 'lowpass'
+          crossfadeLowpass.frequency.value = 22050
+          crossfadeLowpass.Q.value = 0.707
+
+          const crossfadeGain = context.createGain()
+          crossfadeGain.gain.value = 1.0
+
+          splitter.connect(crossfadeLowpass)
+          crossfadeLowpass.connect(crossfadeGain)
+          crossfadeGain.connect(context.destination)
+
+          this.crossfadeLowpasses.set(audioElement, crossfadeLowpass)
+          this.crossfadeGains.set(audioElement, crossfadeGain)
           this.splitters.set(audioElement, splitter)
         }
 
@@ -255,7 +277,20 @@ class AudioManager {
         splitter = context.createGain()
         splitter.gain.value = 1.0
         source.connect(splitter)
-        splitter.connect(context.destination)
+
+        // 重建 crossfade 链：splitter -> lowpass -> gain -> destination
+        const crossfadeLowpass = context.createBiquadFilter()
+        crossfadeLowpass.type = 'lowpass'
+        crossfadeLowpass.frequency.value = 22050
+        crossfadeLowpass.Q.value = 0.707
+        const crossfadeGain = context.createGain()
+        crossfadeGain.gain.value = 1.0
+        splitter.connect(crossfadeLowpass)
+        crossfadeLowpass.connect(crossfadeGain)
+        crossfadeGain.connect(context.destination)
+        this.crossfadeLowpasses.set(audioElement, crossfadeLowpass)
+        this.crossfadeGains.set(audioElement, crossfadeGain)
+
         this.splitters.set(audioElement, splitter)
       }
 
@@ -366,6 +401,29 @@ class AudioManager {
         this.balanceNodes.delete(audioElement)
       }
 
+      // 清理 crossfade 节点
+      const cfLowpass = this.crossfadeLowpasses.get(audioElement)
+      if (cfLowpass) {
+        try {
+          cfLowpass.disconnect()
+        } catch {}
+        this.crossfadeLowpasses.delete(audioElement)
+      }
+      const cfGain = this.crossfadeGains.get(audioElement)
+      if (cfGain) {
+        try {
+          cfGain.disconnect()
+        } catch {}
+        this.crossfadeGains.delete(audioElement)
+      }
+      const envAnalyser = this.envelopeAnalysers.get(audioElement)
+      if (envAnalyser) {
+        try {
+          envAnalyser.disconnect()
+        } catch {}
+        this.envelopeAnalysers.delete(audioElement)
+      }
+
       this.audioSources.delete(audioElement)
       this.audioContexts.delete(audioElement)
 
@@ -463,6 +521,82 @@ class AudioManager {
       large: 0.8
     }
     gainNode.gain.setTargetAtTime(wetMap[mode], ctx.currentTime, 0.2)
+  }
+
+  // --- Crossfade Support ---
+
+  /**
+   * 获取元素的 crossfade gain 节点（用于无感过渡的音量控制）
+   */
+  getCrossfadeGain(audioElement: HTMLAudioElement): GainNode | null {
+    return this.crossfadeGains.get(audioElement) || null
+  }
+
+  /**
+   * 获取元素的 crossfade lowpass 节点（用于无感过渡的低通扫频）
+   */
+  getCrossfadeLowpass(audioElement: HTMLAudioElement): BiquadFilterNode | null {
+    return this.crossfadeLowpasses.get(audioElement) || null
+  }
+
+  /**
+   * 获取元素的 AudioContext（用于 CrossfadeManager 读取 currentTime 等）
+   */
+  getContext(audioElement: HTMLAudioElement): AudioContext | null {
+    return this.audioContexts.get(audioElement) || null
+  }
+
+  /**
+   * 获取或创建过渡时机检测专用的 envelope analyser。
+   * tap 在 splitter 上，fftSize=512，与可视化分析器独立，不干扰频谱图。
+   * 按需惰性创建。
+   */
+  getEnvelopeAnalyser(audioElement: HTMLAudioElement): AnalyserNode | null {
+    let analyser = this.envelopeAnalysers.get(audioElement)
+    if (analyser) return analyser
+
+    const audioData = this.getOrCreateAudioSource(audioElement)
+    if (!audioData) return null
+    const { context } = audioData
+
+    const splitter = this.splitters.get(audioElement)
+    if (!splitter) return null
+
+    try {
+      analyser = context.createAnalyser()
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.3
+      splitter.connect(analyser)
+      this.envelopeAnalysers.set(audioElement, analyser)
+      return analyser
+    } catch (error) {
+      console.error('AudioManager: 创建 envelope analyser 失败:', error)
+      return null
+    }
+  }
+
+  /**
+   * 复位 crossfade 节点到 bypass 状态（gain=1, lowpass freq=22050）。
+   * 过渡完成或取消后调用。
+   */
+  resetCrossfadeNodes(audioElement: HTMLAudioElement): void {
+    const ctx = this.audioContexts.get(audioElement)
+    const gain = this.crossfadeGains.get(audioElement)
+    const lowpass = this.crossfadeLowpasses.get(audioElement)
+    if (!ctx) return
+    const now = ctx.currentTime
+    if (gain) {
+      try {
+        gain.gain.cancelScheduledValues(0)
+        gain.gain.setValueAtTime(1, now)
+      } catch {}
+    }
+    if (lowpass) {
+      try {
+        lowpass.frequency.cancelScheduledValues(0)
+        lowpass.frequency.setValueAtTime(22050, now)
+      } catch {}
+    }
   }
 }
 

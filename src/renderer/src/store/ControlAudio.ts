@@ -7,19 +7,26 @@ import { usePlaySettingStore } from '@renderer/store'
 import type {
   AudioEventCallback,
   AudioEventType,
+  AudioSlot,
   AudioSubscriber,
   UnsubscribeFunction,
   ControlAudioState
 } from '@renderer/types/audio'
 
 /**
- * 音频控制状态接口。
- * @property {HTMLAudioElement | null | undefined} audio - 音频元素实例。
+ * 音频控制状态接口（双槽架构，用于无感过渡）。
+ * @property {HTMLAudioElement | null | undefined} audio - 当前活跃槽的音频元素实例（指向 audioA 或 audioB）。
+ * @property {HTMLAudioElement | null} audioA - 槽 A 的音频元素。
+ * @property {HTMLAudioElement | null} audioB - 槽 B 的音频元素。
+ * @property {AudioSlot} primarySlot - 当前活跃槽标识。
+ * @property {string} srcA - 槽 A 的音频 URL（模板双向绑定）。
+ * @property {string} srcB - 槽 B 的音频 URL（模板双向绑定）。
+ * @property {string} secondaryUrl - 过渡期间非活跃槽待播的 URL（调试用）。
  * @property {boolean} isPlay - 是否正在播放。
  * @property {number} currentTime - 当前播放时间（秒）。
  * @property {number} duration - 音频总时长（秒）。
  * @property {number} volume - 音量（0-100）。
- * @property {string} url - 音频URL。
+ * @property {string} url - 当前活跃槽的音频 URL。
  */
 let userInfo: any
 export const ControlAudioStore = defineStore(
@@ -27,6 +34,12 @@ export const ControlAudioStore = defineStore(
   () => {
     const Audio = reactive<ControlAudioState>({
       audio: null,
+      audioA: null,
+      audioB: null,
+      primarySlot: 'A',
+      srcA: '',
+      srcB: '',
+      secondaryUrl: '',
       isPlay: false,
       currentTime: 0,
       duration: 0,
@@ -48,7 +61,8 @@ export const ControlAudioStore = defineStore(
       play: [],
       pause: [],
       error: [],
-      canplay: []
+      canplay: [],
+      slotSwap: []
     })
     // 生成唯一ID
     const generateId = (): string => {
@@ -104,11 +118,34 @@ export const ControlAudioStore = defineStore(
     }
     // End-------------------------------------------事件订阅者映射表逻辑------------------------------------------
 
-    // 初始化
-    const init = (el: ControlAudioState['audio']) => {
+    // 初始化：接收两个 audio 元素（双槽架构）
+    const init = (elA: HTMLAudioElement | null, elB: HTMLAudioElement | null) => {
       userInfo = LocalUserDetailStore()
-      console.log(el, '全局音频挂载初始化success')
-      Audio.audio = el
+      console.log(elA, elB, '全局音频双槽挂载初始化success')
+      Audio.audioA = elA
+      Audio.audioB = elB
+      Audio.audio = Audio.primarySlot === 'A' ? elA : elB
+    }
+
+    const getPrimaryEl = (): HTMLAudioElement | null => {
+      return Audio.primarySlot === 'A' ? Audio.audioA : Audio.audioB
+    }
+
+    const getSecondaryEl = (): HTMLAudioElement | null => {
+      return Audio.primarySlot === 'A' ? Audio.audioB : Audio.audioA
+    }
+
+    /**
+     * 翻转活跃槽。翻转后 Audio.audio 指向新活跃槽元素，
+     * Audio.url 更新为新活跃槽的 src。同时发布 slotSwap 事件
+     * 让订阅者（如可视化组件）重新绑定。
+     */
+    const swapPrimarySlot = () => {
+      Audio.primarySlot = Audio.primarySlot === 'A' ? 'B' : 'A'
+      Audio.audio = Audio.primarySlot === 'A' ? Audio.audioA : Audio.audioB
+      Audio.url = Audio.primarySlot === 'A' ? Audio.srcA : Audio.srcB
+      Audio.secondaryUrl = ''
+      publish('slotSwap')
     }
 
     /**
@@ -137,13 +174,24 @@ export const ControlAudioStore = defineStore(
      * @throws {Error} 如果音量不在0-100之间。
      */
     const setVolume = (volume: number, transition: boolean = false) => {
+      // 非活跃槽的 element 音量也同步，保证槽交换后用户音量一致
+      const syncSecondary = (target: number) => {
+        const sec = getSecondaryEl()
+        if (sec) {
+          try {
+            sec.volume = Number(target.toFixed(2))
+          } catch {}
+        }
+      }
       if (typeof volume === 'number' && volume >= 0 && volume <= 100) {
         if (Audio.audio) {
+          const v = volume / 100
           if (Audio.isPlay && transition) {
-            transitionVolume(Audio.audio, volume / 100, Audio.volume <= volume)
+            transitionVolume(Audio.audio, v, Audio.volume <= volume)
           } else {
-            Audio.audio.volume = Number((volume / 100).toFixed(2))
+            Audio.audio.volume = Number(v.toFixed(2))
           }
+          syncSecondary(v)
           Audio.volume = volume
           userInfo.userInfo.volume = volume
         }
@@ -152,10 +200,12 @@ export const ControlAudioStore = defineStore(
           if (volume <= 0) {
             Audio.volume = 0
             Audio.audio.volume = 0
+            syncSecondary(0)
             userInfo.userInfo.volume = 0
           } else {
             Audio.volume = 100
             Audio.audio.volume = 100
+            syncSecondary(1)
             userInfo.userInfo.volume = 100
           }
         } else {
@@ -165,7 +215,7 @@ export const ControlAudioStore = defineStore(
     }
 
     /**
-     * 设置音频URL。
+     * 设置当前活跃槽的音频URL。
      * @param {string} url - 音频URL。
      * @throws {Error} 如果URL为空或无效。
      */
@@ -179,9 +229,45 @@ export const ControlAudioStore = defineStore(
         stop()
       }
 
-      Audio.url = url.trim()
-      console.log('音频URL已设置:', Audio.url)
+      const trimmed = url.trim()
+      if (Audio.primarySlot === 'A') {
+        Audio.srcA = trimmed
+      } else {
+        Audio.srcB = trimmed
+      }
+      Audio.url = trimmed
+      console.log('音频URL已设置(slot', Audio.primarySlot, '):', Audio.url)
     }
+
+    /**
+     * 设置非活跃槽的音频URL（用于无感过渡预加载）。
+     */
+    const setSecondaryUrl = (url: string) => {
+      if (typeof url !== 'string' || url.trim() === '') {
+        throw new Error('次要音频URL不能为空')
+      }
+      const trimmed = url.trim()
+      if (Audio.primarySlot === 'A') {
+        Audio.srcB = trimmed
+      } else {
+        Audio.srcA = trimmed
+      }
+      Audio.secondaryUrl = trimmed
+      console.log('次要音频URL已设置(slot', Audio.primarySlot === 'A' ? 'B' : 'A', '):', trimmed)
+    }
+
+    /**
+     * 清空非活跃槽的 src（过渡完成后清理旧元素）。
+     */
+    const clearSecondarySrc = () => {
+      if (Audio.primarySlot === 'A') {
+        Audio.srcB = ''
+      } else {
+        Audio.srcA = ''
+      }
+      Audio.secondaryUrl = ''
+    }
+
     const start = async () => {
       const playSetting = usePlaySettingStore()
       const volume = Audio.volume
@@ -236,6 +322,11 @@ export const ControlAudioStore = defineStore(
       setCurrentTime,
       setVolume,
       setUrl,
+      setSecondaryUrl,
+      clearSecondarySrc,
+      getPrimaryEl,
+      getSecondaryEl,
+      swapPrimarySlot,
       start,
       stop,
       subscribe,
@@ -249,3 +340,4 @@ export const ControlAudioStore = defineStore(
     persist: false
   }
 )
+export type { AudioSlot }

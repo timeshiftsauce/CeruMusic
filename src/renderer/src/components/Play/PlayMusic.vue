@@ -43,6 +43,8 @@ import {
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
 import { useDlnaStore } from '@renderer/store/dlna'
+import { crossfadeState } from '@renderer/utils/audio/crossfade'
+import CrossfadeHint from './CrossfadeHint.vue'
 
 const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
@@ -541,6 +543,45 @@ const progressPercentage = computed(() => {
   return (Audio.value.currentTime / Audio.value.duration) * 100
 })
 
+// 无感过渡预告区间在进度条上的百分比位置
+const crossfadeMarkVisible = computed(() => {
+  return (
+    crossfadeState.markEnd > crossfadeState.markStart &&
+    Audio.value.duration > 0 &&
+    !dlnaStore.currentDevice
+  )
+})
+const crossfadeMarkLeft = computed(() => {
+  if (!crossfadeMarkVisible.value) return 0
+  return (crossfadeState.markStart / Audio.value.duration) * 100
+})
+const crossfadeMarkWidth = computed(() => {
+  if (!crossfadeMarkVisible.value) return 0
+  const d = Audio.value.duration
+  return ((crossfadeState.markEnd - crossfadeState.markStart) / d) * 100
+})
+// 过渡激活时也标注实际正在发生淡化的区段
+const crossfadeActiveMarkVisible = computed(() => {
+  return crossfadeState.active && crossfadeState.fadeDuration > 0 && Audio.value.duration > 0
+})
+const crossfadeActiveMarkLeft = computed(() => {
+  if (!crossfadeActiveMarkVisible.value) return 0
+  return (crossfadeState.fadeStart / Audio.value.duration) * 100
+})
+const crossfadeActiveMarkWidth = computed(() => {
+  if (!crossfadeActiveMarkVisible.value) return 0
+  return (crossfadeState.fadeDuration / Audio.value.duration) * 100
+})
+
+// 过渡完成后，新歌开头的淡入区段标记（从 0 到 fadeInMarkEnd 秒）
+const crossfadeFadeInMarkVisible = computed(() => {
+  return crossfadeState.fadeInMarkEnd > 0 && Audio.value.duration > 0 && !dlnaStore.currentDevice
+})
+const crossfadeFadeInMarkWidth = computed(() => {
+  if (!crossfadeFadeInMarkVisible.value) return 0
+  return (crossfadeState.fadeInMarkEnd / Audio.value.duration) * 100
+})
+
 // 格式化时间显示
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60)
@@ -715,6 +756,24 @@ watch(showFullPlay, (val) => {
         @click.stop="handleProgressClick"
       >
         <div class="progress-background"></div>
+        <!-- 无感过渡预告区间标记 -->
+        <div
+          v-if="crossfadeMarkVisible"
+          class="crossfade-mark"
+          :style="{ left: crossfadeMarkLeft + '%', width: crossfadeMarkWidth + '%' }"
+        ></div>
+        <!-- 过渡进行中的活跃区段标记 -->
+        <div
+          v-if="crossfadeActiveMarkVisible"
+          class="crossfade-active-mark"
+          :style="{ left: crossfadeActiveMarkLeft + '%', width: crossfadeActiveMarkWidth + '%' }"
+        ></div>
+        <!-- 过渡完成后：新歌开头的淡入标记 -->
+        <div
+          v-if="crossfadeFadeInMarkVisible"
+          class="crossfade-fadein-mark"
+          :style="{ left: '0%', width: crossfadeFadeInMarkWidth + '%' }"
+        ></div>
         <div class="progress-filled" :style="{ width: `${progressPercentage}%` }"></div>
         <div class="progress-handle" :style="{ left: `${progressPercentage}%` }"></div>
       </div>
@@ -913,6 +972,9 @@ watch(showFullPlay, (val) => {
     @close="closePlaylist"
     @play-song="playSong"
   />
+
+  <!-- 无感过渡提示 -->
+  <CrossfadeHint />
 </template>
 
 <style lang="scss" scoped>
@@ -977,6 +1039,34 @@ watch(showFullPlay, (val) => {
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes crossfade-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.35);
+  }
+}
+
+@keyframes crossfade-fadein-glow {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) scaleX(0.6);
+    transform-origin: left center;
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-50%) scaleX(1);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translateY(-50%) scaleX(1);
   }
 }
 
@@ -1056,6 +1146,70 @@ watch(showFullPlay, (val) => {
       background: linear-gradient(to right, v-bind(startmaincolor), v-bind(maincolor) 80%);
     }
 
+    // 无感过渡预告区间：在进度条末尾以斜纹/半透明条块显示
+    .crossfade-mark {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: var(--play-line-height);
+      border-radius: 999px;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.35),
+        rgba(255, 255, 255, 0.35) 3px,
+        rgba(255, 255, 255, 0.1) 3px,
+        rgba(255, 255, 255, 0.1) 6px
+      );
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+      opacity: 0.75;
+      transition:
+        left 0.2s linear,
+        width 0.2s linear,
+        height 0.2s ease;
+    }
+
+    // 过渡进行中的活跃区段：更醒目的脉动高亮
+    .crossfade-active-mark {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: var(--play-line-height);
+      border-radius: 999px;
+      pointer-events: none;
+      background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.85),
+        v-bind(maincolor) 50%,
+        rgba(255, 255, 255, 0.85)
+      );
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+      animation: crossfade-pulse 1.2s ease-in-out infinite;
+    }
+
+    // 过渡完成后：新歌开头的淡入段标记（从左向右渐弱的条带 + 轻微辉光）
+    .crossfade-fadein-mark {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: var(--play-line-height);
+      border-radius: 999px;
+      pointer-events: none;
+      background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.7),
+        rgba(255, 255, 255, 0.25) 70%,
+        rgba(255, 255, 255, 0)
+      );
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+      opacity: 0.9;
+      animation: crossfade-fadein-glow 2.4s ease-out;
+      transition:
+        width 0.3s linear,
+        opacity 0.8s ease,
+        height 0.2s ease;
+    }
+
     .progress-handle {
       position: absolute;
       top: 50%;
@@ -1076,13 +1230,19 @@ watch(showFullPlay, (val) => {
     // 悬停或拖拽时，轻微加粗提升可见性
     &:hover {
       .progress-background,
-      .progress-filled {
+      .progress-filled,
+      .crossfade-mark,
+      .crossfade-active-mark,
+      .crossfade-fadein-mark {
         height: 6px;
       }
     }
     &:has(.progress-handle.dragging) {
       .progress-background,
-      .progress-filled {
+      .progress-filled,
+      .crossfade-mark,
+      .crossfade-active-mark,
+      .crossfade-fadein-mark {
         height: 6px;
       }
     }

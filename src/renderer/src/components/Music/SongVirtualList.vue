@@ -322,7 +322,8 @@ import {
   HeartIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  TimeIcon
+  TimeIcon,
+  SwapIcon
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '../ContextMenu/ContextMenu.vue'
 import { createMenuItem, createSeparator, calculateMenuPosition } from '../ContextMenu/utils'
@@ -404,7 +405,8 @@ const emit = defineEmits([
   'removeBatch',
   'exitMultiSelect',
   'addToSongListBatch',
-  'extraMenuClick'
+  'extraMenuClick',
+  'moveToPosition'
 ])
 
 // 虚拟滚动相关状态
@@ -959,6 +961,16 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
     // 添加分隔线
     baseItems.push(createSeparator())
     baseItems.push(
+      createMenuItem('moveToPosition', '移动到位置...', {
+        icon: SwapIcon,
+        onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+          if (contextMenuSong.value) {
+            emit('moveToPosition', contextMenuSong.value)
+          }
+        }
+      })
+    )
+    baseItems.push(
       createMenuItem('removeFromLocalPlaylist', '移出当前歌单', {
         icon: DeleteIcon,
         onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
@@ -1274,7 +1286,11 @@ const scrollToSong = (songmid: string | number, source: string) => {
 
 defineExpose({
   scrollToSong,
-  sortedSongs
+  sortedSongs,
+  sortType,
+  resetSort: () => {
+    sortType.value = 'default'
+  }
 })
 </script>
 

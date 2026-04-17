@@ -361,6 +361,41 @@ class SongListService implements SongListAPI {
     }
   }
 
+  /**
+   * 重新排序歌单歌曲
+   */
+  async reorderSongs(
+    hashId: string,
+    songmids: (string | number)[]
+  ): Promise<IPCResponse<{ updated: number }>> {
+    try {
+      return await this.songListAPI.reorderSongs(hashId, songmids)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '重排歌单失败'
+      }
+    }
+  }
+
+  /**
+   * 移动单首歌曲到指定位置
+   */
+  async moveSong(
+    hashId: string,
+    songmid: string | number,
+    toIndex: number
+  ): Promise<IPCResponse<boolean>> {
+    try {
+      return await this.songListAPI.moveSong(hashId, songmid, toIndex)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '移动歌曲失败'
+      }
+    }
+  }
+
   // === 便捷方法 ===
 
   /**

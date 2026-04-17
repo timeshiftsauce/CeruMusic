@@ -383,6 +383,50 @@ ipcMain.handle('songlist:repair-data', async (_, hashId: string) => {
   }
 })
 
+// 重新排序歌单歌曲
+ipcMain.handle(
+  'songlist:reorder-songs',
+  async (_, hashId: string, songmids: (string | number)[]) => {
+    try {
+      const instance = new ManageSongList(hashId)
+      const updated = instance.reorderSongs(songmids)
+      return { success: true, data: { updated }, message: `已更新 ${updated} 首歌曲顺序` }
+    } catch (error) {
+      console.error('重排歌单失败:', error)
+      const message = error instanceof SongListError ? error.message : '重排歌单失败'
+      return {
+        success: false,
+        error: message,
+        code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+      }
+    }
+  }
+)
+
+// 移动单首歌曲到指定位置（范围 UPDATE，O(|Δ|)）
+ipcMain.handle(
+  'songlist:move-song',
+  async (_, hashId: string, songmid: string | number, toIndex: number) => {
+    try {
+      const instance = new ManageSongList(hashId)
+      const moved = instance.moveSong(songmid, toIndex)
+      return {
+        success: true,
+        data: moved,
+        message: moved ? '歌曲位置已更新' : '无需移动'
+      }
+    } catch (error) {
+      console.error('移动歌曲失败:', error)
+      const message = error instanceof SongListError ? error.message : '移动歌曲失败'
+      return {
+        success: false,
+        error: message,
+        code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
+      }
+    }
+  }
+)
+
 // 强制保存歌单
 ipcMain.handle('songlist:force-save', async (_, hashId: string) => {
   try {

@@ -217,6 +217,31 @@ export const useGlobalPlayStatusStore = defineStore(
           currentBlobUrl = null
         }
 
+        // 本地歌曲无 img 但有 hasCover 时,走 IPC 按需拉取,避免列表外播放时封面缺失
+        const info: any = player.songInfo
+        if (
+          !newImg &&
+          info?.source === 'local' &&
+          info?.hasCover &&
+          info?.songmid &&
+          (window as any)?.api?.localMusic?.getCoverBase64
+        ) {
+          const targetId = String(info.songmid)
+          ;(window as any).api.localMusic
+            .getCoverBase64(targetId)
+            .then((data: string) => {
+              if (
+                data &&
+                player.songInfo &&
+                String(player.songInfo.songmid) === targetId &&
+                !player.songInfo.img
+              ) {
+                player.songInfo.img = data
+              }
+            })
+            .catch(() => {})
+        }
+
         // 处理封面 Blob URL
         const coverUrl = newImg ? newImg : defaultCover
         console.log('coverUrl', coverUrl)

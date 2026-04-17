@@ -43,106 +43,6 @@ import {
 import { useAuthStore } from '@renderer/store'
 
 const settingsStore = useSettingsStore()
-interface LocalSong extends Songs {
-  path?: string
-  size?: string
-  format?: string
-  bitrate?: string
-}
-
-// 本地音乐数据（示例数据，实际应该从本地文件系统获取）
-const localSongs = ref<LocalSong[]>([
-  {
-    songmid: 'local_001',
-    name: '夜曲',
-    singer: '周杰伦',
-    albumName: '十一月的萧邦',
-    albumId: 'album_001',
-    interval: '3:37', // 使用 interval 而不是 duration
-    source: 'local',
-    img: '',
-    lrc: null,
-    types: ['mp3'],
-    _types: {},
-    typeUrl: {},
-    path: '/music/夜曲.mp3',
-    size: '8.5 MB',
-    format: 'MP3',
-    bitrate: '320 kbps'
-  },
-  {
-    songmid: 'local_002',
-    name: '青花瓷',
-    singer: '周杰伦',
-    albumName: '我很忙',
-    albumId: 'album_002',
-    interval: '3:58',
-    source: 'local',
-    img: '',
-    lrc: null,
-    types: ['mp3'],
-    _types: {},
-    typeUrl: {},
-    path: '/music/青花瓷.mp3',
-    size: '9.2 MB',
-    format: 'MP3',
-    bitrate: '320 kbps'
-  },
-  {
-    songmid: 'local_003',
-    name: '稻香',
-    singer: '周杰伦',
-    albumName: '魔杰座',
-    albumId: 'album_003',
-    interval: '3:43',
-    source: 'local',
-    img: '',
-    lrc: null,
-    types: ['mp3'],
-    _types: {},
-    typeUrl: {},
-    path: '/music/稻香.mp3',
-    size: '8.8 MB',
-    format: 'MP3',
-    bitrate: '320 kbps'
-  },
-  {
-    songmid: 'local_004',
-    name: '告白气球',
-    singer: '周杰伦',
-    albumName: '周杰伦的床边故事',
-    albumId: 'album_004',
-    interval: '3:34',
-    source: 'local',
-    img: '',
-    lrc: null,
-    types: ['mp3'],
-    _types: {},
-    typeUrl: {},
-    path: '/music/告白气球.mp3',
-    size: '8.4 MB',
-    format: 'MP3',
-    bitrate: '320 kbps'
-  },
-  {
-    songmid: 'local_005',
-    name: '七里香',
-    singer: '周杰伦',
-    albumName: '七里香',
-    albumId: 'album_005',
-    interval: '4:05',
-    source: 'local',
-    img: '',
-    lrc: null,
-    types: ['mp3'],
-    _types: {},
-    typeUrl: {},
-    path: '/music/七里香.mp3',
-    size: '9.6 MB',
-    format: 'MP3',
-    bitrate: '320 kbps'
-  }
-])
 
 // 歌单列表
 const playlists = ref<SongList[]>([])
@@ -256,45 +156,6 @@ const importSonglistFromFile = async () => {
     if (songlistFileInputRef.value) songlistFileInputRef.value.value = ''
   }
 }
-
-// 将时长字符串转换为秒数
-const parseInterval = (interval: string): number => {
-  if (!interval) return 0
-  const parts = interval.split(':')
-  if (parts.length === 2) {
-    const minutes = parseInt(parts[0]) || 0
-    const seconds = parseInt(parts[1]) || 0
-    return minutes * 60 + seconds
-  }
-  return 0
-}
-
-// 格式化时长（从秒数转换为 mm:ss 格式）
-const formatDuration = (seconds: number): string => {
-  if (!seconds) return '0:00'
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-}
-
-// 统计信息
-const stats = computed(() => {
-  const totalDurationSeconds = localSongs.value.reduce((sum, song) => {
-    return sum + parseInterval(song.interval || '0:00')
-  }, 0)
-
-  const totalSize = localSongs.value.reduce((sum, song) => {
-    const sizeStr = song.size || '0 MB'
-    const sizeNum = parseFloat(sizeStr.replace(/[^\d.]/g, ''))
-    return sum + sizeNum
-  }, 0)
-
-  return {
-    totalSongs: localSongs.value.length,
-    totalDuration: formatDuration(totalDurationSeconds),
-    totalSize: `${totalSize.toFixed(1)} MB`
-  }
-})
 
 // 加载歌单列表
 const loadPlaylists = async () => {
@@ -1630,11 +1491,6 @@ onDeactivated(() => {
       <div class="page-header">
         <div class="header-left">
           <h2>本地歌单</h2>
-          <div class="stats">
-            <span>{{ stats.totalSongs }} 首本地歌曲</span>
-            <span>总时长 {{ stats.totalDuration }}</span>
-            <span>总大小 {{ stats.totalSize }}</span>
-          </div>
         </div>
         <div class="header-actions">
           <!-- <t-button theme="default" @click="openMusicFolder">

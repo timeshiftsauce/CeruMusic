@@ -149,6 +149,19 @@ export interface SongListAPI {
    * 强制保存歌单
    */
   forceSave(hashId: string): Promise<IPCResponse>
+
+  /**
+   * 重新排序歌单歌曲（传入最终顺序的 songmid 数组）
+   */
+  reorderSongs(
+    hashId: string,
+    songmids: (string | number)[]
+  ): Promise<IPCResponse<{ updated: number }>>
+
+  /**
+   * 移动单首歌曲到指定 0-based 位置（范围 UPDATE，仅写入受影响行）
+   */
+  moveSong(hashId: string, songmid: string | number, toIndex: number): Promise<IPCResponse<boolean>>
 }
 
 // 错误码枚举
