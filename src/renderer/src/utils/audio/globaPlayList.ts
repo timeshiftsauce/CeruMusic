@@ -12,6 +12,7 @@ import {
   destroyPlaylistEventListeners
 } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
+import { crossfadeManager } from './crossfade'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -108,6 +109,8 @@ const togglePlayPause = async () => {
 }
 
 const playSong = async (song: SongList) => {
+  // 用户主动切歌，取消可能正在进行的无感过渡
+  crossfadeManager.cancel()
   if (!localUserStore.userSource.pluginId && song.source !== 'local') {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
@@ -493,7 +496,42 @@ const updatePlayMode = () => {
   userInfo.value.playMode = playMode.value
 }
 
+/**
+ * 计算下一首歌曲（不推进播放，仅返回引用，供无感过渡预取 URL 使用）。
+ * - SINGLE 模式下返回 null（单曲循环不过渡）
+ * - RANDOM 模式使用 shuffleOrder，必要时重建
+ * - SEQUENCE 模式按列表顺序循环
+ * - 列表为空返回 null
+ */
+const getNextSong = (): SongList | null => {
+  if (list.value.length === 0) return null
+  if (playMode.value === PlayMode.SINGLE) return null
+
+  if (playMode.value === PlayMode.RANDOM) {
+    if (shuffleOrder.value.length !== list.value.length) {
+      buildShuffleOrder()
+    }
+    const curId = userInfo.value.lastPlaySongId
+    let idx = shuffleOrder.value.findIndex((id) => id === curId)
+    if (idx < 0) idx = -1
+    let nextIdx = idx + 1
+    if (nextIdx >= shuffleOrder.value.length) {
+      nextIdx = 0 // 返回环尾的第一首以供过渡预取；实际循环到下一轮时 buildShuffleOrder 会重建
+    }
+    const nextId = shuffleOrder.value[nextIdx]
+    return list.value.find((s) => s.songmid === nextId) || null
+  }
+
+  // SEQUENCE
+  const currentIndex = list.value.findIndex(
+    (song) => song.songmid === userInfo.value.lastPlaySongId
+  )
+  const nextIndex = (currentIndex + 1) % list.value.length
+  return list.value[nextIndex] || null
+}
+
 const playPrevious = async () => {
+  crossfadeManager.cancel()
   if (list.value.length === 0) return
   try {
     const currentIndex = list.value.findIndex(
@@ -509,6 +547,7 @@ const playPrevious = async () => {
 }
 
 const playNext = async () => {
+  crossfadeManager.cancel()
   if (list.value.length === 0) return
   try {
     const currentIndex = list.value.findIndex(
@@ -524,6 +563,8 @@ const playNext = async () => {
 }
 
 const playNextAuto = async () => {
+  // 若无感过渡正在完成最后的推进，避免重复推进
+  if (crossfadeManager.isFinalizingCurrentAdvance()) return
   if (list.value.length === 0) return
   try {
     if (playMode.value === PlayMode.SINGLE && userInfo.value.lastPlaySongId) {
@@ -642,6 +683,32 @@ const initPlayback = async () => {
   playbackInstalled = true
 
   initPlaylistEventListeners(localUserStore, playSong)
+
+  // 初始化无感过渡管理器：注入 getNextSong 回调，订阅 slotSwap 重置自动下一首计数
+  crossfadeManager.init(getNextSong)
+  controlAudio.subscribe('slotSwap', () => {
+    autoNextCount.value = 0
+    // 关键：翻转槽位后，playSong 挂在旧 primary 上的 DOM error/playing 监听器仍然存在。
+    // 翻转后 completeCrossfade 会对旧 primary 执行 removeAttribute('src') + load()，
+    // 这会异步触发 'error' 事件，带着旧歌闭包跑 auto-switch，结果把上一首 URL 又写回了新 primary。
+    // 所以这里同步清理这些过期的监听器。翻转后旧 primary === 新 secondary。
+    const oldPrimary = controlAudio.getSecondaryEl()
+    if (oldPrimary) {
+      if (currentPlaybackErrorHandler) {
+        try {
+          oldPrimary.removeEventListener('error', currentPlaybackErrorHandler)
+        } catch {}
+        currentPlaybackErrorHandler = null
+      }
+      if (currentPlaybackPlayingHandler) {
+        try {
+          oldPrimary.removeEventListener('playing', currentPlaybackPlayingHandler)
+        } catch {}
+        currentPlaybackPlayingHandler = null
+      }
+    }
+  })
+
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
     const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
     if (lastPlayedSong) {
@@ -704,6 +771,7 @@ const uninstallPlayback = () => {
   playbackInstalled = false
 
   destroyPlaylistEventListeners()
+  crossfadeManager.destroy()
   window.removeEventListener('global-music-control', onGlobalCtrl)
   if (savePositionInterval !== null) {
     clearInterval(savePositionInterval)
@@ -727,5 +795,6 @@ export {
   handlePause,
   setVolume,
   seekTo,
-  onGlobalCtrl
+  onGlobalCtrl,
+  getNextSong
 }

@@ -25,3 +25,8 @@ export function genCoverKey(filePath: string) {
     return md5(filePath)
   }
 }
+
+export function genCoverKeyWithMtime(filePath: string, mtimeMs: number) {
+  if (mtimeMs && isFinite(mtimeMs)) return md5(`${filePath}:${mtimeMs}`)
+  return md5(filePath)
+}

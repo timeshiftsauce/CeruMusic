@@ -210,6 +210,29 @@ watch(
   }
 )
 
+// 监听活跃 audio element 变化：无感过渡翻转槽后需要重新绑定分析器到新元素
+watch(
+  () => Audio.value.audio,
+  (newEl, oldEl) => {
+    if (!newEl || newEl === oldEl) return
+    try {
+      stopVisualization()
+      // 移除旧的 analyser 引用
+      try {
+        audioManager.removeAnalyser(componentId.value)
+      } catch {}
+      analyser.value = undefined
+      // 对新元素重新初始化分析器
+      initAudioAnalyser()
+      if (props.show && Audio.value.isPlay) {
+        startVisualization()
+      }
+    } catch (e) {
+      console.warn('AudioVisualizer: 切换活跃 audio 元素失败:', e)
+    }
+  }
+)
+
 // 设置画布尺寸的函数
 const resizeCanvas = () => {
   if (!canvasRef.value) return

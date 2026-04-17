@@ -3,9 +3,10 @@ import fs from 'fs'
 import fsp from 'fs/promises'
 import path from 'node:path'
 import { join } from 'path'
+import pLimit from 'p-limit'
 import { localMusicIndexService } from '../services/LocalMusicIndex'
 import { coverCacheService } from '../services/CoverCache'
-import { genId, genCoverKey, normPath } from '../utils/fileUtils'
+import { genId, genCoverKey, genCoverKeyWithMtime, normPath } from '../utils/fileUtils'
 import { readTags } from '../utils/tagUtils'
 import { is } from '@electron-toolkit/utils'
 import wy from '../utils/musicSdk/wy/recognize'
@@ -135,31 +136,88 @@ ipcMain.handle('dialog:openFile', async (_e, options) => {
 
 ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
   if (!Array.isArray(dirs) || dirs.length === 0) {
-    return []
+    return ''
   }
 
   const sender = e.sender
+  // Yield to event loop so the IPC reply microtask + UI repaint can run
+  // before we start any heavy work.
+  await new Promise((r) => setImmediate(r))
 
-  const existsDirs = dirs.filter((d) => {
+  const existsDirs: string[] = []
+  for (const d of dirs) {
     try {
-      return fs.existsSync(d)
-    } catch {
-      return false
-    }
-  })
+      if (fs.existsSync(d)) existsDirs.push(d)
+    } catch {}
+    await new Promise((r) => setImmediate(r))
+  }
 
   const files: string[] = []
   try {
-    for (const d of existsDirs) await walkDir(d, files)
+    for (const d of existsDirs) {
+      await walkDir(d, files)
+      await new Promise((r) => setImmediate(r))
+    }
 
-    const CHUNK_SIZE = 50 // 每批处理 50 个文件
     const totalFiles = files.length
     let processedCount = 0
-    const allSongs: any[] = []
+    let scannedCount = 0
+    let reusedCount = 0
+    const BATCH = 50
+    let pendingUpserts: any[] = []
+    let lastProgressAt = 0
 
-    for (let i = 0; i < totalFiles; i += CHUNK_SIZE) {
-      const chunk = files.slice(i, i + CHUNK_SIZE)
-      const promises = chunk.map(async (p) => {
+    // Bulk-preload all stat rows in ONE SQLite call. Avoids N sync DB calls
+    // hammering the main thread during scan.
+    const statsMap = localMusicIndexService.getAllStats()
+
+    const limit = pLimit(4)
+
+    const flush = async () => {
+      if (!pendingUpserts.length) return
+      const toWrite = pendingUpserts
+      pendingUpserts = []
+      await localMusicIndexService.upsertSongs(toWrite as any)
+      await new Promise((r) => setImmediate(r))
+    }
+
+    const sendProgress = (force = false) => {
+      const now = Date.now()
+      if (!force && now - lastProgressAt < 80) return
+      lastProgressAt = now
+      sender.send('local-music:scan-progress', {
+        processed: processedCount,
+        total: totalFiles,
+        scanned: scannedCount,
+        reused: reusedCount
+      })
+    }
+
+    const formatTime = (sec: number) => {
+      if (!sec || !isFinite(sec)) return ''
+      const m = Math.floor(sec / 60)
+      const s = Math.floor(sec % 60)
+      return `${m}:${String(s).padStart(2, '0')}`
+    }
+
+    const tasks = files.map((p) =>
+      limit(async () => {
+        let size = 0
+        let mtimeMs = 0
+        try {
+          const st = await fsp.stat(p)
+          size = st.size
+          mtimeMs = Math.floor(st.mtimeMs)
+        } catch {}
+
+        const cached = statsMap.get(p)
+        if (cached && cached.size === size && cached.mtime_ms === mtimeMs && size > 0) {
+          reusedCount++
+          processedCount++
+          sendProgress()
+          return
+        }
+
         let tags = {
           title: '',
           album: '',
@@ -173,8 +231,11 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
           duration: 0
         }
         try {
-          tags = readTags(p, false) // 扫描时不读取歌词
+          tags = readTags(p, false)
         } catch {}
+        // Yield right after each native sync call so the event loop can
+        // service pending IPC / UI repaint work between heavy reads.
+        await new Promise((r) => setImmediate(r))
 
         const base = path.basename(p)
         const noExt = base.replace(path.extname(base), '')
@@ -197,16 +258,9 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
             Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : ''
         }
 
-        const songmid = genId(p)
+        const songmid = genId(normPath(p) || p)
 
-        const formatTime = (sec: number) => {
-          if (!sec || !isFinite(sec)) return ''
-          const m = Math.floor(sec / 60)
-          const s = Math.floor(sec % 60)
-          return `${m}:${String(s).padStart(2, '0')}`
-        }
-
-        return {
+        const item: any = {
           songmid,
           singer: singer || '未知艺术家',
           name: name || '未知曲目',
@@ -216,9 +270,9 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
           interval: tags.duration ? formatTime(tags.duration) : '',
           img: '',
           hasCover: !!(tags as any).hasCover,
-          coverKey: genCoverKey(p),
+          coverKey: genCoverKeyWithMtime(p, mtimeMs),
           year: (tags as any).year || 0,
-          lrc: null, // 初始歌词为空
+          lrc: null,
           types: [],
           _types: {},
           typeUrl: {},
@@ -227,37 +281,42 @@ ipcMain.handle('local-music:scan', async (e, dirs: string[]) => {
           bitrate: tags.bitrate,
           sampleRate: tags.sampleRate,
           channels: tags.channels,
-          duration: tags.duration
+          duration: tags.duration,
+          _size: size,
+          _mtime_ms: mtimeMs
         }
+
+        pendingUpserts.push(item)
+        scannedCount++
+        processedCount++
+
+        if (pendingUpserts.length >= BATCH) {
+          await flush()
+        }
+
+        sendProgress()
       })
+    )
 
-      const chunkSongs = await Promise.all(promises)
-      allSongs.push(...chunkSongs)
-      processedCount += chunk.length
-
-      // 发送进度更新
-      sender.send('local-music:scan-progress', { processed: processedCount, total: totalFiles })
-
-      // 短暂延时，避免完全阻塞 UI
-      await new Promise((resolve) => setImmediate(resolve))
-    }
+    await Promise.all(tasks)
+    await flush()
+    sendProgress(true)
 
     await localMusicIndexService.setDirs(existsDirs)
-    await localMusicIndexService.upsertSongs(allSongs)
+    await new Promise((r) => setImmediate(r))
     await localMusicIndexService.pruneByScan(existsDirs, files)
+    await new Promise((r) => setImmediate(r))
 
-    // 通知 renderer 扫描完成
+    // Renderer ignores this handler's return value and reacts to
+    // scan-finished instead. Avoid serializing the whole library twice.
+    const allSongs = localMusicIndexService.getAllSongs()
     sender.send('local-music:scan-finished', allSongs)
 
-    try {
-      return JSON.stringify(allSongs)
-    } catch {
-      return '[]'
-    }
-  } catch (e) {
-    // 出错也要通知完成，避免界面一直转
+    return ''
+  } catch (err) {
+    console.error('[local-music:scan] failed', err)
     sender.send('local-music:scan-finished', [])
-    return '[]'
+    return ''
   }
 })
 
@@ -479,14 +538,19 @@ ipcMain.handle('local-music:get-cover', async (_e, trackId: string) => {
 ipcMain.handle('local-music:get-covers', async (_e, trackIds: string[]) => {
   if (!Array.isArray(trackIds) || trackIds.length === 0) return {}
   const res: Record<string, string> = {}
-  for (const id of trackIds) {
-    const s = localMusicIndexService.getSongById(id)
-    if (!s?.path) continue
-    try {
-      const data = await coverCacheService.getCoverByFile(s.path, genCoverKey(s.path))
-      if (data) res[id] = data
-    } catch {}
-  }
+  const limit = pLimit(8)
+  await Promise.all(
+    trackIds.map((id) =>
+      limit(async () => {
+        const s = localMusicIndexService.getSongById(id)
+        if (!s?.path) return
+        try {
+          const data = await coverCacheService.getCoverByFile(s.path, genCoverKey(s.path))
+          if (data) res[id] = data
+        } catch {}
+      })
+    )
+  )
   return res
 })
 

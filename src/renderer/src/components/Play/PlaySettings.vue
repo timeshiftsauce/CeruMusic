@@ -54,6 +54,11 @@ const settingSections = computed(() => [
         update: (val: boolean) => playSetting.setIsPauseTransition(val)
       },
       {
+        label: '无感过渡(智能交叉淡化)',
+        value: playSetting.getIsSeamlessTransition,
+        update: (val: boolean) => playSetting.setIsSeamlessTransition(val)
+      },
+      {
         label: '使用 Apple 风格歌词',
         value: playSetting.getUseAmlLyricRenderer,
         update: (val: boolean) => playSetting.setUseAmlLyricRenderer(val)

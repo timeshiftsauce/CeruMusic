@@ -14,6 +14,10 @@ export type AudioEventType =
   | 'pause'
   | 'error'
   | 'canplay'
+  | 'slotSwap'
+
+// 槽位标识,用于无感过渡的双 audio element 架构
+export type AudioSlot = 'A' | 'B'
 
 // 订阅者接口
 export interface AudioSubscriber {
@@ -39,6 +43,12 @@ export enum PlayMode {
 
 export type ControlAudioState = {
   audio: HTMLAudioElement | null | undefined
+  audioA: HTMLAudioElement | null
+  audioB: HTMLAudioElement | null
+  primarySlot: AudioSlot
+  srcA: string
+  srcB: string
+  secondaryUrl: string
   isPlay: boolean
   currentTime: number
   duration: number

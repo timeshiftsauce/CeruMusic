@@ -874,6 +874,115 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
     MessagePlugin.error('移出歌曲失败')
   }
 }
+
+// 移动歌曲到指定位置（以用户当前可见列表为准）
+const handleMoveToPosition = (song: MusicItem) => {
+  if (!isLocalPlaylist.value) return
+  const visible: MusicItem[] = songListRef.value?.sortedSongs ?? displaySongs.value
+  const total = visible.length
+  const fromVis = visible.findIndex((s) => String(s.songmid) === String(song.songmid))
+  if (fromVis < 0) {
+    MessagePlugin.warning('无法定位到当前歌曲')
+    return
+  }
+  const inputValue = ref<string>(String(fromVis + 1))
+
+  const dialog = DialogPlugin({
+    header: '移动到指定位置',
+    body: () =>
+      h('div', [
+        h(
+          'div',
+          { style: 'margin-bottom: 8px; color: var(--td-text-color-secondary);' },
+          `当前位置：${fromVis + 1} / ${total}，请输入目标位置（1 ~ ${total}）`
+        ),
+        h('input', {
+          value: inputValue.value,
+          onInput: (e: Event) => {
+            inputValue.value = (e.target as HTMLInputElement).value
+          },
+          placeholder: '目标位置',
+          autofocus: true,
+          style:
+            'width: 100%; padding: 6px 10px; border: 1px solid var(--td-component-border);' +
+            ' border-radius: 4px; background: var(--td-bg-color-specialcomponent);' +
+            ' color: var(--td-text-color-primary); outline: none;'
+        })
+      ]),
+    confirmBtn: '移动',
+    cancelBtn: '取消',
+    onConfirm: async () => {
+      const n = parseInt(inputValue.value, 10)
+      if (!Number.isFinite(n) || n < 1 || n > total) {
+        MessagePlugin.warning(`请输入 1 到 ${total} 之间的数字`)
+        return
+      }
+      const toVis = n - 1
+      dialog.destroy()
+      if (toVis === fromVis) return
+
+      const sortType = songListRef.value?.sortType ?? 'default'
+      const isDefaultOrder = !sortType || sortType === 'default'
+
+      if (isDefaultOrder) {
+        // 可见列表 = 自然顺序的过滤子集 → 用锚点的自然索引做 moveSong（O(|Δ|)）
+        const anchor = visible[toVis]
+        const naturalTo = songs.value.findIndex((s) => String(s.songmid) === String(anchor.songmid))
+        const fromNat = songs.value.findIndex((s) => String(s.songmid) === String(song.songmid))
+        if (naturalTo < 0 || fromNat < 0) {
+          MessagePlugin.error('定位失败')
+          return
+        }
+        const next = songs.value.slice()
+        const [moved] = next.splice(fromNat, 1)
+        next.splice(naturalTo, 0, moved)
+        const prev = songs.value
+        songs.value = next
+        try {
+          const res = await songListAPI.moveSong(playlistInfo.value.id, song.songmid, naturalTo)
+          if (!res.success) {
+            songs.value = prev
+            MessagePlugin.error(res.error || '排序失败')
+            return
+          }
+          MessagePlugin.success(`已移动到第 ${toVis + 1} 位`)
+        } catch (e: any) {
+          songs.value = prev
+          MessagePlugin.error(e?.message || '排序失败')
+        }
+      } else {
+        // 排序视图下：把当前可见顺序固化为自然顺序，再应用移动（O(n)，只在排序视图中发生）
+        const newVisible = visible.slice()
+        const [moved] = newVisible.splice(fromVis, 1)
+        newVisible.splice(toVis, 0, moved)
+        const visibleIds = new Set(newVisible.map((s) => String(s.songmid)))
+        const nonVisible = songs.value.filter((s) => !visibleIds.has(String(s.songmid)))
+        const finalOrder = [...newVisible, ...nonVisible]
+
+        const prev = songs.value
+        songs.value = finalOrder
+        // 重置客户端排序，让用户直接看到移动生效后的新自然顺序
+        songListRef.value?.resetSort?.()
+        try {
+          const res = await songListAPI.reorderSongs(
+            playlistInfo.value.id,
+            finalOrder.map((s) => s.songmid)
+          )
+          if (!res.success) {
+            songs.value = prev
+            MessagePlugin.error(res.error || '排序失败')
+            return
+          }
+          MessagePlugin.success(`已移动到第 ${toVis + 1} 位`)
+        } catch (e: any) {
+          songs.value = prev
+          MessagePlugin.error(e?.message || '排序失败')
+        }
+      }
+    },
+    onClose: () => dialog.destroy()
+  })
+}
 const handleRemoveBatchSelected = async (batchSongs: any[]) => {
   if (!batchSongs || batchSongs.length === 0) {
     MessagePlugin.warning('未选择歌曲')
@@ -1770,6 +1879,7 @@ const filteredMoreActions = computed(() =>
           @add-to-song-list-batch="handleAddBatchToSongList"
           @scroll="handleScroll"
           @exit-multi-select="handleExitMultiSelect"
+          @move-to-position="handleMoveToPosition"
         />
 
         <transition name="locate-btn-fade">
