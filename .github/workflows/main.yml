@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Check out git repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           # 【优化 1】启用 actions/setup-node 内置的 yarn 缓存
@@ -34,7 +34,7 @@ jobs:
       - name: Cache Electron Binaries
         # 【优化 2】缓存 Electron 预编译二进制文件
         # Electron 首次打包会下载很大的压缩包，缓存后下次构建可秒速跳过下载阶段
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/electron
@@ -92,14 +92,14 @@ jobs:
 
       - name: Upload Artifacts
         # 将构建产物上传到 GitHub Actions 任务面板，方便在 Release 发布前检查包体
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.os }}-build-artifacts
           path: dist
 
       - name: Release
         # 只有在推送 Tag (v*) 时才触发真正的 GitHub Release 发布
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: 'dist/**'
