@@ -63,6 +63,8 @@ nsis:
 mac:
   icon: 'resources/icons/icon.icns'
   entitlementsInherit: build/entitlements.mac.plist
+  singleArchFiles: 'Contents/Resources/app.asar.unpacked/node_modules/@img/{sharp-darwin-arm64,sharp-libvips-darwin-arm64}/**'
+  x64ArchFiles: 'Contents/Resources/app.asar.unpacked/node_modules/@img/{sharp-darwin-x64,sharp-libvips-darwin-x64}/lib/**/*'
   target:
     - target: dmg
       arch:
