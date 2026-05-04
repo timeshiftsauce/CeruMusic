@@ -17,7 +17,9 @@ jobs:
       fail-fast: false # 即使一个平台失败，其他平台继续运行
       matrix:
         # 定义运行环境：Windows, macOS, Linux
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # macos-13 = Intel x64 runner, macos-latest = Apple Silicon arm64 runner
+        # 两台 mac runner 各自构建对应架构,避免 universal 包对 native module(better-sqlite3) 的二进制冲突
+        os: [windows-latest, macos-13, macos-latest, ubuntu-latest]
 
     steps:
       - name: Check out git repository
@@ -67,9 +69,13 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: yarn run build:win
 
-      - name: Build Electron App for macos
+      - name: Build Electron App for macOS Intel (x64)
+        if: matrix.os == 'macos-13'
+        run: yarn run build:mac:intel
+
+      - name: Build Electron App for macOS Apple Silicon (arm64)
         if: matrix.os == 'macos-latest'
-        run: yarn run build:mac:universal
+        run: yarn run build:mac:arm64
 
       - name: Build Electron App for linux
         if: matrix.os == 'ubuntu-latest'
@@ -81,7 +87,7 @@ jobs:
           npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"
 
       - name: Cleanup Artifacts for MacOS
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
           npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
 

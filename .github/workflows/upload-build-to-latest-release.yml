@@ -9,7 +9,12 @@ on:
 jobs:
   build-and-upload:
     name: build and upload to latest release
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # macos-13 = Intel x64 runner, macos-latest = Apple Silicon arm64 runner
+      matrix:
+        os: [macos-13, macos-latest]
 
     steps:
       - name: Check out git repository
@@ -59,8 +64,13 @@ jobs:
           npm i -g yarn
           yarn install --frozen-lockfile
 
-      - name: Build Electron App for macos
-        run: yarn run build:mac:universal
+      - name: Build Electron App for macOS Intel (x64)
+        if: matrix.os == 'macos-13'
+        run: yarn run build:mac:intel
+
+      - name: Build Electron App for macOS Apple Silicon (arm64)
+        if: matrix.os == 'macos-latest'
+        run: yarn run build:mac:arm64
 
       - name: Cleanup Artifacts for MacOS
         shell: bash
