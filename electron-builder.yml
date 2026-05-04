@@ -21,7 +21,6 @@ asarUnpack:
   - node_modules/bindings/**
   - node_modules/file-uri-to-path/**
   - '**/*.node'
-afterPack: build/afterPack.js
 win:
   executableName: ceru-music
   icon: 'resources/icons/icon.ico'
@@ -63,8 +62,7 @@ nsis:
 mac:
   icon: 'resources/icons/icon.icns'
   entitlementsInherit: build/entitlements.mac.plist
-  singleArchFiles: 'Contents/Resources/app.asar.unpacked/node_modules/@img/{sharp-darwin-arm64,sharp-libvips-darwin-arm64}/**'
-  x64ArchFiles: 'Contents/Resources/app.asar.unpacked/node_modules/@img/{sharp-darwin-x64,sharp-libvips-darwin-x64}/lib/**/*'
+  x64ArchFiles: 'Contents/Resources/app.asar.unpacked/node_modules/@img/{sharp-darwin-*,sharp-libvips-darwin-*}/lib/**/*'
   target:
     - target: dmg
       arch:
