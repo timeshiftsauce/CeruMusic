@@ -39,6 +39,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@langchain/core": "^0.3.71",
     "@langchain/deepseek": "^0.1.0",
+    "@langchain/openai": "^1.4.5",
     "@logto/browser": "^3.0.10",
     "@logto/vue": "^3.0.10",
     "@lrc-player/core": "^1.1.5",
