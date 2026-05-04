@@ -468,12 +468,10 @@ function findDownloadAsset(assets, platform) {
       /win.*x64.*\.zip$/i
     ],
     macos: [
-      /ceru-music.*universal\.dmg$/i,
       /ceru-music.*arm64\.dmg$/i,
       /ceru-music.*x64\.dmg$/i,
       /ceru-music.*\.dmg$/i,
       /\.dmg$/i,
-      /ceru-music.*universal\.zip$/i,
       /ceru-music.*arm64\.zip$/i,
       /ceru-music.*x64\.zip$/i,
       /darwin.*\.zip$/i,
@@ -702,8 +700,8 @@ function detectArchitecture() {
     if (userAgent.includes('arm') || platform.includes('arm')) {
       return 'arm64'
     }
-    // Default to universal for macOS (works on both Intel and Apple Silicon)
-    return 'universal'
+    // Default to Intel x64 when no Apple Silicon indicator is found
+    return 'x64'
   }
 
   // For Windows, detect 32-bit vs 64-bit
@@ -727,8 +725,7 @@ function getArchitectureName(arch) {
   const names = {
     x64: '64位',
     ia32: '32位',
-    arm64: 'Apple Silicon',
-    universal: 'Universal (Intel + Apple Silicon)'
+    arm64: 'Apple Silicon'
   }
   return names[arch] || arch
 }
@@ -770,10 +767,10 @@ function highlightUserOS() {
       if (description && userOS === 'macos') {
         if (userArch === 'arm64') {
           description.innerHTML +=
-            '<br><small style="color: var(--text-muted);">检测到 Apple Silicon Mac，推荐 Universal 版本</small>'
-        } else if (userArch === 'universal') {
+            '<br><small style="color: var(--text-muted);">检测到 Apple Silicon Mac，请下载 arm64 版本</small>'
+        } else if (userArch === 'x64') {
           description.innerHTML +=
-            '<br><small style="color: var(--text-muted);">Universal 版本兼容 Intel 和 Apple Silicon Mac</small>'
+            '<br><small style="color: var(--text-muted);">检测到 Intel Mac，请下载 x64 版本</small>'
         }
       }
     }
@@ -1012,19 +1009,8 @@ function findAssetForPlatform(assets, platform) {
       fallback: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win.*\.zip$/i]
     },
     macos: {
-      universal: [/ceru-music.*universal\.dmg$/i, /ceru-music.*universal\.zip$/i],
-      arm64: [
-        /ceru-music.*arm64\.dmg$/i,
-        /ceru-music.*arm64\.zip$/i,
-        /ceru-music.*universal\.dmg$/i,
-        /ceru-music.*universal\.zip$/i
-      ],
-      x64: [
-        /ceru-music.*x64\.dmg$/i,
-        /ceru-music.*x64\.zip$/i,
-        /ceru-music.*universal\.dmg$/i,
-        /ceru-music.*universal\.zip$/i
-      ],
+      arm64: [/ceru-music.*arm64\.dmg$/i, /ceru-music.*arm64\.zip$/i],
+      x64: [/ceru-music.*x64\.dmg$/i, /ceru-music.*x64\.zip$/i],
       fallback: [
         /ceru-music.*\.dmg$/i,
         /\.dmg$/i,
@@ -1137,19 +1123,8 @@ function findDownloadAsset(assets, platform, userArch = null) {
       fallback: [/ceru-music.*setup\.exe$/i, /\.exe$/i, /windows.*\.zip$/i, /win.*\.zip$/i]
     },
     macos: {
-      universal: [/ceru-music.*universal\.dmg$/i, /ceru-music.*universal\.zip$/i],
-      arm64: [
-        /ceru-music.*arm64\.dmg$/i,
-        /ceru-music.*arm64\.zip$/i,
-        /ceru-music.*universal\.dmg$/i,
-        /ceru-music.*universal\.zip$/i
-      ],
-      x64: [
-        /ceru-music.*x64\.dmg$/i,
-        /ceru-music.*x64\.zip$/i,
-        /ceru-music.*universal\.dmg$/i,
-        /ceru-music.*universal\.zip$/i
-      ],
+      arm64: [/ceru-music.*arm64\.dmg$/i, /ceru-music.*arm64\.zip$/i],
+      x64: [/ceru-music.*x64\.dmg$/i, /ceru-music.*x64\.zip$/i],
       fallback: [
         /ceru-music.*\.dmg$/i,
         /\.dmg$/i,
@@ -1232,7 +1207,6 @@ function getArchitectureInfo(filename) {
 
   const name = filename.toLowerCase()
 
-  if (name.includes('universal')) return '(Universal)'
   if (name.includes('arm64')) return '(Apple Silicon)'
   if (name.includes('x64')) return '(64位)'
   if (name.includes('ia32')) return '(32位)'

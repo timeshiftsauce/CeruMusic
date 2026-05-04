@@ -93,6 +93,16 @@ interface UpdateInfo {
 const UPDATE_SERVER = 'https://update.ceru.shiqianjiang.cn'
 const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${app.getVersion()}`
 
+// mac 拆分了 x64/arm64 安装包,服务端可能只返回其中一个 URL,
+// 这里在客户端按当前 arch 改写 URL 末尾的架构后缀(例如 ...-x64.dmg ↔ ...-arm64.dmg),
+// 这样无论服务端给哪个 mac 包,客户端都能自己匹配到正确架构的产物。
+function resolveDownloadUrlForCurrentArch(url: string): string {
+  if (process.platform !== 'darwin' || !url) return url
+  const want = process.arch === 'arm64' ? 'arm64' : 'x64'
+  const other = want === 'arm64' ? 'x64' : 'arm64'
+  return url.replace(new RegExp(`-${other}(\\.[a-z0-9]+)(\\?.*)?$`, 'i'), `-${want}$1$2`)
+}
+
 // 初始化自动更新器
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window
@@ -135,7 +145,11 @@ async function fetchUpdateInfo(): Promise<UpdateInfo | null> {
     })
 
     if (response.status === 200) {
-      return response.data as UpdateInfo
+      const data = response.data as UpdateInfo
+      if (data && data.url) {
+        data.url = resolveDownloadUrlForCurrentArch(data.url)
+      }
+      return data
     } else if (response.status === 204) {
       // 204 表示没有更新
       return null
