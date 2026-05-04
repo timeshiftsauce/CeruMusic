@@ -1,0 +1,120 @@
+name: Upload Build To Latest Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    name: build and upload to latest release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v5
+
+      - name: Resolve target release tag
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')"
+          RELEASE_NAME="$(gh api repos/${{ github.repository }}/releases/latest --jq '.name')"
+
+          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "null" ]; then
+            echo "未找到可上传的最新 Release"
+            exit 1
+          fi
+
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_name=${RELEASE_NAME:-$TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "目标 Release: ${RELEASE_NAME:-$TAG_NAME} ($TAG_NAME)"
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'yarn'
+
+      - name: Cache Electron Binaries
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-v1-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-v1-
+
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          npm i -g yarn
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mkdir -p .fake-bin
+            echo '@echo off' > .fake-bin/npx.cmd
+            echo 'echo "Fake npx called"' >> .fake-bin/npx.cmd
+            export PATH="$PWD/.fake-bin:$PATH"
+          fi
+
+          yarn install --frozen-lockfile
+
+      - name: Build Electron App for windows
+        if: matrix.os == 'windows-latest'
+        run: yarn run build:win
+
+      - name: Build Electron App for macos
+        if: matrix.os == 'macos-latest'
+        run: yarn run build:mac:universal
+
+      - name: Build Electron App for linux
+        if: matrix.os == 'ubuntu-latest'
+        run: yarn run build:linux
+
+      - name: Cleanup Artifacts for Windows
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"
+
+      - name: Cleanup Artifacts for MacOS
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
+
+      - name: Cleanup Artifacts for Linux
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|latest*.yml)"
+
+      - name: Upload build outputs to latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "dist 目录没有可上传文件"
+            exit 1
+          fi
+
+          echo "准备上传到 Release: $TAG_NAME"
+          printf ' - %s\n' "${files[@]}"
+          gh release upload "$TAG_NAME" "${files[@]}" --clobber --repo "${{ github.repository }}"
