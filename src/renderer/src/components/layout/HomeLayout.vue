@@ -40,7 +40,8 @@ const sourceicon = {
   mg: 'mg',
   tx: 'tx',
   kw: 'kw',
-  git: 'git'
+  git: 'git',
+  all: 'all'
 }
 const source = ref('kugouyinle')
 interface MenuItem {
@@ -107,7 +108,8 @@ const sourceNames = {
   mg: '咪咕音乐',
   tx: 'QQ音乐',
   kw: '酷我音乐',
-  git: 'GitCode'
+  git: 'GitCode',
+  all: '聚合搜索'
 }
 
 // 动态音源列表数据，基于supportedSources
@@ -117,11 +119,16 @@ const sourceList = computed(() => {
 
   if (!supportedSources) return []
 
-  return Object.keys(supportedSources).map((key) => ({
+  const list = Object.keys(supportedSources).map((key) => ({
     key,
     name: sourceNames[key] || key,
     icon: sourceicon[key] || key
   }))
+  // 当支持的音源 ≥ 2 个时，在顶部插入"聚合"选项
+  if (list.length >= 2) {
+    list.unshift({ key: 'all', name: sourceNames.all, icon: sourceicon.all })
+  }
+  return list
 })
 
 // 切换音源选择器显示状态
@@ -136,22 +143,25 @@ const selectSource = (sourceKey: string) => {
   const LocalUserDetail = LocalUserDetailStore()
   LocalUserDetail.userInfo.selectSources = sourceKey
 
-  const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
-  if (!LocalUserDetail.userInfo.sourceQualityMap) {
-    LocalUserDetail.userInfo.sourceQualityMap = {}
-  }
-  if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
-    const saved = LocalUserDetail.userInfo.sourceQualityMap[sourceKey]
-    const useQuality =
-      saved && sourceDetail.qualitys.includes(saved)
-        ? saved
-        : sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
-    LocalUserDetail.userInfo.sourceQualityMap[sourceKey] = useQuality
-    LocalUserDetail.userInfo.selectQuality = useQuality
+  // 聚合模式不需要写入质量映射，质量由单曲自身 source 决定
+  if (sourceKey !== 'all') {
+    const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
+    if (!LocalUserDetail.userInfo.sourceQualityMap) {
+      LocalUserDetail.userInfo.sourceQualityMap = {}
+    }
+    if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
+      const saved = LocalUserDetail.userInfo.sourceQualityMap[sourceKey]
+      const useQuality =
+        saved && sourceDetail.qualitys.includes(saved)
+          ? saved
+          : sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
+      LocalUserDetail.userInfo.sourceQualityMap[sourceKey] = useQuality
+      LocalUserDetail.userInfo.selectQuality = useQuality
+    }
   }
 
   // 更新音源图标
-  source.value = sourceicon[sourceKey]
+  source.value = sourceicon[sourceKey] || sourceKey
   source_list_show.value = false
 }
 
@@ -355,7 +365,8 @@ function checkGuide() {
             <div class="search-container">
               <div class="search-input">
                 <div class="source-selector" @click="toggleSourceList">
-                  <svg class="icon" aria-hidden="true">
+                  <span v-if="source === 'all'" class="source-fallback">聚</span>
+                  <svg v-else class="icon" aria-hidden="true">
                     <use :xlink:href="`#icon-${source}`"></use>
                   </svg>
                 </div>
@@ -374,7 +385,8 @@ function checkGuide() {
                         :class="{ active: source === item.icon }"
                         @click="selectSource(item.key)"
                       >
-                        <svg class="source-icon" aria-hidden="true">
+                        <span v-if="item.key === 'all'" class="source-fallback">聚</span>
+                        <svg v-else class="source-icon" aria-hidden="true">
                           <use :xlink:href="`#icon-${item.icon}`"></use>
                         </svg>
                         <span class="source-name">{{ item.name }}</span>
@@ -652,6 +664,19 @@ function checkGuide() {
             background-color: var(--home-source-selector-hover);
           }
 
+          .source-fallback {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2em;
+            aspect-ratio: 1 / 1;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            background: var(--td-brand-color-light, #e7f8f5);
+            color: var(--td-brand-color, #00a870);
+          }
+
           .source-arrow {
             margin-left: 0.25rem;
             font-size: 0.75rem;
@@ -737,6 +762,20 @@ function checkGuide() {
               width: 1rem;
               height: 1rem;
               margin-right: 0.5rem;
+            }
+
+            .source-fallback {
+              width: 1rem;
+              height: 1rem;
+              margin-right: 0.5rem;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 0.75rem;
+              font-weight: 700;
+              border-radius: 4px;
+              background: var(--td-brand-color-light, #e7f8f5);
+              color: var(--td-brand-color, #00a870);
             }
 
             .source-name {

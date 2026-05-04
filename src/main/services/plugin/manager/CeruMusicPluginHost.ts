@@ -6,25 +6,31 @@
  *
  * @author 时迁酱，无聊的霜霜，Star
  * @since 2025-9-19
- * @version 1.0
+ * @version 2.0
+ *
+ * v2 — 主线程 facade。插件代码运行在独立 worker_thread 中，host 仅持有元信息和 RPC 通道。
  */
 
-import * as vm from 'vm'
-import fetch from 'node-fetch'
 import * as fs from 'fs'
-import * as crypto from 'crypto'
+import path from 'path'
+import { Worker } from 'worker_threads'
+import { randomUUID } from 'crypto'
 import { MusicItem } from '../../musicSdk/type'
 import { sendPluginNotice } from '../../../events/pluginNotice'
 import { pluginLog } from '../../../logger'
 
 // ==================== 常量定义 ====================
 const CONSTANTS = {
-  DEFAULT_TIMEOUT: 10000, // 10秒超时
-  API_VERSION: '1.0.3',
-  ENVIRONMENT: 'nodejs',
-  NOTICE_DELAY: 100, // 通知延迟时间
+  INVOKE_TIMEOUT: 15_000,
+  INIT_TIMEOUT: 8_000,
+  CRASH_LIMIT: 3,
+  HEARTBEAT_TIMEOUT: 5_000,
+  HEARTBEAT_CHECK_INTERVAL: 2_000,
   LOG_PREFIX: '[CeruMusic]'
 } as const
+
+// 编译产物路径：electron-vite 会把 pluginWorker 输出到 out/main/pluginWorker.js
+const WORKER_PATH = path.join(__dirname, 'pluginWorker.js')
 
 // ==================== 类型定义 ====================
 export interface PluginInfo {
@@ -41,7 +47,6 @@ export interface PluginSource {
   [key: string]: any
 }
 
-// ==================== 服务插件类型定义 ====================
 export interface PluginConfigField {
   key: string
   label: string
@@ -82,82 +87,17 @@ export interface ImportableSong {
 
 export type PluginType = 'music-source' | 'service'
 
-interface CeruMusicPlugin {
-  pluginInfo: PluginInfo
-  sources: PluginSource[]
-  musicUrl: (source: string, musicInfo: MusicInfo, quality: string) => Promise<string>
-  getPic?: (source: string, musicInfo: MusicInfo) => Promise<string>
-  // 服务类插件扩展
-  pluginType?: PluginType
-  configSchema?: PluginConfigField[]
-  onConfigUpdate?: (config: Record<string, any>) => void
-  getPlaylists?: (config: Record<string, any>) => Promise<ServicePlaylist[]>
-  getPlaylistSongs?: (
-    config: Record<string, any>,
-    playlistId: string
-  ) => Promise<PlaylistSongResult>
-  testConnection?: (config: Record<string, any>) => Promise<{ success: boolean; message: string }>
-  getLyric?:
-    | ((source: string, musicInfo: MusicInfo) => Promise<string>)
-    | ((config: Record<string, any>, songInfo: any) => Promise<{ lyric: string }>)
-}
-
 interface MusicInfo extends MusicItem {
   id?: string
 }
 
-interface RequestResult {
-  body: any
-  statusCode: number
-  headers: Record<string, string>
+interface PluginMeta {
+  pluginInfo: PluginInfo
+  sources: PluginSource[]
+  pluginType: PluginType
+  configSchema: PluginConfigField[]
+  hasMethods: Record<string, boolean>
 }
-
-interface CeruMusicApiUtils {
-  buffer: {
-    from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => Buffer
-    bufToString: (buffer: Buffer, encoding?: BufferEncoding) => string
-  }
-  crypto: {
-    aesEncrypt: (data: any, mode: string, key: string | Buffer, iv?: string | Buffer) => Buffer
-    md5: (str: string) => string
-    randomBytes: (size: number) => Buffer
-    rsaEncrypt: (data: string, key: string) => string
-  }
-}
-
-interface CeruMusicApi {
-  env: string
-  version: string
-  utils: CeruMusicApiUtils
-  request: (
-    url: string,
-    options?: RequestOptions | RequestCallback,
-    callback?: RequestCallback
-  ) => Promise<RequestResult> | void
-  NoticeCenter: (
-    type: 'error' | 'info' | 'success' | 'warn' | 'update',
-    data: {
-      title: string
-      content?: string
-      url?: string
-      version?: string
-      pluginInfo: {
-        name?: string // 插件名
-        type: 'lx' | 'cr' //插件类型
-      }
-    }
-  ) => void
-}
-
-type RequestOptions = {
-  method?: string
-  headers?: Record<string, string>
-  body?: any
-  timeout?: number
-  [key: string]: any
-}
-
-type RequestCallback = (error: Error | null, result: RequestResult | null) => void
 
 type Logger = {
   log: (...args: any[]) => void
@@ -166,9 +106,7 @@ type Logger = {
   info: (...args: any[]) => void
 }
 
-type PluginMethodName = 'musicUrl' | 'getPic' | 'getLyric'
-
-// ==================== 错误类定义 ====================
+// ==================== 错误类 ====================
 class PluginError extends Error {
   constructor(
     message: string,
@@ -179,627 +117,452 @@ class PluginError extends Error {
   }
 }
 
+interface PendingCall {
+  resolve: (v: any) => void
+  reject: (e: any) => void
+  timer: NodeJS.Timeout
+  method: string
+}
+
 /**
- * CeruMusic 插件引擎
- * 负责加载和执行单个插件，并提供一个简洁的API。
+ * CeruMusic 插件主机（主线程 Facade）
+ * 真正的插件代码在 pluginWorker.ts 中执行；本类只负责：
+ *  - 启动/重启/销毁 worker
+ *  - 通过 RPC 调用插件方法
+ *  - 缓存 metadata 让同步 getter 仍同步
+ *  - 调用超时强杀 + 自动 respawn
+ *  - 转发 worker 发来的 notice/log/throttle
  */
 class CeruMusicPluginHost {
-  private pluginCode: string | null
-  private plugin: CeruMusicPlugin | null
+  private pluginCode: string | null = null
+  private worker: Worker | null = null
+  private meta: PluginMeta | null = null
+  private logger: Logger = console
+  private pending = new Map<string, PendingCall>()
+  private crashCount = 0
+  private destroyed = false
+  private disabled = false
+
+  /** 上次收到 worker heartbeat 的时间戳。0 表示尚未收到。 */
+  private lastHeartbeat = 0
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null
+
   public pluginId?: string
 
+  /** 节流状态：插件调用 stopRequests 后置为 true，阻止后续自动调用 */
+  private _throttled: boolean = false
+  private _throttleReason: string = ''
+  private _throttleTimer: ReturnType<typeof setTimeout> | null = null
+
   /**
-   * 创建一个新的插件主机实例
-   * @param pluginCode 插件的 JavaScript 代码字符串（可选）
-   * @param logger 日志记录器
+   * 插件触发限流时的外部回调，由 pluginService 注入。
    */
+  public onThrottle: ((pluginId: string, reason: string, duration?: number) => void) | null = null
+
+  /**
+   * 插件被永久禁用（崩溃次数超阈值 / 重启失败）时的外部回调。
+   * 由 pluginService 注入，通常用于通知渲染端。
+   */
+  public onDisabled: ((pluginId: string, reason: string) => void) | null = null
+
   constructor(pluginCode: string | null = null, logger: Logger = console) {
     this.pluginCode = pluginCode
-    this.plugin = null
-
-    if (pluginCode) {
-      this._initialize(logger)
-    }
+    this.logger = logger
+    // 注意：构造函数不再同步初始化沙箱。需要调用方 await loadPlugin() 或显式 _spawn()。
   }
 
-  // ==================== 公共方法 ====================
+  // ==================== 公共方法（与旧版兼容） ====================
 
-  /**
-   * 从文件加载插件
-   * @param pluginPath 插件文件路径
-   * @param logger 日志记录器
-   */
-  async loadPlugin(pluginPath: string, logger: Logger = console): Promise<CeruMusicPlugin> {
+  async loadPlugin(pluginPath: string, logger: Logger = console): Promise<this> {
+    this.logger = logger
     try {
       this.pluginCode = fs.readFileSync(pluginPath, 'utf-8')
-      this._initialize(logger)
-      return this.plugin as CeruMusicPlugin
     } catch (error: any) {
       throw new PluginError(`无法加载插件 ${pluginPath}: ${error.message}`)
     }
+    await this._spawn()
+    return this
   }
 
-  /**
-   * 获取插件信息
-   */
+  /** 旧 API：构造函数传入 pluginCode 时，需要异步初始化。 */
+  async ensureReady(): Promise<void> {
+    if (this.meta) return
+    if (!this.pluginCode) throw new PluginError('No plugin code provided.')
+    await this._spawn()
+  }
+
   getPluginInfo(): PluginInfo {
-    this._ensurePluginInitialized()
-    return this.plugin!.pluginInfo
+    this._ensureReady()
+    return this.meta!.pluginInfo
   }
 
-  /**
-   * 获取插件代码
-   */
   getPluginCode(): string | null {
     return this.pluginCode
   }
 
-  /**
-   * 获取支持的音源和音质信息
-   */
   getSupportedSources(): PluginSource[] {
-    this._ensurePluginInitialized()
-    return this.plugin!.sources
+    this._ensureReady()
+    return this.meta!.sources
   }
 
-  /**
-   * 调用插件的 getMusicUrl 方法
-   * @param source 音源标识
-   * @param musicInfo 音乐信息
-   * @param quality 音质
-   */
+  getPluginType(): PluginType {
+    this._ensureReady()
+    return this.meta!.pluginType || 'music-source'
+  }
+
+  getConfigSchema(): PluginConfigField[] {
+    this._ensureReady()
+    return this.meta!.configSchema || []
+  }
+
+  /** 插件是否已被禁用（崩溃次数超阈值或重启失败）。 */
+  isDisabled(): boolean {
+    return this.disabled
+  }
+
+  // ---------- 音源类调用 ----------
   async getMusicUrl(source: string, musicInfo: MusicInfo, quality: string): Promise<string> {
     const songinfo = {
       ...musicInfo,
-      id: musicInfo.songmid || musicInfo.hash
+      id: musicInfo.songmid || (musicInfo as any).hash
     }
-    return this._callPluginMethod('musicUrl', source, songinfo, quality)
+    return this._callPluginMethod('musicUrl', [source, songinfo, quality])
   }
 
-  /**
-   * 调用插件的 getPic 方法
-   * @param source 音源标识
-   * @param musicInfo 音乐信息
-   */
   async getPic(source: string, musicInfo: MusicInfo): Promise<string> {
-    return this._callPluginMethod('getPic', source, musicInfo)
+    return this._callPluginMethod('getPic', [source, musicInfo])
   }
 
-  /**
-   * 调用插件的 getLyric 方法
-   * @param source 音源标识
-   * @param musicInfo 音乐信息
-   */
   async getLyric(source: string, musicInfo: MusicInfo): Promise<string> {
-    return this._callPluginMethod('getLyric', source, musicInfo)
+    return this._callPluginMethod('getLyric', [source, musicInfo])
   }
 
-  // ==================== 服务插件方法 ====================
-
-  /**
-   * 获取插件类型
-   */
-  getPluginType(): PluginType {
-    this._ensurePluginInitialized()
-    return this.plugin!.pluginType || 'music-source'
-  }
-
-  /**
-   * 获取插件配置 schema
-   */
-  getConfigSchema(): PluginConfigField[] {
-    this._ensurePluginInitialized()
-    return this.plugin!.configSchema || []
-  }
-
-  /**
-   * 测试服务连接
-   */
+  // ---------- 服务类调用 ----------
   async testConnection(
     config: Record<string, any>
   ): Promise<{ success: boolean; message: string }> {
-    this._ensurePluginInitialized()
-    if (typeof this.plugin!.testConnection !== 'function') {
-      throw new PluginError('Plugin does not implement testConnection.', 'testConnection')
-    }
-    try {
-      return await this.plugin!.testConnection.call({ cerumusic: this._getCerumusicApi() }, config)
-    } catch (error: any) {
-      throw new PluginError(`testConnection failed: ${error.message}`, 'testConnection')
-    }
+    return this._callPluginMethod('testConnection', [config])
   }
 
-  /**
-   * 获取远程歌单列表
-   */
   async getPlaylists(config: Record<string, any>): Promise<ServicePlaylist[]> {
-    this._ensurePluginInitialized()
-    if (typeof this.plugin!.getPlaylists !== 'function') {
-      throw new PluginError('Plugin does not implement getPlaylists.', 'getPlaylists')
-    }
-    try {
-      return await this.plugin!.getPlaylists.call({ cerumusic: this._getCerumusicApi() }, config)
-    } catch (error: any) {
-      throw new PluginError(`getPlaylists failed: ${error.message}`, 'getPlaylists')
-    }
+    return this._callPluginMethod('getPlaylists', [config])
   }
 
-  /**
-   * 获取远程歌单歌曲
-   */
   async getPlaylistSongs(
     config: Record<string, any>,
     playlistId: string
   ): Promise<PlaylistSongResult> {
-    this._ensurePluginInitialized()
-    if (typeof this.plugin!.getPlaylistSongs !== 'function') {
-      throw new PluginError('Plugin does not implement getPlaylistSongs.', 'getPlaylistSongs')
-    }
-    try {
-      return await this.plugin!.getPlaylistSongs.call(
-        { cerumusic: this._getCerumusicApi() },
-        config,
-        playlistId
-      )
-    } catch (error: any) {
-      throw new PluginError(`getPlaylistSongs failed: ${error.message}`, 'getPlaylistSongs')
-    }
+    return this._callPluginMethod('getPlaylistSongs', [config, playlistId])
   }
 
-  /**
-   * 获取服务插件歌词（异步，播放时按需调用）
-   */
   async getServiceLyric(config: Record<string, any>, songInfo: any): Promise<{ lyric: string }> {
-    this._ensurePluginInitialized()
-    if (typeof this.plugin!.getLyric !== 'function') {
-      throw new PluginError('Plugin does not implement getLyric.', 'getLyric')
+    return this._callPluginMethod('getLyric', [config, songInfo])
+  }
+
+  /** 释放 worker 与所有 pending。卸载/更新插件时必须调用。 */
+  async destroy(): Promise<void> {
+    if (this.destroyed) return
+    this.destroyed = true
+    if (this._throttleTimer) {
+      clearTimeout(this._throttleTimer)
+      this._throttleTimer = null
     }
+    this._stopWatchdog()
+    this._rejectAllPending(new PluginError('Plugin host destroyed'))
+    if (this.worker) {
+      try {
+        await this.worker.terminate()
+      } catch {}
+      this.worker = null
+    }
+  }
+
+  // ==================== 私有：worker 生命周期 ====================
+  private async _spawn(): Promise<void> {
+    if (!this.pluginCode) throw new PluginError('No plugin code provided.')
+    if (this.destroyed) throw new PluginError('Plugin host has been destroyed')
+
+    const worker = new Worker(WORKER_PATH)
+    this.worker = worker
+
+    worker.on('message', (msg) => this._onWorkerMessage(msg))
+    worker.on('error', (err) => this._onWorkerError(err))
+    worker.on('exit', (code) => this._onWorkerExit(code))
+
+    // 发送 init 并等 init-ok
+    const id = randomUUID()
+    const initPromise = new Promise<PluginMeta>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id)
+        reject(new PluginError(`Plugin init timed out after ${CONSTANTS.INIT_TIMEOUT}ms`))
+      }, CONSTANTS.INIT_TIMEOUT)
+      this.pending.set(id, {
+        resolve: (data: any) => resolve(data),
+        reject,
+        timer,
+        method: 'init'
+      })
+    })
+
+    worker.postMessage({
+      id,
+      type: 'init',
+      pluginCode: this.pluginCode,
+      pluginId: this.pluginId || ''
+    })
+
     try {
-      return await (this.plugin!.getLyric as any).call(
-        { cerumusic: this._getCerumusicApi() },
-        config,
-        songInfo
+      this.meta = await initPromise
+      this.lastHeartbeat = Date.now()
+      this._startWatchdog()
+      this.logger.log(
+        `${CONSTANTS.LOG_PREFIX} Plugin "${this.meta.pluginInfo?.name}" loaded successfully.`
       )
-    } catch (error: any) {
-      throw new PluginError(`getServiceLyric failed: ${error.message}`, 'getLyric')
+    } catch (err: any) {
+      // init 失败，清掉这个 worker
+      try {
+        await worker.terminate()
+      } catch {}
+      this.worker = null
+      throw new PluginError('无法初始化澜音插件,可能是插件格式不正确. ' + err.message)
     }
   }
 
-  // ==================== 私有方法 ====================
+  private _startWatchdog(): void {
+    this._stopWatchdog()
+    this.watchdogTimer = setInterval(() => {
+      if (this.destroyed || !this.worker) return
+      const elapsed = Date.now() - this.lastHeartbeat
+      if (elapsed > CONSTANTS.HEARTBEAT_TIMEOUT) {
+        pluginLog.error(
+          `${CONSTANTS.LOG_PREFIX} 插件 ${this.pluginId} worker 心跳丢失 ${elapsed}ms，判定为卡死`
+        )
+        this._stopWatchdog()
+        this._terminateAndRespawn(`heartbeat lost ${elapsed}ms`).catch(() => {})
+      }
+    }, CONSTANTS.HEARTBEAT_CHECK_INTERVAL)
+    this.watchdogTimer.unref?.()
+  }
 
-  /**
-   * 初始化沙箱环境，加载并验证插件
-   * @private
-   */
-  private _initialize(logger: Logger): void {
-    if (!this.pluginCode) {
-      throw new PluginError('No plugin code provided.')
+  private _stopWatchdog(): void {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer)
+      this.watchdogTimer = null
+    }
+  }
+
+  private async _terminateAndRespawn(reason: string): Promise<void> {
+    pluginLog.warn(`${CONSTANTS.LOG_PREFIX} 插件 worker 被强杀: ${reason}`)
+    this._stopWatchdog()
+    this._rejectAllPending(new PluginError(`Plugin worker terminated: ${reason}`))
+    if (this.worker) {
+      try {
+        await this.worker.terminate()
+      } catch {}
+      this.worker = null
     }
 
-    const sandbox = this._createSandbox(logger)
-
-    try {
-      vm.runInNewContext(this.pluginCode, sandbox)
-      this.plugin = sandbox.module.exports as CeruMusicPlugin
-
-      this._validatePlugin()
-
-      logger.log(
-        `${CONSTANTS.LOG_PREFIX} Plugin "${this.plugin.pluginInfo.name}" loaded successfully.`
+    this.crashCount++
+    if (this.crashCount >= CONSTANTS.CRASH_LIMIT) {
+      const disableReason = `crashed ${this.crashCount} times: ${reason}`
+      pluginLog.error(
+        `${CONSTANTS.LOG_PREFIX} 插件 ${this.pluginId} 崩溃次数过多，已禁用直到下次手动加载`
       )
-    } catch (error: any) {
-      logger.error(`${CONSTANTS.LOG_PREFIX} Error executing plugin code:`, error)
-      throw new PluginError('无法初始化澜音插件,可能是插件格式不正确.' + error.message)
-    }
-  }
-
-  /**
-   * 创建沙箱环境
-   * @private
-   */
-  private _createSandbox(logger: Logger): any {
-    return {
-      module: { exports: {} },
-      cerumusic: this._getCerumusicApi(),
-      console: logger,
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
-      Buffer,
-      JSON,
-      require: () => ({}),
-      global: {},
-      process: { env: {} }
-    }
-  }
-
-  /**
-   * 验证插件结构
-   * @private
-   */
-  private _validatePlugin(): void {
-    if (!this.plugin?.pluginInfo) {
-      throw new PluginError('Invalid plugin structure. Required field: pluginInfo.')
-    }
-
-    // 服务类插件不要求 musicUrl 和 sources
-    if (this.plugin.pluginType === 'service') {
+      this._markDisabled(disableReason)
       return
     }
 
-    if (!this.plugin.sources || !this.plugin.musicUrl) {
-      throw new PluginError(
-        'Invalid plugin structure. Required fields: pluginInfo, sources, musicUrl.'
-      )
+    if (this.destroyed) return
+    try {
+      await this._spawn()
+    } catch (err: any) {
+      pluginLog.error(`${CONSTANTS.LOG_PREFIX} 重启插件 worker 失败: ${err.message}`)
+      this._markDisabled(`respawn failed: ${err.message}`)
     }
   }
 
-  /**
-   * 确保插件已初始化
-   * @private
-   */
-  private _ensurePluginInitialized(): void {
-    if (!this.plugin) {
+  private _markDisabled(reason: string): void {
+    if (this.disabled) return
+    this.disabled = true
+    this._stopWatchdog()
+    try {
+      this.onDisabled?.(this.pluginId ?? '', reason)
+    } catch (e: any) {
+      pluginLog.error(`${CONSTANTS.LOG_PREFIX} onDisabled 回调失败: ${e?.message}`)
+    }
+  }
+
+  private _rejectAllPending(err: Error): void {
+    for (const [, p] of this.pending) {
+      clearTimeout(p.timer)
+      p.reject(err)
+    }
+    this.pending.clear()
+  }
+
+  // ==================== 私有：消息处理 ====================
+  private _onWorkerMessage(msg: any): void {
+    if (!msg || typeof msg !== 'object') return
+
+    // heartbeat — 任何 worker 消息都应当顺便刷新 lastHeartbeat，
+    // 但 heartbeat 是专门的轻量事件，不需要进 RPC 分支。
+    if (msg.type === 'heartbeat') {
+      this.lastHeartbeat = Date.now()
+      return
+    }
+    // 任何其他响应也算 worker 还活着
+    this.lastHeartbeat = Date.now()
+
+    // 带 id 的 RPC 响应
+    if (msg.id && (msg.type === 'init-ok' || msg.type === 'result' || msg.type === 'error')) {
+      const pending = this.pending.get(msg.id)
+      if (!pending) return
+      this.pending.delete(msg.id)
+      clearTimeout(pending.timer)
+      if (msg.type === 'init-ok') {
+        pending.resolve(msg.meta)
+      } else if (msg.type === 'result') {
+        pending.resolve(msg.data)
+      } else if (msg.type === 'error') {
+        pending.reject(
+          new PluginError(msg.error?.message || 'Plugin error', msg.error?.method || pending.method)
+        )
+      }
+      return
+    }
+
+    // 广播事件
+    if (msg.type === 'log') {
+      const level = msg.level as 'log' | 'info' | 'warn' | 'error'
+      const args = Array.isArray(msg.args) ? msg.args : []
+      try {
+        ;(this.logger as any)[level]?.(...args)
+      } catch {}
+      return
+    }
+
+    if (msg.type === 'notice') {
+      try {
+        if (this.meta?.pluginInfo) {
+          sendPluginNotice(
+            {
+              type: msg.noticeType,
+              data: msg.data,
+              currentVersion: this.meta.pluginInfo.version,
+              pluginId: this.pluginId
+            },
+            this.meta.pluginInfo.name
+          )
+        }
+      } catch {}
+      return
+    }
+
+    if (msg.type === 'throttle') {
+      const reason: string = String(msg.reason ?? '')
+      const duration: number | undefined = msg.duration
+      this._throttled = true
+      this._throttleReason = reason
+      pluginLog.warn(
+        `${CONSTANTS.LOG_PREFIX} 插件请求已暂停，原因: ${reason}${duration ? `，将在 ${duration}ms 后恢复` : ''}`
+      )
+
+      if (this._throttleTimer) {
+        clearTimeout(this._throttleTimer)
+        this._throttleTimer = null
+      }
+
+      this.onThrottle?.(this.pluginId ?? '', reason, duration)
+
+      if (duration && duration > 0) {
+        this._throttleTimer = setTimeout(() => {
+          this._throttled = false
+          this._throttleReason = ''
+          this._throttleTimer = null
+          pluginLog.log(`${CONSTANTS.LOG_PREFIX} 插件请求冷却结束，已恢复`)
+        }, duration)
+      }
+      return
+    }
+  }
+
+  private _onWorkerError(err: Error): void {
+    pluginLog.error(`${CONSTANTS.LOG_PREFIX} worker 错误:`, err?.message || err)
+    this._rejectAllPending(new PluginError(`Worker error: ${err?.message || err}`))
+  }
+
+  private _onWorkerExit(code: number): void {
+    if (this.destroyed) return
+    if (this.worker === null) return
+    pluginLog.warn(`${CONSTANTS.LOG_PREFIX} worker 退出 code=${code}`)
+    this._rejectAllPending(new PluginError(`Worker exited with code ${code}`))
+    this.worker = null
+  }
+
+  // ==================== 私有：调用 ====================
+  private _ensureReady(): void {
+    if (!this.meta) {
       throw new PluginError('Plugin not initialized')
     }
   }
 
-  /**
-   * 统一的插件方法调用逻辑
-   * @private
-   */
-  private async _callPluginMethod(
-    methodName: PluginMethodName,
-    ...args: readonly any[]
-  ): Promise<string> {
-    this._ensurePluginInitialized()
-    const method = this.plugin![methodName] as any
-    if (typeof method !== 'function') {
-      throw new PluginError(`Action "${methodName}" is not implemented in plugin.`, methodName)
-    }
-    try {
-      pluginLog.log(`${CONSTANTS.LOG_PREFIX} 开始调用插件的 ${methodName} 方法...`)
-
-      const result = await method.call(...[{ cerumusic: this._getCerumusicApi() }], ...args)
-
-      pluginLog.log(`${CONSTANTS.LOG_PREFIX} 插件 ${methodName} 方法调用成功`)
-      return result
-    } catch (error: any) {
-      pluginLog.error(`${CONSTANTS.LOG_PREFIX} ${methodName} 方法执行失败:`, error.message)
-      if (methodName === 'musicUrl') {
-        pluginLog.error(`${CONSTANTS.LOG_PREFIX} 错误堆栈:`, error.stack)
-      }
-      throw new PluginError(`Plugin ${methodName} failed: ${error.message}`, methodName)
-    }
-  }
-
-  // ==================== 工具方法 ====================
-
-  // /**
-  //  * 验证 URL 是否有效
-  //  * @private
-  //  */
-  // private _isValidUrl(url: string): boolean {
-  //   try {
-  //     const urlObj = new URL(url)
-  //     return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
-  //   } catch {
-  //     return false
-  //   }
-  // }
-
-  // /**
-  //  * 根据通知类型获取标题
-  //  * @private
-  //  */
-  // private _getNoticeTitle(type: string): string {
-  //   const titleMap: Record<string, string> = {
-  //     update: '插件更新',
-  //     error: '插件错误',
-  //     warning: '插件警告',
-  //     info: '插件信息',
-  //     success: '操作成功'
-  //   }
-  //   return titleMap[type] || '插件通知'
-  // }
-
-  // /**
-  //  * 根据通知类型获取默认消息
-  //  * @private
-  //  */
-  // private _getDefaultMessage(type: string, data: any): string {
-  //   const pluginName = this.plugin?.pluginInfo?.name || '未知插件'
-
-  //   switch (type) {
-  //     case 'error':
-  //       return `插件 "${pluginName}" 发生错误: ${data?.error || '未知错误'}`
-  //     case 'warning':
-  //       return `插件 "${pluginName}" 警告: ${data?.warning || '需要注意'}`
-  //     case 'success':
-  //       return `插件 "${pluginName}" 操作成功`
-  //     case 'info':
-  //     default:
-  //       return `插件 "${pluginName}" 信息: ${JSON.stringify(data)}`
-  //   }
-  // }
-
-  /**
-   * 解析响应体
-   * @private
-   */
-  private async _parseResponseBody(response: any): Promise<any> {
-    const contentType = response.headers.get('content-type') || ''
-
-    try {
-      if (contentType.includes('application/json')) {
-        return await response.json()
-      } else if (contentType.includes('text/')) {
-        return await response.text()
-      } else {
-        // 对于其他类型，尝试解析为 JSON，失败则返回文本
-        const text = await response.text()
-        try {
-          return JSON.parse(text)
-        } catch {
-          return text
-        }
-      }
-    } catch (parseError: any) {
-      console.error(`${CONSTANTS.LOG_PREFIX} 解析响应失败: ${parseError.message}`)
-      return {
-        error: 'Parse failed',
-        message: parseError.message,
-        statusCode: response.status
-      }
-    }
-  }
-
-  /**
-   * 创建错误结果
-   * @private
-   */
-  private _createErrorResult(error: any, url: string): RequestResult {
-    const isTimeout = error.name === 'AbortError'
-    return {
-      body: {
-        error: error.name || 'RequestError',
-        message: error.message,
-        url
-      },
-      statusCode: isTimeout ? 408 : 500,
-      headers: {}
-    }
-  }
-
-  // ==================== API 构建方法 ====================
-
-  /**
-   * 获取 cerumusic API 对象
-   * @private
-   */
-  private _getCerumusicApi(): CeruMusicApi {
-    return {
-      env: CONSTANTS.ENVIRONMENT,
-      version: CONSTANTS.API_VERSION,
-      utils: this._createApiUtils(),
-      request: this._createRequestFunction(),
-      NoticeCenter: this._createNoticeCenter()
-    }
-  }
-
-  /**
-   * 创建 API 工具对象
-   * @private
-   */
-  private _createApiUtils(): CeruMusicApiUtils {
-    // 验证编码格式是否支持
-    const validateEncoding = (encoding?: BufferEncoding): BufferEncoding => {
-      const supportedEncodings = ['base64', 'hex', 'utf8']
-      if (encoding && !supportedEncodings.includes(encoding)) {
-        throw new Error(
-          `Unsupported encoding: ${encoding}. Only ${supportedEncodings.join(', ')} are supported.`
-        )
-      }
-      return encoding || 'utf8'
+  private async _callPluginMethod(method: string, args: any[]): Promise<any> {
+    this._ensureReady()
+    if (this.disabled) {
+      throw new PluginError(`Plugin is disabled due to repeated crashes`, method)
     }
 
-    // 验证AES模式是否支持
-    const validateAesMode = (mode: string): string => {
-      const supportedModes = ['aes-128-cbc', 'aes-128-ecb']
-      if (!supportedModes.includes(mode)) {
-        throw new Error(
-          `Unsupported AES mode: ${mode}. Only ${supportedModes.join(', ')} are supported.`
-        )
-      }
-      return mode
+    if (this._throttled) {
+      pluginLog.warn(
+        `${CONSTANTS.LOG_PREFIX} 插件已暂停请求，跳过 ${method} 调用。原因: ${this._throttleReason}`
+      )
+      throw new PluginError(`Plugin requests paused: ${this._throttleReason}`, method)
     }
 
-    return {
-      buffer: {
-        from: (data: string | Buffer | ArrayBuffer, encoding?: BufferEncoding) => {
-          if (typeof data === 'string') {
-            const validatedEncoding = validateEncoding(encoding)
-            return Buffer.from(data, validatedEncoding)
-          } else if (data instanceof Buffer) {
-            return data
-          } else if (data instanceof ArrayBuffer) {
-            return Buffer.from(new Uint8Array(data))
-          } else {
-            return Buffer.from(data as any)
-          }
+    if (!this.meta!.hasMethods?.[method]) {
+      throw new PluginError(`Action "${method}" is not implemented in plugin.`, method)
+    }
+
+    if (!this.worker) {
+      throw new PluginError(`Plugin worker is not running`, method)
+    }
+
+    pluginLog.log(`${CONSTANTS.LOG_PREFIX} 开始调用插件的 ${method} 方法...`)
+    const id = randomUUID()
+    const worker = this.worker
+
+    return new Promise<any>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pending.has(id)) return
+        this.pending.delete(id)
+        const errMsg = `Plugin ${method} timed out after ${CONSTANTS.INVOKE_TIMEOUT}ms`
+        pluginLog.error(`${CONSTANTS.LOG_PREFIX} ${errMsg}`)
+        // 强杀 + 重启
+        this._terminateAndRespawn(`${method} timeout`).catch(() => {})
+        reject(new PluginError(errMsg, method))
+      }, CONSTANTS.INVOKE_TIMEOUT)
+
+      this.pending.set(id, {
+        resolve: (data: any) => {
+          pluginLog.log(`${CONSTANTS.LOG_PREFIX} 插件 ${method} 方法调用成功`)
+          resolve(data)
         },
-        bufToString: (buffer: Buffer, encoding?: BufferEncoding) => {
-          const validatedEncoding = validateEncoding(encoding)
-          return buffer.toString(validatedEncoding)
-        }
-      },
-      crypto: {
-        aesEncrypt: (data: any, mode: string, key: string | Buffer, iv?: string | Buffer) => {
-          // AES 加密实现
-          const validatedMode = validateAesMode(mode)
-          const cipher = crypto.createCipheriv(
-            validatedMode,
-            key,
-            validatedMode === 'aes-128-ecb' ? Buffer.alloc(0) : iv || Buffer.alloc(0)
-          )
-          let encrypted
-          if (typeof data === 'string') {
-            encrypted = cipher.update(data, 'utf8')
-          } else if (Buffer.isBuffer(data)) {
-            encrypted = cipher.update(data)
-          } else {
-            encrypted = cipher.update(JSON.stringify(data), 'utf8')
-          }
-          encrypted = Buffer.concat([encrypted, cipher.final()])
-          return encrypted
+        reject: (err: any) => {
+          pluginLog.error(`${CONSTANTS.LOG_PREFIX} ${method} 方法执行失败:`, err?.message)
+          reject(err)
         },
-        md5: (str: string) => {
-          // MD5 哈希实现
-          return crypto.createHash('md5').update(str).digest('hex')
-        },
-        randomBytes: (size: number) => {
-          // 生成随机字节
-          return crypto.randomBytes(size)
-        },
-        rsaEncrypt: (data: string, key: string) => {
-          // RSA 加密实现
-          // 注意：这里假设 key 是 PEM 格式的公钥
-          const encrypted = crypto.publicEncrypt(
-            { key, padding: crypto.constants.RSA_PKCS1_PADDING },
-            Buffer.from(data, 'utf8')
-          )
-          return encrypted.toString('base64')
-        }
+        timer,
+        method
+      })
+
+      try {
+        worker.postMessage({ id, type: 'invoke', method, args })
+      } catch (err: any) {
+        clearTimeout(timer)
+        this.pending.delete(id)
+        reject(new PluginError(`Failed to dispatch ${method}: ${err.message}`, method))
       }
-    }
-  }
-
-  /**
-   * 创建请求函数
-   * @private
-   */
-  private _createRequestFunction() {
-    return (
-      url: string,
-      options?: RequestOptions | RequestCallback,
-      callback?: RequestCallback
-    ) => {
-      // 支持 Promise 和 callback 两种调用方式
-      if (typeof options === 'function') {
-        callback = options as RequestCallback
-        options = { method: 'GET' }
-      }
-
-      const requestOptions = options as RequestOptions
-      const makeRequest = () => this._makeHttpRequest(url, requestOptions)
-
-      // 执行请求
-      if (callback) {
-        makeRequest()
-          .then((result) => callback(null, result))
-          .catch((error) => {
-            const errorResult = this._createErrorResult(error, url)
-            callback(error, errorResult)
-          })
-        return undefined
-      } else {
-        return makeRequest()
-      }
-    }
-  }
-
-  /**
-   * 执行 HTTP 请求
-   * @private
-   */
-  private async _makeHttpRequest(url: string, options: RequestOptions): Promise<RequestResult> {
-    const controller = new AbortController()
-    const timeout = options.timeout || CONSTANTS.DEFAULT_TIMEOUT
-
-    const timeoutId = setTimeout(() => {
-      controller.abort()
-      console.warn(`${CONSTANTS.LOG_PREFIX} 请求超时: ${url}`)
-    }, timeout)
-
-    try {
-      // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 发起请求: ${options.method || 'GET'} ${url}`)
-
-      const fetchOptions = {
-        method: 'GET',
-        ...options,
-        signal: controller.signal
-      }
-      // const date = Date.now()
-      const response = await fetch(url, fetchOptions)
-      clearTimeout(timeoutId)
-
-      // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 请求响应: ${response.status} ${response.statusText}`)
-
-      const body = await this._parseResponseBody(response)
-      const headers = this._extractHeaders(response)
-
-      const result: RequestResult = {
-        body,
-        statusCode: response.status,
-        headers
-      }
-
-      // pluginLog.log(`${CONSTANTS.LOG_PREFIX} 请求完成:`, {
-      //   url,
-      //   status: response.status,
-      //   body: body,
-      //   spend: Date.now() - date
-      // })
-
-      return result
-    } catch (error: any) {
-      clearTimeout(timeoutId)
-
-      const errorMessage =
-        error.name === 'AbortError' ? `请求超时: ${url}` : `请求失败: ${error.message}`
-
-      console.error(`${CONSTANTS.LOG_PREFIX} ${errorMessage}`)
-      return this._createErrorResult(error, url)
-    }
-  }
-
-  /**
-   * 提取响应头
-   * @private
-   */
-  private _extractHeaders(response: any): Record<string, string> {
-    const headers: Record<string, string> = {}
-    response.headers.forEach((value: string, key: string) => {
-      headers[key] = value
     })
-    return headers
-  }
-
-  /**
-   * 创建通知中心
-   * @private
-   */
-  private _createNoticeCenter() {
-    return (type: string, data: any) => {
-      const sendNotice = () => {
-        if (this.plugin?.pluginInfo) {
-          sendPluginNotice(
-            {
-              type: type as any,
-              data,
-              currentVersion: this.plugin.pluginInfo.version,
-              pluginId: this.pluginId
-            },
-            this.plugin.pluginInfo.name
-          )
-        } else {
-          // 如果插件还未初始化，延迟执行
-          setTimeout(sendNotice, CONSTANTS.NOTICE_DELAY)
-        }
-      }
-      sendNotice()
-    }
   }
 }
 

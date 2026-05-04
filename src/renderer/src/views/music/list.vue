@@ -38,6 +38,7 @@ import {
   watch
 } from 'vue'
 import { useRoute } from 'vue-router'
+import shareAPI from '@renderer/api/share'
 
 interface MusicItem {
   singer: string
@@ -250,6 +251,10 @@ const isCloudUserPlaylist = computed(() => {
   return route.query.type === 'cloud_user'
 })
 
+const isPlaylistShare = computed(() => {
+  return route.query.type === 'playlist_share'
+})
+
 // 获取歌单歌曲列表
 const bgImageLoaded = ref(false)
 const bgImageFromRoute = ref(false)
@@ -289,7 +294,9 @@ const fetchPlaylistSongs = async () => {
     const isLocalPlaylist = route.query.type === 'local' || route.query.source === 'local'
     const isCloudUserPlaylist = route.query.type === 'cloud_user'
 
-    if (isCloudUserPlaylist) {
+    if (isPlaylistShare.value) {
+      await fetchPlaylistShareSongs(true)
+    } else if (isCloudUserPlaylist) {
       await fetchCloudUserPlaylist(true)
     } else if (isLocalPlaylist) {
       // 处理本地歌单
@@ -372,6 +379,7 @@ const fetchLocalPlaylistSongs = async () => {
 }
 
 const cloudNextPos = ref<number | undefined>(undefined)
+const playlistShareNextPos = ref<number | undefined>(undefined)
 
 const fetchCloudUserPlaylist = async (reset = false) => {
   try {
@@ -436,6 +444,73 @@ const fetchCloudUserPlaylist = async (reset = false) => {
     } else {
       loadingMore.value = false
     }
+  }
+}
+
+const fetchPlaylistShareSongs = async (reset = false) => {
+  try {
+    if ((reset && !loading.value) || (!reset && loadingMore.value)) return
+
+    const shareId = String(route.params.id || '')
+    if (!shareId) throw new Error('缺少分享ID')
+
+    if (reset) {
+      currentPage.value = 1
+      hasMore.value = true
+      songs.value = []
+      playlistShareNextPos.value = undefined
+      loading.value = true
+    } else {
+      if (!hasMore.value) return
+      loadingMore.value = true
+    }
+
+    const detail = await shareAPI.getPlaylistById(shareId, pageSize, playlistShareNextPos.value)
+    if (!detail?.playlist) throw new Error('歌单分享不存在')
+
+    const pageSongs = (detail.playlist.songs || []).map(mapCloudSongToLocal)
+
+    if (reset) {
+      songs.value = pageSongs
+      playlistInfo.value = {
+        ...playlistInfo.value,
+        id: detail.playlist.id,
+        title: detail.playlist.name,
+        author: detail.username || 'share',
+        cover: detail.playlist.cover || playlistInfo.value.cover,
+        total: detail.playlist.total || songs.value.length,
+        source: 'share',
+        desc: detail.playlist.describe || '',
+        isLeaderboard: false,
+        meta: {
+          ...(playlistInfo.value.meta || {}),
+          cloudId: detail.playlist.id,
+          playlistShareId: detail.id,
+          sourceShare: true,
+          canPlay: detail.canPlay,
+          playExpiresAt: detail.playExpiresAt,
+          openInAppScheme: detail.openInAppScheme
+        }
+      }
+    } else {
+      songs.value = [...songs.value, ...pageSongs]
+    }
+
+    if (detail.playlist.songs?.length) {
+      const lastSong = detail.playlist.songs[detail.playlist.songs.length - 1]
+      playlistShareNextPos.value = lastSong.pos
+    }
+
+    const total = detail.playlist.total || 0
+    hasMore.value = songs.value.length < total
+  } catch (error: any) {
+    console.error('获取分享歌单失败:', error)
+    MessagePlugin.error('获取分享歌单失败: ' + (error.message || '未知错误'))
+    if (songs.value.length === 0) songs.value = []
+    hasMore.value = false
+  } finally {
+    loading.value = false
+    loadingMore.value = false
   }
 }
 
@@ -1225,10 +1300,10 @@ const playAll = (shouldShuffle = false) => {
       loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
       while (hasMore.value) {
         if (route.query.type === 'cloud_user') {
-          // 获取服务器歌曲
           await fetchCloudUserPlaylist(false)
+        } else if (route.query.type === 'playlist_share') {
+          await fetchPlaylistShareSongs(false)
         } else {
-          // 获取平台的网络歌曲
           await fetchNetworkPlaylistSongs(false)
         }
       }
@@ -1448,18 +1523,23 @@ const handleSaveToLocal = async () => {
       try {
         if (hasMore.value) {
           while (hasMore.value) {
-            await fetchNetworkPlaylistSongs(false)
+            if (isPlaylistShare.value) {
+              await fetchPlaylistShareSongs(false)
+            } else {
+              await fetchNetworkPlaylistSongs(false)
+            }
           }
         }
 
         const createRes = await songListAPI.create(
           playlistInfo.value.title || '歌单',
           playlistInfo.value.desc || '',
-          (playlistInfo.value.source as any) || 'local',
+          isPlaylistShare.value ? 'local' : (playlistInfo.value.source as any) || 'local',
           {
             playlistId,
             source: playlistInfo.value.source,
-            isLeaderboard: playlistInfo.value.isLeaderboard
+            isLeaderboard: playlistInfo.value.isLeaderboard,
+            ...(isPlaylistShare.value ? playlistInfo.value.meta || {} : {})
           }
         )
         if (!createRes.success || !createRes.data?.id) {
@@ -1576,6 +1656,8 @@ const handleScroll = (event?: Event) => {
     const isCloudUserPlaylist = route.query.type === 'cloud_user'
     if (isCloudUserPlaylist) {
       fetchCloudUserPlaylist(false)
+    } else if (isPlaylistShare.value) {
+      fetchPlaylistShareSongs(false)
     } else {
       fetchNetworkPlaylistSongs(false)
     }

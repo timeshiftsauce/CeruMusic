@@ -41,6 +41,21 @@ let currentPlaybackErrorHandler: ((e: Event) => void) | null = null
 let currentPlaybackPlayingHandler: ((e: Event) => void) | null = null
 let currentPlayRequestId: number = 0
 
+// ==================== 插件限流状态 ====================
+// 当插件调用 stopRequests 时，主进程会通过 IPC 通知渲染进程。
+// 限流期间：换源循环提前退出，tryAutoNext 静默放弃，不再堆 notice。
+// 以 pluginId 为键，切换插件后旧插件的限流不影响新插件。
+const _throttledPlugins = new Set<string>()
+const _throttleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const _disabledPlugins = new Set<string>()
+let _unsubscribeThrottle: (() => void) | null = null
+let _unsubscribeDisabled: (() => void) | null = null
+
+function _isThrottled(): boolean {
+  const pluginId = localUserStore.userSource.pluginId
+  return pluginId != null && (_throttledPlugins.has(pluginId) || _disabledPlugins.has(pluginId))
+}
+
 const setUrl = controlAudio.setUrl
 const start = controlAudio.start
 const stop = controlAudio.stop
@@ -189,6 +204,11 @@ const playSong = async (song: SongList) => {
 
     // 如果 urlToPlay 为空或者上面抛出了错误，说明原源不行，开始尝试 candidates
     if (!urlToPlay || urlToPlay.includes('error')) {
+      // 限流期间不进入换源循环
+      if (_isThrottled()) {
+        isLoadingSong.value = false
+        return
+      }
       try {
         const candidates = await getCandidateSongs(song, userInfo.value)
 
@@ -197,8 +217,9 @@ const playSong = async (song: SongList) => {
 
         let playSuccess = false
         for (const item of candidates) {
-          // 每次循环前都检查是否被新的播放请求打断
+          // 每次循环前都检查是否被新的播放请求打断，或者插件已限流
           if (currentPlayRequestId !== requestId) return
+          if (_isThrottled()) break
 
           try {
             const url = await getSongRealUrl(toRaw(item))
@@ -371,6 +392,8 @@ const playSong = async (song: SongList) => {
         console.warn('Playback error, trying auto switch...')
         currentPlaybackErrorHandler = null
 
+        if (_isThrottled()) return
+
         try {
           const candidates = await getCandidateSongs(song, userInfo.value)
           // 注意：这里的 song 是闭包变量，仍然引用着当时那首歌。
@@ -381,6 +404,7 @@ const playSong = async (song: SongList) => {
           let playSuccess = false
           for (const item of candidates) {
             if (currentPlayRequestId !== requestId) return
+            if (_isThrottled()) break
             try {
               const url = await getSongRealUrl(toRaw(item))
               if (currentPlayRequestId !== requestId) return
@@ -436,6 +460,7 @@ const playSong = async (song: SongList) => {
 const tryAutoNext = (reason: string) => {
   if (
     localUserStore.userSource.pluginId === undefined ||
+    _isThrottled() ||
     reason.includes('频率') ||
     reason.includes('限制')
   ) {
@@ -484,8 +509,7 @@ watch(
     if (playMode.value === PlayMode.RANDOM) {
       buildShuffleOrder()
     }
-  },
-  { deep: true }
+  }
 )
 
 const updatePlayMode = () => {
@@ -684,6 +708,44 @@ const initPlayback = async () => {
 
   initPlaylistEventListeners(localUserStore, playSong)
 
+  // 注册插件限流监听（绑定到生命周期，避免重复注册）
+  _unsubscribeThrottle = window.api.pluginNotice.onPluginThrottle(
+    ({ pluginId, reason, duration }) => {
+      _throttledPlugins.add(pluginId)
+      MessagePlugin.warning(
+        `插件请求受限：${reason}${duration ? `，${Math.ceil(duration / 1000)}秒后自动恢复` : '，已暂停换源'}`
+      )
+      const old = _throttleTimers.get(pluginId)
+      if (old !== undefined) clearTimeout(old)
+      if (duration && duration > 0) {
+        _throttleTimers.set(
+          pluginId,
+          setTimeout(() => {
+            _throttledPlugins.delete(pluginId)
+            _throttleTimers.delete(pluginId)
+          }, duration)
+        )
+      } else {
+        _throttleTimers.delete(pluginId)
+      }
+    }
+  )
+
+  // 注册插件禁用监听：插件因崩溃次数过多被永久禁用，提示用户并停止换源
+  _unsubscribeDisabled = window.api.pluginNotice.onPluginDisabled(({ pluginId, reason }) => {
+    _disabledPlugins.add(pluginId)
+    // 清理限流定时器（已禁用的插件不需要再恢复）
+    const t = _throttleTimers.get(pluginId)
+    if (t !== undefined) {
+      clearTimeout(t)
+      _throttleTimers.delete(pluginId)
+    }
+    MessagePlugin.error(
+      `插件已被禁用：${reason}。请检查插件是否包含死循环或异常逻辑，必要时重新加载或卸载该插件。`,
+      8000
+    )
+  })
+
   // 初始化无感过渡管理器：注入 getNextSong 回调，订阅 slotSwap 重置自动下一首计数
   crossfadeManager.init(getNextSong)
   controlAudio.subscribe('slotSwap', () => {
@@ -777,6 +839,14 @@ const uninstallPlayback = () => {
     clearInterval(savePositionInterval)
     savePositionInterval = null
   }
+  _unsubscribeThrottle?.()
+  _unsubscribeThrottle = null
+  _unsubscribeDisabled?.()
+  _unsubscribeDisabled = null
+  _throttleTimers.forEach(clearTimeout)
+  _throttleTimers.clear()
+  _throttledPlugins.clear()
+  _disabledPlugins.clear()
 }
 
 export {
