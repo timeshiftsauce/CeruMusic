@@ -71,11 +71,18 @@ jobs:
 
       - name: Build Electron App for macOS Intel (x64)
         if: matrix.os == 'macos-13'
-        run: yarn run build:mac:intel
+        shell: bash
+        run: |
+          # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
+          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          yarn run build:mac:intel
 
       - name: Build Electron App for macOS Apple Silicon (arm64)
         if: matrix.os == 'macos-latest'
-        run: yarn run build:mac:arm64
+        shell: bash
+        run: |
+          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          yarn run build:mac:arm64
 
       - name: Build Electron App for linux
         if: matrix.os == 'ubuntu-latest'
