@@ -27,6 +27,12 @@ async function exists(targetPath) {
   }
 }
 
+async function resolveMacAppBundleDir(appOutDir) {
+  const entries = await fs.readdir(appOutDir, { withFileTypes: true });
+  const appBundle = entries.find((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
+  return appBundle ? path.join(appOutDir, appBundle.name) : null;
+}
+
 exports.default = async function afterPack(context) {
   const platform = context.electronPlatformName;
   const arch = normalizeArch(context.arch);
@@ -41,8 +47,14 @@ exports.default = async function afterPack(context) {
     return;
   }
 
+  const appBundleDir = await resolveMacAppBundleDir(appOutDir);
+  if (!appBundleDir) {
+    console.warn(`[afterPack] No .app bundle found in ${appOutDir}, skip pruning.`);
+    return;
+  }
+
   const unpackedImgDir = path.join(
-    appOutDir,
+    appBundleDir,
     "Contents",
     "Resources",
     "app.asar.unpacked",
