@@ -9,11 +9,7 @@ on:
 jobs:
   build-and-upload:
     name: build and upload to latest release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: macos-latest
 
     steps:
       - name: Check out git repository
@@ -61,45 +57,15 @@ jobs:
         shell: bash
         run: |
           npm i -g yarn
-
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            mkdir -p .fake-bin
-            echo '@echo off' > .fake-bin/npx.cmd
-            echo 'echo "Fake npx called"' >> .fake-bin/npx.cmd
-            export PATH="$PWD/.fake-bin:$PATH"
-          fi
-
           yarn install --frozen-lockfile
 
-      - name: Build Electron App for windows
-        if: matrix.os == 'windows-latest'
-        run: yarn run build:win
-
       - name: Build Electron App for macos
-        if: matrix.os == 'macos-latest'
         run: yarn run build:mac:universal
 
-      - name: Build Electron App for linux
-        if: matrix.os == 'ubuntu-latest'
-        run: yarn run build:linux
-
-      - name: Cleanup Artifacts for Windows
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: |
-          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"
-
       - name: Cleanup Artifacts for MacOS
-        if: matrix.os == 'macos-latest'
         shell: bash
         run: |
           npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
-
-      - name: Cleanup Artifacts for Linux
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|latest*.yml)"
 
       - name: Upload build outputs to latest release
         shell: bash
