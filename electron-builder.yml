@@ -61,7 +61,6 @@ nsis:
   allowElevation: true
 mac:
   icon: 'resources/icons/icon.icns'
-  entitlementsInherit: build/entitlements.mac.plist
   target:
     - target: dmg
       arch:
