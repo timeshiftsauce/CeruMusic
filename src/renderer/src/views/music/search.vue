@@ -30,6 +30,9 @@ const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
 const filenameTemplate = ref(settings.value.filenameTemplate)
 
+const localUserDetailStoreInst = LocalUserDetailStore()
+const { userSource } = storeToRefs(localUserDetailStoreInst)
+
 const keyword = ref('')
 const searchResults = ref<MusicItem[]>([])
 const loading = ref(false)
@@ -163,9 +166,11 @@ async function setPic(offset: number, source: string) {
   for (let i = offset; i < searchResults.value.length; i++) {
     const tempImg = searchResults.value[i].img
     if (tempImg) continue
+    // 聚合模式下每首歌使用自身 source 获取封面
+    const songSource = (searchResults.value[i] as any).source || source
     try {
       const url = await window.api.music.requestSdk('getPic', {
-        source,
+        source: songSource,
         songInfo: toRaw(searchResults.value[i])
       })
       if (typeof url !== 'object') {
@@ -378,6 +383,12 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
                   :alt="playlist.title"
                   @error="playlist.cover = songCover"
                 />
+                <span
+                  v-if="userSource.source === 'all' && playlist.source"
+                  class="source-badge"
+                >
+                  {{ playlist.source }}
+                </span>
               </div>
               <div class="playlist-info">
                 <h4 class="playlist-title">{{ unescape(playlist.title) }}</h4>
@@ -614,6 +625,23 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+    .source-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 2;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(12px) saturate(160%);
+      -webkit-backdrop-filter: blur(12px) saturate(160%);
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+      pointer-events: none;
     }
   }
   .playlist-info {

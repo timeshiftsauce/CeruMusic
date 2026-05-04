@@ -1,4 +1,4 @@
-import { Request } from '@renderer/utils/request'
+import { Request, unwrap } from '@renderer/utils/request'
 import { base64ToFile, isBase64 } from '@renderer/utils/file'
 
 // Define types locally or export them
@@ -52,14 +52,6 @@ const API_URL = 'https://api.ceru.shiqianjiang.cn/api'
 const request = new Request(API_URL)
 
 const BASE_URL = '/user-songlist'
-
-const unwrap = async <T>(promise: Promise<any>): Promise<T> => {
-  const res = await promise
-  if (res && typeof res === 'object' && 'data' in res && 'code' in res) {
-    return res.data
-  }
-  return res
-}
 
 export const cloudSongListAPI = {
   // 获取用户的所有歌单

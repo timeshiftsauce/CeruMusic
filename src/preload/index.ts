@@ -376,6 +376,22 @@ const api = {
       }
       ipcRenderer.on('plugin-notice', listener)
       return () => ipcRenderer.removeListener('plugin-notice', listener)
+    },
+    onPluginThrottle(
+      callback: (data: { pluginId: string; reason: string; duration?: number }) => void
+    ) {
+      function listener(_: any, data: any) {
+        callback(data)
+      }
+      ipcRenderer.on('plugin-throttle', listener)
+      return () => ipcRenderer.removeListener('plugin-throttle', listener)
+    },
+    onPluginDisabled(callback: (data: { pluginId: string; reason: string }) => void) {
+      function listener(_: any, data: any) {
+        callback(data)
+      }
+      ipcRenderer.on('plugin-disabled', listener)
+      return () => ipcRenderer.removeListener('plugin-disabled', listener)
     }
   },
   // 系统音频采集
@@ -387,6 +403,28 @@ const api = {
       // 暂时保留这个或者也迁移到主进程，目前主要用 getDefaultScreenSourceId
       return []
     }
+  },
+  // 歌曲分享
+  share: {
+    getPluginCodeAndMd5: (
+      pluginId: string
+    ): Promise<{ code: string; md5: string; type: 'cr' | 'lx' } | { error: string }> =>
+      ipcRenderer.invoke('service-share-getPluginCodeAndMd5', pluginId),
+    onShareOpen: (callback: (payload: { id: string }) => void) => {
+      const handler = (_: any, payload: { id: string }) => callback(payload)
+      ipcRenderer.on('share-open', handler)
+      return () => ipcRenderer.removeListener('share-open', handler)
+    },
+    onPlaylistShareOpen: (callback: (payload: { id: string }) => void) => {
+      const handler = (_: any, payload: { id: string }) => callback(payload)
+      ipcRenderer.on('playlist-share-open', handler)
+      return () => ipcRenderer.removeListener('playlist-share-open', handler)
+    },
+    /** 拉取并清空主进程缓冲的待处理分享 id（冷启动 / 启动页期间累积） */
+    getPending: (): Promise<string[]> => ipcRenderer.invoke('get-pending-share-ids'),
+    /** 拉取并清空主进程缓冲的待处理歌单分享 id */
+    getPendingPlaylistShares: (): Promise<string[]> =>
+      ipcRenderer.invoke('get-pending-playlist-share-ids')
   }
 }
 

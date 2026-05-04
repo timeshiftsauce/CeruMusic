@@ -30,7 +30,11 @@ import './events/localMusic'
 import fs from 'node:fs'
 import { initHotkeyService } from './services/hotkeys'
 import { deepLinkRouter } from './router'
-import { setupDeepLinks } from './router/routes'
+import {
+  setupDeepLinks,
+  consumePendingShareIds,
+  consumePendingPlaylistShareIds
+} from './router/routes'
 
 // Initialize deep link routes
 setupDeepLinks()
@@ -572,6 +576,26 @@ app.whenReady().then(async () => {
   setupDownloadManager()
   downloadManager.start()
 
+  // 注册插件限流处理器：插件调用 stopRequests 时暂停所有下载并通知渲染进程
+  pluginService.setThrottleHandler((pluginId, reason, duration) => {
+    downloadManager.pauseAllTasks()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('plugin-throttle', { pluginId, reason, duration })
+    }
+  })
+
+  // 注册插件禁用处理器：插件因崩溃次数过多被永久禁用时通知渲染进程
+  pluginService.setDisabledHandler((pluginId, reason) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('plugin-disabled', { pluginId, reason })
+    }
+  })
+
+  // 应用退出前销毁所有插件 worker，避免 worker 阻塞主进程退出
+  app.on('before-quit', () => {
+    pluginService.disposeAll().catch(() => {})
+  })
+
   // 仅在主进程初始化一次托盘
   setupTray()
 
@@ -590,6 +614,14 @@ app.whenReady().then(async () => {
     initLyricIpc(mainWindow)
     const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
     if (startArg) queueOpenPlaylist(startArg)
+    // 冷启动 deep-link（Windows / Linux）：进程参数中包含 cerumusic:// 协议链接
+    const startProtocolUrl = process.argv?.find(
+      (a) => typeof a === 'string' && a.startsWith('cerumusic://')
+    )
+    if (startProtocolUrl) {
+      console.log('[deep-link] 冷启动检测到协议链接:', startProtocolUrl)
+      deepLinkRouter.match(mainWindow, startProtocolUrl)
+    }
     mainWindow.webContents.on('did-finish-load', () => {
       // 页面加载完成后分发并清空队列
       pendingPlaylistFiles.forEach((p) => mainWindow!.webContents.send('open-playlist-file', p))
@@ -639,6 +671,16 @@ ipcMain.handle('get-pending-open-playlist-files', async () => {
   const list = [...pendingPlaylistFiles]
   pendingPlaylistFiles = []
   return list
+})
+
+// 查询并清空待处理的分享 DeepLink id 队列（冷启动 / 启动页阶段缓冲的事件）
+ipcMain.handle('get-pending-share-ids', async () => {
+  return consumePendingShareIds()
+})
+
+// 查询并清空待处理的歌单分享 DeepLink id 队列
+ipcMain.handle('get-pending-playlist-share-ids', async () => {
+  return consumePendingPlaylistShareIds()
 })
 
 // 系统音频采集 - 获取屏幕源ID

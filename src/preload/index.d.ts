@@ -192,6 +192,10 @@ interface CustomAPI {
 
   pluginNotice: {
     onPluginNotice: (listener: (...args: any[]) => void) => () => void
+    onPluginThrottle: (
+      listener: (data: { pluginId: string; reason: string; duration?: number }) => void
+    ) => () => void
+    onPluginDisabled: (listener: (data: { pluginId: string; reason: string }) => void) => () => void
   }
 
   localMusic: {
@@ -208,6 +212,16 @@ interface CustomAPI {
     onScanFinished: (callback: (resList: any[]) => void) => void
     removeScanProgress: () => void
     removeScanFinished: () => void
+  }
+
+  share: {
+    getPluginCodeAndMd5: (
+      pluginId: string
+    ) => Promise<{ code: string; md5: string; type: 'cr' | 'lx' } | { error: string }>
+    onShareOpen: (callback: (payload: { id: string }) => void) => () => void
+    onPlaylistShareOpen: (callback: (payload: { id: string }) => void) => () => void
+    getPending: () => Promise<string[]>
+    getPendingPlaylistShares: () => Promise<string[]>
   }
 }
 

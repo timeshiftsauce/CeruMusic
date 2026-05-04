@@ -7,7 +7,8 @@ import {
   PlayCircleIcon,
   DeleteIcon,
   ViewListIcon,
-  DownloadIcon
+  DownloadIcon,
+  ShareIcon
 } from 'tdesign-icons-vue-next'
 import { createQualityDialog } from '@renderer/utils/audio/download'
 import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
@@ -40,6 +41,7 @@ import {
   handleUploadToCloudHelper,
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
+import SharePlaylistDialog from '@renderer/components/Share/SharePlaylistDialog.vue'
 import { useAuthStore } from '@renderer/store'
 
 const settingsStore = useSettingsStore()
@@ -88,6 +90,9 @@ const currentEditingPlaylist = ref<SongList | null>(null)
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
 const contextMenuPlaylist = ref<SongList | null>(null)
+const sharePlaylistDialogVisible = ref(false)
+const shareTargetPlaylist = ref<SongList | null>(null)
+const shareTargetPlaylistSongCount = ref(0)
 const songlistFileInputRef = ref<HTMLInputElement | null>(null)
 const songlistUploadedFile = ref<File | null>(null)
 const triggerSonglistFileInput = () => {
@@ -1161,6 +1166,71 @@ const handleSyncToCloud = async (pl: any) => {
   }
 }
 
+const openPlaylistShareDialog = async (pl: SongList) => {
+  shareTargetPlaylist.value = pl
+  try {
+    const res = await songListAPI.getSongs(pl.id)
+    shareTargetPlaylistSongCount.value = res.success
+      ? (res.data || []).filter((s) => s.source !== 'local').length
+      : 0
+  } catch {
+    shareTargetPlaylistSongCount.value = 0
+  }
+  sharePlaylistDialogVisible.value = true
+}
+
+const handleSharePlaylist = async (pl: SongList) => {
+  if (pl.meta?.cloudId) {
+    openPlaylistShareDialog(pl)
+    return
+  }
+
+  const dialog = DialogPlugin.confirm({
+    header: '先上传到云端',
+    body: `歌单"${pl.name}"需要先上传到云端后才能分享，是否继续？`,
+    confirmBtn: '上传并分享',
+    cancelBtn: '取消',
+    onConfirm: async () => {
+      dialog.destroy()
+      let songs: any[] = []
+      try {
+        const res = await songListAPI.getSongs(pl.id)
+        if (!res.success) throw new Error(res.error || '获取歌曲失败')
+        songs = [...(res.data || [])]
+      } catch (e: any) {
+        MessagePlugin.error('获取歌曲失败: ' + (e.message || '未知错误'))
+        return
+      }
+
+      try {
+        const newMeta = await handleUploadToCloudHelper(
+          {
+            id: pl.id,
+            name: pl.name,
+            description: pl.description || '',
+            cover: pl.coverImgUrl,
+            meta: pl.meta
+          },
+          songs,
+          loadPlaylists
+        )
+        const patched = {
+          ...pl,
+          meta: {
+            ...(pl.meta || {}),
+            ...(newMeta || {})
+          }
+        }
+        updatePlaylistState(pl.id, { meta: patched.meta })
+        openPlaylistShareDialog(patched as SongList)
+      } catch {
+        // helper 内已提示
+      }
+    },
+    onCancel: () => dialog.destroy()
+  })
+}
+
 const handleDownloadCloudPlaylist = async (pl: any) => {
   const loadingMsg = MessagePlugin.loading('正在下载到本地...', 0)
   try {
@@ -1367,6 +1437,12 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       })
     )
     items.push(
+      createMenuItem('share-playlist', '分享歌单', {
+        icon: ShareIcon,
+        onClick: () => handleSharePlaylist(pl)
+      })
+    )
+    items.push(
       createMenuItem('delete-both', '删除(双端)', {
         icon: DeleteIcon,
         onClick: () => handleDeleteBoth(pl)
@@ -1377,6 +1453,12 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       createMenuItem('upload-cloud', '上传到云端', {
         icon: CloudUploadIcon,
         onClick: () => handleUploadToCloud(pl)
+      })
+    )
+    items.push(
+      createMenuItem('share-playlist', '分享歌单', {
+        icon: ShareIcon,
+        onClick: () => handleSharePlaylist(pl)
       })
     )
   }
@@ -1949,6 +2031,12 @@ onDeactivated(() => {
       :position="contextMenuPosition"
       @close="closeContextMenu"
       @item-click="handleContextMenuItemClick"
+    />
+
+    <SharePlaylistDialog
+      v-model="sharePlaylistDialogVisible"
+      :playlist="shareTargetPlaylist"
+      :song-count="shareTargetPlaylistSongCount"
     />
   </div>
 </template>
