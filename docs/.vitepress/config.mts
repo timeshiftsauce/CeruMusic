@@ -39,7 +39,8 @@ export default defineConfig({
     logo: '/logo.svg',
     nav: [
       { text: '首页', link: '/' },
-      { text: '使用文档', link: '/guide/' }
+      { text: '使用文档', link: '/guide/' },
+      { text: '接口文档', link: 'https://api.ceru.shiqianjiang.cn/api-docs' }
     ],
 
     sidebar: [
@@ -49,8 +50,21 @@ export default defineConfig({
           { text: '安装教程', link: '/guide/' },
           {
             text: '使用教程',
-            items: [{ text: '音乐播放列表', link: '/guide/used/playList' }]
+            collapsed: false,
+            items: [
+              { text: '搜索与播放', link: '/guide/used/search-and-play' },
+              { text: '音乐播放列表', link: '/guide/used/playList' },
+              { text: '歌曲下载', link: '/guide/used/download' },
+              { text: '本地音乐', link: '/guide/used/local-music' },
+              { text: '外观与主题', link: '/guide/used/appearance' },
+              { text: '音效与均衡器', link: '/guide/used/audio-effects' },
+              { text: '快捷键', link: '/guide/used/hotkeys' },
+              { text: '听歌识曲与分享', link: '/guide/used/recognize-and-share' },
+              { text: '数据存储', link: '/guide/used/storage' },
+              { text: 'Scheme URL', link: '/guide/used/scheme-url' }
+            ]
           },
+          { text: '常见问题 FAQ', link: '/guide/faq' },
           { text: '更新日志', link: '/guide/updateLog' },
           { text: '更新计划', link: '/guide/update' }
         ]
@@ -120,5 +134,4 @@ export default defineConfig({
   },
   lastUpdated: true
 })
-console.log(process.env.BASE_URL_DOCS)
 // Smooth scrolling functions
