@@ -21,6 +21,7 @@ asarUnpack:
   - node_modules/bindings/**
   - node_modules/file-uri-to-path/**
   - '**/*.node'
+afterPack: build/afterPack.js
 win:
   executableName: ceru-music
   icon: 'resources/icons/icon.ico'
