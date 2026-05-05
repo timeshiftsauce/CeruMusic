@@ -2076,23 +2076,14 @@
   dependencies:
     "@langchain/openai" "^0.6.0"
 
-"@langchain/openai@^0.6.0":
-  version "0.6.7"
-  resolved "https://registry.npmmirror.com/@langchain/openai/-/openai-0.6.7.tgz"
-  integrity sha512-mNT9AdfEvDjlWU76hEl1HgTFkgk7yFKdIRgQz3KXKZhEERXhAwYJNgPFq8+HIpgxYSnc12akZ1uo8WPS98ErPQ==
+"@langchain/openai@^0.6.0", "@langchain/openai@^0.6.7":
+  version "0.6.17"
+  resolved "https://registry.npmmirror.com/@langchain/openai/-/openai-0.6.17.tgz#6e87064316d6834b7cfb88a2df2ea7ee2a4b0325"
+  integrity sha512-JVSzD+FL5v/2UQxKd+ikB1h4PQOtn0VlK8nqW2kPp0fshItCv4utrjBKXC/rubBnSXoRTyonBINe8QRZ6OojVQ==
   dependencies:
     js-tiktoken "^1.0.12"
-    openai "^5.12.1"
+    openai "5.12.2"
     zod "^3.25.32"
-
-"@langchain/openai@^1.4.5":
-  version "1.4.5"
-  resolved "https://registry.npmmirror.com/@langchain/openai/-/openai-1.4.5.tgz#e2d243d7f6ce64db9bc57dc22ac927ff785dc7be"
-  integrity sha512-bQ2WMIZfSh02trJLYSAtiIcD3j6EBCiAm9nw0dZWQsVaUxmWc3JJqs8uUte6AkMazmLHzcUIw+14UkXO5fRJvQ==
-  dependencies:
-    js-tiktoken "^1.0.12"
-    openai "^6.34.0"
-    zod "^3.25.76 || ^4"
 
 "@logto/browser@^3.0.10":
   version "3.0.10"
@@ -8147,15 +8138,10 @@ open@^10.2.0:
     is-inside-container "^1.0.0"
     wsl-utils "^0.1.0"
 
-openai@^5.12.1:
+openai@5.12.2:
   version "5.12.2"
-  resolved "https://registry.npmmirror.com/openai/-/openai-5.12.2.tgz"
+  resolved "https://registry.npmmirror.com/openai/-/openai-5.12.2.tgz#512ab6b80eb8414837436e208f1b951442b97761"
   integrity sha512-xqzHHQch5Tws5PcKR2xsZGX9xtch+JQFz5zb14dGqlshmmDAFBFEWmeIpf7wVqWV+w7Emj7jRgkNJakyKE0tYQ==
-
-openai@^6.34.0:
-  version "6.35.0"
-  resolved "https://registry.npmmirror.com/openai/-/openai-6.35.0.tgz#3f3fdf2a03b9009b3c85d1b386f41ad0284d4b5d"
-  integrity sha512-L/skwIGnt5xQZHb0UfTu9uAUKbis3ehKypOuJKi20QvG7UStV6C8IC3myGYHcdiF4kms/bAvOJ9UqqNWqi8x/Q==
 
 optionator@^0.9.3:
   version "0.9.4"
@@ -10972,11 +10958,6 @@ zod@^3.25.32:
   version "3.25.76"
   resolved "https://registry.npmmirror.com/zod/-/zod-3.25.76.tgz"
   integrity sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==
-
-"zod@^3.25.76 || ^4":
-  version "4.4.3"
-  resolved "https://registry.npmmirror.com/zod/-/zod-4.4.3.tgz#b680f172885d18bbebf21a834ea25e55a1bbf356"
-  integrity sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==
 
 zwitch@^2.0.4:
   version "2.0.4"
