@@ -18,6 +18,7 @@ import { musicCacheService } from '../musicCache'
 import download from '../../utils/downloadSongs'
 
 function main(source: string = 'wy') {
+  if (source === 'all') return aggregateMain()
   const Api = musicSdk[source]
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {
@@ -223,7 +224,19 @@ function main(source: string = 'wy') {
       const results: any[] = []
       for (const task of tasks) {
         try {
-          const res = await this.downloadSingleSong(task)
+          // 直接加入 DownloadManager 队列，URL 由 urlFetcher 按需获取（受并发数控制）。
+          // 若已有现成 URL（lazy 模式）则直接使用，避免重复请求。
+          const url =
+            task.lazy && task.songInfo.typeUrl?.[task.quality]
+              ? task.songInfo.typeUrl[task.quality]
+              : ''
+          const res = download(
+            task.songInfo,
+            url,
+            task.tagWriteOptions,
+            task.pluginId,
+            task.quality
+          )
           results.push({ success: true, songmid: task.songInfo.songmid, ...res })
         } catch (e: any) {
           results.push({
@@ -294,6 +307,91 @@ function main(source: string = 'wy') {
     }
   }
 }
+
+function aggregateMain() {
+  const Agg = (musicSdk as any).aggregate
+  const notSupported = (name: string) => {
+    throw new Error(`聚合模式下请选择具体音源 (${name})`)
+  }
+  return {
+    async search({ keyword, page = 1, limit = 30 }: SearchArg) {
+      return (await Agg.search(keyword, page, limit)) as Promise<SearchResult>
+    },
+    async tipSearch(_: { keyword: string }) {
+      return (await Agg.tipSearch(_.keyword)) as Promise<TipSearchResult>
+    },
+    async getMusicUrl(_: GetMusicUrlArg): Promise<any> {
+      return notSupported('getMusicUrl')
+    },
+    async getPic(_: GetMusicPicArg): Promise<any> {
+      return notSupported('getPic')
+    },
+    async getLyric(_: GetLyricArg): Promise<any> {
+      return notSupported('getLyric')
+    },
+    async getHotSonglist() {
+      const res = await Agg.getCategoryPlaylists({ tagId: '', page: 1 })
+      return res as PlaylistResult
+    },
+    async getPlaylistTags() {
+      return await Agg.getPlaylistTags()
+    },
+    async getCategoryPlaylists({
+      sortId = '',
+      tagId = '',
+      page = 1,
+      limit
+    }: {
+      sortId?: string
+      tagId?: string
+      page?: number
+      limit?: number
+    }) {
+      const res = await Agg.getCategoryPlaylists({ sortId, tagId, page, limit })
+      return {
+        category: { id: tagId || 'hot', name: tagId || '热门' },
+        ...res
+      }
+    },
+    async getPlaylistDetail(_: GetSongListDetailsArg): Promise<any> {
+      return notSupported('getPlaylistDetail')
+    },
+    async downloadSingleSong(_: DownloadSingleSongArgs): Promise<any> {
+      return notSupported('downloadSingleSong')
+    },
+    async downloadBatchSongs(_: { tasks: DownloadSingleSongArgs[] }): Promise<any> {
+      return notSupported('downloadBatchSongs')
+    },
+    async parsePlaylistId(_: { url: string }): Promise<any> {
+      return notSupported('parsePlaylistId')
+    },
+    async getPlaylistDetailById(_id: string, _page: number = 1): Promise<any> {
+      return notSupported('getPlaylistDetailById')
+    },
+    async searchPlaylist({ keyword, page = 1, limit = 30 }: SearchArg) {
+      return (await Agg.searchPlaylist(keyword, page, limit)) as PlaylistResult
+    },
+    async getLeaderboards() {
+      return await Agg.getLeaderboards()
+    },
+    async getLeaderboardDetail(_: { id: string; page: number }): Promise<any> {
+      return notSupported('getLeaderboardDetail')
+    },
+    async getHotComment(_: GetCommentArg): Promise<any> {
+      return notSupported('getHotComment')
+    },
+    async getComment(_: GetCommentArg): Promise<any> {
+      return notSupported('getComment')
+    },
+    async recognize(_: { fp: string; duration: number }) {
+      return [] as any[]
+    },
+    async getAlbumList(_: GetAlbumDetailArg): Promise<any> {
+      return notSupported('getAlbumList')
+    }
+  }
+}
+
 export default main
 // main('wy')
 //   .getAlbumList({ songInfo: { albumId: '250748750' } as any, page: 1, limit: 10 })

@@ -50,7 +50,27 @@ export default class DownloadManager extends EventEmitter {
   private async loadTasks() {
     try {
       const data = await fs.readFile(downloadsFilePath, 'utf-8')
-      const tasksArray = JSON.parse(data) as DownloadTask[]
+      let tasksArray: DownloadTask[]
+      try {
+        tasksArray = JSON.parse(data) as DownloadTask[]
+      } catch (parseErr) {
+        const backupPath = `${downloadsFilePath}.corrupt-${Date.now()}.bak`
+        try {
+          await fs.writeFile(backupPath, data)
+          log.warn(
+            `Download history JSON is corrupt, backed up to ${backupPath} and starting fresh.`,
+            parseErr
+          )
+        } catch (backupErr) {
+          log.warn('Failed to back up corrupt download history:', backupErr)
+        }
+        try {
+          await fs.writeFile(downloadsFilePath, '[]')
+        } catch (resetErr) {
+          log.warn('Failed to reset corrupt download history file:', resetErr)
+        }
+        return
+      }
       log.info(`Loaded ${tasksArray.length} tasks from history.`)
       for (const task of tasksArray) {
         if (task.status === DownloadStatus.Downloading) {
@@ -96,13 +116,23 @@ export default class DownloadManager extends EventEmitter {
     }
   }
 
+  private saveQueue: Promise<void> = Promise.resolve()
+
   private async saveTasks() {
-    const tasksArray = Array.from(this.tasks.values())
-    try {
-      await fs.writeFile(downloadsFilePath, JSON.stringify(tasksArray, null, 2))
-    } catch (error) {
-      log.error('Failed to save download history:', error)
-    }
+    this.saveQueue = this.saveQueue.then(async () => {
+      const tasksArray = Array.from(this.tasks.values())
+      const tmpPath = `${downloadsFilePath}.tmp`
+      try {
+        await fs.writeFile(tmpPath, JSON.stringify(tasksArray, null, 2))
+        await fs.rename(tmpPath, downloadsFilePath)
+      } catch (error) {
+        log.error('Failed to save download history:', error)
+        try {
+          await fs.unlink(tmpPath)
+        } catch {}
+      }
+    })
+    return this.saveQueue
   }
 
   public getTask(taskId: string): DownloadTask | undefined {
@@ -239,8 +269,12 @@ export default class DownloadManager extends EventEmitter {
 
       worker.postMessage(task)
     } catch (error: any) {
-      log.error('Failed to start task:', taskId, error)
       this.initializingTasks.delete(taskId)
+      // 若任务在初始化期间被外部暂停（如插件限流触发 pauseAllTasks），
+      // 状态已被设为 Paused，不应再重试，否则会绕过暂停逻辑反复重新启动。
+      const taskAfterError = this.tasks.get(taskId)
+      if (!taskAfterError || taskAfterError.status === DownloadStatus.Paused) return
+      log.error('Failed to start task:', taskId, error)
       this.handleTaskError(taskId, error)
     }
   }
@@ -336,10 +370,13 @@ export default class DownloadManager extends EventEmitter {
   }
 
   public pauseAllTasks() {
-    log.info('Pausing all tasks')
     const activeIds = Array.from(this.activeDownloads.keys())
     const queuedIds = [...this.queue]
     const initIds = Array.from(this.initializingTasks.values())
+
+    if (activeIds.length === 0 && queuedIds.length === 0 && initIds.length === 0) return
+
+    log.info('Pausing all tasks')
 
     for (const id of activeIds) {
       this.cleanupTask(id)

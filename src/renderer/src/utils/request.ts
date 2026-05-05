@@ -186,3 +186,11 @@ export class Request {
 
 // 导出默认实例（resource 为空，用于 Logto Account API）
 export const defaultRequest = new Request('')
+
+export const unwrap = async <T>(promise: Promise<any>): Promise<T> => {
+  const res = await promise
+  if (res && typeof res === 'object' && 'data' in res && 'code' in res) {
+    return (res as any).data
+  }
+  return res
+}

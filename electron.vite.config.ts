@@ -19,7 +19,20 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          downloadWorker: resolve(__dirname, 'src/main/workers/downloadWorker.ts')
+          downloadWorker: resolve(__dirname, 'src/main/workers/downloadWorker.ts'),
+          pluginWorker: resolve(__dirname, 'src/main/services/plugin/manager/pluginWorker.ts')
+        },
+        output: {
+          entryFileNames: '[name].js',
+          chunkFileNames: 'script/[name]-[hash].js',
+          assetFileNames(chunkInfo) {
+            if (chunkInfo.names[0].endsWith('.css')) return 'style/[name]-[hash].css'
+            // 图片资源
+            const imgReg = /\.(png|jpg|jpeg|gif|svg|webp)$/
+            if (imgReg.test(chunkInfo.names[0])) return 'images/[name]-[hash].[ext]'
+            // 其他资源
+            return 'assets/[name]-[hash].[ext]'
+          },
         }
       },
       minify: 'terser'
@@ -40,6 +53,20 @@ export default defineConfig({
         compress: {
           drop_console: true,
           drop_debugger: true
+        }
+      },
+      rollupOptions: {
+        output: {
+          entryFileNames: 'script/[name]-[hash].js',
+          chunkFileNames: 'script/[name]-[hash].js',
+          assetFileNames(chunkInfo) {
+            if (chunkInfo.names[0].endsWith('.css')) return 'style/[name]-[hash].css'
+            // 图片资源
+            const imgReg = /\.(png|jpg|jpeg|gif|svg|webp)$/
+            if (imgReg.test(chunkInfo.names[0])) return 'images/[name]-[hash].[ext]'
+            // 其他资源
+            return 'assets/[name]-[hash].[ext]'
+          }
         }
       }
     },

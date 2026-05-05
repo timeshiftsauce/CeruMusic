@@ -387,6 +387,12 @@ const songlistScrollRef = ref<HTMLDivElement>()
               >
                 <div class="playlist-cover">
                   <s-image :src="playlist.cover" class="playlist-cover-image" />
+                  <span
+                    v-if="userSource.source === 'all' && playlist.source"
+                    class="source-badge"
+                  >
+                    {{ playlist.source }}
+                  </span>
                 </div>
                 <div
                   class="playlist-info"
@@ -733,6 +739,24 @@ const songlistScrollRef = ref<HTMLDivElement>()
       background: linear-gradient(135deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
       opacity: 0;
       transition: opacity 0.3s ease;
+    }
+
+    .source-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 2;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(12px) saturate(160%);
+      -webkit-backdrop-filter: blur(12px) saturate(160%);
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+      pointer-events: none;
     }
 
     .playlist-cover-image {

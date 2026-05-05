@@ -37,6 +37,15 @@ interface Player {
     lines: LyricLine[]
     trans?: string
     source?: string
+    // 原始歌词字符串，用于分享上传到后端（不要使用解析后的 LyricLine）
+    raw?: {
+      lrc?: string
+      yrc?: string
+      ttml?: string
+      qrc?: string
+      trans?: string
+      format?: 'lrc' | 'yrc' | 'qrc' | 'ttml'
+    }
   }
   isLoading: boolean
   comments: {
@@ -78,10 +87,9 @@ export interface CommentResponse {
   maxPage: number
 }
 
-// 辅助函数：将URL转换为 Blob URL
 async function getBlobUrlFromUrl(url: string): Promise<string> {
   if (!url) return ''
-  console.log('转换URL:', url)
+  if (/^(data:|blob:|file:)/i.test(url)) return url
   try {
     const response = await fetch(url)
     const blob = await response.blob()
@@ -170,7 +178,8 @@ export const useGlobalPlayStatusStore = defineStore(
       songName: computed(() => player.songInfo?.name || ''),
       singer: computed(() => player.songInfo?.singer || ''),
       lyrics: {
-        lines: []
+        lines: [],
+        raw: {}
       },
       isLoading: false,
       comments: {
@@ -309,14 +318,26 @@ export const useGlobalPlayStatusStore = defineStore(
     }
 
     // 监听歌曲ID变化，获取歌词, 评论
+    type RawLyricFormat = 'lrc' | 'yrc' | 'qrc' | 'ttml'
+    const setRawLyric = (format: RawLyricFormat, text: string, trans?: string) => {
+      player.lyrics.raw = {
+        ...(player.lyrics.raw || {}),
+        [format]: text,
+        format,
+        ...(trans !== undefined ? { trans } : {})
+      }
+    }
     watch(
       [() => player.songId, () => player.songInfo?.songmid],
       async ([newId], _oldArgs, onCleanup) => {
         if (!newId || !player.songInfo) {
           player.lyrics.lines = []
+          player.lyrics.raw = {}
           return
         }
         player.isLoading = true
+        // 切换歌曲时重置原始歌词缓存
+        player.lyrics.raw = {}
 
         // 竞态与取消控制
         let active = true
@@ -396,8 +417,11 @@ export const useGlobalPlayStatusStore = defineStore(
                 let lyrics: null | LyricLine[] = null
                 if (lyricData?.crlyric) {
                   lyrics = parseCrLyricBySource(source, lyricData.crlyric)
+                  // 缓存原始歌词字符串
+                  setRawLyric(source === 'tx' ? 'qrc' : 'yrc', lyricData.crlyric, lyricData?.tlyric)
                 } else if (lyricData?.lyric) {
                   lyrics = parseLrc(lyricData.lyric) as any
+                  setRawLyric('lrc', lyricData.lyric, lyricData?.tlyric)
                 }
                 lyrics = mergeTranslation(lyrics as any, lyricData?.tlyric)
 
@@ -437,6 +461,8 @@ export const useGlobalPlayStatusStore = defineStore(
               }
 
               parsedLyrics = ttmlLyrics as LyricLine[]
+              // 缓存原始 TTML 字符串
+              setRawLyric('ttml', res)
 
               sdkPromise.catch(() => {})
             } catch (ttmlError: any) {
@@ -473,8 +499,10 @@ export const useGlobalPlayStatusStore = defineStore(
                 if (lyricText) {
                   if (/^\[(\d+),\d+\]/.test(lyricText) || /\(\d+,\d+,\d+\)/.test(lyricText)) {
                     parsedLyrics = parseYrc(lyricText) as any
+                    setRawLyric('yrc', lyricText)
                   } else {
                     parsedLyrics = parseLrc(lyricText) as any
+                    setRawLyric('lrc', lyricText)
                   }
                 } else {
                   parsedLyrics = []
@@ -496,8 +524,10 @@ export const useGlobalPlayStatusStore = defineStore(
 
                 if (lyricData?.crlyric) {
                   parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
+                  setRawLyric(source === 'tx' ? 'qrc' : 'yrc', lyricData.crlyric, lyricData?.tlyric)
                 } else if (lyricData?.lyric) {
                   parsedLyrics = parseLrc(lyricData.lyric) as LyricLine[]
+                  setRawLyric('lrc', lyricData.lyric, lyricData?.tlyric)
                 }
 
                 parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
@@ -516,8 +546,10 @@ export const useGlobalPlayStatusStore = defineStore(
 
             if (text && (/^\[(\d+),\d+\]/.test(text) || /\(\d+,\d+,\d+\)/.test(text))) {
               parsedLyrics = text ? (parseYrc(text) as any) : []
+              if (text) setRawLyric('yrc', text)
             } else {
               parsedLyrics = text ? (parseLrc(text) as any) : []
+              if (text) setRawLyric('lrc', text)
             }
           }
           if (!active) return
@@ -618,6 +650,6 @@ export const useGlobalPlayStatusStore = defineStore(
     }
   },
   {
-    persist: true
+    persist: false
   }
 )

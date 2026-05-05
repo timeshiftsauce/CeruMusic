@@ -27,7 +27,7 @@ store/
 ## CONVENTIONS
 
 - Each store uses `defineStore('name', () => { ... })` functional syntax; import as `const store = useXxxStore()`.
-- Persistence uses `persist: { key, paths }`; update when adding new state fields needing storage.
+- Persistence uses `persist: { key, pick }` (or `omit`) per `pinia-plugin-persistedstate@4.x`; update when adding new state fields needing storage. The legacy `paths` option is silently ignored in 4.x.
 - Avoid direct mutation of array elements in downloads when reactivity matters; reassign with `splice` or `map`.
 - ControlAudio implements its own pub/sub map; always unsubscribe on component unmount via returned disposer.
 - GlobalPlayStatus comment pagination uses requested page index (some APIs 0-based).

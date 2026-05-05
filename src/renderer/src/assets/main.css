@@ -391,7 +391,7 @@
   --plugins-mac-maximize: #28ca42;
 
   /* Player 组件专用变量 - 亮色主题 */
-  --player-bg-default: #ffffff46;
+  --player-bg-default: #ffffff1a;
   --player-bg-idle: #ffffff;
   --player-text-idle: rgba(0, 0, 0, 0.8);
   --player-text-hover-idle: var(--td-brand-color-5);
@@ -767,7 +767,7 @@
   --plugins-mac-maximize: #28ca42;
 
   /* Player 组件专用变量 - 暗色主题 */
-  --player-bg-default: rgba(0, 0, 0, 0.2);
+  --player-bg-default: rgba(0, 0, 0, 0.1);
   --player-bg-idle: #2d2d2d;
   --player-text-idle: rgba(255, 255, 255, 0.9);
   --player-text-hover-idle: var(--td-brand-color-7);

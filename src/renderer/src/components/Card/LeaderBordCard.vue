@@ -4,6 +4,10 @@
       <s-image v-if="data.pic" :src="data.pic" :alt="data.name" loading="lazy" />
       <div v-else class="placeholder">{{ data.name[0] }}</div>
 
+      <div v-if="data.source" class="source-badge">
+        {{ data.source }}
+      </div>
+
       <div v-if="data.listen" class="play-count">
         <EarphoneIcon class="icon" />
         <span>{{ data.listen }}</span>
@@ -27,6 +31,7 @@ const props = defineProps<{
     pic?: string
     listen?: string
     update_frequency?: string
+    source?: string
     [key: string]: any
   }
 }>()
@@ -101,6 +106,20 @@ const handleClick = () => {
       .icon {
         font-size: 14px;
       }
+    }
+
+    .source-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 2px 8px;
+      border-radius: 4px;
+      backdrop-filter: blur(4px);
+      z-index: 2;
     }
 
     .card-info {

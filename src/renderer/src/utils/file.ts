@@ -13,3 +13,7 @@ export function base64ToFile(base64: string, filename: string = 'cover.png'): Fi
 export function isBase64(str: string): boolean {
   return typeof str === 'string' && str.startsWith('data:image/')
 }
+
+export function sanitizeFileName(name: string, max = 60): string {
+  return (name || '').replace(/[\\/:*?"<>|]+/g, '_').slice(0, max)
+}

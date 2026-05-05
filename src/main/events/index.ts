@@ -1,4 +1,5 @@
 import InitPluginService from './plugins'
+import InitShareService from './share'
 import '../services/musicSdk/index'
 import aiEvents from '../events/ai'
 // import initLocalMusicEvents from './localMusic'
@@ -10,6 +11,7 @@ import { initDlnaService } from './dlna'
 
 export default function InitEventServices(mainWindow: BrowserWindow) {
   InitPluginService()
+  InitShareService()
   aiEvents(mainWindow)
   initFontEvents()
   // initLocalMusicEvents()

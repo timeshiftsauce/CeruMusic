@@ -155,6 +155,7 @@ export const ControlAudioStore = defineStore(
      */
     const setCurrentTime = (time: number) => {
       if (typeof time === 'number') {
+        if (Audio.currentTime === time) return
         Audio.currentTime = time
         return
       }
