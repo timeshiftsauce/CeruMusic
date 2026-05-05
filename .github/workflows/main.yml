@@ -72,6 +72,15 @@ jobs:
       - name: Build Electron App for macOS Intel (x64)
         if: matrix.os == 'macos-13'
         shell: bash
+        env:
+          # macOS 代码签名 + 公证(Apple notarization)所需环境变量
+          # CSC_LINK / CSC_KEY_PASSWORD 由 electron-builder 用于导入 Developer ID Application 证书
+          # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 由 notarytool 用于提交公证
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
@@ -80,6 +89,12 @@ jobs:
       - name: Build Electron App for macOS Apple Silicon (arm64)
         if: matrix.os == 'macos-latest'
         shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
           yarn run build:mac:arm64
