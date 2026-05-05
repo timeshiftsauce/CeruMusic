@@ -61,18 +61,25 @@ nsis:
   allowElevation: true
 mac:
   icon: 'resources/icons/icon.icns'
-  entitlementsInherit: build/entitlements.mac.plist
+  category: public.app-category.music
   target:
     - target: dmg
       arch:
-        - universal
+        - x64
+        - arm64
     - target: zip
       arch:
-        - universal
+        - x64
+        - arm64
   extendInfo:
     - NSDocumentsFolderUsageDescription: 需要访问文档文件夹来保存和打开您创建的文件。
     - NSDownloadsFolderUsageDescription: 需要访问下载文件夹来管理您下载的歌曲。
-  notarize: false
+    - NSMicrophoneUsageDescription: 需要访问麦克风以支持录音相关功能。
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
   title: ${productName}

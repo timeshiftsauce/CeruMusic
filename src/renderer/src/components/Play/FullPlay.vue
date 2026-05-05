@@ -206,6 +206,7 @@ interface Props {
   songId?: string | null
   songInfo: SongList | { songmid: number | null | string; lrc: string | null }
   mainColor: string
+  disableAutoHide?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -213,7 +214,8 @@ const props = withDefaults(defineProps<Props>(), {
   showComments: false,
   coverImage: '@assets/images/Default.jpg',
   songId: '',
-  mainColor: '#rgb(0,0,0)'
+  mainColor: '#rgb(0,0,0)',
+  disableAutoHide: false
 })
 // 定义事件
 const emit = defineEmits(['toggle-fullscreen', 'idle-change', 'update:showComments'])
@@ -240,6 +242,16 @@ const resetIdleTimer = () => {
     return
   }
 
+  // 外部要求禁用自动隐藏（例如更多菜单打开时）
+  if (props.disableAutoHide) {
+    if (idleTimer) clearTimeout(idleTimer)
+    if (isIdle.value) {
+      isIdle.value = false
+      emit('idle-change', false)
+    }
+    return
+  }
+
   // 恢复显示时
   if (isIdle.value) {
     isIdle.value = false
@@ -250,7 +262,12 @@ const resetIdleTimer = () => {
 
   if (props.show) {
     idleTimer = setTimeout(() => {
-      if (props.show && playSetting.getAutoHideBottom && !showSettings.value) {
+      if (
+        props.show &&
+        playSetting.getAutoHideBottom &&
+        !showSettings.value &&
+        !props.disableAutoHide
+      ) {
         isIdle.value = true
         emit('idle-change', true)
       }
@@ -324,6 +341,21 @@ watch(
       if (idleTimer) clearTimeout(idleTimer)
       isIdle.value = false
       emit('idle-change', false)
+    } else {
+      resetIdleTimer()
+    }
+  }
+)
+
+watch(
+  () => props.disableAutoHide,
+  (val) => {
+    if (val) {
+      if (idleTimer) clearTimeout(idleTimer)
+      if (isIdle.value) {
+        isIdle.value = false
+        emit('idle-change', false)
+      }
     } else {
       resetIdleTimer()
     }
@@ -423,35 +455,42 @@ const jumpTime = (e) => {
   }
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
+// 背景渲染懒加载状态：仅在首次进入全屏时初始化 PIXI，避免在最小化播放栏期间空跑
+const bgInitialized = ref(false)
+let pendingAlbumImage: string | null = null
+
 // 监听封面图片变化
 watch(
   () => actualCoverImage.value,
   async (newImage) => {
-    // 更新背景图片
-    if (bgRef.value) {
-      // 尝试获取旧的纹理引用，以便在过渡后手动销毁以防止内存泄漏
-      // 注意：bgRef.value 是 CoreBackgroundRender 实例，需要访问内部属性
-      const renderer = bgRef.value as any
-      // 获取当前容器中的第一个子元素（Sprite）的纹理
-      const oldTexture = renderer.curContainer?.children?.[0]?.texture
+    // 若背景渲染器尚未初始化（用户还没打开过全屏），仅缓存待应用的封面，不触发任何 PIXI 工作
+    if (!bgRef.value) {
+      pendingAlbumImage = newImage
+      return
+    }
+    // 当处于隐藏状态时，缓存到下次显示再切（避免无意义的纹理上传）
+    if (!props.show) {
+      pendingAlbumImage = newImage
+      return
+    }
+    pendingAlbumImage = null
+    // 尝试获取旧的纹理引用，以便在过渡后手动销毁以防止内存泄漏
+    const renderer = bgRef.value as any
+    const oldTexture = renderer.curContainer?.children?.[0]?.texture
 
-      await bgRef.value.setAlbum(newImage, false)
+    await bgRef.value.setAlbum(newImage, false)
 
-      // 延迟销毁旧纹理，确保过渡动画（约1秒）完成
-      // 这里给予2秒的缓冲时间
-      if (oldTexture) {
-        setTimeout(() => {
-          // 检查纹理是否有效且未被销毁
-          // destroy(true) 会同时销毁 baseTexture，释放 WebGL 纹理内存
-          if (oldTexture.baseTexture && !oldTexture.baseTexture.destroyed) {
-            try {
-              oldTexture.destroy(true)
-            } catch (e) {
-              console.warn('Failed to clean up old album texture:', e)
-            }
+    // 延迟销毁旧纹理，确保过渡动画（约1秒）完成
+    if (oldTexture) {
+      setTimeout(() => {
+        if (oldTexture.baseTexture && !oldTexture.baseTexture.destroyed) {
+          try {
+            oldTexture.destroy(true)
+          } catch (e) {
+            console.warn('Failed to clean up old album texture:', e)
           }
-        }, 2000)
-      }
+        }
+      }, 2000)
     }
   },
   { immediate: true }
@@ -515,10 +554,49 @@ const initBackgroundRender = async () => {
   }
 }
 
-// 组件挂载时初始化
-onMounted(async () => {
+// 首次进入全屏时才创建 PIXI 实例；之后通过 pause/resume 控制是否产生 GPU 工作
+const ensureBackgroundRender = async () => {
+  if (bgRef.value) return
   await initBackgroundRender()
-})
+  // 应用挂载期间收集的最新封面（initBackgroundRender 内部已 setAlbum 一次，
+  // 但若期间封面 watch 又有更新，这里以最新为准）
+  if (bgRef.value && pendingAlbumImage) {
+    const img = pendingAlbumImage
+    pendingAlbumImage = null
+    try {
+      await (bgRef.value as any).setAlbum(img, false)
+    } catch {}
+  }
+  // 略微延迟标记，避免 PIXI 第一帧未刷出时露出黑色
+  requestAnimationFrame(() => {
+    bgInitialized.value = true
+  })
+}
+
+// 组件挂载时不主动创建背景渲染器（懒加载）
+onMounted(() => {})
+
+// 跟随全屏显隐控制背景渲染：显示时确保实例存在并 resume；隐藏时 pause 释放主线程/GPU
+watch(
+  () => props.show,
+  async (visible) => {
+    if (visible) {
+      await ensureBackgroundRender()
+      // 应用隐藏期间累积的待处理封面
+      if (bgRef.value && pendingAlbumImage) {
+        const img = pendingAlbumImage
+        pendingAlbumImage = null
+        try {
+          await bgRef.value.setAlbum(img, false)
+        } catch {}
+      }
+      bgRef.value?.resume()
+    } else {
+      bgRef.value?.pause()
+    }
+  },
+  { immediate: true }
+)
 
 // 组件卸载前清理订阅
 onBeforeUnmount(async () => {
@@ -590,6 +668,42 @@ const lightMainColor = computed(() => {
 const useBlackText = computed(() => {
   return player.value.coverDetail.useBlackText
 })
+
+// 由封面取色生成的纯色渐变背景，可控且色块干净，避免封面原图杂色
+const bgGradient = computed(() => {
+  const c = player.value.coverDetail.ColorObject
+  if (!c) {
+    return 'linear-gradient(135deg, #2a2a2e 0%, #1a1a1d 100%)'
+  }
+  const main = `rgb(${c.r}, ${c.g}, ${c.b})`
+  const dark = `rgb(${Math.round(c.r * 0.35)}, ${Math.round(c.g * 0.35)}, ${Math.round(c.b * 0.35)})`
+  const deep = `rgb(${Math.round(c.r * 0.18)}, ${Math.round(c.g * 0.18)}, ${Math.round(c.b * 0.18)})`
+  const accent = player.value.coverDetail.lightMainColor || main
+  return [
+    `radial-gradient(ellipse 60% 50% at 25% 20%, ${accent} 0%, transparent 55%)`,
+    `radial-gradient(ellipse 70% 60% at 80% 75%, ${main} 0%, transparent 60%)`,
+    `linear-gradient(135deg, ${dark} 0%, ${deep} 100%)`
+  ].join(', ')
+})
+
+// 双层渐变交替：bgGradient 变化时把"上一帧"放到 prev 层，让 current 层从 0 淡入，
+// 实现切歌时背景平滑过渡（background-image 本身不支持 transition）。
+const bgLayerA = ref('')
+const bgLayerB = ref('')
+const activeLayer = ref<'A' | 'B'>('A')
+watch(
+  bgGradient,
+  (next) => {
+    if (activeLayer.value === 'A') {
+      bgLayerB.value = next
+      activeLayer.value = 'B'
+    } else {
+      bgLayerA.value = next
+      activeLayer.value = 'A'
+    }
+  },
+  { immediate: true }
+)
 
 // 计算歌词颜色
 const lyricViewColor = computed(() => {
@@ -708,10 +822,22 @@ onUnmounted(() => {
       animating: isAnimating
     }"
   >
-    <!-- <ShaderBackground :cover-image="actualCoverImage" /> -->
+    <!-- 兜底渐变背景：双层交替淡入，由封面取色生成；切歌时颜色平滑过渡 -->
+    <div
+      class="bg-fallback bg-fallback-a"
+      :class="{ active: activeLayer === 'A' }"
+      :style="{ backgroundImage: bgLayerA }"
+    ></div>
+    <div
+      class="bg-fallback bg-fallback-b"
+      :class="{ active: activeLayer === 'B' }"
+      :style="{ backgroundImage: bgLayerB }"
+    ></div>
+    <!-- PIXI 背景渲染层：未进入全屏时不创建实例；隐藏时 pause -->
     <div
       ref="backgroundContainer"
-      style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1"
+      class="bg-render"
+      :class="{ 'bg-render-active': props.show && bgInitialized }"
     ></div>
     <div v-if="showFestivalEffects" ref="festivalOverlay" class="festival-overlay"></div>
     <!-- 全屏按钮 -->
@@ -954,6 +1080,79 @@ onUnmounted(() => {
   left: 90px;
 }
 
+/* 兜底渐变背景：基于封面取色，纯渐变干净可控；双层交替实现切歌平滑过渡 */
+.bg-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  contain: layout style;
+  will-change: opacity, transform;
+  transform: scale(1.08);
+  overflow: hidden;
+}
+.bg-fallback.active {
+  opacity: 1;
+  /* 缓慢呼吸位移，制造柔和动态感 */
+  animation: bg-breath 22s ease-in-out infinite alternate;
+}
+/* 旋转的柔光斑：用主色淡淡转一圈，不可控感被限制在固定范围 */
+.bg-fallback.active::after {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(
+      circle at 30% 30%,
+      rgba(255, 255, 255, 0.18),
+      transparent 35%
+    ),
+    radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.12), transparent 40%);
+  mix-blend-mode: overlay;
+  animation: bg-spin 36s linear infinite;
+  will-change: transform;
+}
+
+@keyframes bg-breath {
+  0% {
+    transform: scale(1.06) translate3d(-1%, -1%, 0);
+  }
+  50% {
+    transform: scale(1.12) translate3d(2%, 1%, 0);
+  }
+  100% {
+    transform: scale(1.08) translate3d(-1%, 2%, 0);
+  }
+}
+@keyframes bg-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* PIXI 背景层：仅全屏激活后淡入显示 */
+.bg-render {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  contain: strict;
+  will-change: opacity;
+}
+.bg-render-active {
+  opacity: 1;
+}
+
 .full-play {
   --height: calc(100vh - var(--play-bottom-height));
   --text-color: rgba(255, 255, 255, 0.9);
@@ -965,6 +1164,7 @@ onUnmounted(() => {
   width: 100vw;
   height: 100vh;
   color: var(--text-color);
+  overflow: hidden; /* 裁掉未全屏时 bg-fallback 的 blur 光晕外溢到主内容区 */
 
   &.animating {
     transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);

@@ -108,6 +108,7 @@
               <span class="version">{{ plugin.pluginInfo.version }}</span>
               <span v-if="isPluginSelected(plugin.pluginId)" class="current-tag">当前使用</span>
               <span v-if="isServicePlugin(plugin)" class="service-tag">服务插件</span>
+              <span v-if="plugin.disabled" class="disabled-tag">已禁用</span>
             </h3>
             <p class="author">作者: {{ plugin.pluginInfo.author }}</p>
             <p class="description">{{ plugin.pluginInfo.description || '无描述' }}</p>
@@ -358,6 +359,7 @@ interface Plugin {
   pluginInfo: PluginInfo
   supportedSources: { [key: string]: PluginSource }
   pluginType?: 'music-source' | 'service'
+  disabled?: boolean
 }
 
 // 定义API返回结果的接口
@@ -1120,6 +1122,16 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 500;
   box-shadow: 0 2px 4px rgba(58, 110, 216, 0.2);
+}
+
+.disabled-tag {
+  background: linear-gradient(135deg, #e64545, #b51d1d);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(181, 29, 29, 0.25);
 }
 
 .config-form {

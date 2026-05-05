@@ -308,6 +308,9 @@
       @item-click="handleContextMenuItemClick"
       @close="closeContextMenu"
     />
+
+    <!-- 分享对话框 -->
+    <ShareSongDialog v-model="shareDialogVisible" :song="shareTargetSong" />
   </div>
 </template>
 
@@ -323,7 +326,8 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   TimeIcon,
-  SwapIcon
+  SwapIcon,
+  ShareIcon
 } from 'tdesign-icons-vue-next'
 import ContextMenu from '../ContextMenu/ContextMenu.vue'
 import { createMenuItem, createSeparator, calculateMenuPosition } from '../ContextMenu/utils'
@@ -336,6 +340,7 @@ import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSync
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import { useAuthStore } from '@renderer/store'
 import { useSettingsStore } from '@renderer/store/Settings'
+import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 
 const settingsStore = useSettingsStore()
 
@@ -388,7 +393,7 @@ const props = withDefaults(defineProps<Props>(), {
   playlistId: '',
   multiSelect: false,
   bufferSize: 10,
-  coverConcurrency: 30,
+  coverConcurrency: 8,
   hideLocalSource: false,
   enableDownload: true
 })
@@ -428,6 +433,10 @@ const doubleClickDelay = 300 // 300ms 内的第二次点击视为双击
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
 const contextMenuSong = ref<Song | null>(null)
+
+// 分享对话框状态
+const shareDialogVisible = ref(false)
+const shareTargetSong = ref<Song | null>(null)
 
 // 排序相关状态
 type SortType =
@@ -956,6 +965,20 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       })
     )
   }
+  // 分享（非本地歌曲才能分享）
+  if (contextMenuSong.value?.source !== 'local') {
+    baseItems.push(
+      createMenuItem('share', '分享', {
+        icon: ShareIcon,
+        onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
+          if (contextMenuSong.value) {
+            shareTargetSong.value = contextMenuSong.value
+            shareDialogVisible.value = true
+          }
+        }
+      })
+    )
+  }
   // 如果是本地歌单，添加"移出本地歌单"选项
   if (props.isLocalPlaylist) {
     // 添加分隔线
@@ -1126,6 +1149,11 @@ const loadFavorites = async () => {
   }
 }
 
+const handlePlaylistUpdated = async () => {
+  await loadPlaylists()
+  await loadFavorites()
+}
+
 const isLiked = (song: Song) => likedSet.value.has(song.songmid)
 
 const ensureFavoritesId = async (): Promise<string | null> => {
@@ -1241,15 +1269,12 @@ onMounted(async () => {
   await loadFavorites()
 
   // 监听歌单变化事件
-  window.addEventListener('playlist-updated', async () => {
-    await loadPlaylists()
-    await loadFavorites()
-  })
+  window.addEventListener('playlist-updated', handlePlaylistUpdated)
 })
 
 onUnmounted(() => {
   // 清理事件监听器
-  window.removeEventListener('playlist-updated', loadPlaylists)
+  window.removeEventListener('playlist-updated', handlePlaylistUpdated)
 })
 
 // 切换到普通模式时清空选择
@@ -1267,8 +1292,7 @@ watch(
   (newSongs) => {
     const ids = new Set(newSongs.map((s) => s.songmid))
     selectedSet.value = new Set([...selectedSet.value].filter((id) => ids.has(id)))
-  },
-  { deep: true }
+  }
 )
 
 const scrollToSong = (songmid: string | number, source: string) => {

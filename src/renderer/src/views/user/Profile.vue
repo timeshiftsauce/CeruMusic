@@ -82,6 +82,36 @@
           </div>
         </div>
       </t-form>
+
+      <section class="security-section">
+        <div class="security-header">
+          <h2>账号安全</h2>
+          <p class="security-hint">
+            以下设置会在系统默认浏览器中跳转到澜音认证服务器（{{
+              logtoEndpointHost
+            }}）完成，操作过程中你的密码与设备凭据不会经过本应用。
+          </p>
+        </div>
+
+        <div v-for="group in securityGroups" :key="group.title" class="security-group">
+          <div class="security-group-title">{{ group.title }}</div>
+          <div class="security-rows">
+            <button
+              v-for="item in group.items"
+              :key="item.path"
+              type="button"
+              class="security-row"
+              @click="openAccountFlow(item)"
+            >
+              <div class="row-main">
+                <div class="row-label">{{ item.label }}</div>
+                <div class="row-sub">{{ resolveSub(item) }}</div>
+              </div>
+              <span class="row-arrow" aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -93,6 +123,7 @@ import { useAuthStore } from '@renderer/store/Auth'
 import { MessagePlugin } from 'tdesign-vue-next'
 import defaultAvatar from '@renderer/assets/user.webp'
 import displayName from '@renderer/utils/auth/displayName'
+import logtoConfig from '@renderer/config'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -111,6 +142,130 @@ const formData = reactive({
 const userAvatar = computed(() => {
   return authStore.user?.picture || defaultAvatar
 })
+
+interface SecurityItem {
+  label: string
+  path: string
+  identifierFrom?: 'email' | 'phone' | 'username'
+  fallbackSub?: string
+}
+interface SecurityGroup {
+  title: string
+  items: SecurityItem[]
+}
+
+const logtoEndpoint = (logtoConfig.endpoint || '').replace(/\/$/, '')
+const logtoEndpointHost = computed(() => {
+  try {
+    return new URL(logtoConfig.endpoint || 'https://').host
+  } catch {
+    return logtoConfig.endpoint || ''
+  }
+})
+
+const securityGroups: SecurityGroup[] = [
+  {
+    title: '基本身份',
+    items: [
+      {
+        label: '邮箱',
+        path: '/account/email',
+        identifierFrom: 'email',
+        fallbackSub: '绑定或修改登录邮箱'
+      },
+      {
+        label: '手机号',
+        path: '/account/phone',
+        identifierFrom: 'phone',
+        fallbackSub: '绑定或修改登录手机号'
+      },
+      {
+        label: '用户名',
+        path: '/account/username',
+        identifierFrom: 'username',
+        fallbackSub: '设置或修改登录用户名'
+      },
+      {
+        label: '密码',
+        path: '/account/password',
+        fallbackSub: '设置或修改登录密码'
+      }
+    ]
+  },
+  {
+    title: '通行密钥（Passkey）',
+    items: [
+      {
+        label: '添加 Passkey',
+        path: '/account/passkey/add',
+        fallbackSub: '使用指纹、Face ID 或安全密钥登录'
+      },
+      {
+        label: '管理 Passkey',
+        path: '/account/passkey/manage',
+        fallbackSub: '查看、重命名或移除已绑定的 Passkey'
+      }
+    ]
+  },
+  {
+    title: '两步验证',
+    items: [
+      {
+        label: '绑定验证器 App',
+        path: '/account/authenticator-app',
+        fallbackSub: '使用 Google Authenticator 等 TOTP 应用'
+      },
+      {
+        label: '更换验证器 App',
+        path: '/account/authenticator-app/replace',
+        fallbackSub: '更换或重新绑定验证器'
+      },
+      {
+        label: '生成备份码',
+        path: '/account/backup-codes/generate',
+        fallbackSub: '当无法使用验证器时用于登录'
+      },
+      {
+        label: '管理备份码',
+        path: '/account/backup-codes/manage',
+        fallbackSub: '查看剩余可用的备份码'
+      }
+    ]
+  }
+]
+
+function resolveIdentifier(item: SecurityItem): string {
+  const u: any = authStore.user
+  if (!u || !item.identifierFrom) return ''
+  switch (item.identifierFrom) {
+    case 'email':
+      return u.email || ''
+    case 'phone':
+      return u.phone_number || ''
+    case 'username':
+      return u.username || ''
+    default:
+      return ''
+  }
+}
+
+function resolveSub(item: SecurityItem): string {
+  const id = resolveIdentifier(item)
+  return id || item.fallbackSub || ''
+}
+
+function openAccountFlow(item: SecurityItem) {
+  if (!logtoEndpoint) {
+    MessagePlugin.error('未配置认证服务器地址')
+    return
+  }
+  const url = new URL(logtoEndpoint + item.path)
+  url.searchParams.set('ui_locales', 'zh-CN')
+  url.searchParams.set('show_success', 'true')
+  const id = resolveIdentifier(item)
+  if (id) url.searchParams.set('identifier', id)
+  window.open(url.toString())
+}
 
 onActivated(() => {
   if (authStore.user) {
@@ -319,5 +474,117 @@ const handleCancel = () => {
       max-width: 100%;
     }
   }
+}
+
+.security-section {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--td-component-stroke, rgba(0, 0, 0, 0.08));
+}
+
+.security-header {
+  margin-bottom: 1.25rem;
+
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+    margin: 0 0 6px;
+  }
+}
+
+.security-hint {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary, rgba(0, 0, 0, 0.55));
+  margin: 0;
+}
+
+.security-group {
+  margin-bottom: 1.5rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.security-group-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--td-text-color-secondary, rgba(0, 0, 0, 0.55));
+  margin: 0 0 8px;
+  padding-left: 4px;
+  text-transform: uppercase;
+}
+
+.security-rows {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--td-component-stroke, rgba(0, 0, 0, 0.08));
+  background: var(--td-bg-color-container, transparent);
+}
+
+.security-row {
+  appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: inherit;
+  border-bottom: 1px solid var(--td-component-stroke, rgba(0, 0, 0, 0.06));
+  transition: background-color 0.18s ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--td-bg-color-container-hover, rgba(0, 0, 0, 0.04));
+  }
+
+  &:active {
+    background: var(--td-bg-color-container-active, rgba(0, 0, 0, 0.06));
+  }
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  line-height: 1.4;
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--td-text-color-secondary, rgba(0, 0, 0, 0.55));
+  line-height: 1.5;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-arrow {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--td-text-color-placeholder, rgba(0, 0, 0, 0.35));
+  transition: transform 0.2s ease;
+}
+
+.security-row:hover .row-arrow {
+  transform: translate(2px, -2px);
+  color: var(--td-brand-color, #006eff);
 }
 </style>
