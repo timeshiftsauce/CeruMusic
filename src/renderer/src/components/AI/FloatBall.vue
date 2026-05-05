@@ -146,11 +146,12 @@ const handleMouseUp = () => {
   }
 }
 
-// 检查API Key是否已配置
+// 检查AI配置是否已配置
 const checkAPIKey = async (): Promise<boolean> => {
-  if (!userInfo.value.deepseekAPIkey) {
+  const cfg = userInfo.value.aiConfig
+  if (!cfg?.apiKey) {
     const errorMessage =
-      '请先配置 DeepSeek API Key 才能使用 AI 功能。\n\n请前往 设置 → DeepSeek API Key 配置 进行设置。'
+      '请先配置 AI 服务才能使用 AI 功能。\n\n请前往 设置 → AI 服务配置 进行设置。'
     messages.value.push({
       type: 'error',
       content: errorMessage,
@@ -301,9 +302,9 @@ const scrollToBottom = () => {
   })
 }
 
-// 监听API Key配置状态变化
+// 监听AI配置状态变化
 watch(
-  () => userInfo.value.deepseekAPIkey,
+  () => userInfo.value.aiConfig?.apiKey,
   async (newKey, oldKey) => {
     if (!oldKey && newKey) {
       clearErrorMessages()
