@@ -8,7 +8,8 @@ import {
   nextTick,
   onActivated,
   onDeactivated,
-  toRaw
+  toRaw,
+  h
 } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -38,13 +39,19 @@ import {
   DownloadIcon,
   CheckIcon,
   LockOnIcon,
-  ChatBubble1Icon
+  ChatBubble1Icon,
+  EllipsisIcon,
+  ShareIcon,
+  SoundIcon
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
 import { useDlnaStore } from '@renderer/store/dlna'
-import { crossfadeState } from '@renderer/utils/audio/crossfade'
+import { crossfadeState, crossfadeManager } from '@renderer/utils/audio/crossfade'
 import CrossfadeHint from './CrossfadeHint.vue'
+import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
+import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
+import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
 
 const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
@@ -151,6 +158,7 @@ watch(
 // 当前歌曲是否已在“我的喜欢”
 const likeState = ref(false)
 const isLiked = computed(() => likeState.value)
+let cachedFavoritesId: string | null = null
 
 const refreshLikeState = async () => {
   try {
@@ -158,13 +166,15 @@ const refreshLikeState = async () => {
       likeState.value = false
       return
     }
-    const favIdRes = await window.api.songList.getFavoritesId()
-    const favoritesId: string | null = (favIdRes && favIdRes.data) || null
-    if (!favoritesId) {
+    if (!cachedFavoritesId) {
+      const favIdRes = await window.api.songList.getFavoritesId()
+      cachedFavoritesId = (favIdRes && favIdRes.data) || null
+    }
+    if (!cachedFavoritesId) {
       likeState.value = false
       return
     }
-    const hasRes = await songListAPI.hasSong(favoritesId, userInfo.value.lastPlaySongId)
+    const hasRes = await songListAPI.hasSong(cachedFavoritesId, userInfo.value.lastPlaySongId)
     likeState.value = !!(hasRes.success && hasRes.data)
   } catch {
     likeState.value = false
@@ -337,6 +347,12 @@ const closePlaylist = () => {
 // 全局快捷控制事件由全局播放管理器处理
 // 初始化播放器
 
+let lyricLockHandler: ((_: any, lock: any) => void) | null = null
+let lyricOpenChangeHandler: ((_: any, visible: boolean) => void) | null = null
+let lyricCloseHandler: (() => void) | null = null
+let openPlaylistHandler: (() => void) | null = null
+let closePlaylistHandler: (() => void) | null = null
+
 function globalControls(e) {
   console.log('全局:', e)
   if (e.detail.name === 'toggleFullPlay') {
@@ -346,26 +362,25 @@ function globalControls(e) {
 
 onMounted(async () => {
   // 监听来自主进程的锁定状态广播
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_, lock) => {
+  lyricLockHandler = (_: any, lock: any) => {
     desktopLyricLocked.value = !!lock
-  })
-  window.electron?.ipcRenderer?.on?.(
-    'desktop-lyric-open-change',
-    async (_: any, visible: boolean) => {
-      desktopLyricOpen.value = !!visible
-      if (desktopLyricOpen.value) {
-        const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-        desktopLyricLocked.value = !!lock
-      } else {
-        desktopLyricLocked.value = false
-      }
+  }
+  lyricOpenChangeHandler = async (_: any, visible: boolean) => {
+    desktopLyricOpen.value = !!visible
+    if (desktopLyricOpen.value) {
+      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+      desktopLyricLocked.value = !!lock
+    } else {
+      desktopLyricLocked.value = false
     }
-  )
-  // 监听主进程通知关闭桌面歌词
-  window.electron?.ipcRenderer?.on?.('closeDesktopLyric', () => {
+  }
+  lyricCloseHandler = () => {
     desktopLyricOpen.value = false
     desktopLyricLocked.value = false
-  })
+  }
+  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', lyricLockHandler)
+  window.electron?.ipcRenderer?.on?.('desktop-lyric-open-change', lyricOpenChangeHandler)
+  window.electron?.ipcRenderer?.on?.('closeDesktopLyric', lyricCloseHandler)
   // 初始化同步当前打开与锁定状态
   try {
     const open = await window.electron?.ipcRenderer?.invoke?.('get-lyric-open-state')
@@ -374,36 +389,41 @@ onMounted(async () => {
     desktopLyricLocked.value = !!lock
   } catch {}
   window.addEventListener('global-music-control', globalControls)
-  const openPlaylistHandler = () => {
+  openPlaylistHandler = () => {
     showPlaylist.value = true
     nextTick(() => {
       playlistDrawerRef.value?.scrollToCurrentSong?.()
     })
   }
-  const closePlaylistHandler = () => {
+  closePlaylistHandler = () => {
     showPlaylist.value = false
   }
   window.addEventListener('open-playlist', openPlaylistHandler)
   window.addEventListener('close-playlist', closePlaylistHandler)
-  // stash handler for removal
-  ;(window as any).__open_playlist_handler__ = openPlaylistHandler
-  ;(window as any).__close_playlist_handler__ = closePlaylistHandler
 })
 
 // 组件卸载时清理
 onUnmounted(() => {
-  window.electron?.ipcRenderer?.removeAllListeners?.('toogleDesktopLyricLock')
-  window.electron?.ipcRenderer?.removeAllListeners?.('desktop-lyric-open-change')
-  window.electron?.ipcRenderer?.removeAllListeners?.('closeDesktopLyric')
+  if (lyricLockHandler) {
+    window.electron?.ipcRenderer?.removeListener?.('toogleDesktopLyricLock', lyricLockHandler)
+  }
+  if (lyricOpenChangeHandler) {
+    window.electron?.ipcRenderer?.removeListener?.(
+      'desktop-lyric-open-change',
+      lyricOpenChangeHandler
+    )
+  }
+  if (lyricCloseHandler) {
+    window.electron?.ipcRenderer?.removeListener?.('closeDesktopLyric', lyricCloseHandler)
+  }
   window.removeEventListener('global-music-control', globalControls)
-  try {
-    const h = (window as any).__open_playlist_handler__
-    if (h) window.removeEventListener('open-playlist', h)
-  } catch {}
-  try {
-    const h2 = (window as any).__close_playlist_handler__
-    if (h2) window.removeEventListener('close-playlist', h2)
-  } catch {}
+  if (openPlaylistHandler) window.removeEventListener('open-playlist', openPlaylistHandler)
+  if (closePlaylistHandler) window.removeEventListener('close-playlist', closePlaylistHandler)
+  lyricLockHandler = null
+  lyricOpenChangeHandler = null
+  lyricCloseHandler = null
+  openPlaylistHandler = null
+  closePlaylistHandler = null
 
   // 清理可能存在的拖动监听器
   window.removeEventListener('mousemove', handleVolumeDragMove)
@@ -491,6 +511,7 @@ const onToggleLike = async () => {
       // 持久化ID到主进程配置
       await window.api.songList.setFavoritesId(favoritesId)
     }
+    cachedFavoritesId = favoritesId
 
     // 根据当前状态决定添加或移除
     if (likeState.value) {
@@ -528,6 +549,196 @@ const onDownload = async () => {
   } catch (e: any) {
     console.error('下载失败:', e)
     MessagePlugin.error('下载失败，请稍后重试')
+  }
+}
+
+// 分享对话框
+const shareDialogVisible = ref(false)
+
+// 更多菜单是否打开（打开时阻止控制栏自动隐藏）
+const isMoreMenuOpen = ref(false)
+
+// 音质切换相关
+const qualityDisplayMap: Record<string, string> = {
+  low: '标准',
+  standard: '高品质',
+  high: '超高品质',
+  lossless: '无损',
+  '128k': '标准 128K',
+  '192k': '高品质 192K',
+  '320k': '超高品质 320K',
+  flac: '无损 FLAC',
+  flac24bit: '高解析度无损',
+  hires: '高清臻音',
+  atmos: '沉浸环绕声',
+  master: '超清母带'
+}
+
+const getQualityDisplayName = (quality: string) => qualityDisplayMap[quality] || quality
+
+// 当前歌曲是否支持音质切换（来自插件音源、且非 service 插件直链）
+const canSwitchQuality = computed(() => {
+  const src = (songInfo.value as any).source
+  if (!src || src === 'local') return false
+  if ((songInfo.value as any).url) return false
+  return true
+})
+
+// 当前歌曲对应音源插件支持的音质列表
+const currentSourceQualities = computed<string[]>(() => {
+  if (!canSwitchQuality.value) return []
+  const src = (songInfo.value as any).source
+  const sources = userInfo.value.supportedSources || {}
+  return sources[src]?.qualitys || []
+})
+
+// 当前歌曲使用的音质
+const currentQuality = computed(() => {
+  const src = (songInfo.value as any).source
+  if (!src) return ''
+  return (userInfo.value.sourceQualityMap || {})[src] || userInfo.value.selectQuality || ''
+})
+
+const switchingQuality = ref(false)
+
+// 切换音质：保留当前进度与播放状态
+const switchQuality = async (quality: string) => {
+  if (switchingQuality.value) return
+  if (!quality || quality === currentQuality.value) return
+  if (!canSwitchQuality.value) return
+
+  if (dlnaStore.currentDevice) {
+    MessagePlugin.warning('投屏模式下暂不支持切换音质')
+    return
+  }
+
+  const src = (songInfo.value as any).source
+  const currentSong = list.value.find((s) => s.songmid === userInfo.value.lastPlaySongId)
+  if (!currentSong) {
+    MessagePlugin.warning('当前没有正在播放的歌曲')
+    return
+  }
+
+  switchingQuality.value = true
+  // 取消可能正在进行的无感过渡，避免新旧 URL 抢占
+  crossfadeManager.cancel()
+
+  const savedTime = Audio.value.currentTime || Audio.value.audio?.currentTime || 0
+  const wasPlaying = Audio.value.isPlay && !!Audio.value.audio && !Audio.value.audio.paused
+
+  if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
+  userInfo.value.sourceQualityMap[src] = quality
+  if (userInfo.value.selectSources === src) {
+    userInfo.value.selectQuality = quality
+  }
+
+  const hideLoading = MessagePlugin.loading({
+    content: `正在切换到${getQualityDisplayName(quality)}...`,
+    duration: 0
+  })
+  const closeLoading = () => {
+    try {
+      const v = hideLoading as any
+      if (v && typeof v.close === 'function') v.close()
+      else if (v && typeof v.then === 'function') v.then((m: any) => m?.close && m.close())
+    } catch {}
+  }
+
+  try {
+    const newUrl = await getSongRealUrl(_.cloneDeep(toRaw(currentSong)) as any)
+    if (!newUrl || (typeof newUrl === 'string' && newUrl.includes('error'))) {
+      throw new Error('获取播放链接失败')
+    }
+
+    // 关键：先置 isPlay=false，避免 setUrl 内部触发 stop() 的异步音量淡出
+    // （否则后续 play() 时音量已被淡到 0，听起来像没有恢复播放）
+    Audio.value.isPlay = false
+    const a = Audio.value.audio
+    if (a) {
+      try {
+        a.pause()
+      } catch {}
+    }
+
+    controlAudio.setUrl(newUrl)
+
+    // 等待 GlobalAudio 中 srcA/srcB watcher 完成（pause -> nextTick -> load()）
+    // 否则其延迟的 load() 会在我们调用 play() 之后再触发一次重置，
+    // 表现为：刚切换到新音质就立刻被暂停。
+    await nextTick()
+    await nextTick()
+
+    if (Audio.value.audio) {
+      // 恢复用户音量（防止被前一次 stop 的淡出残留为 0）
+      Audio.value.audio.volume = (Audio.value.volume || 0) / 100
+
+      await waitForAudioReady(Audio.value.audio)
+      Audio.value.audio.currentTime = savedTime
+      controlAudio.setCurrentTime(savedTime)
+
+      if (wasPlaying) {
+        try {
+          await controlAudio.start()
+        } catch (e) {
+          console.warn('恢复播放失败:', e)
+        }
+      }
+    }
+
+    closeLoading()
+    MessagePlugin.success(`已切换到${getQualityDisplayName(quality)}`)
+  } catch (e: any) {
+    console.error('切换音质失败:', e)
+    closeLoading()
+    MessagePlugin.error('切换音质失败：' + (e?.message || '未知错误'))
+  } finally {
+    switchingQuality.value = false
+  }
+}
+
+// 更多菜单选项
+const moreMenuOptions = computed(() => {
+  const opts: any[] = [
+    {
+      label: '分享',
+      key: 'share',
+      icon: () => h(ShareIcon, { size: '16' }),
+      disabled: !songInfo.value.songmid
+    }
+  ]
+
+  if (currentSourceQualities.value.length > 0) {
+    const cur = currentQuality.value
+    opts.push({
+      label: cur ? `音质 · ${getQualityDisplayName(cur)}` : '音质',
+      key: 'quality',
+      icon: () => h(SoundIcon, { size: '16' }),
+      disabled: !songInfo.value.songmid || switchingQuality.value,
+      children: currentSourceQualities.value.map((q) => ({
+        label: getQualityDisplayName(q),
+        key: `quality:${q}`,
+        icon:
+          q === cur
+            ? () => h(CheckIcon, { size: '14', style: { color: 'var(--td-brand-color-5)' } })
+            : undefined,
+        disabled: switchingQuality.value
+      }))
+    })
+  }
+
+  return opts
+})
+
+const handleMoreMenuSelect = (key: string) => {
+  if (key === 'share') {
+    if (!songInfo.value.songmid) return
+    shareDialogVisible.value = true
+    return
+  }
+  if (typeof key === 'string' && key.startsWith('quality:')) {
+    const q = key.slice('quality:'.length)
+    void switchQuality(q)
+    return
   }
 }
 
@@ -589,9 +800,59 @@ const formatTime = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-// 当前播放时间和总时长的格式化显示
-const currentTimeFormatted = computed(() => formatTime(Audio.value.currentTime))
+// 拖动进度条时，时间显示同步反映拖动位置（而非松开后才更新）
+const displayCurrentTime = computed(() => {
+  if (isDraggingProgress.value) {
+    return (tempProgressPercentage.value / 100) * (Audio.value.duration || 0)
+  }
+  return Audio.value.currentTime
+})
+const currentTimeFormatted = computed(() => formatTime(displayCurrentTime.value))
 const durationFormatted = computed(() => formatTime(Audio.value.duration))
+
+// 进度条悬停 / 拖动时的鼠标位置 tooltip：显示对应时间与该时间点的歌词
+const isCursorOverProgress = ref(false)
+const cursorProgressPercentage = ref(0)
+const showProgressTooltip = computed(
+  () => (isCursorOverProgress.value || isDraggingProgress.value) && Audio.value.duration > 0
+)
+const cursorProgressTime = computed(
+  () => (cursorProgressPercentage.value / 100) * (Audio.value.duration || 0)
+)
+const cursorProgressTimeFormatted = computed(() => formatTime(cursorProgressTime.value))
+const cursorProgressLyric = computed(() => {
+  const lines = player.value.lyrics?.lines || []
+  if (lines.length === 0) return ''
+  const timeMs = cursorProgressTime.value * 1000
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line: any = lines[i]
+    if (line.startTime <= timeMs) {
+      const wordsText = (line.words || [])
+        .map((w: any) => w.word)
+        .join('')
+        .trim()
+      const text = wordsText || line.translatedLyric || line.romanLyric || ''
+      if (text) return text
+    }
+  }
+  return ''
+})
+
+const updateCursorPositionFromEvent = (event: MouseEvent) => {
+  if (!progressRef.value) return
+  const rect = progressRef.value.getBoundingClientRect()
+  const offsetX = Math.max(0, Math.min(event.clientX - rect.left, rect.width))
+  cursorProgressPercentage.value = (offsetX / rect.width) * 100
+}
+const handleProgressMouseEnter = () => {
+  isCursorOverProgress.value = true
+}
+const handleProgressMouseMove = (event: MouseEvent) => {
+  updateCursorPositionFromEvent(event)
+}
+const handleProgressMouseLeave = () => {
+  isCursorOverProgress.value = false
+}
 
 // 进度条拖动处理
 const handleProgressClick = (event: MouseEvent) => {
@@ -607,6 +868,7 @@ const handleProgressClick = (event: MouseEvent) => {
 
   // 更新临时进度值，使UI立即响应
   tempProgressPercentage.value = percentage
+  cursorProgressPercentage.value = percentage
 
   const wasPlaying = Audio.value.isPlay
   const newTime = (percentage / 100) * Audio.value.duration
@@ -641,6 +903,7 @@ const handleProgressDragMove = (event: MouseEvent) => {
 
   // 拖动时只更新UI，不频繁设置audio.currentTime
   tempProgressPercentage.value = percentage
+  cursorProgressPercentage.value = percentage
 }
 
 const handleProgressDragEnd = (event: MouseEvent) => {
@@ -720,14 +983,14 @@ const playbghover = computed(
 const bg = ref('var(--player-bg-default)')
 
 watch(
-  songInfo,
-  async (newVal) => {
+  () => songInfo.value.songmid,
+  (songmid) => {
     bg.value = bg.value === 'var(--player-bg-idle)' ? 'var(--player-bg-default)' : toRaw(bg.value)
-    if (!newVal.songmid) {
+    if (!songmid) {
       bg.value = 'var(--player-bg-idle)'
     }
   },
-  { deep: true, immediate: true }
+  { immediate: true }
 )
 
 watch(showFullPlay, (val) => {
@@ -744,7 +1007,7 @@ watch(showFullPlay, (val) => {
   <div
     class="player-container"
     :style="!showFullPlay && 'box-shadow: none'"
-    :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay }"
+    :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay && !isMoreMenuOpen }"
     @click.stop="toggleFullPlay"
   >
     <!-- 进度条 -->
@@ -754,6 +1017,9 @@ watch(showFullPlay, (val) => {
         class="progress-bar"
         @mousedown="handleProgressDragStart($event)"
         @click.stop="handleProgressClick"
+        @mouseenter="handleProgressMouseEnter"
+        @mousemove="handleProgressMouseMove"
+        @mouseleave="handleProgressMouseLeave"
       >
         <div class="progress-background"></div>
         <!-- 无感过渡预告区间标记 -->
@@ -776,11 +1042,26 @@ watch(showFullPlay, (val) => {
         ></div>
         <div class="progress-filled" :style="{ width: `${progressPercentage}%` }"></div>
         <div class="progress-handle" :style="{ left: `${progressPercentage}%` }"></div>
+        <!-- 鼠标悬停 / 拖动时的 tooltip：显示位置时间与对应歌词 -->
+        <transition name="progress-tip-fade">
+          <div
+            v-if="showProgressTooltip"
+            class="progress-tooltip"
+            :style="{ left: `${cursorProgressPercentage}%` }"
+            @click.stop
+            @mousedown.stop
+          >
+            <div v-if="cursorProgressLyric" class="progress-tooltip-lyric">
+              {{ cursorProgressLyric }}
+            </div>
+            <div class="progress-tooltip-time">{{ cursorProgressTimeFormatted }}</div>
+          </div>
+        </transition>
       </div>
     </div>
 
     <div class="player-content">
-      <!-- 左侧：封面和歌曲信息 -->
+      <!-- 左侧：封面 + 歌曲信息 + 歌曲操作 -->
       <div class="left-section">
         <div v-if="songInfo.songmid" class="album-cover">
           <img :src="player.cover || songCover" alt="专辑封面" />
@@ -794,7 +1075,7 @@ watch(showFullPlay, (val) => {
         <div class="left-actions">
           <t-tooltip :content="isLiked ? '已喜欢' : '喜欢'">
             <t-button
-              class="control-btn"
+              class="control-btn like-btn"
               variant="text"
               shape="circle"
               :disabled="!songInfo.songmid"
@@ -838,10 +1119,28 @@ watch(showFullPlay, (val) => {
               </t-tooltip>
             </div>
           </Transition>
+          <!-- 更多按钮 -->
+          <n-dropdown
+            trigger="click"
+            placement="top-start"
+            :options="moreMenuOptions"
+            @select="handleMoreMenuSelect"
+            @update:show="(s: boolean) => (isMoreMenuOpen = s)"
+          >
+            <t-button
+              class="control-btn"
+              shape="circle"
+              variant="text"
+              :disabled="!songInfo.songmid"
+              @click.stop
+            >
+              <ellipsis-icon size="18" />
+            </t-button>
+          </n-dropdown>
         </div>
       </div>
 
-      <!-- 中间：播放控制 -->
+      <!-- 中间：核心播放控制 -->
       <div class="center-controls">
         <t-button class="control-btn" variant="text" shape="circle" @click.stop="playPrevious">
           <span class="iconfont icon-shangyishou"></span>
@@ -862,20 +1161,47 @@ watch(showFullPlay, (val) => {
         </t-button>
       </div>
 
-      <!-- 右侧：时间和其他控制 -->
+      <!-- 右侧：时间 + 辅助控制 -->
       <div class="right-section">
-        <div class="time-display">{{ currentTimeFormatted }} / {{ durationFormatted }}</div>
+        <div class="time-display">
+          <span class="time-current">{{ currentTimeFormatted }}</span>
+          <span class="time-sep">/</span>
+          <span class="time-total">{{ durationFormatted }}</span>
+        </div>
 
         <div class="extra-controls">
           <!-- 播放模式按钮 -->
           <t-tooltip :content="playModeTip">
             <t-button
-              class="control-btn"
+              class="control-btn mode-btn"
               shape="circle"
               variant="text"
               @click.stop="updatePlayMode"
             >
-              <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.5em"></i>
+              <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.4em"></i>
+            </t-button>
+          </t-tooltip>
+
+          <!-- 桌面歌词开关按钮 -->
+          <t-tooltip
+            :content="
+              desktopLyricOpen ? (desktopLyricLocked ? '解锁歌词' : '关闭桌面歌词') : '打开桌面歌词'
+            "
+          >
+            <t-button
+              class="control-btn lyric-btn"
+              shape="circle"
+              variant="text"
+              :disabled="!songInfo.songmid"
+              @click.stop="toggleDesktopLyric"
+            >
+              <SvgIcon name="lyricOpen" size="18"></SvgIcon>
+              <transition name="fade" mode="out-in">
+                <template v-if="desktopLyricOpen">
+                  <LockOnIcon v-if="desktopLyricLocked" key="lock" class="lyric-lock" size="8" />
+                  <CheckIcon v-else key="check" class="lyric-check" size="8" />
+                </template>
+              </transition>
             </t-button>
           </t-tooltip>
 
@@ -910,29 +1236,6 @@ watch(showFullPlay, (val) => {
             </transition>
           </div>
 
-          <!-- 桌面歌词开关按钮 -->
-          <t-tooltip
-            :content="
-              desktopLyricOpen ? (desktopLyricLocked ? '解锁歌词' : '关闭桌面歌词') : '打开桌面歌词'
-            "
-          >
-            <t-button
-              class="control-btn lyric-btn"
-              shape="circle"
-              variant="text"
-              :disabled="!songInfo.songmid"
-              @click.stop="toggleDesktopLyric"
-            >
-              <SvgIcon name="lyricOpen" size="18"></SvgIcon>
-              <transition name="fade" mode="out-in">
-                <template v-if="desktopLyricOpen">
-                  <LockOnIcon v-if="desktopLyricLocked" key="lock" class="lyric-lock" size="8" />
-                  <CheckIcon v-else key="check" class="lyric-check" size="8" />
-                </template>
-              </transition>
-            </t-button>
-          </t-tooltip>
-
           <!-- 播放列表按钮 -->
           <t-tooltip content="播放列表">
             <n-badge :value="list.length" :max="99" color="#bbb">
@@ -958,6 +1261,7 @@ watch(showFullPlay, (val) => {
       :cover-image="player.cover"
       :song-info="songInfo"
       :main-color="maincolor"
+      :disable-auto-hide="isMoreMenuOpen"
       @toggle-fullscreen="toggleFullPlay"
       @idle-change="handleIdleChange"
     />
@@ -975,6 +1279,9 @@ watch(showFullPlay, (val) => {
 
   <!-- 无感过渡提示 -->
   <CrossfadeHint />
+
+  <!-- 分享对话框 -->
+  <ShareSongDialog v-model="shareDialogVisible" />
 </template>
 
 <style lang="scss" scoped>
@@ -1009,6 +1316,18 @@ watch(showFullPlay, (val) => {
 .comment-fade-leave-to {
   opacity: 0;
   transform: scale(0.9);
+}
+
+/* 进度条 tooltip 过渡 */
+.progress-tip-fade-enter-active,
+.progress-tip-fade-leave-active {
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.progress-tip-fade-enter-from,
+.progress-tip-fade-leave-to {
+  opacity: 0;
 }
 
 /* 加载动画 */
@@ -1099,7 +1418,8 @@ watch(showFullPlay, (val) => {
     background 0.3s;
   background: v-bind(bg);
   // border-top: 1px solid #e5e7eb;
-  backdrop-filter: blur(1000px);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
   z-index: 1000;
   height: var(--play-bottom-height);
   display: flex;
@@ -1227,6 +1547,56 @@ watch(showFullPlay, (val) => {
       }
     }
 
+    /* 进度条悬停 / 拖动时的位置 tooltip */
+    .progress-tooltip {
+      position: absolute;
+      bottom: calc(50% + 12px);
+      transform: translateX(-50%);
+      pointer-events: none;
+      background: rgba(0, 0, 0, 0.78);
+      color: #fff;
+      backdrop-filter: blur(10px);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 320px;
+      min-width: 56px;
+      text-align: center;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      white-space: normal;
+      z-index: 10;
+
+      &::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: -5px;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid rgba(0, 0, 0, 0.78);
+        transform: translateX(-50%);
+      }
+
+      .progress-tooltip-lyric {
+        font-size: 12px;
+        opacity: 0.95;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 300px;
+      }
+
+      .progress-tooltip-time {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.85;
+        margin-top: 2px;
+      }
+    }
+
     // 悬停或拖拽时，轻微加粗提升可见性
     &:hover {
       .progress-background,
@@ -1315,15 +1685,17 @@ watch(showFullPlay, (val) => {
 .left-actions {
   display: flex;
   align-items: center;
-  gap: 3px;
-  margin-left: 12px;
+  gap: 4px;
+  margin-left: 16px;
 
   .control-btn {
     background: transparent;
     border: none;
     color: v-bind(contrastTextColor);
     cursor: pointer;
-    padding: 4px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1348,21 +1720,24 @@ watch(showFullPlay, (val) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  flex: 1;
+  gap: 14px;
+  flex: 0 0 auto;
 
   .control-btn {
     background: transparent;
     border: none;
     color: v-bind(contrastTextColor);
     cursor: pointer;
-    padding: 5px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
 
     span {
-      font-size: 28px;
+      font-size: 26px;
+      line-height: 1;
     }
 
     &:hover {
@@ -1370,13 +1745,15 @@ watch(showFullPlay, (val) => {
     }
 
     &.play-btn {
+      width: 40px;
+      height: 40px;
       background-color: v-bind(playbg);
       transition: background-color 0.2s ease;
 
       border-radius: 50%;
 
       span {
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 800;
         color: v-bind(hoverColor);
       }
@@ -1394,32 +1771,52 @@ watch(showFullPlay, (val) => {
   }
 }
 
-/* 右侧：时间和其他控制 */
+/* 右侧：时间 + 辅助控制 */
 .right-section {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex: 1;
   justify-content: flex-end;
 
   .time-display {
     font-size: 12px;
-    line-height: 12px;
+    line-height: 1;
     color: v-bind(contrastTextColor);
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+
+    .time-current {
+      color: v-bind(hoverColor);
+      min-width: 32px;
+      text-align: right;
+    }
+    .time-sep {
+      opacity: 0.5;
+    }
+    .time-total {
+      opacity: 0.75;
+      min-width: 32px;
+      text-align: left;
+    }
   }
 
   .extra-controls {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 
     .control-btn {
       background: transparent;
       border: none;
       color: v-bind(contrastTextColor);
       cursor: pointer;
-      padding: 4px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1553,7 +1950,7 @@ watch(showFullPlay, (val) => {
   }
 
   .center-controls {
-    gap: 8px;
+    gap: 10px;
   }
 
   .right-section .extra-controls {
@@ -1564,6 +1961,10 @@ watch(showFullPlay, (val) => {
 @media (max-width: 576px) {
   .left-section .song-info {
     max-width: 120px;
+  }
+
+  .left-actions .comment-btn-wrapper {
+    display: none;
   }
 
   .right-section .extra-controls .control-btn:nth-child(1) {

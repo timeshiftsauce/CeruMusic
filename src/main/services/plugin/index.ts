@@ -16,7 +16,35 @@ import { getPluginConfig, savePluginConfig, deletePluginConfig } from './pluginC
 // 存储已加载的插件实例
 const loadedPlugins = {}
 
+/** 全局限流回调，由 main/index.ts 注入 */
+let _throttleHandler: ((pluginId: string, reason: string, duration?: number) => void) | null = null
+/** 全局禁用回调，由 main/index.ts 注入。插件因崩溃次数过多被永久禁用时触发。 */
+let _disabledHandler: ((pluginId: string, reason: string) => void) | null = null
+
 const pluginService = {
+  /**
+   * 设置全局限流处理器（由 main/index.ts 在启动时注入）。
+   * 当任意插件调用 stopRequests 时触发。
+   */
+  setThrottleHandler(handler: (pluginId: string, reason: string, duration?: number) => void) {
+    _throttleHandler = handler
+    // 同步更新已加载的所有插件 host
+    for (const host of Object.values(loadedPlugins) as CeruMusicPluginHost[]) {
+      host.onThrottle = handler
+    }
+  },
+
+  /**
+   * 设置全局禁用处理器（由 main/index.ts 在启动时注入）。
+   * 当任意插件被永久禁用时触发，通常用于 IPC 通知渲染端 + 弹窗。
+   */
+  setDisabledHandler(handler: (pluginId: string, reason: string) => void) {
+    _disabledHandler = handler
+    for (const host of Object.values(loadedPlugins) as CeruMusicPluginHost[]) {
+      host.onDisabled = handler
+    }
+  },
+
   async selectAndAddPlugin(type: 'lx' | 'cr') {
     try {
       // 打开文件选择对话框
@@ -63,11 +91,15 @@ const pluginService = {
 
   async addPlugin(pluginCode: string, pluginName: string, targetPluginId?: string) {
     try {
-      // 首先解析插件信息
+      // 首先解析插件信息（在隔离 worker 内验证；用完立即销毁）
       const tempPluginManager = new CeruMusicPluginHost(pluginCode, new Logger('temp'))
-
-      // 验证插件信息
-      const pluginInfo = tempPluginManager.getPluginInfo()
+      let pluginInfo: any
+      try {
+        await tempPluginManager.ensureReady()
+        pluginInfo = tempPluginManager.getPluginInfo()
+      } finally {
+        await tempPluginManager.destroy()
+      }
       if (!pluginInfo || !pluginInfo.name || !pluginInfo.version || !pluginInfo.author) {
         throw new Error('插件信息不完整，必须包含名称、版本和作者信息')
       }
@@ -112,6 +144,11 @@ const pluginService = {
         }
 
         if (loadedPlugins[pluginId]) {
+          try {
+            await loadedPlugins[pluginId].destroy()
+          } catch (e) {
+            console.warn('销毁旧插件 host 失败:', e)
+          }
           delete loadedPlugins[pluginId]
         }
       }
@@ -121,11 +158,13 @@ const pluginService = {
       const filePath = path.join(pluginsDir, `${pluginId}-${safePluginName}`)
 
       // 写入插件文件
-      await fsPromise.writeFile(filePath, tempPluginManager.getPluginCode() as string)
+      await fsPromise.writeFile(filePath, pluginCode)
 
       // 重新加载插件以确保正确初始化
       const ceruPluginManager = new CeruMusicPluginHost()
       ceruPluginManager.pluginId = pluginId
+      ceruPluginManager.onThrottle = _throttleHandler
+      ceruPluginManager.onDisabled = _disabledHandler
       await ceruPluginManager.loadPlugin(filePath, new Logger(pluginId))
 
       // 将插件添加到已加载插件列表
@@ -167,8 +206,13 @@ const pluginService = {
       const pluginPath = path.join(pluginsDir, pluginFile)
       await fsPromise.unlink(pluginPath)
 
-      // 从已加载插件中移除
+      // 销毁 worker 后再从已加载列表中移除
       if (loadedPlugins[pluginId]) {
+        try {
+          await loadedPlugins[pluginId].destroy()
+        } catch (e) {
+          console.warn('销毁插件 host 失败:', e)
+        }
         delete loadedPlugins[pluginId]
       }
 
@@ -199,8 +243,15 @@ const pluginService = {
         return []
       }
 
-      // 清空已加载的插件
-      Object.keys(loadedPlugins).forEach((key) => delete loadedPlugins[key])
+      // 清空已加载的插件（先销毁 worker）
+      await Promise.all(
+        Object.keys(loadedPlugins).map(async (key) => {
+          try {
+            await loadedPlugins[key].destroy()
+          } catch {}
+          delete loadedPlugins[key]
+        })
+      )
 
       const results = await Promise.all(
         files.map(async (file) => {
@@ -219,6 +270,8 @@ const pluginService = {
             // 加载插件
             const ceruPluginManager = new CeruMusicPluginHost()
             ceruPluginManager.pluginId = pluginId
+            ceruPluginManager.onThrottle = _throttleHandler
+            ceruPluginManager.onDisabled = _disabledHandler
             await ceruPluginManager.loadPlugin(fullPath, new Logger(pluginId))
 
             // 获取插件信息
@@ -261,7 +314,8 @@ const pluginService = {
         pluginId,
         pluginName: pluginId.split('-')[1] || pluginId,
         pluginInfo: ceruPluginManager.getPluginInfo(),
-        supportedSources: ceruPluginManager.getSupportedSources()
+        supportedSources: ceruPluginManager.getSupportedSources(),
+        disabled: ceruPluginManager.isDisabled()
       }
     })
   },
@@ -388,6 +442,18 @@ const pluginService = {
     if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
     const config = getPluginConfig(pluginId)
     return await plugin.getServiceLyric(config, songInfo)
+  },
+
+  /** 应用退出前调用，销毁所有插件 worker，避免阻塞退出。 */
+  async disposeAll() {
+    await Promise.all(
+      Object.keys(loadedPlugins).map(async (key) => {
+        try {
+          await loadedPlugins[key].destroy()
+        } catch {}
+        delete loadedPlugins[key]
+      })
+    )
   }
 }
 

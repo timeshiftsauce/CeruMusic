@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.9.11",
+  "version": "1.9.13",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -39,6 +39,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@langchain/core": "^0.3.71",
     "@langchain/deepseek": "^0.1.0",
+    "@langchain/openai": "^0.6.7",
     "@logto/browser": "^3.0.10",
     "@logto/vue": "^3.0.10",
     "@lrc-player/core": "^1.1.5",
@@ -77,6 +78,7 @@
     "p-limit": "^3.1.0",
     "pinia": "^3.0.3",
     "pinia-plugin-persistedstate": "4.5.0",
+    "qrcode": "^1.5.4",
     "tdesign-icons-vue-next": "^0.4.1",
     "tdesign-vue-next": "^1.15.2",
     "upnp-mediarenderer-client": "^1.4.0",
@@ -98,6 +100,7 @@
     "@types/node": "^22.16.5",
     "@types/node-fetch": "^2.6.13",
     "@types/node-ssdp": "^4.0.5",
+    "@types/qrcode": "^1.5.6",
     "@types/upnp-mediarenderer-client": "^1.4.3",
     "@types/uuid": "^11.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
@@ -130,6 +133,9 @@
     "vue-tsc": "3.0.3"
   },
   "resolutions": {
-    "node-abi": "^3.71.0"
+    "node-abi": "^3.71.0",
+    "buffer": "^6.0.3",
+    "@langchain/core": "^0.3.71",
+    "@langchain/openai": "^0.6.7"
   }
 }

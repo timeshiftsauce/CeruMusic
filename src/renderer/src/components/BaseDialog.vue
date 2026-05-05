@@ -94,7 +94,7 @@ onBeforeUnmount(() => lockScroll(false))
     ),
     var(--td-mask-disabled, rgba(0, 0, 0, 0.6));
   backdrop-filter: saturate(120%) blur(3px);
-  z-index: 888;
+  z-index: 5555;
 }
 .bd-wrapper {
   position: fixed;
@@ -104,7 +104,7 @@ onBeforeUnmount(() => lockScroll(false))
   justify-content: center;
   padding: 24px;
   pointer-events: none;
-  z-index: 999999;
+  z-index: 5556;
 }
 .bd-card {
   pointer-events: auto;

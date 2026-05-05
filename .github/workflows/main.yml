@@ -17,7 +17,9 @@ jobs:
       fail-fast: false # 即使一个平台失败，其他平台继续运行
       matrix:
         # 定义运行环境：Windows, macOS, Linux
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # macos-13 = Intel x64 runner, macos-latest = Apple Silicon arm64 runner
+        # 两台 mac runner 各自构建对应架构,避免 universal 包对 native module(better-sqlite3) 的二进制冲突
+        os: [windows-latest, macos-13, macos-latest, ubuntu-latest]
 
     steps:
       - name: Check out git repository
@@ -67,9 +69,35 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: yarn run build:win
 
-      - name: Build Electron App for macos
+      - name: Build Electron App for macOS Intel (x64)
+        if: matrix.os == 'macos-13'
+        shell: bash
+        env:
+          # macOS 代码签名 + 公证(Apple notarization)所需环境变量
+          # CSC_LINK / CSC_KEY_PASSWORD 由 electron-builder 用于导入 Developer ID Application 证书
+          # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 由 notarytool 用于提交公证
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
+          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          yarn run build:mac:intel
+
+      - name: Build Electron App for macOS Apple Silicon (arm64)
         if: matrix.os == 'macos-latest'
-        run: yarn run build:mac:universal
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          yarn run build:mac:arm64
 
       - name: Build Electron App for linux
         if: matrix.os == 'ubuntu-latest'
@@ -81,7 +109,7 @@ jobs:
           npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"
 
       - name: Cleanup Artifacts for MacOS
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
           npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
 
