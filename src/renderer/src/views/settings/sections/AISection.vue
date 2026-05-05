@@ -1,77 +1,185 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import AIFloatBallSettings from '@renderer/components/Settings/AIFloatBallSettings.vue'
+import type { AIProvider, AIConfig } from '@renderer/types/userInfo'
 
 const userStore = LocalUserDetailStore()
 const { userInfo } = storeToRefs(userStore)
 
-// DeepSeek API Key Configuration
-const deepseekAPIkey = ref<string>(userInfo.value.deepseekAPIkey || '')
-const isEditingAPIKey = ref<boolean>(false)
+const providers: Array<{ value: AIProvider; label: string }> = [
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'siliconflow', label: '硅基流动' },
+  { value: 'custom', label: '自定义' }
+]
 
-const saveAPIKey = (): void => {
-  userInfo.value.deepseekAPIkey = deepseekAPIkey.value.trim()
-  isEditingAPIKey.value = false
-  console.log('DeepSeek API Key 已保存')
+const defaultConfigs: Record<AIProvider, { baseURL: string; model: string }> = {
+  deepseek: { baseURL: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  siliconflow: { baseURL: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3' },
+  custom: { baseURL: '', model: '' }
 }
 
-const startEditAPIKey = (): void => {
-  isEditingAPIKey.value = true
+// 初始化 aiConfig（兼容旧版 deepseekAPIkey）
+const initAIConfig = (): AIConfig => {
+  const existing = userInfo.value.aiConfig
+  if (existing?.provider) {
+    return { ...existing }
+  }
+  // 兼容旧版配置
+  if (userInfo.value.deepseekAPIkey) {
+    return {
+      provider: 'deepseek',
+      apiKey: userInfo.value.deepseekAPIkey,
+      baseURL: defaultConfigs.deepseek.baseURL,
+      model: defaultConfigs.deepseek.model
+    }
+  }
+  return { provider: 'deepseek', apiKey: '', baseURL: '', model: '' }
 }
 
-const cancelEditAPIKey = (): void => {
-  deepseekAPIkey.value = userInfo.value.deepseekAPIkey || ''
-  isEditingAPIKey.value = false
+const aiConfig = ref<AIConfig>(initAIConfig())
+const isEditing = ref<boolean>(false)
+
+const selectedProvider = computed<AIProvider>({
+  get: () => aiConfig.value.provider || 'deepseek',
+  set: (val: AIProvider) => {
+    aiConfig.value.provider = val
+    const defaults = defaultConfigs[val]
+    aiConfig.value.baseURL = defaults.baseURL
+    aiConfig.value.model = defaults.model
+  }
+})
+
+const isCustom = computed(() => selectedProvider.value === 'custom')
+
+const isConfigured = computed(() => {
+  const cfg = userInfo.value.aiConfig
+  if (!cfg?.apiKey) return false
+  if (cfg.provider === 'custom' && (!cfg.baseURL || !cfg.model)) return false
+  return true
+})
+
+const providerLabel = computed(() => {
+  return providers.find((p) => p.value === userInfo.value.aiConfig?.provider)?.label || '未配置'
+})
+
+const saveConfig = (): void => {
+  const cfg: AIConfig = {
+    provider: aiConfig.value.provider,
+    apiKey: aiConfig.value.apiKey?.trim() || '',
+    baseURL: aiConfig.value.baseURL?.trim() || '',
+    model: aiConfig.value.model?.trim() || ''
+  }
+  userInfo.value.aiConfig = cfg
+  isEditing.value = false
 }
 
-const clearAPIKey = (): void => {
-  deepseekAPIkey.value = ''
-  userInfo.value.deepseekAPIkey = ''
-  isEditingAPIKey.value = false
-  console.log('DeepSeek API Key 已清空')
+const startEdit = (): void => {
+  aiConfig.value = initAIConfig()
+  isEditing.value = true
 }
+
+const cancelEdit = (): void => {
+  aiConfig.value = initAIConfig()
+  isEditing.value = false
+}
+
+const clearConfig = (): void => {
+  aiConfig.value = { provider: 'deepseek', apiKey: '', baseURL: '', model: '' }
+  userInfo.value.aiConfig = { provider: 'deepseek', apiKey: '', baseURL: '', model: '' }
+  isEditing.value = false
+}
+
+// 监听外部变化
+watch(
+  () => userInfo.value.aiConfig,
+  (newVal) => {
+    if (newVal && !isEditing.value) {
+      aiConfig.value = { ...newVal }
+    }
+  },
+  { deep: true }
+)
 </script>
 
 <template>
   <div class="settings-section">
     <div id="ai-api-config" class="setting-group">
-      <h3>DeepSeek API 配置</h3>
-      <p>配置您的 DeepSeek API Key 以使用 AI 功能</p>
+      <h3>AI 服务配置</h3>
+      <p>配置您的 AI 服务以使用 AI 助手功能</p>
 
       <div class="api-key-section">
-        <div class="api-key-input-group">
-          <label for="deepseek-api-key">API Key:</label>
-          <div class="input-container">
+        <!-- 查看模式 -->
+        <div v-if="!isEditing" class="config-display">
+          <div class="config-item">
+            <span class="config-label">服务商：</span>
+            <span class="config-value">{{ providerLabel }}</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">API Key：</span>
+            <span class="config-value">{{ isConfigured ? '已配置' : '未配置' }}</span>
+          </div>
+          <div v-if="userInfo.aiConfig?.model" class="config-item">
+            <span class="config-label">模型：</span>
+            <span class="config-value">{{ userInfo.aiConfig.model }}</span>
+          </div>
+          <div class="config-actions">
+            <t-button theme="primary" @click="startEdit">
+              {{ isConfigured ? '编辑' : '配置' }}
+            </t-button>
+            <t-button v-if="isConfigured" theme="danger" @click="clearConfig"> 清空 </t-button>
+          </div>
+        </div>
+
+        <!-- 编辑模式 -->
+        <div v-else class="config-edit">
+          <div class="input-group">
+            <label>服务商：</label>
+            <t-select v-model="selectedProvider" :options="providers" />
+          </div>
+
+          <div class="input-group">
+            <label for="ai-api-key">API Key：</label>
             <t-input
-              id="deepseek-api-key"
-              v-model="deepseekAPIkey"
-              :type="isEditingAPIKey ? 'text' : 'password'"
-              :readonly="!isEditingAPIKey"
-              :placeholder="isEditingAPIKey ? '请输入您的 DeepSeek API Key' : '未配置 API Key'"
-              class="api-key-input"
+              id="ai-api-key"
+              v-model="aiConfig.apiKey"
+              type="password"
+              placeholder="请输入 API Key"
             />
-            <div class="input-actions">
-              <t-button v-if="!isEditingAPIKey" theme="primary" @click="startEditAPIKey">
-                {{ userInfo.deepseekAPIkey ? '编辑' : '配置' }}
-              </t-button>
-              <template v-else>
-                <t-button theme="primary" @click="saveAPIKey"> 保存 </t-button>
-                <t-button theme="default" @click="cancelEditAPIKey"> 取消 </t-button>
-                <t-button theme="danger" @click="clearAPIKey"> 清空 </t-button>
-              </template>
-            </div>
+          </div>
+
+          <div v-if="isCustom" class="input-group">
+            <label for="ai-base-url">Base URL：</label>
+            <t-input
+              id="ai-base-url"
+              v-model="aiConfig.baseURL"
+              placeholder="https://api.example.com/v1"
+            />
+          </div>
+
+          <div class="input-group">
+            <label for="ai-model">模型：</label>
+            <t-input
+              id="ai-model"
+              v-model="aiConfig.model"
+              :placeholder="defaultConfigs[selectedProvider].model"
+            />
+          </div>
+
+          <div class="input-actions">
+            <t-button theme="primary" @click="saveConfig">保存</t-button>
+            <t-button theme="default" @click="cancelEdit">取消</t-button>
           </div>
         </div>
 
         <div class="api-key-status">
           <div class="status-indicator">
-            <span
-              :class="['status-dot', userInfo.deepseekAPIkey ? 'configured' : 'not-configured']"
-            ></span>
+            <span :class="['status-dot', isConfigured ? 'configured' : 'not-configured']"></span>
             <span class="status-text">
-              {{ userInfo.deepseekAPIkey ? 'API Key 已配置' : 'API Key 未配置' }}
+              {{ isConfigured ? 'AI 服务已配置' : 'AI 服务未配置' }}
             </span>
           </div>
         </div>
@@ -79,13 +187,9 @@ const clearAPIKey = (): void => {
         <div class="api-key-tips">
           <h4>使用说明：</h4>
           <ul>
-            <li>
-              请前往
-              <a href="https://platform.deepseek.com/" target="_blank">DeepSeek 官网</a>
-              获取您的 API Key
-            </li>
+            <li>支持 DeepSeek、OpenAI、硅基流动及自定义 OpenAI 兼容接口</li>
             <li>API Key 将安全存储在本地，不会上传到服务器</li>
-            <li>配置后即可使用 AI 相关功能</li>
+            <li>配置后即可使用 AI 助手功能</li>
           </ul>
         </div>
       </div>
@@ -137,38 +241,57 @@ const clearAPIKey = (): void => {
 }
 
 .api-key-section {
-  .api-key-input-group {
+  .config-display {
     margin-bottom: 1rem;
 
-    label {
-      display: block;
-      font-weight: 600;
-      color: var(--settings-text-primary);
+    .config-item {
+      display: flex;
+      align-items: center;
       margin-bottom: 0.5rem;
       font-size: 0.875rem;
+
+      .config-label {
+        font-weight: 600;
+        color: var(--settings-text-primary);
+        min-width: 80px;
+      }
+
+      .config-value {
+        color: var(--settings-text-secondary);
+      }
     }
 
-    .input-container {
+    .config-actions {
       display: flex;
-      gap: 0.75rem;
-      align-items: flex-start;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+  }
 
-      .api-key-input {
-        flex: 1;
+  .config-edit {
+    margin-bottom: 1rem;
+
+    .input-group {
+      margin-bottom: 1rem;
+
+      label {
+        display: block;
+        font-weight: 600;
+        color: var(--settings-text-primary);
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
       }
 
-      .input-actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-shrink: 0;
-
-        .t-button {
-          transition: all 0.2s ease;
-          &:hover {
-            transform: translateY(-1px);
-          }
-        }
+      .t-input,
+      .t-select {
+        width: 100%;
       }
+    }
+
+    .input-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
     }
   }
 
@@ -225,15 +348,6 @@ const clearAPIKey = (): void => {
 
         &:last-child {
           margin-bottom: 0;
-        }
-
-        a {
-          color: var(--td-brand-color-5);
-          text-decoration: none;
-
-          &:hover {
-            text-decoration: underline;
-          }
         }
       }
     }
