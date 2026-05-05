@@ -548,6 +548,15 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // 拦截 Ctrl+W，防止误触关闭窗口导致程序退出
+  app.on('browser-window-created', (_, window) => {
+    window.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'w') {
+        event.preventDefault()
+      }
+    })
+  })
+
   // Initialize plugins before starting download manager
   try {
     console.log('Initializing plugins...')
