@@ -19,10 +19,12 @@
 import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { useSettingsStore } from '@renderer/store/Settings'
 import shareAPI from '@renderer/api/share'
 
 const route = useRoute()
 const router = useRouter()
+const settingsStore = useSettingsStore()
 // 启动页路由是 '/'(welcome)；其它路由（/home/*, /settings 等）视为应用就绪
 // 排除桌面歌词与识别 worker 这种独立窗口
 const isAppReady = computed(() => {
@@ -153,6 +155,22 @@ watch(isAppReady, (ready) => {
 
 let unsubShareOpen: (() => void) | null = null
 let unsubPlaylistShareOpen: (() => void) | null = null
+let unsubCloseRequest: (() => void) | null = null
+
+// 处理 Ctrl+W / Alt+F4 的关闭请求，模拟点击关闭按钮行为
+const handleWindowCloseRequest = () => {
+  const settings = settingsStore.settings
+  if (!settings.hasConfiguredCloseBehavior) {
+    // 未配置过关闭行为，通过自定义事件通知 TitleBarControls 显示对话框
+    window.dispatchEvent(new CustomEvent('ceru-show-close-dialog'))
+    return
+  }
+  if (settings.closeToTray) {
+    window.api?.setMiniMode(true)
+  } else {
+    window.api?.close()
+  }
+}
 
 onMounted(async () => {
   if (window?.api?.share?.onShareOpen) {
@@ -171,6 +189,11 @@ onMounted(async () => {
   } catch (e) {
     console.warn('[share] 拉取待处理分享 id 失败', e)
   }
+
+  // 监听主进程发送的关闭请求（Ctrl+W / Alt+F4）
+  if (window.api?.windowClose?.onRequest) {
+    unsubCloseRequest = window.api.windowClose.onRequest(() => handleWindowCloseRequest())
+  }
 })
 
 onBeforeUnmount(() => {
@@ -178,5 +201,7 @@ onBeforeUnmount(() => {
   unsubShareOpen = null
   unsubPlaylistShareOpen?.()
   unsubPlaylistShareOpen = null
+  unsubCloseRequest?.()
+  unsubCloseRequest = null
 })
 </script>

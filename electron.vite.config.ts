@@ -32,7 +32,7 @@ export default defineConfig({
             if (imgReg.test(chunkInfo.names[0])) return 'images/[name]-[hash].[ext]'
             // 其他资源
             return 'assets/[name]-[hash].[ext]'
-          },
+          }
         }
       },
       minify: 'terser'

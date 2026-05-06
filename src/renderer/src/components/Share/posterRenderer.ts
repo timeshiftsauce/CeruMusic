@@ -880,7 +880,7 @@ async function renderLyric(data: PosterData, ctx: CanvasRenderingContext2D): Pro
   try {
     const qr = await renderQrCanvas(data.shareUrl, qrSize)
     ctx.drawImage(qr, qrX + qrPad, qrY + qrPad, qrSize, qrSize)
-  } catch { }
+  } catch {}
 
   ctx.save()
   ctx.fillStyle = 'rgba(255,255,255,0.92)'
@@ -889,7 +889,13 @@ async function renderLyric(data: PosterData, ctx: CanvasRenderingContext2D): Pro
   ctx.textAlign = 'left'
   const lyricBrandLogoSize = 26
   const lyricBrandCenterY = footerY + 18
-  await drawBrandLogo(ctx, headPad, lyricBrandCenterY - lyricBrandLogoSize / 2, lyricBrandLogoSize, 7)
+  await drawBrandLogo(
+    ctx,
+    headPad,
+    lyricBrandCenterY - lyricBrandLogoSize / 2,
+    lyricBrandLogoSize,
+    7
+  )
   ctx.fillText(`${DEFAULT_BRAND}`, headPad + lyricBrandLogoSize + 10, lyricBrandCenterY)
 
   ctx.fillStyle = 'rgba(255,255,255,0.5)'
@@ -1030,7 +1036,7 @@ async function renderMinimal(data: PosterData, ctx: CanvasRenderingContext2D): P
   try {
     const qr = await renderQrCanvas(data.shareUrl, qrSize)
     ctx.drawImage(qr, qrX, qrY, qrSize, qrSize)
-  } catch { }
+  } catch {}
 
   // 底部
   ctx.save()
@@ -1328,7 +1334,7 @@ async function renderPolaroid(data: PosterData, ctx: CanvasRenderingContext2D): 
   try {
     const qr = await renderQrCanvas(data.shareUrl, qrSize)
     ctx.drawImage(qr, qrX, qrY, qrSize, qrSize)
-  } catch { }
+  } catch {}
 }
 
 // ============= Dispatcher =============
