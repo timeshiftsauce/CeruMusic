@@ -190,10 +190,20 @@
         {{ phase === 'success' ? '关闭' : '取消' }}
       </t-button>
       <template v-if="phase === 'success'">
-        <t-button theme="default" variant="outline" :disabled="!shareResult?.url" @click="copyShareLink">
+        <t-button
+          theme="default"
+          variant="outline"
+          :disabled="!shareResult?.url"
+          @click="copyShareLink"
+        >
           复制链接
         </t-button>
-        <t-button theme="primary" :loading="posterSaving" :disabled="!posterDataUrl" @click="savePoster">
+        <t-button
+          theme="primary"
+          :loading="posterSaving"
+          :disabled="!posterDataUrl"
+          @click="savePoster"
+        >
           保存分享图
         </t-button>
       </template>

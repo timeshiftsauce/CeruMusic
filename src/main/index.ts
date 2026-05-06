@@ -548,11 +548,15 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // 拦截 Ctrl+W，防止误触关闭窗口导致程序退出
+  // 拦截 Ctrl+W 和 Alt+F4，模拟点击关闭按钮行为（最小化到托盘或显示关闭对话框）
   app.on('browser-window-created', (_, window) => {
     window.webContents.on('before-input-event', (event, input) => {
-      if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'w') {
+      const isCtrlW = input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'w'
+      const isAltF4 = input.type === 'keyDown' && input.alt && input.key.toLowerCase() === 'f4'
+      if (isCtrlW || isAltF4) {
         event.preventDefault()
+        // 发送 window-close IPC，让渲染进程按正常关闭流程处理（显示对话框或最小化到托盘）
+        window.webContents.send('window-close-requested')
       }
     })
   })

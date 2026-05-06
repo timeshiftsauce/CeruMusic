@@ -387,10 +387,7 @@ const songlistScrollRef = ref<HTMLDivElement>()
               >
                 <div class="playlist-cover">
                   <s-image :src="playlist.cover" class="playlist-cover-image" />
-                  <span
-                    v-if="userSource.source === 'all' && playlist.source"
-                    class="source-badge"
-                  >
+                  <span v-if="userSource.source === 'all' && playlist.source" class="source-badge">
                     {{ playlist.source }}
                   </span>
                 </div>

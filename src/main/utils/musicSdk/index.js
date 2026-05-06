@@ -87,9 +87,7 @@ const aggregate = {
   async search(keyword, page = 1, limit = 30) {
     const tasks = AGGREGATE_ORDER.filter(
       (id) => sources[id] && sources[id].musicSearch && sources[id].musicSearch.search
-    ).map((id) =>
-      sources[id].musicSearch.search(keyword, page, limit).catch(() => null)
-    )
+    ).map((id) => sources[id].musicSearch.search(keyword, page, limit).catch(() => null))
     const results = await Promise.all(tasks)
     const validResults = results.filter((r) => r && Array.isArray(r.list))
     const lists = validResults.map((res) =>
@@ -114,9 +112,7 @@ const aggregate = {
     )
     const results = await Promise.all(tasks)
     const valid = results.filter((r) => r && Array.isArray(r.list))
-    const lists = valid.map((res) =>
-      res.list.map((item) => ensureSource(item, res.source))
-    )
+    const lists = valid.map((res) => res.list.map((item) => ensureSource(item, res.source)))
     return {
       list: interleave(lists),
       total: valid.reduce((sum, r) => sum + (r.total || 0), 0),
@@ -246,7 +242,9 @@ const aggregate = {
       const seen = new Set()
       const dedup = []
       for (const item of flat) {
-        const key = String(item?.name || '').toLowerCase().trim()
+        const key = String(item?.name || '')
+          .toLowerCase()
+          .trim()
         if (key && !seen.has(key)) {
           seen.add(key)
           dedup.push(item)

@@ -383,10 +383,7 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
                   :alt="playlist.title"
                   @error="playlist.cover = songCover"
                 />
-                <span
-                  v-if="userSource.source === 'all' && playlist.source"
-                  class="source-badge"
-                >
+                <span v-if="userSource.source === 'all' && playlist.source" class="source-badge">
                   {{ playlist.source }}
                 </span>
               </div>
