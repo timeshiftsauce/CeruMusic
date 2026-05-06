@@ -93,10 +93,18 @@ async function start() {
       wasPlaying.value = false
     }
 
+    // 必须先调用 prepareCapture 拿一次性媒体采集授权（10s 过期）
+    const capturePrepared = await window.api.systemAudio.prepareCapture()
+    if (!capturePrepared) {
+      MessagePlugin.error('当前采集请求未获授权，请重新点击开始识别')
+      reset()
+      return
+    }
+
     // Get system audio stream
-    const sourceId = await (window as any).api?.systemAudio?.getDefaultScreenSourceId?.()
+    const sourceId = await window.api.systemAudio.getDefaultScreenSourceId()
     if (!sourceId) {
-      MessagePlugin.error('无法获取屏幕源ID')
+      MessagePlugin.error('无法获取系统音频采集源，请重新点击开始识别')
       reset()
       return
     }
@@ -159,9 +167,13 @@ async function start() {
         stopRecording(false) // Stop without success (timeout)
       }
     }, 1000)
-  } catch (err) {
+  } catch (err: any) {
     console.error('启动录音失败', err)
-    MessagePlugin.error('启动录音失败，请检查权限')
+    if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+      MessagePlugin.error('音频采集权限被拒绝，请检查系统权限后重试')
+    } else {
+      MessagePlugin.error('启动录音失败，请检查权限')
+    }
     reset()
   }
 }

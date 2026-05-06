@@ -8,6 +8,7 @@ import { app, powerSaveBlocker } from 'electron'
 import { type BrowserWindow, ipcMain } from 'electron'
 import lyricWindow from '../windows/lyric-window'
 import { initDlnaService } from './dlna'
+import { configManager } from '../services/ConfigManager'
 
 export default function InitEventServices(mainWindow: BrowserWindow) {
   InitPluginService()
@@ -48,6 +49,12 @@ function basisEvent(mainWindow: BrowserWindow) {
   })
   mainWindow.on('close', () => {
     lyricWindow.getWin()?.close()
+    // 当渲染端意外绕过设置直接 close 时，保险：若 closeToTray 为 false 则确保正常退出
+    // 注意：使用 app.quit() 而非 app.exit(0)，让 before-quit / disposeAll 等钩子执行
+    const closeToTray = configManager.get<boolean>('closeToTray', true)
+    if (!closeToTray) {
+      app.quit()
+    }
   })
 
   // Mini 模式 IPC 处理 - 最小化到系统托盘
@@ -96,5 +103,15 @@ function basisEvent(mainWindow: BrowserWindow) {
   // 获取应用版本号
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
+  })
+
+  // 设置同步 IPC：渲染端 closeToTray 变更时通知主进程持久化
+  ipcMain.on('settings:sync-close-to-tray', (_, value: boolean) => {
+    configManager.set<boolean>('closeToTray', value)
+  })
+
+  // 主进程读取 closeToTray 当前值（保险查询）
+  ipcMain.handle('settings:get-close-to-tray', () => {
+    return configManager.get<boolean>('closeToTray', true)
   })
 }

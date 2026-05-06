@@ -7,13 +7,14 @@ import './assets/icon_font/iconfont.js'
 // vue
 
 import App from './App.vue'
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import LogtoClient, { LogtoConfig, UserScope } from '@logto/browser'
 import config from './config'
 const { endpoint, appId, resources } = config
 import { Request } from '@renderer/utils/request'
 // router
 import router from './router'
+import { useSettingsStore } from '@renderer/store/Settings'
 // pinia
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
@@ -39,6 +40,16 @@ const app = createApp(App)
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 app.use(pinia)
+
+// macOS 状态栏歌词：watch 设置变化并通知主进程
+const settingsStore = useSettingsStore(pinia)
+watch(
+  () => settingsStore.settings.macStatusBarLyricEnabled,
+  (enabled) => {
+    ;(window as any).electron?.ipcRenderer?.send?.('set-mac-status-bar-lyric-enabled', !!enabled)
+  },
+  { immediate: true }
+)
 // router
 app.use(router)
 // app

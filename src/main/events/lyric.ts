@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, screen } from 'electron'
 import { isAbsolute, relative, resolve } from 'path'
 import { lyricConfig } from '@common/types/config'
 import { configManager } from '../services/ConfigManager'
+import menuBarLyric from '../services/menuBarLyric'
 
 import lyricWindow from '../windows/lyric-window'
 
@@ -60,9 +61,14 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   ipcMain.on('win-show', () => {
     mainWin?.show()
   })
+  // macOS 状态栏歌词开关同步
+  ipcMain.on('set-mac-status-bar-lyric-enabled', (_event, enabled: boolean) => {
+    menuBarLyric.setEnabled(enabled)
+  })
   // 音乐名称更改
   ipcMain.on('play-song-change', (_, title) => {
     if (!title) return
+    menuBarLyric.setSong(title)
     if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
 
     lyricWin?.webContents.send('play-song-change', title)
@@ -71,6 +77,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 音乐歌词更改
   ipcMain.on('play-lyric-change', (_, lyricData) => {
     if (!lyricData) return
+    menuBarLyric.setLyrics(lyricData)
     if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
 
     lyricWin?.webContents.send('play-lyric-change', lyricData)
@@ -79,6 +86,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 当前行索引变化（用于立即高亮切换）
   ipcMain.on('play-lyric-index', (_, index: number) => {
     if (index === undefined || index === null) return
+    menuBarLyric.setIndex(index)
     if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
 
     lyricWin?.webContents.send('play-lyric-index', index)
@@ -93,6 +101,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 播放状态更改（播放/暂停）
   ipcMain.on('play-status-change', (_, status: boolean) => {
+    menuBarLyric.setPlayStatus(status)
     if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
     lyricWin?.webContents.send('play-status-change', status)
   })

@@ -30,6 +30,13 @@ export const searchItems: SearchItem[] = [
     keywords: ['颜色', '皮肤', 'color']
   },
   {
+    id: 'appearance-mac-status-lyric',
+    category: 'appearance',
+    title: '状态栏歌词',
+    description: '在 mac 状态栏显示当前歌词并提供播放控制菜单',
+    keywords: ['状态栏', '菜单栏', '歌词', 'mac', 'tray']
+  },
+  {
     id: 'appearance-lyric-font',
     category: 'appearance',
     title: '歌词字体设置',
