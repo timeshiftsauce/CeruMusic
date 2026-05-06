@@ -75,9 +75,7 @@ const currentToken = ref<number>(0)
 
 // 是否可视 - 仅在需要观察时才创建 IntersectionObserver,
 // 避免长列表(如发现页聚合源 180+ 卡片)创建大量观察器拖慢滚动
-const isCanLook = props.observeVisibility
-  ? useElementVisibility(imgContainer)
-  : ref(true)
+const isCanLook = props.observeVisibility ? useElementVisibility(imgContainer) : ref(true)
 
 // 图片加载完成
 const imageLoaded = (e: Event) => {

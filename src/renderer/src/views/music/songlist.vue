@@ -86,6 +86,10 @@ const editPlaylistForm = ref({
 // 当前编辑的歌单
 const currentEditingPlaylist = ref<SongList | null>(null)
 
+// 封面 URL(空或占位时回退到 defaultCover) - 用于 hover 模糊背板
+const getCoverUrl = (p: SongList): string =>
+  p.coverImgUrl && p.coverImgUrl !== 'default-cover' ? p.coverImgUrl : defaultCover
+
 // 右键菜单状态
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
@@ -1624,6 +1628,7 @@ onDeactivated(() => {
             :key="playlist.id"
             class="playlist-card"
             :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
+            :style="{ '--cover-url': `url('${getCoverUrl(playlist)}')` }"
             @contextmenu="handlePlaylistContextMenu($event, playlist)"
           >
             <div class="playlist-cover" @click="viewPlaylist(playlist)">
@@ -2379,6 +2384,11 @@ onDeactivated(() => {
     transform 0.2s ease,
     box-shadow 0.2s ease;
 
+  // 浏览器原生虚拟化:视口外的卡片跳过 layout/paint
+  content-visibility: auto;
+  contain-intrinsic-size: 0 380px;
+  contain: layout paint;
+
   &.custom-bg {
     background-color: var(--td-bg-color-component);
     backdrop-filter: blur(8px);
@@ -2390,6 +2400,26 @@ onDeactivated(() => {
 
     .playlist-cover .cover-overlay {
       opacity: 1;
+    }
+    .playlist-cover .cover-image {
+      transform: scale(1.06);
+    }
+    .playlist-info::before {
+      opacity: 1;
+    }
+    .playlist-info {
+      .playlist-name-text {
+        color: #fff !important;
+      }
+      .playlist-description {
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .playlist-meta {
+        color: rgba(255, 255, 255, 0.85);
+        span:first-child {
+          color: #fff;
+        }
+      }
     }
   }
 
@@ -2404,6 +2434,7 @@ onDeactivated(() => {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .cover-overlay {
@@ -2431,6 +2462,26 @@ onDeactivated(() => {
     flex: 1;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 0;
+    transition: color 0.3s ease;
+
+    // GPU-only hover backdrop:用封面本身做模糊背板,无需 JS 算色
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: var(--cover-url);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      filter: blur(40px) brightness(0.55) saturate(1.6);
+      transform: scale(1.6);
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      z-index: -1;
+      pointer-events: none;
+    }
     .playlist-name-row {
       display: flex;
       align-items: flex-start;
