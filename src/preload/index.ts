@@ -108,6 +108,13 @@ const api = {
       return () => ipcRenderer.removeListener('window-close-requested', handler)
     }
   },
+  // 设置同步 API：把 closeToTray 等渲染端配置同步到主进程
+  settings: {
+    syncCloseToTray: (value: boolean) => {
+      ipcRenderer.send('settings:sync-close-to-tray', value)
+    },
+    getCloseToTray: () => ipcRenderer.invoke('settings:get-close-to-tray')
+  },
   // 音频缓存管理
   musicCache: {
     getInfo: () => ipcRenderer.invoke('music-cache:get-info'),
@@ -404,6 +411,9 @@ const api = {
   },
   // 系统音频采集
   systemAudio: {
+    prepareCapture: async () => {
+      return ipcRenderer.invoke('system-audio:prepare-capture')
+    },
     getDefaultScreenSourceId: async () => {
       return ipcRenderer.invoke('system-audio:get-default-source-id')
     },

@@ -108,6 +108,12 @@ interface CustomAPI {
     onRequest: (callback: () => void) => () => void
   }
 
+  // 设置同步：把渲染端某些配置（如 closeToTray）同步到主进程
+  settings: {
+    syncCloseToTray: (value: boolean) => void
+    getCloseToTray: () => Promise<boolean>
+  }
+
   // 插件管理API
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') => Promise<any>
@@ -226,6 +232,13 @@ interface CustomAPI {
     onPlaylistShareOpen: (callback: (payload: { id: string }) => void) => () => void
     getPending: () => Promise<string[]>
     getPendingPlaylistShares: () => Promise<string[]>
+  }
+
+  systemAudio: {
+    /** 必须先调用此方法获取一次性媒体采集授权（10s 过期、最多 4 次请求） */
+    prepareCapture: () => Promise<boolean>
+    getDefaultScreenSourceId: () => Promise<string>
+    getAllScreenSourceIds: () => Promise<string[]>
   }
 }
 

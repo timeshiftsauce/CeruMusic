@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -25,6 +25,8 @@ const switchStyle = (style: 'windows' | 'traffic-light'): void => {
   console.log(`设置成 ${style} 风格 ${style === 'windows'}`)
   userInfo.value.topBarStyle = style === 'traffic-light'
 }
+
+const isMac = computed(() => /mac/i.test(navigator.platform || navigator.userAgent))
 </script>
 
 <template>
@@ -135,6 +137,29 @@ const switchStyle = (style: 'windows' | 'traffic-light'): void => {
     <t-card title="全局背景" class="setting-card" hover-shadow>
       <GlobalBackgroundSettings />
     </t-card>
+
+    <template v-if="isMac">
+      <div class="setting-spacer"></div>
+      <t-card id="appearance-mac-status-lyric" title="状态栏歌词" class="setting-card" hover-shadow>
+        <div class="setting-group-item">
+          <div class="setting-label">
+            <h4>菜单栏显示歌词</h4>
+            <p>开启后在 mac 状态栏显示当前歌词，并可通过状态栏菜单控制歌曲。</p>
+          </div>
+          <div class="setting-control" style="display: flex; align-items: center; gap: 10px">
+            <t-switch
+              :value="settings.macStatusBarLyricEnabled"
+              @change="
+                (val) => settingsStore.updateSettings({ macStatusBarLyricEnabled: Boolean(val) })
+              "
+            />
+            <span class="setting-text">{{
+              settings.macStatusBarLyricEnabled ? '已开启状态栏歌词' : '已关闭状态栏歌词'
+            }}</span>
+          </div>
+        </div>
+      </t-card>
+    </template>
 
     <!-- 歌词设置 -->
     <div class="setting-spacer"></div>

@@ -1,108 +1,119 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, WatchHandle, onUnmounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, WatchHandle } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
-import { extractDominantColor } from '../../utils/color/colorExtractor'
 import LeaderBord from '@renderer/components/Find/LeaderBord.vue'
-import { ChevronDownIcon } from 'tdesign-icons-vue-next'
+import { ChevronDownIcon, PlayCircleIcon } from 'tdesign-icons-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
 
+interface Playlist {
+  id: string
+  title: string
+  description: string
+  cover: string
+  playCount: string | number
+  author: string
+  total: string | number
+  time: string
+  source: string
+}
+interface Tag {
+  id: string
+  name: string
+}
+interface TagGroup {
+  name: string
+  list: Tag[]
+}
+type CacheEntry = {
+  list: Playlist[]
+  page: number
+  total: number
+  noMore: boolean
+}
+
 const settingsStore = useSettingsStore()
-
-// 路由实例
 const router = useRouter()
+const LocalUserDetail = LocalUserDetailStore()
+const { userSource } = storeToRefs(LocalUserDetail)
 
-// 推荐/分类歌单数据
-const recommendPlaylists: any = ref([])
+// 列表数据 - shallowRef:卡片对象不会被改写,深度响应式无收益
+const recommendPlaylists = shallowRef<Playlist[]>([])
 const loading = ref(true)
 const error = ref('')
-const mainColors = ref<any[]>([])
-const textColors = ref<string[]>([])
 
-let watchSource: WatchHandle | null = null
-
-// 分类导航与分页状态
-const tags = ref<any[]>([])
-const hotTag = ref<any[]>([])
+// 标签数据
+const tags = ref<TagGroup[]>([])
+const hotTag = ref<Tag[]>([])
 const activeCategoryName = ref<string>('热门')
 const activeTagId = ref<string>('')
+const activeGroupName = ref<string>('')
+
+// 分页
 const page = ref<number>(1)
 const limit = ref<number>(30)
 const total = ref<number>(0)
 const loadingMore = ref<boolean>(false)
 const noMore = ref<boolean>(false)
-const scrollLock = ref<boolean>(false)
-const categoryCache: Record<string, { list: any[]; page: number; total: number }> = {}
-const showMore = ref<boolean>(false)
-const activeGroupIndex = ref<number>(0)
-const activeGroupName = ref<string>('')
 
-// 获取分类标签
-const fetchTags = async () => {
+// 跨分类缓存(key 含 source,音源切换不会撞车)
+const categoryCache = new Map<string, CacheEntry>()
+const showMore = ref<boolean>(false)
+
+let watchSource: WatchHandle | null = null
+
+const cacheKey = computed(
+  () => `${userSource.value.source || 'wy'}::${activeTagId.value || 'hot'}`
+)
+
+const activeGroup = computed(
+  () => tags.value.find((g) => g.name === activeGroupName.value) || tags.value[0]
+)
+
+const mapItem = (item: any): Playlist => ({
+  id: item.id,
+  title: item.name,
+  description: item.desc || '精选歌单',
+  cover: item.img,
+  playCount: item.play_count,
+  author: item.author,
+  total: item.total,
+  time: item.time,
+  source: item.source
+})
+
+const fetchTags = async (): Promise<void> => {
   try {
     const res = await window.api.music.requestSdk('getPlaylistTags', {
       source: userSource.value.source || 'wy'
     })
     tags.value = res?.tags || []
     hotTag.value = res?.hotTag || []
-    activeGroupIndex.value = 0
-    activeGroupName.value = tags.value[0]?.name || ''
+    if (!activeGroupName.value) activeGroupName.value = tags.value[0]?.name || ''
   } catch (e) {
     console.error('获取歌单标签失败:', e)
-    loading.value = false
-    error.value = '获取分类歌单失败，请稍后重试'
   }
 }
 
-// 根据分类获取歌单
-const fetchCategoryPlaylists = async (reset = false) => {
-  if (scrollLock.value || loadingMore.value) return
+const fetchCategoryPlaylists = async (reset = false): Promise<void> => {
+  if (loadingMore.value) return
   if (reset) {
     page.value = 1
     noMore.value = false
+    error.value = ''
+    // 命中缓存
+    const cached = categoryCache.get(cacheKey.value)
+    if (cached) {
+      recommendPlaylists.value = cached.list
+      page.value = cached.page
+      total.value = cached.total
+      noMore.value = cached.noMore
+      loading.value = false
+      return
+    }
     loading.value = true
     recommendPlaylists.value = []
-  }
-  // 缓存命中
-  const cacheKey = activeTagId.value || 'hot' + ':' + userSource.value.source
-  if (reset && categoryCache[cacheKey]) {
-    const cache = categoryCache[cacheKey]
-    recommendPlaylists.value = cache.list
-    page.value = cache.page
-    total.value = cache.total
-    mainColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#FFF')
-    textColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#000')
-
-    // 异步获取每个封面的主题色和对应的文字颜色
-
-    const colorPromises = recommendPlaylists.value.map(async (item: any, index: number) => {
-      try {
-        const color = await extractDominantColor(item.cover)
-        // const textColor = await getBestContrastTextColor(item.cover)
-        return { index, color }
-      } catch (error) {
-        console.warn(`获取封面主题色失败 (索引 ${index}):`, error)
-        textColors.value[index] = '#000'
-        return { index, color: '#fff' }
-      }
-    })
-
-    // 等待所有颜色提取完成
-    const results = await Promise.all(colorPromises)
-
-    // 更新主题色和文字颜色数组
-    results.forEach(({ index, color }) => {
-      if (index < mainColors.value.length) {
-        // 深化颜色值，让颜色更深邃
-        const deepR = Math.floor(color.r * 0.7)
-        const deepG = Math.floor(color.g * 0.7)
-        const deepB = Math.floor(color.b * 0.7)
-        mainColors.value[index] = `rgba(${deepR}, ${deepG}, ${deepB}, 0.85)`
-        // textColors.value[index] = textColor
-      }
-    })
-    return
   }
   loadingMore.value = true
   try {
@@ -113,95 +124,53 @@ const fetchCategoryPlaylists = async (reset = false) => {
       page: page.value,
       limit: limit.value
     })
-    const list = Array.isArray(res?.list) ? res.list : []
+    const rawList = Array.isArray(res?.list) ? res.list : []
+    const mapped: Playlist[] = rawList.map(mapItem)
     total.value = res?.total || 0
-    const mapped = list.map((item: any) => ({
-      id: item.id,
-      title: item.name,
-      description: item.desc || '精选歌单',
-      cover: item.img,
-      playCount: item.play_count,
-      author: item.author,
-      total: item.total,
-      time: item.time,
-      source: item.source
-    }))
     recommendPlaylists.value = reset ? mapped : [...recommendPlaylists.value, ...mapped]
-    // 更新颜色占位
-    mainColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#FFF')
-    textColors.value = Array.from({ length: recommendPlaylists.value.length }).map(() => '#000')
 
-    const colorPromises = recommendPlaylists.value.map(async (item: any, index: number) => {
-      try {
-        const color = await extractDominantColor(item.cover)
-        // const textColor = await getBestContrastTextColor(item.cover)
-        return { index, color }
-      } catch (error) {
-        console.warn(`获取封面主题色失败 (索引 ${index}):`, error)
-        textColors.value[index] = '#000'
-        return { index, color: '#fff' }
-      }
-    })
-
-    // 等待所有颜色提取完成
-    const results = await Promise.all(colorPromises)
-
-    // 更新主题色和文字颜色数组
-    results.forEach(({ index, color }) => {
-      if (index < mainColors.value.length) {
-        // 深化颜色值，让颜色更深邃
-        const deepR = Math.floor(color.r * 0.7)
-        const deepG = Math.floor(color.g * 0.7)
-        const deepB = Math.floor(color.b * 0.7)
-        mainColors.value[index] = `rgba(${deepR}, ${deepG}, ${deepB}, 0.85)`
-        textColors.value[index] = '#fff'
-      }
-    })
-    // 更新分页与状态
     const loadedCount = recommendPlaylists.value.length
-    noMore.value = loadedCount >= total.value
-    // fix
+    noMore.value = loadedCount >= total.value || mapped.length === 0
     if (!noMore.value) page.value += 1
-    // 写入缓存
-    categoryCache[cacheKey] = {
+
+    categoryCache.set(cacheKey.value, {
       list: recommendPlaylists.value.slice(),
       page: page.value,
-      total: total.value
-    }
+      total: total.value,
+      noMore: noMore.value
+    })
     error.value = ''
   } catch (e) {
     console.error('获取分类歌单失败:', e)
-    loading.value = false
-    error.value = '获取分类歌单失败，请稍后重试'
+    if (!recommendPlaylists.value.length) error.value = '获取分类歌单失败,请稍后重试'
   } finally {
     loading.value = false
     loadingMore.value = false
   }
 }
 
-// 切换分类标签
-const onSelectTag = async (tagId: string, name: string) => {
+const onSelectTag = (tagId: string, name: string): void => {
+  if (activeTagId.value === tagId) return
   activeTagId.value = tagId
   activeCategoryName.value = name
   showMore.value = false
-  await fetchCategoryPlaylists(true)
+  fetchCategoryPlaylists(true)
 }
 
-const onScroll = (e: Event) => {
+// 滚动加载更多 - rAF 节流
+let scrollFrame = 0
+const onScroll = (e: Event): void => {
+  if (scrollFrame) return
   const el = e.target as HTMLElement
-  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
-  if (nearBottom && !noMore.value && !loadingMore.value) {
-    fetchCategoryPlaylists(false)
-  }
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+      if (!noMore.value && !loadingMore.value) fetchCategoryPlaylists(false)
+    }
+  })
 }
 
-watch(activeGroupName, (name) => {
-  const idx = tags.value.findIndex((g: any) => g.name === name)
-  activeGroupIndex.value = idx >= 0 ? idx : 0
-})
-
-const playPlaylist = (playlist: any): void => {
-  // 跳转到歌曲列表页面，传递歌单ID和其他必要信息
+const playPlaylist = (playlist: Playlist): void => {
   router.push({
     name: 'list',
     params: { id: playlist.id },
@@ -215,83 +184,72 @@ const playPlaylist = (playlist: any): void => {
   })
 }
 
-// 获取 store 实例和响应式引用
-const LocalUserDetail = LocalUserDetailStore()
-const { userSource } = storeToRefs(LocalUserDetail)
+const onDocClick = (e: MouseEvent): void => {
+  const target = e.target as HTMLElement
+  if (!target.closest('.category-bar') && showMore.value) showMore.value = false
+}
 
-// 组件挂载时获取数据
 onMounted(() => {
-  // 设置音源变化监听器
   watchSource = watch(
     userSource,
     () => {
-      loading.value = true
-      error.value = ''
-      // 初始化分类
-      fetchTags().then(() => {
-        // 默认热门分类
-        activeTagId.value = ''
-        activeCategoryName.value = '热门'
-        fetchCategoryPlaylists(true)
-      })
+      tags.value = []
+      activeGroupName.value = ''
+      activeTagId.value = ''
+      activeCategoryName.value = '热门'
+      fetchTags().then(() => fetchCategoryPlaylists(true))
     },
     { deep: true, immediate: true }
   )
-  const onDocClick = (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (!target.closest('.category-bar') && showMore.value) showMore.value = false
-  }
   document.addEventListener('click', onDocClick)
-  onUnmounted(() => {
-    document.removeEventListener('click', onDocClick)
-  })
 })
-const backTop = ref(false)
-const scrollTop = ref(0)
+
 onUnmounted(() => {
   if (watchSource) {
     watchSource()
     watchSource = null
   }
+  if (scrollFrame) {
+    cancelAnimationFrame(scrollFrame)
+    scrollFrame = 0
+  }
+  document.removeEventListener('click', onDocClick)
 })
+
+// keep-alive 滚动位置保持
+const backTop = ref(false)
+const scrollTop = ref(0)
+const songlistScrollRef = ref<HTMLDivElement>()
 onActivated(() => {
   backTop.value = true
-  // 恢复滚动位置
-  if (songlistScrollRef.value) {
-    songlistScrollRef.value.scrollTop = scrollTop.value
-  }
+  if (songlistScrollRef.value) songlistScrollRef.value.scrollTop = scrollTop.value
 })
 onDeactivated(() => {
   backTop.value = false
-  // 记录滚动位置
-  if (songlistScrollRef.value) {
-    scrollTop.value = songlistScrollRef.value.scrollTop
-  }
+  if (songlistScrollRef.value) scrollTop.value = songlistScrollRef.value.scrollTop
 })
-const songlistScrollRef = ref<HTMLDivElement>()
 </script>
 
 <template>
   <div id="findContainerRef" class="find-container">
-    <!-- 页面标题 -->
-    <div class="page-header">
+    <header class="page-header">
       <h2>发现音乐</h2>
       <p>探索最新最热的音乐内容</p>
-    </div>
+    </header>
+
     <n-tabs type="segment" animated class="find-tabs" default-value="songlist" size="small">
       <n-tab-pane name="songlist" tab="歌单" class="songlist-tab-pane">
-        <div ref="songlistScrollRef" class="scroll-container" @scroll="onScroll">
-          <!-- 分类导航 -->
+        <div ref="songlistScrollRef" class="scroll-container" @scroll.passive="onScroll">
           <n-back-top
             v-if="backTop"
             :listen-to="songlistScrollRef"
             :right="40"
             :bottom="120"
             style="z-index: 100"
-          >
-          </n-back-top>
+          />
 
-          <div ref="categoryBarRef" class="category-bar">
+          <!-- 分类导航 -->
+          <div class="category-bar">
             <div class="hot-tags">
               <button
                 class="tag-chip"
@@ -315,38 +273,34 @@ const songlistScrollRef = ref<HTMLDivElement>()
                 @mouseenter="showMore = true"
                 @mouseleave="showMore = false"
               >
-                <t-button ref="moreBtnRef" class="tag-chip more" shape="round" variant="outline">
+                <t-button class="tag-chip more" shape="round" variant="outline">
                   更多分类
                   <template #suffix>
-                    <i class="iconfont icon-arrow-down" :class="{ rotate: showMore }">
-                      <ChevronDownIcon />
-                    </i>
+                    <ChevronDownIcon class="chevron" :class="{ rotate: showMore }" />
                   </template>
                 </t-button>
 
                 <transition name="dropdown">
                   <div v-if="showMore" class="more-panel">
                     <div class="panel-inner">
-                      <div class="panel-content">
-                        <t-tabs v-model:value="activeGroupName" size="medium">
-                          <t-tab-panel
-                            v-for="group in tags"
-                            :key="group.name"
-                            :value="group.name"
-                            :label="group.name"
-                          />
-                        </t-tabs>
-                        <div v-if="tags[activeGroupIndex]" class="panel-tags">
-                          <button
-                            v-for="t in tags[activeGroupIndex].list"
-                            :key="t.id"
-                            class="tag-chip"
-                            :class="{ active: activeTagId === t.id }"
-                            @click="onSelectTag(t.id, t.name)"
-                          >
-                            {{ t.name }}
-                          </button>
-                        </div>
+                      <t-tabs v-model:value="activeGroupName" size="medium">
+                        <t-tab-panel
+                          v-for="group in tags"
+                          :key="group.name"
+                          :value="group.name"
+                          :label="group.name"
+                        />
+                      </t-tabs>
+                      <div v-if="activeGroup" class="panel-tags">
+                        <button
+                          v-for="t in activeGroup.list"
+                          :key="t.id"
+                          class="tag-chip"
+                          :class="{ active: activeTagId === t.id }"
+                          @click="onSelectTag(t.id, t.name)"
+                        >
+                          {{ t.name }}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -355,55 +309,58 @@ const songlistScrollRef = ref<HTMLDivElement>()
             </div>
           </div>
 
-          <!-- 分类歌单 -->
-          <div class="section">
+          <section class="section">
             <h3 class="section-title">{{ activeCategoryName }}歌单</h3>
 
-            <!-- 加载状态 -->
-            <div v-if="loading && recommendPlaylists.length === 0" class="loading-container">
-              <t-loading size="large" text="正在加载歌单..." />
+            <!-- 错误 -->
+            <div v-if="error && !recommendPlaylists.length" class="state-container">
+              <div class="error-state">
+                <p class="state-text">{{ error }}</p>
+                <t-button theme="primary" size="medium" @click="fetchCategoryPlaylists(true)">
+                  重新加载
+                </t-button>
+              </div>
             </div>
 
-            <!-- 错误状态 -->
-            <div v-else-if="error" class="error-container">
-              <t-alert theme="error" :message="error" />
-              <t-button
-                theme="primary"
-                style="margin-top: 1rem"
-                @click="fetchCategoryPlaylists(true)"
-              >
-                重新加载
-              </t-button>
+            <!-- 骨架 -->
+            <div v-else-if="loading && !recommendPlaylists.length" class="playlist-grid">
+              <div v-for="n in 12" :key="`sk-${n}`" class="playlist-card skeleton-card">
+                <div class="playlist-cover">
+                  <div class="skeleton-block"></div>
+                </div>
+                <div class="playlist-info">
+                  <n-skeleton text :repeat="2" />
+                  <n-skeleton text style="width: 50%; margin-top: 6px" />
+                </div>
+              </div>
             </div>
 
-            <!-- 歌单列表 -->
-            <div v-else class="playlist-grid">
-              <div
-                v-for="(playlist, index) in recommendPlaylists"
-                :key="playlist.id"
+            <!-- 列表 -->
+            <div v-else-if="recommendPlaylists.length" class="playlist-grid">
+              <article
+                v-for="playlist in recommendPlaylists"
+                :key="`${playlist.source || ''}-${playlist.id}`"
                 class="playlist-card"
                 :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
+                :style="{ '--cover-url': `url('${playlist.cover}')` }"
                 @click="playPlaylist(playlist)"
               >
                 <div class="playlist-cover">
-                  <s-image :src="playlist.cover" class="playlist-cover-image" />
+                  <s-image
+                    :src="playlist.cover"
+                    class="playlist-cover-image"
+                    :observe-visibility="false"
+                  />
                   <span v-if="userSource.source === 'all' && playlist.source" class="source-badge">
                     {{ playlist.source }}
                   </span>
+                  <div class="cover-overlay">
+                    <PlayCircleIcon class="play-icon" />
+                  </div>
                 </div>
-                <div
-                  class="playlist-info"
-                  :style="{
-                    '--hover-bg-color': mainColors[index],
-                    '--hover-text-color': textColors[index]
-                  }"
-                >
-                  <h4 class="playlist-title">
-                    {{ playlist.title }}
-                  </h4>
-                  <p class="playlist-desc">
-                    {{ playlist.description }}
-                  </p>
+                <div class="playlist-info">
+                  <h4 class="playlist-title">{{ playlist.title }}</h4>
+                  <p class="playlist-desc">{{ playlist.description }}</p>
                   <div class="playlist-meta">
                     <span class="play-count">
                       <i class="iconfont icon-bofang"></i>
@@ -411,19 +368,28 @@ const songlistScrollRef = ref<HTMLDivElement>()
                     </span>
                     <span v-if="playlist.total" class="song-count">{{ playlist.total }}首</span>
                   </div>
-                  <!-- <div class="playlist-author">by {{ playlist.author }}</div> -->
                 </div>
+              </article>
+            </div>
+
+            <!-- 空 -->
+            <div v-else-if="!loading" class="state-container">
+              <div class="empty-state">
+                <p class="state-text">该分类暂无歌单</p>
               </div>
             </div>
+
+            <!-- 加载/到底 -->
             <div v-if="loadingMore && recommendPlaylists.length > 0" class="load-status">
               <t-loading size="small" text="加载更多..." />
             </div>
             <div v-else-if="noMore && recommendPlaylists.length > 0" class="load-status">
-              <span class="no-more">没有更多内容</span>
+              <span class="no-more">— 已经到底啦 —</span>
             </div>
-          </div>
+          </section>
         </div>
       </n-tab-pane>
+
       <n-tab-pane name="leaderboard" tab="排行榜" class="find-tab-pane">
         <leader-bord ref="leaderboardRef" />
       </n-tab-pane>
@@ -441,8 +407,8 @@ const songlistScrollRef = ref<HTMLDivElement>()
   margin: 0 auto;
   display: flex;
   flex-direction: column;
+
   :deep(.find-tabs) {
-    // padding: 0 2rem;
     flex: 1;
     overflow: hidden;
     & > *,
@@ -453,7 +419,7 @@ const songlistScrollRef = ref<HTMLDivElement>()
       margin-bottom: 1rem;
     }
     .n-tabs-pane-wrapper {
-      padding: 0rem;
+      padding: 0;
       .find-tab-pane {
         height: 100%;
         overflow-y: auto;
@@ -465,122 +431,6 @@ const songlistScrollRef = ref<HTMLDivElement>()
       }
     }
   }
-}
-
-.scroll-container {
-  height: 100%;
-  overflow-y: auto;
-  padding: 0 2rem;
-}
-
-.category-bar {
-  margin-bottom: 1rem;
-  position: relative;
-  // position: sticky;
-  // top: 0;
-  // z-index: 2;
-  // padding: 6px;
-  // background: var(--find-card-bg);
-
-  .hot-tags {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .more-category-wrapper {
-    position: static;
-    display: inline-block;
-
-    .more-panel {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      z-index: 100;
-      padding-top: 8px; /* Use padding instead of margin to bridge the gap */
-      margin-top: 0;
-      width: 100%;
-      min-width: unset;
-      transform-origin: top center;
-
-      /* Inner container for actual visual style */
-      .panel-inner {
-        background: var(--td-bg-color-container);
-        border-radius: 12px;
-        box-shadow: 0 6px 30px rgba(0, 0, 0, 0.1);
-        border: 1px solid var(--td-border-level-1-color);
-        padding: 8px 16px 16px;
-      }
-    }
-  }
-
-  .tag-chip {
-    padding: 4px 12px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
-
-    &:hover {
-      color: var(--td-text-color-primary);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-
-    &.active {
-      background: var(--td-brand-color-light);
-      color: var(--td-brand-color);
-      font-weight: 600;
-    }
-
-    &.more {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      background: var(--td-bg-color-secondarycontainer);
-      // color: var(--td-text-color-primary);
-
-      &:hover {
-        background: var(--td-bg-color-component-hover);
-      }
-
-      .icon-arrow-down {
-        font-size: 12px;
-        transition: transform 0.2s;
-        &.rotate {
-          transform: rotate(180deg);
-        }
-      }
-    }
-  }
-
-  .panel-tags {
-    display: flex;
-    flex-wrap: wrap;
-    padding-top: 12px;
-    gap: 8px;
-    max-height: 300px;
-    overflow-y: auto;
-  }
-}
-
-/* 下拉淡入缩放动画 */
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all 0.16s ease;
-}
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.98);
-}
-.dropdown-enter-to,
-.dropdown-leave-from {
-  opacity: 1;
-  transform: translateY(0) scale(1);
 }
 
 .page-header {
@@ -603,6 +453,115 @@ const songlistScrollRef = ref<HTMLDivElement>()
   }
 }
 
+.scroll-container {
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 2rem;
+  // 让浏览器知道这是一个独立滚动容器,辅助 content-visibility 推算视口
+  contain: layout paint;
+}
+
+/* ======= 分类栏 ======= */
+.category-bar {
+  position: relative;
+  margin-bottom: 1rem;
+
+  .hot-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tag-chip {
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: var(--td-text-color-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.4;
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease;
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--td-text-color-primary);
+      background: var(--td-bg-color-secondarycontainer);
+    }
+
+    &.active {
+      background: var(--td-brand-color-light);
+      color: var(--td-brand-color);
+      font-weight: 600;
+    }
+
+    &.more {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--td-bg-color-secondarycontainer);
+
+      &:hover {
+        background: var(--td-bg-color-component-hover);
+      }
+
+      .chevron {
+        font-size: 13px;
+        transition: transform 0.2s ease;
+        &.rotate {
+          transform: rotate(180deg);
+        }
+      }
+    }
+  }
+
+  .more-category-wrapper {
+    position: static;
+    display: inline-block;
+  }
+
+  .more-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding-top: 8px;
+    transform-origin: top center;
+
+    .panel-inner {
+      background: var(--td-bg-color-container);
+      border-radius: 12px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--td-border-level-1-color);
+      padding: 8px 16px 16px;
+    }
+  }
+
+  .panel-tags {
+    display: flex;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.18s ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+/* ======= 主体 ======= */
 .section {
   margin-bottom: 3rem;
 
@@ -610,69 +569,76 @@ const songlistScrollRef = ref<HTMLDivElement>()
     color: var(--td-text-color-primary);
     font-size: 1.25rem;
     font-weight: 600;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
   }
 }
 
-.loading-container {
+.state-container {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   padding: 4rem 0;
+  text-align: center;
+
+  .state-text {
+    color: var(--find-text-secondary);
+    margin-bottom: 1rem;
+  }
 }
 
 .load-status {
   display: flex;
   justify-content: center;
-  padding: 12px 0;
+  padding: 16px 0;
   .no-more {
     font-size: 12px;
     color: var(--find-text-muted);
+    letter-spacing: 0.5px;
   }
 }
 
-.error-container {
-  text-align: center;
-  padding: 2rem;
-}
-
+/* ======= 网格 ======= */
 .playlist-grid {
   display: grid;
   gap: 1.25rem;
-
-  // 响应式grid列数
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 
-  // 响应式断点优化
   @media (max-width: 480px) {
     gap: 0.75rem;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
-
   @media (min-width: 481px) and (max-width: 768px) {
     gap: 1rem;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
-
   @media (min-width: 769px) and (max-width: 1024px) {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   }
-
   @media (min-width: 1200px) {
     gap: 1.5rem;
     grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   }
 }
 
+/* ======= 卡片 ======= */
 .playlist-card {
-  // 卡片样式
-  background: var(--find-card-bg);
-  border-radius: 1rem;
-  overflow: hidden;
-  box-shadow: var(--find-card-shadow);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
   position: relative;
+  background: var(--find-card-bg);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(0, 0, 0, 0.04);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.25s ease;
+
+  // 浏览器原生"虚拟化":视口外的卡片跳过 layout/paint
+  content-visibility: auto;
+  contain-intrinsic-size: 0 280px;
+  // 卡片内的样式变化不冒泡
+  contain: layout paint;
 
   &.custom-bg {
     background-color: var(--td-bg-color-component);
@@ -684,234 +650,230 @@ const songlistScrollRef = ref<HTMLDivElement>()
     }
   }
 
-  // 现代化悬浮效果
   &:hover {
-    transform: translateY(-4px) scale(1.02);
-    box-shadow: var(--find-card-shadow-hover);
-
-    .playlist-cover::after {
-      opacity: 1;
-    }
-
-    .playlist-info {
-      backdrop-filter: blur(8px);
-      background-color: var(--hover-bg-color);
-      color: var(--find-text-primary);
-      .playlist-title {
-        color: var(--hover-text-color);
-      }
-      .playlist-desc {
-        color: var(--hover-text-color);
-      }
-      .playlist-meta {
-        color: var(--hover-text-color);
-        * {
-          color: var(--hover-text-color);
-        }
-      }
-      .playlist-author {
-        color: var(--hover-text-color);
-      }
-    }
-  }
-
-  // 活跃状态
-  &:active {
-    transform: translateY(-2px) scale(1.01);
-  }
-
-  .playlist-cover {
-    position: relative;
-    aspect-ratio: 1;
-    overflow: hidden;
-
-    // 悬浮遮罩层
-    &::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: linear-gradient(135deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-
-    .source-badge {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 2;
-      padding: 3px 8px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      color: #fff;
-      background: rgba(0, 0, 0, 0.55);
-      backdrop-filter: blur(12px) saturate(160%);
-      -webkit-backdrop-filter: blur(12px) saturate(160%);
-      border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-      pointer-events: none;
-    }
+    transform: translateY(-3px);
+    box-shadow:
+      0 6px 24px rgba(0, 0, 0, 0.12),
+      var(--find-card-shadow-hover);
 
     .playlist-cover-image {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      user-select: none;
-      -webkit-user-drag: none;
-      transition: transform 0.3s ease;
+      transform: scale(1.06);
     }
-
-    // 图片悬浮缩放效果
-    &:hover .playlist-cover-image {
-      transform: scale(1.05);
+    .cover-overlay {
+      opacity: 1;
     }
-  }
-
-  .playlist-info {
-    padding: 1.25rem 1rem;
-    position: relative;
-    background: var(--find-card-info-bg);
-    transition: all 0.3s ease;
-
-    .playlist-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--find-text-primary);
-      margin-bottom: 0.5rem;
-      line-height: 1.4;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      min-height: 2.8rem; // 确保标题区域高度一致
+    .playlist-info::before {
+      opacity: 1;
     }
-
-    .playlist-desc {
-      font-size: 0.875rem;
-      color: var(--find-text-secondary);
-      margin-bottom: 0.75rem;
-      line-height: 1.5;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      min-height: 2.625rem; // 确保描述区域高度一致
-      transition: color 0.3s ease;
-    }
-
-    .playlist-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      margin-top: auto; // 推到底部
-      padding-top: 0.5rem;
-      border-top: 1px solid var(--find-meta-border);
-      transition: color 0.3s ease;
-    }
-
-    .play-count {
-      font-size: 0.75rem;
-      color: var(--find-text-muted);
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-      font-weight: 500;
-      transition: color 0.3s ease;
-
-      .iconfont {
-        font-size: 0.875rem;
-        opacity: 0.8;
+    .playlist-info {
+      color: #fff;
+      .playlist-title,
+      .playlist-desc,
+      .playlist-meta,
+      .playlist-meta * {
+        color: #fff;
+      }
+      .song-count {
+        background: rgba(255, 255, 255, 0.16);
       }
     }
+  }
 
-    .song-count {
-      font-size: 0.75rem;
-      color: var(--find-text-muted);
-      font-weight: 500;
-      background: var(--find-song-count-bg);
-      padding: 0.125rem 0.5rem;
-      border-radius: 0.375rem;
-      transition: color 0.3s ease;
-    }
-
-    .playlist-author {
-      font-size: 0.75rem;
-      color: var(--find-text-secondary);
-      font-style: italic;
-      margin-top: 0.25rem;
-      opacity: 0.8;
-      transition: color 0.3s ease;
-    }
+  &:active {
+    transform: translateY(-1px);
   }
 }
 
-.song-list {
-  background: var(--find-song-bg);
-  border-radius: 0.75rem;
+.playlist-cover {
+  position: relative;
+  aspect-ratio: 1;
   overflow: hidden;
-  box-shadow: var(--td-shadow-1);
+  background: var(--td-bg-color-secondarycontainer);
+
+  .playlist-cover-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    user-select: none;
+    -webkit-user-drag: none;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .source-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(10px) saturate(160%);
+    -webkit-backdrop-filter: blur(10px) saturate(160%);
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    pointer-events: none;
+  }
+
+  .cover-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      transparent 45%,
+      rgba(0, 0, 0, 0.18) 75%,
+      rgba(0, 0, 0, 0.5) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 12px;
+    pointer-events: none;
+    z-index: 1;
+
+    .play-icon {
+      font-size: 36px;
+      color: #fff;
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+      transform: translateY(4px);
+      transition: transform 0.25s ease;
+    }
+  }
 }
 
-.song-item {
-  display: flex;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--find-border-color);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+.playlist-card:hover .cover-overlay .play-icon {
+  transform: translateY(0);
+}
 
-  &:last-child {
-    border-bottom: none;
-  }
+.playlist-info {
+  position: relative;
+  padding: 14px 14px 16px;
+  background: var(--find-card-info-bg);
+  transition: color 0.3s ease;
+  z-index: 0;
 
-  &:hover {
-    background-color: var(--find-song-hover-bg);
-  }
-
-  .song-index {
-    width: 2rem;
-    text-align: center;
-    font-size: 0.875rem;
-    color: var(--find-text-secondary);
-    font-weight: 500;
-  }
-
-  .song-info {
-    flex: 1;
-    margin-left: 1rem;
-
-    .song-title {
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--find-text-primary);
-      margin-bottom: 0.25rem;
-    }
-
-    .song-artist {
-      font-size: 0.75rem;
-      color: var(--find-text-secondary);
-    }
-  }
-
-  .song-duration {
-    font-size: 0.75rem;
-    color: var(--find-text-secondary);
-    margin-right: 1rem;
-  }
-
-  .song-actions {
+  // GPU-only "themed" hover backdrop using cover image
+  // 用封面本身做模糊背板,无需 JS 算色
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--cover-url);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(40px) brightness(0.55) saturate(1.6);
+    transform: scale(1.6);
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.35s ease;
+    z-index: -1;
+    pointer-events: none;
   }
 
-  &:hover .song-actions {
-    opacity: 1;
+  .playlist-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--find-text-primary);
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 2.8rem;
+    transition: color 0.3s ease;
+  }
+
+  .playlist-desc {
+    font-size: 0.82rem;
+    color: var(--find-text-secondary);
+    margin-bottom: 0.65rem;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.5rem;
+    transition: color 0.3s ease;
+  }
+
+  .playlist-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--find-meta-border);
+    transition:
+      color 0.3s ease,
+      border-color 0.3s ease;
+  }
+
+  .play-count {
+    font-size: 0.75rem;
+    color: var(--find-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 500;
+    transition: color 0.3s ease;
+
+    .iconfont {
+      font-size: 0.875rem;
+      opacity: 0.85;
+    }
+  }
+
+  .song-count {
+    font-size: 0.72rem;
+    color: var(--find-text-muted);
+    font-weight: 500;
+    background: var(--find-song-count-bg);
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.375rem;
+    transition:
+      color 0.3s ease,
+      background-color 0.3s ease;
+  }
+}
+
+/* ======= 骨架 ======= */
+.skeleton-card {
+  cursor: default;
+  pointer-events: none;
+  // 骨架不参与 hover 阴影抬升
+  &:hover {
+    transform: none;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 4px 16px rgba(0, 0, 0, 0.04);
+  }
+
+  .skeleton-block {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.06) 25%,
+      rgba(0, 0, 0, 0.12) 37%,
+      rgba(0, 0, 0, 0.06) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
   }
 }
 </style>

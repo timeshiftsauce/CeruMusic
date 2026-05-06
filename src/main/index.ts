@@ -9,9 +9,12 @@ import {
   Tray,
   Menu,
   desktopCapturer,
-  session
+  session,
+  nativeImage,
+  type WebContents
 } from 'electron'
 import { configManager } from './services/ConfigManager'
+import menuBarLyric from './services/menuBarLyric'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -40,6 +43,73 @@ import {
 setupDeepLinks()
 
 let pendingPlaylistFiles: string[] = []
+const MEDIA_CAPTURE_GRANT_TTL_MS = 10_000
+const MEDIA_CAPTURE_REQUEST_BUDGET = 4
+
+type MediaCaptureGrant = {
+  expiresAt: number
+  allowScreenSourceLookup: boolean
+  remainingMediaRequests: number
+}
+
+const mediaCaptureGrants = new Map<number, MediaCaptureGrant>()
+
+const purgeExpiredMediaCaptureGrants = (): void => {
+  const now = Date.now()
+  for (const [webContentsId, grant] of mediaCaptureGrants.entries()) {
+    if (grant.expiresAt <= now) {
+      mediaCaptureGrants.delete(webContentsId)
+    }
+  }
+}
+
+const getMediaCaptureGrant = (webContentsId: number): MediaCaptureGrant | null => {
+  purgeExpiredMediaCaptureGrants()
+  return mediaCaptureGrants.get(webContentsId) || null
+}
+
+const isMainWindowWebContents = (webContents: WebContents | null | undefined): boolean => {
+  return (
+    !!mainWindow &&
+    !!webContents &&
+    !mainWindow.isDestroyed() &&
+    mainWindow.webContents.id === webContents.id
+  )
+}
+
+const authorizeMediaCaptureForWebContents = (webContentsId: number): void => {
+  mediaCaptureGrants.set(webContentsId, {
+    expiresAt: Date.now() + MEDIA_CAPTURE_GRANT_TTL_MS,
+    allowScreenSourceLookup: true,
+    remainingMediaRequests: MEDIA_CAPTURE_REQUEST_BUDGET
+  })
+}
+
+const consumeScreenSourceLookupGrant = (webContentsId: number): boolean => {
+  const grant = getMediaCaptureGrant(webContentsId)
+  if (!grant || !grant.allowScreenSourceLookup) return false
+  grant.allowScreenSourceLookup = false
+  if (grant.remainingMediaRequests <= 0) {
+    mediaCaptureGrants.delete(webContentsId)
+  }
+  return true
+}
+
+const hasMediaPermissionGrant = (webContentsId: number): boolean => {
+  const grant = getMediaCaptureGrant(webContentsId)
+  return !!grant && grant.remainingMediaRequests > 0
+}
+
+const consumeMediaPermissionGrant = (webContentsId: number): boolean => {
+  const grant = getMediaCaptureGrant(webContentsId)
+  if (!grant || grant.remainingMediaRequests <= 0) return false
+  grant.remainingMediaRequests -= 1
+  if (!grant.allowScreenSourceLookup && grant.remainingMediaRequests <= 0) {
+    mediaCaptureGrants.delete(webContentsId)
+  }
+  return true
+}
+
 const queueOpenPlaylist = (filePath: string) => {
   if (!filePath) return
   if (!/\.(cmpl|cpl)$/i.test(filePath)) return
@@ -96,14 +166,60 @@ if (!gotTheLock) {
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let trayLyricLocked = false
+const MAC_TRAY_GUID = 'f4f8a5d8-9eb2-4f98-8fd7-3a3d5ec9b2cf'
 
-function updateTrayMenu() {
+const sendPlaybackControl = (channel: 'music-control' | 'playPrev' | 'playNext'): void => {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+  mainWindow.webContents.send(channel)
+}
+
+const isMacStatusBarLyricTrayInteractive = (): boolean =>
+  process.platform !== 'darwin' || menuBarLyric.isEnabled()
+
+function updateTrayMenu(): void {
+  if (!tray) return
+  if (!isMacStatusBarLyricTrayInteractive()) {
+    tray.setToolTip('')
+    tray.setContextMenu(null)
+    return
+  }
+
+  tray.setToolTip('Ceru Music')
   const lyricWin = lyricWindow.getWin()
   const isVisible = !!lyricWin && lyricWin.isVisible()
   const toggleLyricLabel = isVisible ? '隐藏桌面歌词' : '显示桌面歌词'
   const toggleLockLabel = trayLyricLocked ? '解锁桌面歌词' : '锁定桌面歌词'
 
   const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '上一首',
+      click: () => {
+        sendPlaybackControl('playPrev')
+      }
+    },
+    {
+      label: '播放/暂停',
+      click: () => {
+        sendPlaybackControl('music-control')
+      }
+    },
+    {
+      label: '下一首',
+      click: () => {
+        sendPlaybackControl('playNext')
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '显示主窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      }
+    },
+    { type: 'separator' },
     {
       label: toggleLyricLabel,
       click: () => {
@@ -120,22 +236,6 @@ function updateTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: '显示主窗口',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
-        }
-      }
-    },
-    {
-      label: '播放/暂停',
-      click: () => {
-        mainWindow?.webContents.send('music-control')
-      }
-    },
-    { type: 'separator' },
-    {
       label: '退出',
       click: () => {
         app.quit()
@@ -145,30 +245,36 @@ function updateTrayMenu() {
   tray?.setContextMenu(contextMenu)
 }
 
-function setupTray() {
-  // 全局单例防重复（热重载/多次执行保护）
+function setupTray(): void {
+  // 全局单例：复用已有的托盘实例（热重载/多次执行保护）
   const g: any = global as any
+
   if (g.__ceru_tray__) {
-    try {
-      g.__ceru_tray__.destroy()
-    } catch {}
-    g.__ceru_tray__ = null
-  }
-  if (tray) {
-    try {
-      tray.destroy()
-    } catch {}
-    tray = null
+    tray = g.__ceru_tray__
+  } else {
+    const iconName = process.platform === 'win32' ? 'logo.ico' : 'logo.png'
+    const iconPath = path.join(__dirname, `../../resources/${iconName}`)
+    // macOS 上使用空 image + GUID 实现菜单栏歌词的标题持久化
+    const trayImage = process.platform === 'darwin' ? nativeImage.createEmpty() : iconPath
+    tray = process.platform === 'darwin' ? new Tray(trayImage, MAC_TRAY_GUID) : new Tray(trayImage)
+    g.__ceru_tray__ = tray
   }
 
-  const iconName = process.platform === 'win32' ? 'logo.ico' : 'logo.png'
-  const iconPath = path.join(__dirname, `../../resources/${iconName}`)
-  tray = new Tray(iconPath)
-  tray.setToolTip('Ceru Music')
+  menuBarLyric.setTray(tray)
+  menuBarLyric.onEnabledChange(() => {
+    updateTrayMenu()
+  })
   updateTrayMenu()
 
-  // 左键单击切换主窗口显示
-  tray.on('click', () => {
+  tray?.removeAllListeners('click')
+
+  // 左键单击：mac 上弹菜单（受状态栏歌词开关约束），其他平台切换主窗口显示
+  tray?.on('click', () => {
+    if (process.platform === 'darwin') {
+      if (!isMacStatusBarLyricTrayInteractive()) return
+      tray?.popUpContextMenu()
+      return
+    }
     if (!mainWindow) return
     if (mainWindow.isVisible()) {
       mainWindow.hide()
@@ -190,16 +296,18 @@ function setupTray() {
     g.__ceru_tray_ipc_bound__ = true
   }
 
-  // 记录全局托盘句柄
-  g.__ceru_tray__ = tray
-
-  app.once('before-quit', () => {
-    try {
-      tray?.destroy()
-    } catch {}
-    tray = null
-    g.__ceru_tray__ = null
-  })
+  if (!g.__ceru_tray_before_quit_bound__) {
+    app.once('before-quit', () => {
+      menuBarLyric.onEnabledChange(null)
+      menuBarLyric.setTray(null)
+      try {
+        tray?.destroy()
+      } catch {}
+      tray = null
+      g.__ceru_tray__ = null
+    })
+    g.__ceru_tray_before_quit_bound__ = true
+  }
 }
 
 /**
@@ -572,6 +680,30 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  // 系统音频采集 - 媒体权限授权流程
+  // 渲染端必须先调用 system-audio:prepare-capture 拿一次性令牌，否则 PermissionRequest 会被拒
+  const mainSession = session.defaultSession
+  mainSession.setPermissionCheckHandler((webContents, permission) => {
+    if (permission === 'media') {
+      if (!webContents || !isMainWindowWebContents(webContents)) {
+        return false
+      }
+      return hasMediaPermissionGrant(webContents.id)
+    }
+    return true
+  })
+  mainSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      if (!webContents || !isMainWindowWebContents(webContents)) {
+        callback(false)
+        return
+      }
+      callback(consumeMediaPermissionGrant(webContents.id))
+      return
+    }
+    callback(true)
+  })
+
   // GitCode 防盗链：去掉对 gitcode.com 请求的 Referer
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
@@ -696,8 +828,20 @@ ipcMain.handle('get-pending-playlist-share-ids', async () => {
   return consumePendingPlaylistShareIds()
 })
 
+// 系统音频采集 - 标记一次显式授权的采集会话
+ipcMain.handle('system-audio:prepare-capture', async (event) => {
+  if (!isMainWindowWebContents(event.sender)) {
+    return false
+  }
+  authorizeMediaCaptureForWebContents(event.sender.id)
+  return true
+})
+
 // 系统音频采集 - 获取屏幕源ID
-ipcMain.handle('system-audio:get-default-source-id', async () => {
+ipcMain.handle('system-audio:get-default-source-id', async (event) => {
+  if (!isMainWindowWebContents(event.sender) || !consumeScreenSourceLookupGrant(event.sender.id)) {
+    return ''
+  }
   try {
     const sources = await desktopCapturer.getSources({ types: ['screen'] })
     return (sources && sources[0] && sources[0].id) || ''

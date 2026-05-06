@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { PropType } from 'vue'
-import type { LyricLine, LyricWord } from '@applemusic-like-lyrics/core/dist/interfaces'
+import type { LyricLine, LyricWord } from '@applemusic-like-lyrics/core'
 
 const props = defineProps({
   lyricLines: {

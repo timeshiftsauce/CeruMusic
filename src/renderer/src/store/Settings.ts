@@ -40,6 +40,8 @@ export interface SettingsState {
   isDarkMode?: boolean // 暗色模式
   springFestivalDisabled?: boolean
   routePreloadEnabled?: boolean
+  /** macOS 状态栏歌词开关（仅 mac 生效） */
+  macStatusBarLyricEnabled?: boolean
   globalBackground?: GlobalBackgroundSettings
 }
 
@@ -70,6 +72,7 @@ export const useSettingsStore = defineStore(
       isDarkMode: false,
       springFestivalDisabled: false,
       routePreloadEnabled: true,
+      macStatusBarLyricEnabled: false,
       globalBackground: {
         enable: false,
         type: 'none',
@@ -153,6 +156,9 @@ export const useSettingsStore = defineStore(
       if (typeof settings.value.routePreloadEnabled === 'undefined') {
         settings.value.routePreloadEnabled = true
       }
+      if (typeof settings.value.macStatusBarLyricEnabled === 'undefined') {
+        settings.value.macStatusBarLyricEnabled = false
+      }
       if (!settings.value.globalBackground) {
         settings.value.globalBackground = {
           enable: false,
@@ -173,6 +179,13 @@ export const useSettingsStore = defineStore(
         }
       }
       localStorage.setItem('appSettings', JSON.stringify(settings.value))
+
+      // 把 closeToTray 同步到主进程，保险用（主进程 mainWindow.on('close') 会读取此值）
+      if (typeof settings.value.closeToTray !== 'undefined') {
+        try {
+          ;(window as any).api?.settings?.syncCloseToTray(settings.value.closeToTray)
+        } catch {}
+      }
     }
 
     // 更新设置
