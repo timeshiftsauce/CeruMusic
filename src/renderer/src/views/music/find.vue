@@ -63,9 +63,7 @@ const showMore = ref<boolean>(false)
 
 let watchSource: WatchHandle | null = null
 
-const cacheKey = computed(
-  () => `${userSource.value.source || 'wy'}::${activeTagId.value || 'hot'}`
-)
+const cacheKey = computed(() => `${userSource.value.source || 'wy'}::${activeTagId.value || 'hot'}`)
 
 const activeGroup = computed(
   () => tags.value.find((g) => g.name === activeGroupName.value) || tags.value[0]
