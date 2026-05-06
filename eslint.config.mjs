@@ -96,7 +96,7 @@ export default [
     languageOptions: {
       parserOptions: {
         project: './tsconfig.node.json',
-        tsconfigRootDir: process.cwd()
+        tsconfigRootDir: import.meta.dirname
       }
     },
     rules: {
@@ -123,7 +123,7 @@ export default [
     languageOptions: {
       parserOptions: {
         project: './tsconfig.web.json',
-        tsconfigRootDir: process.cwd()
+        tsconfigRootDir: import.meta.dirname
       }
     },
     rules: {
