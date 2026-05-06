@@ -1107,11 +1107,7 @@ onUnmounted(() => {
   position: absolute;
   inset: -20%;
   background:
-    radial-gradient(
-      circle at 30% 30%,
-      rgba(255, 255, 255, 0.18),
-      transparent 35%
-    ),
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), transparent 35%),
     radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.12), transparent 40%);
   mix-blend-mode: overlay;
   animation: bg-spin 36s linear infinite;

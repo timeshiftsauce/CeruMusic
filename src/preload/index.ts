@@ -100,6 +100,14 @@ const api = {
       ipcRenderer.removeAllListeners('ai-stream-error')
     }
   },
+  // 窗口关闭请求监听（Ctrl+W / Alt+F4）
+  windowClose: {
+    onRequest: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('window-close-requested', handler)
+      return () => ipcRenderer.removeListener('window-close-requested', handler)
+    }
+  },
   // 音频缓存管理
   musicCache: {
     getInfo: () => ipcRenderer.invoke('music-cache:get-info'),

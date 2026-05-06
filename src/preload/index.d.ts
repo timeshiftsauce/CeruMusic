@@ -104,6 +104,10 @@ interface CustomAPI {
     removeStreamListeners: () => void
   }
 
+  windowClose: {
+    onRequest: (callback: () => void) => () => void
+  }
+
   // 插件管理API
   plugins: {
     selectAndAddPlugin: (type: 'lx' | 'cr') => Promise<any>

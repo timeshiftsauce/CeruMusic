@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -106,6 +106,22 @@ const handleBack = (): void => {
   // 返回上一页
   router.back()
 }
+
+// 监听全局关闭对话框事件（来自 Ctrl+W / Alt+F4）
+let unsubShowDialog: (() => void) | null = null
+
+onMounted(() => {
+  const handler = () => {
+    showCloseDialog.value = true
+  }
+  window.addEventListener('ceru-show-close-dialog', handler)
+  unsubShowDialog = () => window.removeEventListener('ceru-show-close-dialog', handler)
+})
+
+onBeforeUnmount(() => {
+  unsubShowDialog?.()
+  unsubShowDialog = null
+})
 </script>
 
 <template>
