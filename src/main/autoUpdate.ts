@@ -1,5 +1,4 @@
 import { BrowserWindow, app, shell } from 'electron'
-import axios from 'axios'
 import fs from 'fs'
 import path from 'node:path'
 import { autoUpdater as electronAutoUpdater } from 'electron-updater'
@@ -41,6 +40,79 @@ function ymlNameForPlatform(): string {
   if (process.platform === 'darwin') return 'latest-mac.yml'
   if (process.platform === 'linux') return 'latest-linux.yml'
   return 'latest.yml'
+}
+
+// ============================================================
+// DNS 兜底: 系统 DNS 解析失败时,通过 Cloudflare DoH (1.1.1.1) 拿 IP,
+// 然后改写 URL 直连 IP. DoH 端点用 IP 访问,不依赖系统 DNS.
+// ============================================================
+
+interface DohCacheEntry {
+  ip: string
+  expiresAt: number
+}
+const dohCache = new Map<string, DohCacheEntry>()
+
+async function dohResolve(hostname: string): Promise<string> {
+  const cached = dohCache.get(hostname)
+  if (cached && cached.expiresAt > Date.now()) return cached.ip
+
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 5000)
+  try {
+    const res = await fetch(
+      `https://1.1.1.1/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+      { headers: { Accept: 'application/dns-json' }, signal: ctrl.signal }
+    )
+    if (!res.ok) throw new Error(`DoH HTTP ${res.status}`)
+    const data = (await res.json()) as { Answer?: { data: string }[] }
+    const ips = (data.Answer || [])
+      .map((a) => a.data)
+      .filter((ip) => /^\d+\.\d+\.\d+\.\d+$/.test(ip))
+    if (!ips.length) throw new Error('no A record')
+    const ip = ips[0]
+    dohCache.set(hostname, { ip, expiresAt: Date.now() + 5 * 60_000 })
+    updateLog.log(`DoH resolved ${hostname} → ${ip}`)
+    return ip
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+// 把 https://hostname/path 改成 https://<ip>/path,同时设置 Host header 让 SNI/HTTP 路由正确.
+async function fetchWithDohFallback(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {}
+): Promise<Response> {
+  const { timeoutMs = 10000, ...rest } = init
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+
+  // 先按原 URL 跑
+  try {
+    const res = await fetch(url, { ...rest, signal: ctrl.signal })
+    return res
+  } catch (err: any) {
+    const code = err?.code || err?.cause?.code || ''
+    // 只在 DNS 解析失败时回退,其它错误 (超时/连接拒绝等) 直接抛出
+    if (code !== 'ENOTFOUND' && code !== 'EAI_AGAIN') throw err
+
+    const u = new URL(url)
+    let ip: string
+    try {
+      ip = await dohResolve(u.hostname)
+    } catch (dohErr) {
+      updateLog.log('DoH fallback failed:', (dohErr as Error).message)
+      throw err
+    }
+
+    const ipUrl = `${u.protocol}//${ip}${u.pathname}${u.search}`
+    const headers = new Headers(rest.headers)
+    headers.set('Host', u.hostname)
+    return fetch(ipUrl, { ...rest, headers, signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // ============================================================
@@ -111,9 +183,55 @@ export async function cleanupDownloadedInstallers() {
   } catch {}
 }
 
-// ============================================================
-// 入口: 检查更新 (dispatcher)
-// ============================================================
+interface UpdateError {
+  code?: string
+  message: string
+  raw?: string
+}
+
+const ERROR_CODE_MAP: Record<string, string> = {
+  ENOTFOUND: '无法解析更新服务器域名,请检查 DNS 设置或网络连接',
+  EAI_AGAIN: 'DNS 暂时无法解析,请稍后重试',
+  ETIMEDOUT: '连接更新服务器超时,请检查网络',
+  UND_ERR_CONNECT_TIMEOUT: '连接更新服务器超时,请检查网络',
+  ECONNRESET: '与更新服务器的连接被重置,请重试',
+  ECONNREFUSED: '更新服务器拒绝连接,可能在维护中',
+  ECONNABORTED: '请求被中止,请重试',
+  CERT_HAS_EXPIRED: '更新服务器证书已过期,请检查系统时间',
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: '无法验证服务器证书,请检查系统时间或代理设置',
+  ENETUNREACH: '网络不可达,请检查网络连接',
+  EHOSTUNREACH: '无法访问更新服务器,请检查网络',
+  AbortError: '请求超时',
+  TimeoutError: '请求超时'
+}
+
+function translateError(err: unknown): UpdateError {
+  if (!err) return { message: '未知错误' }
+  if (typeof err === 'string') return { message: err, raw: err }
+  const e = err as {
+    code?: string
+    cause?: { code?: string; message?: string }
+    name?: string
+    message?: string
+  }
+  const code =
+    e.code ||
+    e.cause?.code ||
+    (e.name && e.name !== 'Error' && e.name !== 'TypeError' ? e.name : undefined)
+  const raw = e.message || e.cause?.message || String(err)
+  const friendly = code ? ERROR_CODE_MAP[code] : undefined
+  return {
+    code,
+    message: friendly || raw || '更新失败',
+    raw
+  }
+}
+
+function sendError(err: unknown) {
+  const payload = translateError(err)
+  updateLog.log('Update error:', payload)
+  mainWindow?.webContents.send('auto-updater:error', payload)
+}
 
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window
@@ -146,46 +264,50 @@ export async function checkForUpdates(window?: BrowserWindow) {
     )
     mainWindow?.webContents.send('auto-updater:update-available', currentUpdateInfo)
   } catch (err) {
-    updateLog.log('check error:', err)
-    mainWindow?.webContents.send('auto-updater:error', (err as Error).message)
+    sendError(err)
   }
 }
 
 async function fetchHazelUpdateInfo(): Promise<UpdateInfo | null> {
   updateLog.log('Fetching update info from ' + UPDATE_API_URL)
   try {
-    const response = await axios.get(UPDATE_API_URL, {
-      timeout: 10000,
-      validateStatus: (status) => status === 200 || status === 204
+    const res = await fetchWithDohFallback(UPDATE_API_URL, {
+      method: 'GET',
+      headers: { Accept: 'application/json', 'User-Agent': 'CeruMusic-AutoUpdater' },
+      timeoutMs: 10000
     })
-    if (response.status === 200) {
-      const data = response.data as UpdateInfo
-      if (data && data.url) {
-        data.url = resolveDownloadUrlForCurrentArch(data.url)
-      }
-      return data
+    if (res.status === 204) return null
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`)
     }
-    return null
+    const data = (await res.json()) as UpdateInfo
+    if (data && data.url) {
+      data.url = resolveDownloadUrlForCurrentArch(data.url)
+    }
+    return data
   } catch (error: any) {
-    if (error.response) {
-      throw new Error(`HTTP ${error.response.status}: ${error.response.statusText}`)
-    } else if (error.request) {
-      throw new Error('Network error: No response received')
-    } else {
-      throw new Error(`Request failed: ${error.message}`)
-    }
+    const realCode = error?.code || error?.cause?.code || error?.name
+    const realMessage = error?.cause?.message || error?.message || String(error)
+    updateLog.log('Hazel fetch raw error:', {
+      name: error?.name,
+      code: realCode,
+      message: realMessage
+    })
+    const wrapped = new Error(realMessage) as Error & { code?: string }
+    if (realCode) wrapped.code = realCode
+    throw wrapped
   }
 }
 
 async function detectBlockmapPresence(): Promise<boolean> {
   const ymlName = ymlNameForPlatform()
   try {
-    const res = await axios.get(`${UPDATE_SERVER}/${ymlName}`, {
-      timeout: 5000,
-      transformResponse: [(d) => d],
-      responseType: 'text'
+    const res = await fetchWithDohFallback(`${UPDATE_SERVER}/${ymlName}`, {
+      headers: { 'User-Agent': 'CeruMusic-AutoUpdater' },
+      timeoutMs: 5000
     })
-    const text = String(res.data || '')
+    if (!res.ok) return false
+    const text = await res.text()
     return /blockMapSize\s*:/.test(text)
   } catch (err) {
     updateLog.log('blockmap detect failed:', (err as Error).message)
@@ -254,16 +376,10 @@ function initElectronUpdater() {
       try {
         await downloadWithLegacy()
       } catch (fallbackErr) {
-        mainWindow?.webContents.send(
-          'auto-updater:error',
-          (fallbackErr as Error).message || String(fallbackErr)
-        )
+        sendError(fallbackErr)
       }
     } else {
-      mainWindow?.webContents.send(
-        'auto-updater:error',
-        err?.message || 'electron-updater error'
-      )
+      sendError(err)
     }
   })
 
@@ -289,7 +405,7 @@ async function downloadWithDifferential() {
 }
 
 // ============================================================
-// 路径 2: legacy axios + DownloadManager (全量)
+// 路径 2: 全量下载 + DownloadManager
 // ============================================================
 
 async function downloadWithLegacy() {
@@ -346,14 +462,14 @@ async function downloadWithLegacy() {
       })
       cleanupListeners()
     } else if (t.status === DownloadStatus.Error) {
-      mainWindow?.webContents.send('auto-updater:error', t.error || '下载失败')
+      sendError(t.error || '下载失败')
       cleanupListeners()
     }
   }
 
   const onError = (t: any) => {
     if (t.id !== currentDownloadTaskId) return
-    mainWindow?.webContents.send('auto-updater:error', t.error || '下载失败')
+    sendError(t.error || '下载失败')
     cleanupListeners()
   }
 
@@ -381,7 +497,7 @@ async function downloadWithLegacy() {
 
 export async function downloadUpdate(mode?: UpdateMode) {
   if (!currentUpdateInfo) {
-    mainWindow?.webContents.send('auto-updater:error', 'No update info available')
+    sendError('No update info available')
     return
   }
 
@@ -408,13 +524,10 @@ export async function downloadUpdate(mode?: UpdateMode) {
       try {
         await downloadWithLegacy()
       } catch (e2) {
-        mainWindow?.webContents.send(
-          'auto-updater:error',
-          (e2 as Error).message || String(e2)
-        )
+        sendError(e2)
       }
     } else {
-      mainWindow?.webContents.send('auto-updater:error', (err as Error).message)
+      sendError(err)
     }
   }
 }
@@ -464,9 +577,7 @@ function quitAndInstallLegacy() {
       updateLog.log('Downloaded file not found:', downloadPath)
     }
   } else {
-    shell.showItemInFolder(
-      path.join(app.getPath('temp'), path.basename(currentUpdateInfo.url))
-    )
+    shell.showItemInFolder(path.join(app.getPath('temp'), path.basename(currentUpdateInfo.url)))
   }
 }
 

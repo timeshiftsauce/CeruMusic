@@ -77,9 +77,11 @@ export class AutoUpdateService {
       this.showUpdateDownloadedDialog()
     })
 
-    window.api.autoUpdater.onError((_, error: string) => {
-      this.showUpdateErrorNotification(error)
-    })
+    window.api.autoUpdater.onError(
+      (error: string | { code?: string; message: string; raw?: string }) => {
+        this.showUpdateErrorNotification(error)
+      }
+    )
 
     window.api.autoUpdater.onDifferentialFallback((info: { reason: string }) => {
       this.showDifferentialFallbackNotification(info?.reason)
@@ -325,11 +327,35 @@ export class AutoUpdateService {
   }
 
   // 显示更新错误通知
-  private showUpdateErrorNotification(error: string) {
+  private showUpdateErrorNotification(
+    error: string | { code?: string; message?: string; raw?: string } | null | undefined
+  ) {
+    if (!error) {
+      NotifyPlugin.error({
+        title: '更新失败',
+        content: '未知错误,请稍后重试',
+        duration: 5000
+      })
+      return
+    }
+
+    if (typeof error === 'string') {
+      NotifyPlugin.error({
+        title: '更新失败',
+        content: error,
+        duration: 5000
+      })
+      return
+    }
+
+    // 结构化错误: 主进程已经把 ENOTFOUND/ETIMEDOUT 等翻译成中文 message
+    const friendly = error.message || error.raw || '未知错误,请稍后重试'
+    const lines = [friendly]
+    if (error.code && friendly !== error.code) lines.push(`错误代码: ${error.code}`)
     NotifyPlugin.error({
       title: '更新失败',
-      content: `更新过程中出现错误: ${error}`,
-      duration: 5000
+      content: lines.join('\n'),
+      duration: 6000
     })
   }
 
