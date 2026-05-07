@@ -107,5 +107,6 @@ npmRebuild: false
 publish:
   provider: generic
   url: https://update.cerumusic.top
+  useMultipleRangeRequest: false
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
