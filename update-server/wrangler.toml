@@ -14,4 +14,4 @@ RELEASE_CACHE_TTL = "60"
 # 部署后绑定自定义域名:
 #   wrangler deploy
 #   然后在 Cloudflare 控制台 Workers > 你的 worker > Triggers > Custom Domains
-#   添加 update.ceru.shiqianjiang.cn (域名要在同一 CF 账户托管)
+#   添加 update.cerumusic.top (域名要在同一 CF 账户托管)

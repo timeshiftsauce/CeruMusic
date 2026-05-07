@@ -59,7 +59,7 @@ export async function handleRequest(
     if (path.startsWith('/') && !path.slice(1).includes('/')) {
       const file = decodeURIComponent(path.slice(1))
       if (ASSET_FILE_RE.test(file)) {
-        return await handleAsset(env, ctx, file)
+        return await handleAsset(env, ctx, file, request)
       }
     }
 
@@ -155,20 +155,71 @@ function ymlResponse(body: string): Response {
 
 async function handleAsset(
   env: Env,
-  ctx: ExecutionContext,
-  file: string
+  _ctx: ExecutionContext,
+  file: string,
+  request: Request
 ): Promise<Response> {
   if (!file || file.includes('/') || file.includes('..') || file.startsWith('.')) {
     return new Response('bad request', { status: 400 })
   }
-  const release = await getLatestRelease(env, ctx)
+  const release = await getLatestRelease(env, _ctx)
   const url = downloadUrl(env, release, file)
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: url,
-      'Cache-Control': 'public, max-age=300, s-maxage=300'
+
+  // 反向代理: Worker 拉 GitHub → 流式吐给客户端,绕开国内访问 github 困难的问题。
+  // 仅转发跟范围下载/缓存校验相关的 header,避免泄漏客户端凭据。
+  const upstreamHeaders = new Headers()
+  for (const h of ['Range', 'If-Range', 'If-Modified-Since', 'If-None-Match']) {
+    const v = request.headers.get(h)
+    if (v) upstreamHeaders.set(h, v)
+  }
+  upstreamHeaders.set('User-Agent', 'CeruMusic-UpdateServer')
+
+  let upstream: Response
+  try {
+    let target = url
+    let first = await fetch(target, {
+      method: request.method === 'HEAD' ? 'HEAD' : 'GET',
+      headers: upstreamHeaders,
+      redirect: 'manual'
+    })
+    if (first.status >= 300 && first.status < 400) {
+      const loc = first.headers.get('location')
+      if (loc) {
+        target = loc
+        // 第二跳 (实际 CDN) 才打开 CF 缓存,让边缘节点缓存最终的二进制.
+        first = await fetch(target, {
+          method: request.method === 'HEAD' ? 'HEAD' : 'GET',
+          headers: upstreamHeaders,
+          redirect: 'follow'
+        })
+      }
     }
+    upstream = first
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return new Response(`upstream fetch failed: ${msg}`, { status: 502 })
+  }
+
+  // 仅透传跟内容/缓存相关的 header,过滤掉上游的 Set-Cookie 等
+  const respHeaders = new Headers()
+  const passThrough = [
+    'content-type',
+    'content-length',
+    'content-range',
+    'accept-ranges',
+    'etag',
+    'last-modified'
+  ]
+  for (const h of passThrough) {
+    const v = upstream.headers.get(h)
+    if (v) respHeaders.set(h, v)
+  }
+  if (!respHeaders.has('accept-ranges')) respHeaders.set('Accept-Ranges', 'bytes')
+  respHeaders.set('Cache-Control', 'public, max-age=86400, s-maxage=86400')
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: respHeaders
   })
 }
 
