@@ -17,9 +17,9 @@ jobs:
       fail-fast: false # 即使一个平台失败，其他平台继续运行
       matrix:
         # 定义运行环境：Windows, macOS, Linux
-        # macos-13 = Intel x64 runner, macos-latest = Apple Silicon arm64 runner
+        # macos-15-intel = Intel x64 runner (macos-13 已于 2025-12-04 下线), macos-latest = Apple Silicon arm64 runner
         # 两台 mac runner 各自构建对应架构,避免 universal 包对 native module(better-sqlite3) 的二进制冲突
-        os: [windows-latest, macos-13, macos-latest, ubuntu-latest]
+        os: [windows-latest, macos-15-intel, macos-latest, ubuntu-latest]
 
     steps:
       - name: Check out git repository
@@ -70,7 +70,7 @@ jobs:
         run: yarn run build:win
 
       - name: Build Electron App for macOS Intel (x64)
-        if: matrix.os == 'macos-13'
+        if: matrix.os == 'macos-15-intel'
         shell: bash
         env:
           # macOS 代码签名 + 公证(Apple notarization)所需环境变量
