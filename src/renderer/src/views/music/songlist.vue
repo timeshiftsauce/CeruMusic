@@ -90,6 +90,13 @@ const currentEditingPlaylist = ref<SongList | null>(null)
 const getCoverUrl = (p: SongList): string =>
   p.coverImgUrl && p.coverImgUrl !== 'default-cover' ? p.coverImgUrl : defaultCover
 
+const formatLocalTime = (input: string | number | Date): string => {
+  const d = new Date(input)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 // 右键菜单状态
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
@@ -1685,23 +1692,11 @@ onDeactivated(() => {
                 <span>{{ playlist.source }}</span>
                 <span v-if="playlist.meta?.cloudUpdatedAt"
                   >更新于
-                  {{
-                    new Date(playlist.meta.cloudUpdatedAt)
-                      .toJSON()
-                      .replaceAll(/[TZ]/g, ' ')
-                      .replace('+08:00', '')
-                      .replaceAll(/\.\d{3}/g, '')
-                  }}</span
+                  {{ formatLocalTime(playlist.meta.cloudUpdatedAt) }}</span
                 >
                 <span v-else-if="playlist.createTime"
                   >创建于
-                  {{
-                    new Date(playlist.createTime)
-                      .toJSON()
-                      .replaceAll(/[TZ]/g, ' ')
-                      .replace('+08:00', '')
-                      .replaceAll(/\.\d{3}/g, '')
-                  }}</span
+                  {{ formatLocalTime(playlist.createTime) }}</span
                 >
               </div>
             </div>
@@ -2384,11 +2379,6 @@ onDeactivated(() => {
     transform 0.2s ease,
     box-shadow 0.2s ease;
 
-  // 浏览器原生虚拟化:视口外的卡片跳过 layout/paint
-  content-visibility: auto;
-  contain-intrinsic-size: 0 380px;
-  contain: layout paint;
-
   &.custom-bg {
     background-color: var(--td-bg-color-component);
     backdrop-filter: blur(8px);
@@ -2405,6 +2395,8 @@ onDeactivated(() => {
       transform: scale(1.06);
     }
     .playlist-info::before {
+      filter: blur(40px) brightness(0.55) saturate(1.6);
+      transform: scale(1.6);
       opacity: 1;
     }
     .playlist-info {
@@ -2467,6 +2459,7 @@ onDeactivated(() => {
     transition: color 0.3s ease;
 
     // GPU-only hover backdrop:用封面本身做模糊背板,无需 JS 算色
+    // 默认不挂 filter/transform,避免每张卡都建立合成层;只在 hover 时启用
     &::before {
       content: '';
       position: absolute;
@@ -2475,8 +2468,6 @@ onDeactivated(() => {
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
-      filter: blur(40px) brightness(0.55) saturate(1.6);
-      transform: scale(1.6);
       opacity: 0;
       transition: opacity 0.35s ease;
       z-index: -1;

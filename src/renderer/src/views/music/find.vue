@@ -451,8 +451,6 @@ onDeactivated(() => {
   height: 100%;
   overflow-y: auto;
   padding: 0 2rem;
-  // 让浏览器知道这是一个独立滚动容器,辅助 content-visibility 推算视口
-  contain: layout paint;
 }
 
 /* ======= 分类栏 ======= */
@@ -628,12 +626,6 @@ onDeactivated(() => {
     transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 0.25s ease;
 
-  // 浏览器原生"虚拟化":视口外的卡片跳过 layout/paint
-  content-visibility: auto;
-  contain-intrinsic-size: 0 280px;
-  // 卡片内的样式变化不冒泡
-  contain: layout paint;
-
   &.custom-bg {
     background-color: var(--td-bg-color-component);
     backdrop-filter: blur(8px);
@@ -751,7 +743,7 @@ onDeactivated(() => {
   z-index: 0;
 
   // GPU-only "themed" hover backdrop using cover image
-  // 用封面本身做模糊背板,无需 JS 算色
+  // 默认不挂 filter/transform,避免每张卡都建立合成层;只在 hover 时启用
   &::before {
     content: '';
     position: absolute;

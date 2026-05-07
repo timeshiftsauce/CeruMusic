@@ -71,12 +71,12 @@ jobs:
             asset_name=$(echo "$asset" | jq -r '.name')
             asset_url=$(echo "$asset" | jq -r '.url')
             asset_size=$(echo "$asset" | jq -r '.size')
-            
+
             echo "📦 处理资源: $asset_name (大小: $asset_size bytes)"
 
             # 下载资源文件
             safe_filename="./temp_${TAG_NAME}_$(date +%s)_$i"
-            
+
             if ! curl -sL -o "$safe_filename" \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/octet-stream" \
@@ -85,7 +85,7 @@ jobs:
               failed_count=$((failed_count + 1))
               continue
             fi
-            
+
             if [ -f "$safe_filename" ]; then
               actual_size=$(wc -c < "$safe_filename")
               if [ "$actual_size" -ne "$asset_size" ]; then
@@ -96,20 +96,20 @@ jobs:
               fi
 
               echo "⬆️  上传到 WebDAV: $asset_name"
-              
+
               # 构建远程路径
               remote_path="/yd/ceru/$TAG_NAME/$asset_name"
               full_url="${{ secrets.WEBDAV_BASE_URL }}$remote_path"
-              
+
               # 使用 WebDAV PUT 方法上传文件
               if curl -s -f -X PUT \
                 -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
                 -T "$safe_filename" \
                 "$full_url"; then
-                
+
                 echo "✅ 上传成功: $asset_name"
                 success_count=$((success_count + 1))
-                
+
                 # 验证文件是否存在
                 sleep 1
                 if curl -s -f -u "${{ secrets.WEBDAV_USERNAME }}:${{ secrets.WEBDAV_PASSWORD }}" \
@@ -120,12 +120,12 @@ jobs:
                 else
                   echo "⚠️  文件验证失败，但上传可能成功: $asset_name"
                 fi
-                
+
               else
                 echo "❌ 上传失败: $asset_name"
                 failed_count=$((failed_count + 1))
               fi
-              
+
               # 清理临时文件
               rm -f "$safe_filename"
               echo "----------------------------------------"

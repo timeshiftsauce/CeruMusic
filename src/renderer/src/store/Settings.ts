@@ -38,6 +38,7 @@ export interface SettingsState {
   hasConfiguredCloseBehavior?: boolean
   theme?: string // 主题
   isDarkMode?: boolean // 暗色模式
+  followSystemTheme?: boolean // 跟随系统亮/暗模式
   springFestivalDisabled?: boolean
   routePreloadEnabled?: boolean
   /** macOS 状态栏歌词开关（仅 mac 生效） */
@@ -70,6 +71,7 @@ export const useSettingsStore = defineStore(
       hasConfiguredCloseBehavior: false,
       theme: 'default',
       isDarkMode: false,
+      followSystemTheme: false,
       springFestivalDisabled: false,
       routePreloadEnabled: true,
       macStatusBarLyricEnabled: false,
@@ -149,6 +151,9 @@ export const useSettingsStore = defineStore(
       }
       if (typeof settings.value.isDarkMode === 'undefined') {
         settings.value.isDarkMode = false
+      }
+      if (typeof settings.value.followSystemTheme === 'undefined') {
+        settings.value.followSystemTheme = false
       }
       if (typeof settings.value.springFestivalDisabled === 'undefined') {
         settings.value.springFestivalDisabled = false

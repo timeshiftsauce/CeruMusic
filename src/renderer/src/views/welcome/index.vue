@@ -89,16 +89,15 @@ const features = showNewYear.value
   : ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
 
 onMounted(async () => {
-  // 获取版本号，加 3 秒超时兜底，防止 IPC 卡死
+  // 获取版本号
   try {
-    const appVersion = await Promise.race([
-      window.electron.ipcRenderer.invoke('get-app-version'),
-      new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 3000))
-    ])
+    const appVersion = await window.electron.ipcRenderer.invoke('get-app-version')
     if (appVersion) version.value = appVersion
   } catch (error) {
     console.warn('Failed to get app version:', error)
   }
+
+  const startTime = Date.now()
 
   // 模拟进度条动画
   let progress = 0
@@ -120,6 +119,16 @@ onMounted(async () => {
     loadingText.value = '初始化遇到问题'
   }
 
+  const endTime = Date.now()
+  const duration = endTime - startTime
+
+  // 动态计算等待时间
+  let waitTime = 0
+  if (duration < 2000) {
+    waitTime = 2000 - duration
+  } else {
+    waitTime = 1000
+  }
   loadingPercent.value = 80
   loadingText.value = '加载歌曲资源...'
 
@@ -142,7 +151,7 @@ onMounted(async () => {
             }
           })
         }, 200)
-      }, 1000)
+      }, waitTime)
     })
 })
 
