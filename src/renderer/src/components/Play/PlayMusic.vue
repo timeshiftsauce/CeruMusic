@@ -42,7 +42,8 @@ import {
   ChatBubble1Icon,
   EllipsisIcon,
   ShareIcon,
-  SoundIcon
+  SoundIcon,
+  TimeIcon
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
@@ -352,6 +353,8 @@ let lyricOpenChangeHandler: ((_: any, visible: boolean) => void) | null = null
 let lyricCloseHandler: (() => void) | null = null
 let openPlaylistHandler: (() => void) | null = null
 let closePlaylistHandler: (() => void) | null = null
+let unsubSlotSwap: (() => void) | null = null
+let unsubCanPlay: (() => void) | null = null
 
 function globalControls(e) {
   console.log('全局:', e)
@@ -400,6 +403,11 @@ onMounted(async () => {
   }
   window.addEventListener('open-playlist', openPlaylistHandler)
   window.addEventListener('close-playlist', closePlaylistHandler)
+
+  // 倍速：在槽位翻转 / 新源可播时重新应用，确保跨歌曲与无感过渡后保持一致
+  unsubSlotSwap = controlAudio.subscribe('slotSwap', () => applyPlaybackRate(playbackRate.value))
+  unsubCanPlay = controlAudio.subscribe('canplay', () => applyPlaybackRate(playbackRate.value))
+  applyPlaybackRate(playbackRate.value)
 })
 
 // 组件卸载时清理
@@ -419,6 +427,14 @@ onUnmounted(() => {
   window.removeEventListener('global-music-control', globalControls)
   if (openPlaylistHandler) window.removeEventListener('open-playlist', openPlaylistHandler)
   if (closePlaylistHandler) window.removeEventListener('close-playlist', closePlaylistHandler)
+  if (unsubSlotSwap) {
+    unsubSlotSwap()
+    unsubSlotSwap = null
+  }
+  if (unsubCanPlay) {
+    unsubCanPlay()
+    unsubCanPlay = null
+  }
   lyricLockHandler = null
   lyricOpenChangeHandler = null
   lyricCloseHandler = null
@@ -557,6 +573,26 @@ const shareDialogVisible = ref(false)
 
 // 更多菜单是否打开（打开时阻止控制栏自动隐藏）
 const isMoreMenuOpen = ref(false)
+
+// 播放倍速
+const playbackRate = ref(1)
+const playbackRateOptions = [0.5, 0.75, 1, 1.25, 1.5, 2]
+const formatRate = (r: number) => (r === 1 ? '1.0x（正常）' : `${r}x`)
+const applyPlaybackRate = (rate: number) => {
+  const a = Audio.value.audioA
+  const b = Audio.value.audioB
+  try {
+    if (a) a.playbackRate = rate
+  } catch {}
+  try {
+    if (b) b.playbackRate = rate
+  } catch {}
+}
+const setPlaybackRate = (rate: number) => {
+  if (rate <= 0) return
+  playbackRate.value = rate
+  applyPlaybackRate(rate)
+}
 
 // 音质切换相关
 const qualityDisplayMap: Record<string, string> = {
@@ -726,6 +762,21 @@ const moreMenuOptions = computed(() => {
     })
   }
 
+  opts.push({
+    label: `播放倍速 · ${formatRate(playbackRate.value)}`,
+    key: 'rate',
+    icon: () => h(TimeIcon, { size: '16' }),
+    disabled: !songInfo.value.songmid,
+    children: playbackRateOptions.map((r) => ({
+      label: formatRate(r),
+      key: `rate:${r}`,
+      icon:
+        r === playbackRate.value
+          ? () => h(CheckIcon, { size: '14', style: { color: 'var(--td-brand-color-5)' } })
+          : undefined
+    }))
+  })
+
   return opts
 })
 
@@ -738,6 +789,11 @@ const handleMoreMenuSelect = (key: string) => {
   if (typeof key === 'string' && key.startsWith('quality:')) {
     const q = key.slice('quality:'.length)
     void switchQuality(q)
+    return
+  }
+  if (typeof key === 'string' && key.startsWith('rate:')) {
+    const r = parseFloat(key.slice('rate:'.length))
+    if (!isNaN(r)) setPlaybackRate(r)
     return
   }
 }
