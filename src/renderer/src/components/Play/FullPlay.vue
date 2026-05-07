@@ -1092,14 +1092,11 @@ onUnmounted(() => {
   transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
   contain: layout style;
-  will-change: opacity, transform;
   transform: scale(1.08);
   overflow: hidden;
 }
 .bg-fallback.active {
   opacity: 1;
-  /* 缓慢呼吸位移，制造柔和动态感 */
-  animation: bg-breath 22s ease-in-out infinite alternate;
 }
 /* 旋转的柔光斑：用主色淡淡转一圈，不可控感被限制在固定范围 */
 .bg-fallback.active::after {
@@ -1110,6 +1107,18 @@ onUnmounted(() => {
     radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), transparent 35%),
     radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.12), transparent 40%);
   mix-blend-mode: overlay;
+}
+
+/* FullPlay 显示时才让兜底背景进入 GPU 合成层并跑动画
+ * 否则 will-change + 永动 animation 会让独显在背景持续上传/合成,
+ * 阻塞同时间发生的封面图 GPU 上传与列表滚动重绘。 */
+.full-play.active .bg-fallback {
+  will-change: opacity, transform;
+}
+.full-play.active .bg-fallback.active {
+  animation: bg-breath 22s ease-in-out infinite alternate;
+}
+.full-play.active .bg-fallback.active::after {
   animation: bg-spin 36s linear infinite;
   will-change: transform;
 }

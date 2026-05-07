@@ -252,8 +252,8 @@ export async function checkForUpdates(window?: BrowserWindow) {
     }
 
     // 差分支持判定: 必须打包态 + yml 中存在 blockMapSize
-    supportsDifferential = app.isPackaged && (await detectBlockmapPresence())
-
+    supportsDifferential = await detectBlockmapPresence()
+    console.log('supportsDifferential:', supportsDifferential)
     currentUpdateInfo = { ...hazelInfo, supportsDifferential }
     currentMode = null
     differentialReady = false
@@ -348,6 +348,12 @@ function initElectronUpdater() {
 
   electronAutoUpdater.autoDownload = false
   electronAutoUpdater.autoInstallOnAppQuit = false
+  electronAutoUpdater.disableWebInstaller = true
+  electronAutoUpdater.setFeedURL({
+    provider: 'generic',
+    url: UPDATE_SERVER,
+    useMultipleRangeRequest: false
+  })
 
   electronAutoUpdater.on('download-progress', (p) => {
     downloadProgress = {
@@ -397,6 +403,11 @@ async function downloadWithDifferential() {
   })
   try {
     await electronAutoUpdater.checkForUpdates()
+    // update.cerumusic.top 走实时代理时,单范围差分更稳,避免 multipart/byteranges 兼容性问题
+    const provider = (electronAutoUpdater as any).updateInfoAndProvider?.provider
+    if (provider?.runtimeOptions) {
+      provider.runtimeOptions.isUseMultipleRangeRequest = false
+    }
     await electronAutoUpdater.downloadUpdate()
   } catch (err) {
     isDifferentialDownloading = false

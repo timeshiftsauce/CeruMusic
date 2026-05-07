@@ -343,15 +343,20 @@ onMounted(() => {
 
   // 监听 Store 变化，响应云同步
   watch(
-    () => [settingsStore.settings.theme, settingsStore.settings.isDarkMode],
-    ([newTheme, newMode]) => {
+    () => [
+      settingsStore.settings.theme,
+      settingsStore.settings.isDarkMode,
+      settingsStore.settings.followSystemTheme
+    ],
+    ([newTheme, newMode, newFollow]) => {
       // 只有当 Store 中的值与当前应用的值不同时才应用，避免死循环
       // applyTheme 会更新 localStorage 并触发 theme-changed
       const currentTheme = localStorage.getItem('selected-theme') || 'default'
       const currentMode = localStorage.getItem('dark-mode') === 'true'
 
       const targetTheme = (newTheme as string) || 'default'
-      const targetMode = (newMode as boolean) ?? false
+      // 跟随系统时使用系统偏好作为目标暗色状态
+      const targetMode = newFollow ? detectSystemTheme() : ((newMode as boolean) ?? false)
 
       if (targetTheme !== currentTheme || targetMode !== currentMode) {
         applyTheme(targetTheme, targetMode)
@@ -505,7 +510,10 @@ const loadSavedTheme = () => {
   // 优先尝试从 Store 读取（支持云同步）
   if (settingsStore.settings.theme || typeof settingsStore.settings.isDarkMode !== 'undefined') {
     const themeName = settingsStore.settings.theme || 'default'
-    const isDarkMode = settingsStore.settings.isDarkMode ?? false
+    // 若开启「跟随系统」则用系统偏好覆盖手动暗色选择
+    const isDarkMode = settingsStore.settings.followSystemTheme
+      ? detectSystemTheme()
+      : (settingsStore.settings.isDarkMode ?? false)
     applyTheme(themeName, isDarkMode)
     return
   }
@@ -570,9 +578,11 @@ const setupSystemThemeListener = () => {
   if (window.matchMedia) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleMediaQueryChange = (e: MediaQueryListEvent) => {
+      // 已开启「跟随系统」时直接随系统切换；
+      // 否则保持向后兼容：若用户从未手动设置过暗色（无 dark-mode 持久化），也跟随系统
+      const followSystem = settingsStore.settings.followSystemTheme === true
       const savedDarkMode = localStorage.getItem('dark-mode')
-      // 如果用户没有手动设置暗色模式，则跟随系统主题
-      if (savedDarkMode === null) {
+      if (followSystem || savedDarkMode === null) {
         const savedTheme = localStorage.getItem('selected-theme') || 'default'
         applyTheme(savedTheme, e.matches)
       }
