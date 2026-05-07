@@ -106,17 +106,17 @@ jobs:
       - name: Cleanup Artifacts for Windows
         if: matrix.os == 'windows-latest'
         run: |
-          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml"
+          npx del-cli "dist/*" "!dist/*.exe" "!dist/*.zip" "!dist/*.yml" "!dist/*.blockmap"
 
       - name: Cleanup Artifacts for MacOS
         if: startsWith(matrix.os, 'macos')
         run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|*.blockmap|latest*.yml)"
 
       - name: Cleanup Artifacts for Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
-          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|latest*.yml)"
+          npx del-cli "dist/*" "!dist/(*.AppImage|*.deb|*.snap|*.blockmap|latest*.yml)"
 
       - name: Upload Artifacts
         # 将构建产物上传到 GitHub Actions 任务面板，方便在 Release 发布前检查包体
