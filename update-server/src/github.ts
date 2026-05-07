@@ -35,6 +35,7 @@ function authHeaders(env: Env, extra: Record<string, string> = {}): Record<strin
 }
 
 const RELEASE_CACHE_KEY = 'https://internal.cache/release-latest'
+const TAG_RELEASE_CACHE_PREFIX = 'https://internal.cache/release-tag-'
 
 // 用 Cloudflare 边缘缓存替代 Vercel 版本里的进程内缓存。
 // Workers 是 stateless 的, 模块级变量在不同 isolate 之间不共享。
@@ -55,6 +56,40 @@ export async function getLatestRelease(env: Env, ctx: ExecutionContext): Promise
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(`GitHub releases/latest ${res.status}: ${body.slice(0, 200)}`)
+  }
+  const data = (await res.json()) as Release
+
+  const cacheable = new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': `public, max-age=${ttl}, s-maxage=${ttl}`
+    }
+  })
+  ctx.waitUntil(cache.put(cacheReq, cacheable))
+  return data
+}
+
+export async function getReleaseByTag(
+  env: Env,
+  ctx: ExecutionContext,
+  tag: string
+): Promise<Release> {
+  const ttl = Number(env.RELEASE_CACHE_TTL || 300) // 标签 Release 缓存久一点,因为通常不会变
+  const cache = caches.default
+  const cacheReq = new Request(`${TAG_RELEASE_CACHE_PREFIX}${tag}`)
+
+  const cached = await cache.match(cacheReq)
+  if (cached) {
+    return (await cached.json()) as Release
+  }
+
+  const repo = getRepo(env)
+  const res = await fetch(`${GH_API}/repos/${repo}/releases/tags/${tag}`, {
+    headers: authHeaders(env)
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`GitHub releases/tags/${tag} ${res.status}: ${body.slice(0, 200)}`)
   }
   const data = (await res.json()) as Release
 

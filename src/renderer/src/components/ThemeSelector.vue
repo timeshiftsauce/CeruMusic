@@ -18,7 +18,20 @@
 
     <div class="dark-mode-toggle">
       <label class="toggle-switch">
-        <input type="checkbox" :checked="isDarkMode" @change="toggleDarkMode" />
+        <input type="checkbox" :checked="followSystem" @change="toggleFollowSystem" />
+        <span class="slider"></span>
+        <span class="toggle-label">跟随系统亮/暗</span>
+      </label>
+    </div>
+
+    <div class="dark-mode-toggle">
+      <label class="toggle-switch" :class="{ disabled: followSystem }">
+        <input
+          type="checkbox"
+          :checked="isDarkMode"
+          :disabled="followSystem"
+          @change="toggleDarkMode"
+        />
         <span class="slider"></span>
         <span class="toggle-label">暗色模式</span>
       </label>
@@ -43,6 +56,7 @@ const themes = [
 
 const currentTheme = ref('default')
 const isDarkMode = ref(false)
+const followSystem = ref(false)
 
 // 应用主题
 const applyTheme = (themeName: string, darkMode: boolean = false) => {
@@ -71,7 +85,8 @@ const applyTheme = (themeName: string, darkMode: boolean = false) => {
   // 同步到 Store
   settingsStore.updateSettings({
     theme: themeName,
-    isDarkMode: darkMode
+    isDarkMode: darkMode,
+    followSystemTheme: followSystem.value
   })
 
   // 通知全局（App.vue）同步 Naive UI 主题
@@ -86,7 +101,18 @@ const selectTheme = (themeName: string) => {
 
 // 切换暗色模式
 const toggleDarkMode = () => {
+  if (followSystem.value) return // 跟随系统时不允许手动切换
   isDarkMode.value = !isDarkMode.value
+  applyTheme(currentTheme.value, isDarkMode.value)
+}
+
+// 切换「跟随系统」
+const toggleFollowSystem = () => {
+  followSystem.value = !followSystem.value
+  if (followSystem.value) {
+    // 立刻应用一次系统偏好；保留 isDarkMode 作为关闭后的回退值
+    isDarkMode.value = detectSystemTheme()
+  }
   applyTheme(currentTheme.value, isDarkMode.value)
 }
 
@@ -121,21 +147,39 @@ const loadSavedSettings = () => {
   if (typeof settingsStore.settings.isDarkMode !== 'undefined') {
     isDarkMode.value = settingsStore.settings.isDarkMode
   }
+  if (typeof settingsStore.settings.followSystemTheme !== 'undefined') {
+    followSystem.value = settingsStore.settings.followSystemTheme
+  }
 
-  applyTheme(currentTheme.value, isDarkMode.value)
+  // 跟随系统时用系统偏好覆盖暗色状态
+  const effectiveDark = followSystem.value ? detectSystemTheme() : isDarkMode.value
+  applyTheme(currentTheme.value, effectiveDark)
 }
 
 // 监听 Store 变化（云同步）
 watch(
-  () => [settingsStore.settings.theme, settingsStore.settings.isDarkMode],
-  ([newTheme, newMode]) => {
+  () => [
+    settingsStore.settings.theme,
+    settingsStore.settings.isDarkMode,
+    settingsStore.settings.followSystemTheme
+  ],
+  ([newTheme, newMode, newFollow]) => {
+    let needApply = false
     if (newTheme && newTheme !== currentTheme.value) {
       currentTheme.value = newTheme as string
-      applyTheme(newTheme as string, isDarkMode.value)
+      needApply = true
     }
     if (typeof newMode !== 'undefined' && newMode !== isDarkMode.value) {
       isDarkMode.value = newMode as boolean
-      applyTheme(currentTheme.value, newMode as boolean)
+      needApply = true
+    }
+    if (typeof newFollow !== 'undefined' && newFollow !== followSystem.value) {
+      followSystem.value = newFollow as boolean
+      needApply = true
+    }
+    if (needApply) {
+      const effectiveDark = followSystem.value ? detectSystemTheme() : isDarkMode.value
+      applyTheme(currentTheme.value, effectiveDark)
     }
   }
 )
@@ -145,11 +189,10 @@ const setupSystemThemeListener = () => {
   if (window.matchMedia) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     mediaQuery.addEventListener('change', (e) => {
-      const savedDarkMode = localStorage.getItem('dark-mode')
-      // 如果用户没有手动设置暗色模式，则跟随系统主题
-      if (savedDarkMode === null) {
-        isDarkMode.value = e.matches
-        applyTheme(currentTheme.value, isDarkMode.value)
+      // 已开启「跟随系统」时直接应用；
+      // 否则保持向后兼容：用户从未手动设置过暗色（无 dark-mode 持久化）也跟随系统
+      if (followSystem.value || localStorage.getItem('dark-mode') === null) {
+        applyTheme(currentTheme.value, e.matches)
       }
     })
   }
@@ -212,6 +255,7 @@ onMounted(() => {
 
 .dark-mode-toggle {
   padding-top: 16px;
+  margin-bottom: 16px;
   border-top: 1px solid var(--td-border-level-1-color);
 }
 
@@ -220,6 +264,11 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   cursor: pointer;
+}
+
+.toggle-switch.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .toggle-switch input {

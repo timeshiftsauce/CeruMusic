@@ -1,6 +1,17 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { Writable } from 'node:stream'
+import { createRequire } from 'node:module'
 import { unstable_dev, type Unstable_DevWorker } from 'wrangler'
+import { buildMultipartCompatibleChunks } from '../src/handlers.js'
+
+const require = createRequire(import.meta.url)
+const {
+  DataSplitter
+} = require('../../node_modules/electron-updater/out/differentialDownloader/DataSplitter.js')
 
 let worker: Unstable_DevWorker
 
@@ -16,7 +27,10 @@ after(async () => {
   await worker?.stop()
 })
 
-async function get(path: string, init?: { redirect?: 'manual' | 'follow'; headers?: Record<string, string> }) {
+async function get(
+  path: string,
+  init?: { redirect?: 'manual' | 'follow'; headers?: Record<string, string> }
+) {
   return worker.fetch(path, init as any)
 }
 
@@ -43,6 +57,12 @@ test('GET /latest.yml returns YAML for Windows', async () => {
   const body = await res.text()
   assert.match(body, /version:/)
   assert.match(body, /files:/)
+  assert.match(body, /blockMapSize:\s*\d+/, 'blockMapSize should be injected by worker')
+  const x64Index = body.indexOf('ceru-music-1.11.1-win-x64-setup.exe')
+  const ia32Index = body.indexOf('ceru-music-1.11.1-win-ia32-setup.exe')
+  if (x64Index !== -1 && ia32Index !== -1) {
+    assert.ok(x64Index < ia32Index, 'x64 entry should appear before ia32 entry')
+  }
   console.log('  size:', body.length, 'bytes')
 })
 
@@ -98,6 +118,63 @@ test('GET /<file>.blockmap streams (no redirect)', async () => {
   }
   assert.ok(res.status === 206 || res.status === 200, `expected 206/200, got ${res.status}`)
   assert.ok(!res.headers.get('location'))
+})
+
+test('multipart chunks are compatible with electron-updater DataSplitter', async () => {
+  const boundary = 'ceru-test'
+  const chunks = buildMultipartCompatibleChunks(
+    boundary,
+    { size: 5, contentType: 'application/octet-stream' },
+    [
+      { range: { start: 0, end: 2 }, data: new Uint8Array(Buffer.from('abc')) },
+      { range: { start: 3, end: 4 }, data: new Uint8Array(Buffer.from('de')) }
+    ]
+  )
+
+  const tmp = path.join(os.tmpdir(), 'ceru-empty.bin')
+  fs.writeFileSync(tmp, Buffer.alloc(0))
+  const fd = fs.openSync(tmp, 'r')
+  const outChunks: Buffer[] = []
+  let finished = false
+
+  const out = new Writable({
+    write(chunk, _enc, cb) {
+      outChunks.push(Buffer.from(chunk))
+      cb()
+    }
+  })
+
+  const splitter = new DataSplitter(
+    out,
+    {
+      tasks: [
+        { kind: 1, start: 0, end: 3 },
+        { kind: 1, start: 3, end: 5 }
+      ],
+      start: 0,
+      end: 2,
+      oldFileFd: fd
+    },
+    new Map([
+      [0, 0],
+      [1, 1]
+    ]),
+    boundary,
+    [3, 2],
+    () => {
+      finished = true
+    }
+  )
+
+  await new Promise<void>((resolve, reject) => {
+    splitter.on('error', reject)
+    for (const chunk of chunks) splitter.write(Buffer.from(chunk))
+    splitter.end((err?: Error | null) => (err ? reject(err) : resolve()))
+  })
+
+  fs.closeSync(fd)
+  assert.equal(finished, true)
+  assert.equal(Buffer.concat(outChunks).toString(), 'abcde')
 })
 
 test('GET /update/win32/0.0.1 returns Hazel JSON for older version', async () => {
