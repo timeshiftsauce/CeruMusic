@@ -106,6 +106,6 @@ deb:
 npmRebuild: false
 publish:
   provider: generic
-  url: https://update.ceru.shiqianjiang.cn
+  url: https://update.cerumusic.top
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

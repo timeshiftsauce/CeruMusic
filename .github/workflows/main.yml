@@ -85,6 +85,8 @@ jobs:
           # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
           yarn run build:mac:intel
+          # 重命名 mac yml,避免 arm64 那台 runner 后上传时覆盖 (后续 update-server 会自动合并)
+          if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-x64.yml; fi
 
       - name: Build Electron App for macOS Apple Silicon (arm64)
         if: matrix.os == 'macos-latest'
@@ -98,6 +100,7 @@ jobs:
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
           yarn run build:mac:arm64
+          if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-arm64.yml; fi
 
       - name: Build Electron App for linux
         if: matrix.os == 'ubuntu-latest'
