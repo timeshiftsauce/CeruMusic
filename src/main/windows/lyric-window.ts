@@ -36,6 +36,17 @@ const lyricStore = {
     })
 }
 
+// 与渲染端 fontSizeToHeight 互为逆函数，保证 height↔fontSize 双向同步
+const HEIGHT_MIN = 140
+const HEIGHT_MAX = 360
+const FONT_MIN = 20
+const FONT_MAX = 96
+
+const heightToFontSize = (height: number): number => {
+  const ratio = (height - HEIGHT_MIN) / (HEIGHT_MAX - HEIGHT_MIN)
+  return Math.round(FONT_MIN + Math.min(Math.max(ratio, 0), 1) * (FONT_MAX - FONT_MIN))
+}
+
 class LyricWindow {
   private win: BrowserWindow | null = null
   constructor() {}
@@ -50,13 +61,7 @@ class LyricWindow {
       const bounds = this.win?.getBounds()
       if (bounds) {
         const { width, height } = bounds
-        console.log('歌词窗口缩放:', width, height)
-
-        lyricStore.set({
-          ...lyricStore.get(),
-          width,
-          height
-        })
+        lyricStore.set({ width, height, fontSize: heightToFontSize(height) })
       }
     })
     this.win?.on('closed', () => {
