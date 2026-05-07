@@ -97,7 +97,7 @@ jobs:
       - name: Cleanup Artifacts for MacOS
         shell: bash
         run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|latest*.yml)"
+          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|*.blockmap|latest*.yml)"
 
       - name: Upload build outputs to latest release
         shell: bash
