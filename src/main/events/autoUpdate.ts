@@ -17,9 +17,9 @@ export function registerAutoUpdateEvents() {
     }
   })
 
-  // 下载更新
-  ipcMain.handle('auto-updater:download-update', () => {
-    downloadUpdate()
+  // 下载更新 (mode: 'differential' | 'full' | undefined - undefined 时主进程自动选)
+  ipcMain.handle('auto-updater:download-update', (_event, mode?: 'differential' | 'full') => {
+    downloadUpdate(mode)
   })
 
   // 安装更新

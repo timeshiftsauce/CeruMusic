@@ -13,6 +13,8 @@ export interface UpdateInfo {
   name: string
   notes: string
   pub_date: string
+  supportsDifferential?: boolean
+  mode?: 'differential' | 'full'
 }
 
 // 响应式的下载状态
@@ -78,6 +80,10 @@ export class AutoUpdateService {
     window.api.autoUpdater.onError((_, error: string) => {
       this.showUpdateErrorNotification(error)
     })
+
+    window.api.autoUpdater.onDifferentialFallback((info: { reason: string }) => {
+      this.showDifferentialFallbackNotification(info?.reason)
+    })
   }
 
   // 停止监听更新消息
@@ -103,9 +109,9 @@ export class AutoUpdateService {
   }
 
   // 下载更新
-  async downloadUpdate() {
+  async downloadUpdate(mode?: 'differential' | 'full') {
     try {
-      await window.api.autoUpdater.downloadUpdate()
+      await window.api.autoUpdater.downloadUpdate(mode)
     } catch (error) {
       console.error('下载更新失败:', error)
       NotifyPlugin.error({
@@ -219,7 +225,10 @@ export class AutoUpdateService {
     const dialog = DialogPlugin.confirm({
       header: `发现新版本 ${updateInfo.name}`,
       body: () => {
-        const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否立即下载此更新？`
+        const tail = updateInfo.supportsDifferential
+          ? '\n\n是否立即下载此更新？(下一步可选择更新方式)'
+          : '\n\n是否立即下载此更新？'
+        const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}${tail}`
         return h(
           'div',
           { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
@@ -229,7 +238,37 @@ export class AutoUpdateService {
       confirmBtn: '立即下载',
       cancelBtn: '稍后提醒',
       onConfirm: () => {
-        this.downloadUpdate()
+        dialog.hide()
+        if (updateInfo.supportsDifferential) {
+          this.askModeAndDownload()
+        } else {
+          this.downloadUpdate('full')
+        }
+      }
+    })
+  }
+
+  // 询问用户选择更新方式 (差分/全量)
+  private askModeAndDownload() {
+    const dialog = DialogPlugin.confirm({
+      header: '选择更新方式',
+      body: () => {
+        const content =
+          '差分更新: 仅下载变化的部分,体积小、速度快,推荐使用\n\n全量更新: 重新下载完整安装包,适用于差分失败时的备用方案'
+        return h(
+          'div',
+          { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
+          content
+        )
+      },
+      confirmBtn: '差分更新 (推荐)',
+      cancelBtn: '全量更新',
+      onConfirm: () => {
+        this.downloadUpdate('differential')
+        dialog.hide()
+      },
+      onCancel: () => {
+        this.downloadUpdate('full')
         dialog.hide()
       }
     })
@@ -246,13 +285,15 @@ export class AutoUpdateService {
 
   // 处理下载开始事件
   private handleDownloadStarted(updateInfo: UpdateInfo) {
-    // 迁移到下载管理：不再显示覆盖层，提示用户前往“下载管理”查看
     downloadState.isDownloading = false
     downloadState.updateInfo = updateInfo
     downloadState.progress = { percent: 0, transferred: 0, total: 0 }
+    const isDifferential = updateInfo.mode === 'differential'
     NotifyPlugin.info({
       title: '开始下载更新',
-      content: '已加入下载管理，可在“下载管理”查看进度',
+      content: isDifferential
+        ? '正在以差分方式下载,完成后将提示安装'
+        : '已加入下载管理，可在“下载管理”查看进度',
       duration: 3000
     })
   }
@@ -289,6 +330,15 @@ export class AutoUpdateService {
       title: '更新失败',
       content: `更新过程中出现错误: ${error}`,
       duration: 5000
+    })
+  }
+
+  // 差分下载失败,自动回退全量时的提示
+  private showDifferentialFallbackNotification(reason?: string) {
+    NotifyPlugin.warning({
+      title: '差分更新失败',
+      content: `${reason || '差分下载失败'}, 已自动切换到全量下载`,
+      duration: 4000
     })
   }
 

@@ -233,7 +233,8 @@ const api = {
   // 自动更新相关
   autoUpdater: {
     checkForUpdates: () => ipcRenderer.invoke('auto-updater:check-for-updates'),
-    downloadUpdate: () => ipcRenderer.invoke('auto-updater:download-update'),
+    downloadUpdate: (mode?: 'differential' | 'full') =>
+      ipcRenderer.invoke('auto-updater:download-update', mode),
     quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
     getDownloadedPath: (updateInfo?: any) =>
       ipcRenderer.invoke('auto-updater:get-downloaded-path', updateInfo),
@@ -260,6 +261,9 @@ const api = {
     onDownloadStarted: (callback: (updateInfo: any) => void) => {
       ipcRenderer.on('auto-updater:download-started', (_, updateInfo) => callback(updateInfo))
     },
+    onDifferentialFallback: (callback: (info: { reason: string }) => void) => {
+      ipcRenderer.on('auto-updater:differential-fallback', (_, info) => callback(info))
+    },
 
     // 移除所有监听器
     removeAllListeners: () => {
@@ -270,6 +274,7 @@ const api = {
       ipcRenderer.removeAllListeners('auto-updater:download-progress')
       ipcRenderer.removeAllListeners('auto-updater:update-downloaded')
       ipcRenderer.removeAllListeners('auto-updater:error')
+      ipcRenderer.removeAllListeners('auto-updater:differential-fallback')
     }
   },
   ping: (callbaack: Function) => ipcRenderer.on('song-ended', () => callbaack()),
