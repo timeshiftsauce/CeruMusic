@@ -79,7 +79,6 @@ declare module 'vue' {
     SImage: typeof import('./src/components/sImage.vue')['default']
     SongVirtualList: typeof import('./src/components/Music/SongVirtualList.vue')['default']
     SvgIcon: typeof import('./src/components/SvgIcon.vue')['default']
-    TAlert: typeof import('tdesign-vue-next')['Alert']
     TAside: typeof import('tdesign-vue-next')['Aside']
     TAvatar: typeof import('tdesign-vue-next')['Avatar']
     TButton: typeof import('tdesign-vue-next')['Button']
