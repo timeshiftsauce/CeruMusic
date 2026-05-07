@@ -42,21 +42,36 @@ const lyricStore = {
  */
 const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // const mainWin = mainWindow.getWin()
-  const lyricWin = lyricWindow.getWin()
+  let lyricWin = lyricWindow.getWin()
+  const getLyricWin = () => {
+    lyricWin = lyricWindow.getWin()
+    return lyricWin
+  }
+  const ensureLyricWin = () => {
+    lyricWin = getLyricWin()
+    if (lyricWin && !lyricWin.isDestroyed() && !lyricWin.webContents.isDestroyed()) {
+      return lyricWin
+    }
+    lyricWin = lyricWindow.create()
+    return lyricWin
+  }
 
   // 切换桌面歌词
   ipcMain.on('change-desktop-lyric', (_event, val: boolean) => {
-    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
-
-    if (val) {
-      lyricWin?.show()
-      lyricWin?.setAlwaysOnTop(true, 'screen-saver')
-    } else lyricWin?.hide()
-    // 持久化并广播
     lyricStore.set({ isOpen: !!val })
     lyricOpenState = !!val
     mainWin?.webContents.send('desktop-lyric-open-change', !!val)
-    lyricWin?.webContents.send('desktop-lyric-open-change', !!val)
+
+    const lyricWin = val ? ensureLyricWin() : getLyricWin()
+    if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
+
+    if (val) {
+      lyricWin.show()
+      lyricWin.setAlwaysOnTop(true, 'screen-saver')
+    } else {
+      lyricWin.hide()
+    }
+    lyricWin.webContents.send('desktop-lyric-open-change', !!val)
   })
   ipcMain.on('win-show', () => {
     mainWin?.show()
@@ -69,50 +84,56 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   ipcMain.on('play-song-change', (_, title) => {
     if (!title) return
     menuBarLyric.setSong(title)
-    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+    const lyricWin = getLyricWin()
+    if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
 
-    lyricWin?.webContents.send('play-song-change', title)
+    lyricWin.webContents.send('play-song-change', title)
   })
 
   // 音乐歌词更改
   ipcMain.on('play-lyric-change', (_, lyricData) => {
     if (!lyricData) return
     menuBarLyric.setLyrics(lyricData)
-    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+    const lyricWin = getLyricWin()
+    if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
 
-    lyricWin?.webContents.send('play-lyric-change', lyricData)
+    lyricWin.webContents.send('play-lyric-change', lyricData)
   })
 
   // 当前行索引变化（用于立即高亮切换）
   ipcMain.on('play-lyric-index', (_, index: number) => {
     if (index === undefined || index === null) return
     menuBarLyric.setIndex(index)
-    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
+    const lyricWin = getLyricWin()
+    if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
 
-    lyricWin?.webContents.send('play-lyric-index', index)
+    lyricWin.webContents.send('play-lyric-index', index)
   })
 
   // 当前行进度（用于控制 30% 时机的延迟替换）
   ipcMain.on('play-lyric-progress', (_, payload: { index: number; progress: number }) => {
-    if (!payload || !lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed())
+    const lyricWin = getLyricWin()
+    if (!payload || !lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) {
       return
-    lyricWin?.webContents.send('play-lyric-progress', payload)
+    }
+    lyricWin.webContents.send('play-lyric-progress', payload)
   })
 
   // 播放状态更改（播放/暂停）
   ipcMain.on('play-status-change', (_, status: boolean) => {
     menuBarLyric.setPlayStatus(status)
-    if (!lyricWin || lyricWin?.isDestroyed() || lyricWin?.webContents?.isDestroyed()) return
-    lyricWin?.webContents.send('play-status-change', status)
+    const lyricWin = getLyricWin()
+    if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
+    lyricWin.webContents.send('play-status-change', status)
   })
 
   // 获取窗口位置
   ipcMain.handle('get-window-bounds', () => {
-    return lyricWin?.getBounds()
+    return getLyricWin()?.getBounds()
   })
   // 同步获取窗口位置（回退）
   ipcMain.on('get-window-bounds-sync', (event) => {
-    event.returnValue = lyricWin?.getBounds()
+    event.returnValue = getLyricWin()?.getBounds()
   })
 
   // 获取屏幕尺寸
@@ -132,6 +153,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 移动窗口
   ipcMain.on('move-window', (_, x, y, width, height) => {
+    const lyricWin = getLyricWin()
     lyricWin?.setBounds({ x, y, width, height })
     // 保存配置
     lyricStore.set({ x, y, width, height })
@@ -141,11 +163,11 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 更新高度
   ipcMain.on('update-window-height', (_, height) => {
+    const lyricWin = getLyricWin()
     if (!lyricWin) return
     const { width } = lyricWin.getBounds()
-
-    // 更新窗口高度
     lyricWin.setBounds({ width, height })
+    lyricStore.set({ height })
   })
 
   // 获取配置
@@ -160,8 +182,9 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 保存配置
   ipcMain.on('set-desktop-lyric-option', (_, option, callback: boolean = false) => {
     lyricStore.set(option)
+    const lyricWin = getLyricWin()
     // 触发窗口更新
-    if (callback && lyricWin) {
+    if (callback && lyricWin && !lyricWin.isDestroyed() && !lyricWin.webContents.isDestroyed()) {
       lyricWin.webContents.send('desktop-lyric-option-change', option)
     }
     mainWin?.webContents.send('desktop-lyric-option-change', option)
@@ -175,7 +198,8 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
       fontFamily: font
     })
 
-    if (lyricWin && !lyricWin.isDestroyed()) {
+    const lyricWin = getLyricWin()
+    if (lyricWin && !lyricWin.isDestroyed() && !lyricWin.webContents.isDestroyed()) {
       lyricWin.webContents.send('set-desktop-lyric-font', font)
     }
   })
@@ -188,6 +212,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 关闭桌面歌词
   ipcMain.on('closeDesktopLyric', () => {
+    const lyricWin = getLyricWin()
     lyricWin?.hide()
     lyricOpenState = false
     lyricStore.set({ isOpen: lyricOpenState })
@@ -198,6 +223,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   let lyricLockState = !!lyricStore.get().isLock
   let lyricOpenState = !!lyricStore.get().isOpen
   ipcMain.on('toogleDesktopLyricLock', (_, isLock: boolean) => {
+    const lyricWin = getLyricWin()
     if (!lyricWin) return
     lyricLockState = !!isLock
     lyricStore.set({ isLock: lyricLockState })
@@ -220,6 +246,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 桌面歌词窗口（渲染进程）声明准备就绪：如需启动时显示，等到此刻再显示
   ipcMain.on('lyric-window-ready', () => {
     try {
+      const lyricWin = getLyricWin()
       if (lyricWin && !lyricWin.isDestroyed()) {
         if (lyricOpenState) {
           setTimeout(() => {

@@ -72,6 +72,7 @@ let _cancelled = false
 let _currentNextSong: SongList | null = null
 let _beginningInProgress = false
 let _fadeInClearTimer: any = null
+let _naturalNextDelayEnabled = false
 
 // ------- 工具 -------
 
@@ -112,6 +113,7 @@ const updateMarkRange = () => {
 
     const duration = audioStore.Audio.duration
     if (
+      _naturalNextDelayEnabled ||
       !playSetting.getIsSeamlessTransition ||
       dlnaStore.currentDevice ||
       !duration ||
@@ -194,6 +196,7 @@ const onTimeUpdate = () => {
     // 每次 timeupdate 都刷新 mark range（低成本）
     updateMarkRange()
 
+    if (_naturalNextDelayEnabled) return
     if (!playSetting.getIsSeamlessTransition) return
     if (dlnaStore.currentDevice) return
     if (crossfadeState.scheduled || crossfadeState.active) return
@@ -588,6 +591,19 @@ export const crossfadeManager = {
   },
 
   /**
+   * 设置自然结束后的自动下一首是否延迟触发。
+   * 启用延迟时，提前过渡必须让位，避免在歌曲结束前就被抢先推进。
+   */
+  setNaturalNextDelayEnabled(enabled: boolean) {
+    const shouldCancel = enabled && !_naturalNextDelayEnabled
+    _naturalNextDelayEnabled = enabled
+    if (shouldCancel) {
+      cancelCrossfade()
+    }
+    updateMarkRange()
+  },
+
+  /**
    * 取消正在进行的过渡。
    * 在用户主动切歌 / seek 离开尾段 / 禁用设置时调用。
    */
@@ -618,6 +634,7 @@ export const crossfadeManager = {
     _unsubs = []
     _inited = false
     _getNextSong = null
+    _naturalNextDelayEnabled = false
     crossfadeState.fadeInMarkEnd = 0
     if (_fadeInClearTimer !== null) {
       clearTimeout(_fadeInClearTimer)
