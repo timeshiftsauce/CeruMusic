@@ -12,9 +12,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # macos-13 = Intel x64 runner, macos-latest = Apple Silicon arm64 runner
+      # macos-15-intel = Intel x64 runner (macos-13 已于 2025-12-04 下线), macos-latest = Apple Silicon arm64 runner
       matrix:
-        os: [macos-13, macos-latest]
+        os: [macos-15-intel, macos-latest]
 
     steps:
       - name: Check out git repository
@@ -65,7 +65,7 @@ jobs:
           yarn install --frozen-lockfile
 
       - name: Build Electron App for macOS Intel (x64)
-        if: matrix.os == 'macos-13'
+        if: matrix.os == 'macos-15-intel'
         shell: bash
         env:
           # macOS 代码签名 + 公证(Apple notarization)所需环境变量
