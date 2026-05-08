@@ -650,6 +650,6 @@ export const useGlobalPlayStatusStore = defineStore(
     }
   },
   {
-    persist: false
+    persist: true
   }
 )
