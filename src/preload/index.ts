@@ -27,11 +27,59 @@ const api = {
     ipcRenderer.send('window-mini-mode', isMini)
   },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
+  /** 监听主进程窗口化全屏状态变化 */
+  onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, value: boolean) => callback(value)
+    ipcRenderer.on('app-fullscreen-changed', handler)
+    return () => ipcRenderer.removeListener('app-fullscreen-changed', handler)
+  },
+  // 任务栏歌词
+  taskbarLyric: {
+    toggle: (open: boolean) => ipcRenderer.send('taskbar-lyric:toggle', open),
+    getConfig: () => ipcRenderer.invoke('taskbar-lyric:get-config'),
+    setConfig: (cfg: Record<string, any>) => ipcRenderer.send('taskbar-lyric:set-config', cfg),
+    setMousePassthrough: (passthrough: boolean) =>
+      ipcRenderer.send('taskbar-lyric:set-mouse-passthrough', passthrough),
+    ready: () => ipcRenderer.send('taskbar-lyric:ready'),
+    onOpenChange: (callback: (open: boolean) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, open: boolean) => callback(open)
+      ipcRenderer.on('taskbar-lyric-open-change', handler)
+      return () => ipcRenderer.removeListener('taskbar-lyric-open-change', handler)
+    },
+    onConfigChange: (callback: (cfg: any) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, cfg: any) => callback(cfg)
+      ipcRenderer.on('taskbar-lyric-config-change', handler)
+      return () => ipcRenderer.removeListener('taskbar-lyric-config-change', handler)
+    }
+  },
   onMusicCtrl: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => {
     // 音乐控制
     const handler = (event: Electron.IpcRendererEvent) => callback(event)
     ipcRenderer.on('music-control', handler)
     return () => ipcRenderer.removeListener('music-control', handler)
+  },
+  // Windows 任务栏缩略图工具栏
+  thumbar: {
+    setState: (state: {
+      hasSong?: boolean
+      isPlaying?: boolean
+      isLiked?: boolean
+      songName?: string
+      singer?: string
+    }) => {
+      ipcRenderer.send('thumbar:set-state', state)
+    },
+    setCover: (dataUrl: string | null) => {
+      ipcRenderer.send('thumbar:set-cover', dataUrl)
+    },
+    setClip: (rect: { x: number; y: number; width: number; height: number } | null) => {
+      ipcRenderer.send('thumbar:set-clip', rect)
+    },
+    onToggleLike: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('thumbar:toggle-like', handler)
+      return () => ipcRenderer.removeListener('thumbar:toggle-like', handler)
+    }
   },
   // 音乐相关方法
   music: {

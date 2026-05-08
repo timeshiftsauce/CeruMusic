@@ -76,6 +76,36 @@ const onShadowColorChange = (val: string) => {
 const original = ref<LyricOption | null>(null)
 const backgroundMaskStr = ref<string>('rgba(0,0,0,0.2)')
 
+// ---- 任务栏歌词 ----
+const taskbarLyricOpen = ref(false)
+const taskbarLyricShowCover = ref(true)
+const taskbarLyricFontSize = ref(14)
+const taskbarLyricMainColor = ref('#73BCFC')
+
+const loadTaskbarLyricConfig = async () => {
+  try {
+    const cfg = await (window as any).api?.taskbarLyric?.getConfig?.()
+    if (cfg) {
+      taskbarLyricOpen.value = !!cfg.isOpen
+      taskbarLyricShowCover.value = cfg.showCover !== false
+      if (typeof cfg.fontSize === 'number') taskbarLyricFontSize.value = cfg.fontSize
+      if (typeof cfg.mainColor === 'string') taskbarLyricMainColor.value = cfg.mainColor
+    }
+  } catch {}
+}
+
+const onToggleTaskbarLyric = (val: boolean) => {
+  ;(window as any).api?.taskbarLyric?.toggle?.(!!val)
+}
+
+const onTaskbarLyricConfigChange = () => {
+  ;(window as any).api?.taskbarLyric?.setConfig?.({
+    showCover: taskbarLyricShowCover.value,
+    fontSize: taskbarLyricFontSize.value,
+    mainColor: taskbarLyricMainColor.value
+  })
+}
+
 const loadOption = async () => {
   loading.value = true
   try {
@@ -123,6 +153,7 @@ watch(isOpen, (val) => {
 
 onMounted(() => {
   loadOption()
+  loadTaskbarLyricConfig()
   // 初始化打开状态并监听变化
   window.electron?.ipcRenderer
     ?.invoke?.('get-lyric-open-state')
@@ -132,6 +163,10 @@ onMounted(() => {
     .catch(() => {})
   window.electron?.ipcRenderer?.on?.('desktop-lyric-open-change', (_event, open: boolean) => {
     isOpen.value = !!open
+  })
+  // 任务栏歌词开关变化（其他来源 e.g. 托盘菜单）
+  ;(window as any).api?.taskbarLyric?.onOpenChange?.((open: boolean) => {
+    taskbarLyricOpen.value = !!open
   })
 })
 </script>
@@ -244,6 +279,46 @@ onMounted(() => {
           }"
         >
           这是桌面歌词预览
+        </div>
+      </div>
+    </t-card>
+
+    <t-card class="lyric-style" hover-shadow>
+      <div class="header">
+        <h3>任务栏歌词</h3>
+        <p class="t-text-secondary" style="margin: 0">
+          在 Windows 任务栏右侧显示紧凑的逐字歌词
+        </p>
+      </div>
+      <div class="controls">
+        <div class="row">
+          <div class="field">
+            <label>启用</label>
+            <t-switch v-model="taskbarLyricOpen" @change="onToggleTaskbarLyric" />
+          </div>
+          <div class="field">
+            <label>显示封面</label>
+            <t-switch v-model="taskbarLyricShowCover" @change="onTaskbarLyricConfigChange" />
+          </div>
+          <div class="field" style="grid-column: 1 / -1">
+            <label>字号 ({{ taskbarLyricFontSize }}px)</label>
+            <t-slider
+              v-model="taskbarLyricFontSize"
+              :min="10"
+              :max="20"
+              :step="1"
+              @change="onTaskbarLyricConfigChange"
+            />
+          </div>
+          <div class="field">
+            <label>主色</label>
+            <input
+              type="color"
+              class="color-input"
+              :value="taskbarLyricMainColor"
+              @input="(e: any) => { taskbarLyricMainColor = e.target.value; onTaskbarLyricConfigChange() }"
+            />
+          </div>
         </div>
       </div>
     </t-card>
