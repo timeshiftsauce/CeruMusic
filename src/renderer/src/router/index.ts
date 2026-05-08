@@ -104,7 +104,7 @@ function setAnimate(routerObj: RouteRecordRaw[]) {
     }
   }
 }
-// setAnimate(routes)
+setAnimate(routes)
 
 const option: RouterOptions = {
   history: createWebHashHistory(),
