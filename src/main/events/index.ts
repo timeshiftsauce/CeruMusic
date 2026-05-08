@@ -36,11 +36,8 @@ function basisEvent(mainWindow: BrowserWindow) {
   })
 
   ipcMain.on('window-maximize', () => {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize()
-    } else {
-      mainWindow.maximize()
-    }
+    // 转发到 main/index.ts，在我方全屏激活时会先退出全屏再判断 maximize
+    ipcMain.emit('app-maximize-internal')
   })
 
   ipcMain.on('window-close', () => {
@@ -79,10 +76,9 @@ function basisEvent(mainWindow: BrowserWindow) {
     }
   })
 
-  // 全屏模式 IPC 处理
+  // 全屏模式 IPC：转发到 main/index.ts 的窗口化全屏 toggle
   ipcMain.on('window-toggle-fullscreen', () => {
-    const isFullScreen = mainWindow.isFullScreen()
-    mainWindow.setFullScreen(!isFullScreen)
+    ipcMain.emit('app-toggle-fullscreen-internal')
   })
   // 阻止系统息屏 IPC（开启/关闭）
   ipcMain.handle('power-save-blocker:start', () => {

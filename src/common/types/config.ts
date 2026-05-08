@@ -22,3 +22,12 @@ export interface lyricConfig {
   unplayedColor?: string
   limitBounds?: boolean
 }
+
+export interface taskbarLyricConfig {
+  isOpen: boolean
+  width: number
+  fontSize: number
+  mainColor: string
+  unplayedColor: string
+  showCover: boolean
+}

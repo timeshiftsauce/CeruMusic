@@ -364,29 +364,19 @@ watch(
 
 // 切换全屏模式
 const toggleFullscreen = () => {
-  // 切换全屏状态
-  isFullscreen.value = !isFullscreen.value
-
-  // 调用 Electron API 切换全屏
+  // 状态由主进程的 onFullscreenChanged 事件回写，避免双重 toggle
   window.api.toggleFullscreen()
 }
 
-// 监听 ESC 键退出全屏
+// 监听窗口化全屏状态变化（来自主进程）
+let unsubscribeFullscreen: (() => void) | null = null
 onMounted(async () => {
-  // 添加事件监听器检测全屏状态变化
-  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  unsubscribeFullscreen = window.api.onFullscreenChanged((value: boolean) => {
+    isFullscreen.value = value
+  })
 })
 
 // removed redundant onBeforeUnmount
-
-// 处理全屏状态变化
-const handleFullscreenChange = () => {
-  // 检查当前是否处于全屏状态
-  const fullscreenElement = document.fullscreenElement
-
-  // 更新状态
-  isFullscreen.value = !!fullscreenElement
-}
 
 // 获取音频控制状态
 const controlAudio = ControlAudioStore()
@@ -601,7 +591,8 @@ watch(
 // 组件卸载前清理订阅
 onBeforeUnmount(async () => {
   // 移除事件监听器
-  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  unsubscribeFullscreen?.()
+  unsubscribeFullscreen = null
   window.removeEventListener('mousemove', resetIdleTimer)
   window.removeEventListener('resize', debouncedCheckOverflow)
   document.removeEventListener('click', handleClickOutside)

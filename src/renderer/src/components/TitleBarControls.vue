@@ -107,6 +107,10 @@ const handleBack = (): void => {
   router.back()
 }
 
+// 监听窗口化全屏状态（全屏期间隐藏标题栏控件）
+const isAppFullscreen = ref(false)
+let unsubFullscreen: (() => void) | null = null
+
 // 监听全局关闭对话框事件（来自 Ctrl+W / Alt+F4）
 let unsubShowDialog: (() => void) | null = null
 
@@ -116,16 +120,22 @@ onMounted(() => {
   }
   window.addEventListener('ceru-show-close-dialog', handler)
   unsubShowDialog = () => window.removeEventListener('ceru-show-close-dialog', handler)
+
+  unsubFullscreen = window.api?.onFullscreenChanged?.((value: boolean) => {
+    isAppFullscreen.value = value
+  })
 })
 
 onBeforeUnmount(() => {
   unsubShowDialog?.()
   unsubShowDialog = null
+  unsubFullscreen?.()
+  unsubFullscreen = null
 })
 </script>
 
 <template>
-  <div :class="controlsClass">
+  <div v-show="!isAppFullscreen" :class="controlsClass">
     <div class="left">
       <div class="back-box">
         <t-button
