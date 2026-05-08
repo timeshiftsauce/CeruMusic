@@ -349,11 +349,6 @@ function initElectronUpdater() {
   electronAutoUpdater.autoDownload = false
   electronAutoUpdater.autoInstallOnAppQuit = false
   electronAutoUpdater.disableWebInstaller = true
-  electronAutoUpdater.setFeedURL({
-    provider: 'generic',
-    url: UPDATE_SERVER,
-    useMultipleRangeRequest: false
-  })
 
   electronAutoUpdater.on('download-progress', (p) => {
     downloadProgress = {
