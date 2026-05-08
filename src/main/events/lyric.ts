@@ -5,6 +5,13 @@ import { configManager } from '../services/ConfigManager'
 import menuBarLyric from '../services/menuBarLyric'
 
 import lyricWindow from '../windows/lyric-window'
+import taskbarLyricWindow from '../windows/taskbar-lyric-window'
+
+const sendToTaskbarLyric = (channel: string, ...args: unknown[]): void => {
+  const w = taskbarLyricWindow.getWin()
+  if (!w || w.isDestroyed() || w.webContents.isDestroyed()) return
+  w.webContents.send(channel, ...args)
+}
 
 const lyricStore = {
   get: () =>
@@ -84,6 +91,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   ipcMain.on('play-song-change', (_, title) => {
     if (!title) return
     menuBarLyric.setSong(title)
+    sendToTaskbarLyric('play-song-change', title)
     const lyricWin = getLyricWin()
     if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
 
@@ -94,6 +102,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   ipcMain.on('play-lyric-change', (_, lyricData) => {
     if (!lyricData) return
     menuBarLyric.setLyrics(lyricData)
+    sendToTaskbarLyric('play-lyric-change', lyricData)
     const lyricWin = getLyricWin()
     if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
 
@@ -104,6 +113,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   ipcMain.on('play-lyric-index', (_, index: number) => {
     if (index === undefined || index === null) return
     menuBarLyric.setIndex(index)
+    sendToTaskbarLyric('play-lyric-index', index)
     const lyricWin = getLyricWin()
     if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
 
@@ -112,8 +122,10 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
 
   // 当前行进度（用于控制 30% 时机的延迟替换）
   ipcMain.on('play-lyric-progress', (_, payload: { index: number; progress: number }) => {
+    if (!payload) return
+    sendToTaskbarLyric('play-lyric-progress', payload)
     const lyricWin = getLyricWin()
-    if (!payload || !lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) {
+    if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) {
       return
     }
     lyricWin.webContents.send('play-lyric-progress', payload)
@@ -122,6 +134,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 播放状态更改（播放/暂停）
   ipcMain.on('play-status-change', (_, status: boolean) => {
     menuBarLyric.setPlayStatus(status)
+    sendToTaskbarLyric('play-status-change', status)
     const lyricWin = getLyricWin()
     if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
     lyricWin.webContents.send('play-status-change', status)

@@ -11,10 +11,12 @@ import {
   desktopCapturer,
   session,
   nativeImage,
-  type WebContents
+  type WebContents,
+  BrowserWindowConstructorOptions
 } from 'electron'
 import { configManager } from './services/ConfigManager'
 import menuBarLyric from './services/menuBarLyric'
+import thumbarService from './services/thumbarService'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -22,12 +24,14 @@ import path from 'node:path'
 import InitEventServices from './events'
 
 import lyricWindow from './windows/lyric-window'
+import taskbarLyricWindow, { taskbarLyricStore } from './windows/taskbar-lyric-window'
 
 import './events/musicCache'
 import './events/songList'
 import './events/directorySettings'
 import './events/pluginNotice'
 import initLyricIpc from './events/lyric'
+import { initTaskbarLyricIpc } from './events/taskbarLyric'
 import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
 import fs from 'node:fs'
@@ -189,6 +193,8 @@ function updateTrayMenu(): void {
   const isVisible = !!lyricWin && lyricWin.isVisible()
   const toggleLyricLabel = isVisible ? '隐藏桌面歌词' : '显示桌面歌词'
   const toggleLockLabel = trayLyricLocked ? '解锁桌面歌词' : '锁定桌面歌词'
+  const isTaskbarLyricVisible = taskbarLyricWindow.isVisible()
+  const toggleTaskbarLyricLabel = isTaskbarLyricVisible ? '隐藏任务栏歌词' : '显示任务栏歌词'
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -232,6 +238,14 @@ function updateTrayMenu(): void {
       click: () => {
         const next = !trayLyricLocked
         ipcMain.emit('toogleDesktopLyricLock', null, next)
+      }
+    },
+    {
+      label: toggleTaskbarLyricLabel,
+      click: () => {
+        ipcMain.emit('taskbar-lyric:toggle', null, !isTaskbarLyricVisible)
+        // 即时刷新菜单标签
+        setTimeout(() => updateTrayMenu(), 50)
       }
     },
     { type: 'separator' },
@@ -331,6 +345,85 @@ function updateWindowMaxLimits(win: BrowserWindow | null): void {
   // 移除 maxWidth/maxHeight 上的硬限制，使其能够最大化到当前屏幕的尺寸。
   // 注意：设置为 0, 0 意味着没有最小限制，我们只关注最大限制。
   win.setMaximumSize(currentScreenWidth, currentScreenHeight)
+}
+
+/**
+ * 网易云式窗口化全屏（borderless windowed fullscreen）。
+ * 不走 OS 原生 setFullScreen（在 Windows 配合 titleBarStyle:'hidden' 会被 DWM 边框压缩 16px），
+ * 改为：setBounds 到 display.bounds + alwaysOnTop 覆盖任务栏。
+ * 进入前快照窗口状态，退出后完整还原。
+ */
+const fsState = {
+  active: false,
+  bounds: null as Rectangle | null,
+  maxSize: null as { width: number; height: number } | null,
+  resizable: null as boolean | null,
+  movable: null as boolean | null,
+  alwaysOnTop: null as boolean | null,
+  wasMaximized: false
+}
+
+function isWindowedFullScreenActive(): boolean {
+  return fsState.active
+}
+
+function enterWindowedFullScreen(win: BrowserWindow): void {
+  if (fsState.active) return
+
+  fsState.wasMaximized = win.isMaximized()
+  if (fsState.wasMaximized) win.unmaximize()
+
+  fsState.bounds = win.getBounds()
+  const [maxW, maxH] = win.getMaximumSize()
+  fsState.maxSize = { width: maxW, height: maxH }
+  fsState.resizable = win.isResizable()
+  fsState.movable = win.isMovable()
+  fsState.alwaysOnTop = win.isAlwaysOnTop()
+
+  // 必须先置 active：setBounds 会立刻触发 resized 事件，guard 才能跳过
+  fsState.active = true
+
+  win.setMaximumSize(0, 0)
+  win.setResizable(false)
+  win.setMovable(false)
+  const display = screen.getDisplayMatching(fsState.bounds)
+  win.setBounds(display.bounds)
+  win.setAlwaysOnTop(true) // 盖住任务栏
+
+  win.webContents.send('app-fullscreen-changed', true)
+}
+
+function exitWindowedFullScreen(win: BrowserWindow): void {
+  if (!fsState.active) return
+
+  // 先把 active 置 false 之前，先调用 setBounds 等会触发 resized；
+  // 这里反过来：先恢复，最后再置 false，避免 resized 中途看到 active=false 误处理
+  win.setAlwaysOnTop(fsState.alwaysOnTop ?? false)
+  win.setMovable(fsState.movable ?? true)
+  win.setResizable(fsState.resizable ?? true)
+  if (fsState.maxSize) {
+    win.setMaximumSize(fsState.maxSize.width, fsState.maxSize.height)
+  }
+  if (fsState.bounds) win.setBounds(fsState.bounds)
+
+  fsState.active = false
+
+  if (fsState.wasMaximized) win.maximize()
+
+  fsState.bounds = null
+  fsState.maxSize = null
+  fsState.resizable = null
+  fsState.movable = null
+  fsState.alwaysOnTop = null
+  fsState.wasMaximized = false
+
+  win.webContents.send('app-fullscreen-changed', false)
+}
+
+function toggleAppFullScreen(win: BrowserWindow | null): void {
+  if (!win) return
+  if (fsState.active) exitWindowedFullScreen(win)
+  else enterWindowedFullScreen(win)
 }
 
 import { downloadManager } from './services/DownloadManager'
@@ -516,7 +609,7 @@ function createWindow(): void {
       contextIsolation: false,
       backgroundThrottling: false
     }
-  }
+  } as BrowserWindowConstructorOptions
 
   // 如果有保存的窗口位置和大小，则使用保存的值
   if (savedBounds) {
@@ -543,6 +636,21 @@ function createWindow(): void {
         mainWindow?.webContents.openDevTools()
       }
     }
+    // F11 切换窗口化全屏
+    if (input.key === 'F11' && input.type === 'keyDown') {
+      event.preventDefault()
+      toggleAppFullScreen(mainWindow)
+    }
+    // ESC 退出窗口化全屏
+    if (
+      input.key === 'Escape' &&
+      input.type === 'keyDown' &&
+      isWindowedFullScreenActive() &&
+      mainWindow
+    ) {
+      event.preventDefault()
+      exitWindowedFullScreen(mainWindow)
+    }
   })
   mainWindow.on('blur', () => {
     isSPressed = false
@@ -550,6 +658,7 @@ function createWindow(): void {
 
   // ⚠️ 关键修改 2: 监听 'moved' 事件，动态更新最大尺寸
   mainWindow.on('moved', () => {
+    if (isWindowedFullScreenActive()) return
     // 当窗口移动时，确保最大尺寸限制随屏幕变化
     updateWindowMaxLimits(mainWindow)
 
@@ -563,6 +672,7 @@ function createWindow(): void {
   updateWindowMaxLimits(mainWindow)
 
   mainWindow.on('resized', () => {
+    if (isWindowedFullScreenActive()) return
     if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
       const bounds = mainWindow.getBounds()
 
@@ -596,6 +706,24 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  // IPC：window-toggle-fullscreen 通过 events/index.ts 转发到这里
+  ipcMain.removeAllListeners('app-toggle-fullscreen-internal')
+  ipcMain.on('app-toggle-fullscreen-internal', () => {
+    toggleAppFullScreen(mainWindow)
+  })
+
+  // IPC：window-maximize 在我方全屏期间需要先退出再最大化
+  ipcMain.removeAllListeners('app-maximize-internal')
+  ipcMain.on('app-maximize-internal', () => {
+    if (!mainWindow) return
+    if (isWindowedFullScreenActive()) {
+      exitWindowedFullScreen(mainWindow)
+      return
+    }
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
   })
 
   // 拦截 Logto 认证请求，使用系统浏览器打开
@@ -755,8 +883,15 @@ app.whenReady().then(async () => {
   // 初始化自动更新器 桌面歌词
   if (mainWindow) {
     initAutoUpdateForWindow(mainWindow)
+    thumbarService.init(mainWindow)
     lyricWindow.create()
     initLyricIpc(mainWindow)
+    // 任务栏歌词
+    taskbarLyricWindow.create()
+    initTaskbarLyricIpc(mainWindow)
+    if (taskbarLyricStore.get().isOpen) {
+      taskbarLyricWindow.show()
+    }
     const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
     if (startArg) queueOpenPlaylist(startArg)
     // 冷启动 deep-link（Windows / Linux）：进程参数中包含 cerumusic:// 协议链接

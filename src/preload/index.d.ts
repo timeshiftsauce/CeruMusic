@@ -14,7 +14,32 @@ interface CustomAPI {
   close: () => void
   setMiniMode: (isMini: boolean) => void
   toggleFullscreen: () => void
+  onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void
   onMusicCtrl: (callback: (event: Event, args: any) => void) => () => void
+
+  // 任务栏歌词
+  taskbarLyric: {
+    toggle: (open: boolean) => void
+    getConfig: () => Promise<any>
+    setConfig: (cfg: Record<string, any>) => void
+    setMousePassthrough: (passthrough: boolean) => void
+    ready: () => void
+    onOpenChange: (callback: (open: boolean) => void) => () => void
+    onConfigChange: (callback: (cfg: any) => void) => () => void
+  }
+
+  thumbar: {
+    setState: (state: {
+      hasSong?: boolean
+      isPlaying?: boolean
+      isLiked?: boolean
+      songName?: string
+      singer?: string
+    }) => void
+    setCover: (dataUrl: string | null) => void
+    setClip: (rect: { x: number; y: number; width: number; height: number } | null) => void
+    onToggleLike: (callback: () => void) => () => void
+  }
 
   music: {
     requestSdk: <T extends keyof MainApi>(

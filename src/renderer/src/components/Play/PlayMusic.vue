@@ -187,6 +187,67 @@ watch(
   () => refreshLikeState()
 )
 onMounted(() => refreshLikeState())
+
+// === Windows 任务栏缩略图工具栏（Thumbnail Toolbar）状态同步 ===
+const thumbarApi = (window as any).api?.thumbar
+let removeThumbarToggleLikeListener: (() => void) | null = null
+
+const blobOrUrlToDataUrl = async (src: string): Promise<string | null> => {
+  if (!src) return null
+  if (src.startsWith('data:')) return src
+  try {
+    const resp = await fetch(src)
+    const blob = await resp.blob()
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader()
+      reader.onerror = () => resolve(null)
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+const pushThumbarState = () => {
+  if (!thumbarApi?.setState) return
+  const info: any = songInfo.value || {}
+  thumbarApi.setState({
+    hasSong: !!info.songmid,
+    isPlaying: !!Audio.value.isPlay,
+    isLiked: !!likeState.value,
+    songName: info.name || '',
+    singer: info.singer || ''
+  })
+}
+
+watch(
+  () => Audio.value.isPlay,
+  () => pushThumbarState()
+)
+watch(
+  () => likeState.value,
+  () => pushThumbarState()
+)
+watch(
+  () => [songInfo.value?.songmid, songInfo.value?.name, songInfo.value?.singer],
+  () => pushThumbarState(),
+  { immediate: true }
+)
+watch(
+  () => player.value.cover,
+  async (cover) => {
+    if (!thumbarApi?.setCover) return
+    if (!cover) {
+      thumbarApi.setCover(null)
+      return
+    }
+    const dataUrl = await blobOrUrlToDataUrl(cover)
+    if (dataUrl) thumbarApi.setCover(dataUrl)
+  },
+  { immediate: true }
+)
+
 const showFullPlay = ref(false)
 const showComments = ref(false)
 
@@ -408,6 +469,15 @@ onMounted(async () => {
   unsubSlotSwap = controlAudio.subscribe('slotSwap', () => applyPlaybackRate(playbackRate.value))
   unsubCanPlay = controlAudio.subscribe('canplay', () => applyPlaybackRate(playbackRate.value))
   applyPlaybackRate(playbackRate.value)
+
+  // 任务栏缩略图喜欢按钮点击 -> 触发本地喜欢切换
+  if (thumbarApi?.onToggleLike) {
+    removeThumbarToggleLikeListener = thumbarApi.onToggleLike(() => {
+      onToggleLike().catch(() => {})
+    })
+  }
+  // 首次推送状态
+  pushThumbarState()
 })
 
 // 组件卸载时清理
@@ -440,6 +510,14 @@ onUnmounted(() => {
   lyricCloseHandler = null
   openPlaylistHandler = null
   closePlaylistHandler = null
+
+  if (removeThumbarToggleLikeListener) {
+    removeThumbarToggleLikeListener()
+    removeThumbarToggleLikeListener = null
+  }
+  // 清空任务栏缩略图状态
+  thumbarApi?.setState?.({ hasSong: false, isPlaying: false, isLiked: false, songName: '', singer: '' })
+  thumbarApi?.setCover?.(null)
 
   // 清理可能存在的拖动监听器
   window.removeEventListener('mousemove', handleVolumeDragMove)

@@ -85,6 +85,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@renderer/views/DeskTopLyric/DeskTopLyric.vue')
   },
   {
+    path: '/taskbar-lyric',
+    name: 'taskbar-lyric',
+    component: () => import('@renderer/views/TaskbarLyric/TaskbarLyric.vue')
+  },
+  {
     path: '/recognition-worker',
     name: 'recognition-worker',
     component: () => import('@renderer/views/music/RecognitionWorker.vue')
@@ -175,6 +180,7 @@ const startPreload = () => {
     '/home/local/edit-tag',
     '/settings',
     '/desktop-lyric',
+    '/taskbar-lyric',
     '/recognition-worker'
   ]
   const flat = flattenRoutes(routes).filter(
