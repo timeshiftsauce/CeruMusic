@@ -16,7 +16,6 @@ import {
 } from 'electron'
 import { configManager } from './services/ConfigManager'
 import menuBarLyric from './services/menuBarLyric'
-import thumbarService from './services/thumbarService'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -24,14 +23,12 @@ import path from 'node:path'
 import InitEventServices from './events'
 
 import lyricWindow from './windows/lyric-window'
-import taskbarLyricWindow, { taskbarLyricStore } from './windows/taskbar-lyric-window'
 
 import './events/musicCache'
 import './events/songList'
 import './events/directorySettings'
 import './events/pluginNotice'
 import initLyricIpc from './events/lyric'
-import { initTaskbarLyricIpc } from './events/taskbarLyric'
 import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
 import fs from 'node:fs'
@@ -193,8 +190,6 @@ function updateTrayMenu(): void {
   const isVisible = !!lyricWin && lyricWin.isVisible()
   const toggleLyricLabel = isVisible ? '隐藏桌面歌词' : '显示桌面歌词'
   const toggleLockLabel = trayLyricLocked ? '解锁桌面歌词' : '锁定桌面歌词'
-  const isTaskbarLyricVisible = taskbarLyricWindow.isVisible()
-  const toggleTaskbarLyricLabel = isTaskbarLyricVisible ? '隐藏任务栏歌词' : '显示任务栏歌词'
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -238,14 +233,6 @@ function updateTrayMenu(): void {
       click: () => {
         const next = !trayLyricLocked
         ipcMain.emit('toogleDesktopLyricLock', null, next)
-      }
-    },
-    {
-      label: toggleTaskbarLyricLabel,
-      click: () => {
-        ipcMain.emit('taskbar-lyric:toggle', null, !isTaskbarLyricVisible)
-        // 即时刷新菜单标签
-        setTimeout(() => updateTrayMenu(), 50)
       }
     },
     { type: 'separator' },
@@ -883,15 +870,8 @@ app.whenReady().then(async () => {
   // 初始化自动更新器 桌面歌词
   if (mainWindow) {
     initAutoUpdateForWindow(mainWindow)
-    thumbarService.init(mainWindow)
     lyricWindow.create()
     initLyricIpc(mainWindow)
-    // 任务栏歌词
-    taskbarLyricWindow.create()
-    initTaskbarLyricIpc(mainWindow)
-    if (taskbarLyricStore.get().isOpen) {
-      taskbarLyricWindow.show()
-    }
     const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
     if (startArg) queueOpenPlaylist(startArg)
     // 冷启动 deep-link（Windows / Linux）：进程参数中包含 cerumusic:// 协议链接
