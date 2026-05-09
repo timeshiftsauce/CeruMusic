@@ -3,6 +3,7 @@ import { useRouter, useData } from 'vitepress'
 import { toggleDark } from './dark'
 import DefaultTheme from 'vitepress/theme'
 import { watch, ref } from 'vue'
+import HeroLogo from './HeroLogo.vue'
 
 const { route } = useRouter()
 const isTransitioning = ref(false)
@@ -23,7 +24,11 @@ watch(
 </script>
 
 <template>
-  <Layout> </Layout>
+  <Layout>
+    <template #home-hero-image>
+      <HeroLogo />
+    </template>
+  </Layout>
 </template>
 
 <style>
