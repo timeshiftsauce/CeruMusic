@@ -64,13 +64,8 @@ export function installDesktopLyricBridge() {
       try {
         const name = (song as any)?.name || ''
         const artist = (song as any)?.singer || ''
-        const cover = (player.value as any)?.cover || ''
         if (name || artist) {
-          ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', {
-            name,
-            artist,
-            cover
-          })
+          ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', { name, artist })
         }
       } catch {}
     },
@@ -94,9 +89,8 @@ export function installDesktopLyricBridge() {
       const currentSong = player.value.songInfo as any
       const name = currentSong?.name || ''
       const artist = currentSong?.singer || ''
-      const cover = (player.value as any)?.cover || ''
       if (name || artist) {
-        ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', { name, artist, cover })
+        ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', { name, artist })
       }
       const currentLines = (player.value.lyrics?.lines as any[]) || []
       ;(window as any)?.electron?.ipcRenderer?.send?.(

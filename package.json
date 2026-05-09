@@ -118,6 +118,7 @@
     "sass-embedded": "^1.90.0",
     "scss": "^0.2.4",
     "terser": "^5.44.1",
+    "three": "^0.184.0",
     "ts-jest": "^29.4.6",
     "typescript": "^5.8.3",
     "unplugin-auto-import": "^20.0.0",
