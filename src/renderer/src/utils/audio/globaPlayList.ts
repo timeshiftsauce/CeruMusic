@@ -137,7 +137,7 @@ const togglePlayPause = async () => {
   }
 }
 
-const playSong = async (song: SongList) => {
+const playSong = async (song: SongList, options: { immediate?: boolean } = {}) => {
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
   crossfadeManager.cancel()
@@ -176,9 +176,11 @@ const playSong = async (song: SongList) => {
   // 更新全局的 currentPlayRequestId
   currentPlayRequestId = requestId
 
-  // 防抖：给一个短暂的缓冲期，避免连续快速点击导致并发请求错误
-  await new Promise((resolve) => setTimeout(resolve, 300))
-  if (currentPlayRequestId !== requestId) return
+  if (!options.immediate) {
+    // 防抖：给一个短暂的缓冲期，避免连续快速点击导致并发请求错误
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    if (currentPlayRequestId !== requestId) return
+  }
 
   try {
     isLoadingSong.value = true
