@@ -738,6 +738,9 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       seq: 0
     })
     localSeq.value = 0
+    /* 关闭浮层 —— 任何离开房间路径(主动 leaveRoom / 被踢 / 房间被解散 /
+     * mini 菜单退出)都应该关掉 overlay,避免显示空状态。 */
+    overlayVisible.value = false
     clearAudioHooks()
     stopPingLoop()
     stopDriftLoop()
