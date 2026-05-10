@@ -5,5 +5,5 @@
       "url": "https://api.ceru.shiqianjiang.cn/api"
     }
   ],
-  "enableDev": true
+  "enableDev": false
 }
