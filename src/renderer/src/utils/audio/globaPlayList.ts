@@ -748,7 +748,9 @@ const resolveNextSong = ({
     return list.value.find((s) => s.songmid === nextId) || null
   }
 
-  const currentIndex = list.value.findIndex((song) => song.songmid === userInfo.value.lastPlaySongId)
+  const currentIndex = list.value.findIndex(
+    (song) => song.songmid === userInfo.value.lastPlaySongId
+  )
   const nextIndex = (currentIndex + 1) % list.value.length
   return list.value[nextIndex] || null
 }

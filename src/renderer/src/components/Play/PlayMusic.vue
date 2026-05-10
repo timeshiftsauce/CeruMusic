@@ -519,7 +519,13 @@ onUnmounted(() => {
     removeThumbarToggleLikeListener = null
   }
   // 清空任务栏缩略图状态
-  thumbarApi?.setState?.({ hasSong: false, isPlaying: false, isLiked: false, songName: '', singer: '' })
+  thumbarApi?.setState?.({
+    hasSong: false,
+    isPlaying: false,
+    isLiked: false,
+    songName: '',
+    singer: ''
+  })
   thumbarApi?.setCover?.(null)
 
   // 清理可能存在的拖动监听器
@@ -683,9 +689,7 @@ watch(showListenTogether, (visible) => {
  *  - 用 .lt-locked 样式类灰化、:title 显示无权限文案
  *  - click 守卫：lockedByLT 时拦截 + MessagePlugin
  */
-const lockedByLT = computed(
-  () => listenTogetherStore.isInRoom && !listenTogetherStore.canControl
-)
+const lockedByLT = computed(() => listenTogetherStore.isInRoom && !listenTogetherStore.canControl)
 
 /** 拦截器：返回 true 表示放行，false 表示已拦截（弹了提示） */
 function guardLT(): boolean {
@@ -911,8 +915,7 @@ const moreMenuOptions = computed(() => {
         {
           label: '离开房间',
           key: 'lt:leave',
-          icon: () =>
-            h(UsergroupIcon, { size: '14', style: { color: 'var(--td-error-color)' } })
+          icon: () => h(UsergroupIcon, { size: '14', style: { color: 'var(--td-error-color)' } })
         }
       ]
     })
@@ -1589,10 +1592,7 @@ watch(showFullPlay, (val) => {
   <ShareSongDialog v-model="shareDialogVisible" />
 
   <!-- 一起听入口对话框 -->
-  <ListenTogetherEntryDialog
-    v-model="listenTogetherEntryVisible"
-    :mode="listenTogetherEntryMode"
-  />
+  <ListenTogetherEntryDialog v-model="listenTogetherEntryVisible" :mode="listenTogetherEntryMode" />
 </template>
 
 <style lang="scss" scoped>

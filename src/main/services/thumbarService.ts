@@ -163,9 +163,12 @@ class ThumbarService {
       this.applyCover(dataUrl)
     })
 
-    ipcMain.on('thumbar:set-clip', (_event, rect: { x: number; y: number; width: number; height: number } | null) => {
-      this.applyClip(rect)
-    })
+    ipcMain.on(
+      'thumbar:set-clip',
+      (_event, rect: { x: number; y: number; width: number; height: number } | null) => {
+        this.applyClip(rect)
+      }
+    )
   }
 
   private applyCover(dataUrl: string | null): void {
@@ -183,7 +186,11 @@ class ThumbarService {
     try {
       const img = nativeImage.createFromDataURL(dataUrl)
       if (img.isEmpty()) return
-      const small = img.resize({ width: COVER_OVERLAY_SIZE, height: COVER_OVERLAY_SIZE, quality: 'good' })
+      const small = img.resize({
+        width: COVER_OVERLAY_SIZE,
+        height: COVER_OVERLAY_SIZE,
+        quality: 'good'
+      })
       this.win.setOverlayIcon(small, this.tooltip())
       this.overlayCoverHash = hash
     } catch (e) {
@@ -222,9 +229,9 @@ class ThumbarService {
     if (!this.icons) return
 
     const { hasSong, isPlaying, isLiked } = this.state
-    const disabledFlags: Array<'enabled' | 'disabled' | 'dismissonclick' | 'nobackground' | 'hidden' | 'noninteractive'> = hasSong
-      ? []
-      : ['disabled']
+    const disabledFlags: Array<
+      'enabled' | 'disabled' | 'dismissonclick' | 'nobackground' | 'hidden' | 'noninteractive'
+    > = hasSong ? [] : ['disabled']
 
     try {
       this.win.setThumbarButtons([
