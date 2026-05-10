@@ -220,6 +220,18 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   let isReplacingSharedPlaylist = false
   let playlistBeforeRoom: SongList[] | null = null
   let roomSongApplyToken = 0
+  /**
+   * 当前正在加载的歌曲 key —— 防止 song-load 分支被反复重入
+   *
+   * playSong 内部为了换 URL 会先 removeAttribute('src') + load(),期间 audio.src
+   * 暂时为空。如果此时有新的 SYNC(或 ROOM_STATE)到达 ensureRoomSongLoadedAndSynced,
+   * `hasLoadedAudio` 会是 false,导致再次进入 song-load 分支重启 playSong,产生
+   * 死循环(日志表现为同一 URL 反复 setUrl)。
+   *
+   * 标志位记录当前正在加载的 source::songmid;如果新请求的歌就是它,直接走 apply
+   * 路径(等当前加载完即可)。
+   */
+  let loadingSongKey: string | null = null
 
   /** ControlAudio 订阅取消函数 —— 离开房间时统一清理 */
   const audioUnsubs: Array<() => void> = []
@@ -996,6 +1008,15 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     options: { immediate?: boolean; forceAlign?: boolean } = {}
   ): Promise<void> {
     if (!snapshot.song) {
+      loadingSongKey = null
+      await applySnapshot(snapshot, { forceAlign: options.forceAlign })
+      return
+    }
+
+    const targetKey = `${snapshot.song.source}::${snapshot.song.songmid}`
+
+    /* 已经在加载这首歌 —— 不重启 playSong,只等加载完成,期间应用快照 */
+    if (loadingSongKey === targetKey) {
       await applySnapshot(snapshot, { forceAlign: options.forceAlign })
       return
     }
@@ -1015,6 +1036,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }
 
     const token = ++roomSongApplyToken
+    loadingSongKey = targetKey
     try {
       if (ca.Audio.audio) {
         try {
@@ -1041,6 +1063,11 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       await applySnapshot(snapshot, { forceAlign: false })
     } catch (e) {
       console.warn('[lt] 房间歌曲同步失败:', e)
+    } finally {
+      /* 仅当我们仍然是最后一个加载者时清掉 key —— 否则后来的加载会继续持有 */
+      if (loadingSongKey === targetKey && token === roomSongApplyToken) {
+        loadingSongKey = null
+      }
     }
   }
 
