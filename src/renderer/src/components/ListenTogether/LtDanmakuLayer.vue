@@ -27,21 +27,31 @@ interface DanmakuItem {
   isSelf: boolean
   /** 轨道索引 0..N-1 */
   track: number
-  /** 飘过总时长(ms),用于 CSS animation duration */
+  /** 飘过总时长(ms),每条独立 —— 模拟 B 站快慢不一的随机感 */
   duration: number
+  /** 字号(px)—— 13/14/15/16 微抖动 */
+  fontSize: number
   /** 启动时间戳,用于辅助清理判断 */
   startedAt: number
 }
 
-const TRACK_COUNT = 5
-const FLY_DURATION_MS = 10_000
-/** 同一轨道的最小间隔时间(ms),给新弹幕留追上前面那条的"安全距离" */
-const TRACK_COOLDOWN_MS = 2200
+/* 范围:layer 占据"歌词区"—— 顶部操作栏下方到播放器一半之间。
+ * 8 条轨道在这个高度区间均匀分布。 */
+const TRACK_COUNT = 8
+/** 同轨道最小冷却(ms)—— 给前一条留追赶距离,~1.0s */
+const TRACK_COOLDOWN_MS = 1000
+/** 在"最早可用"的前 N 条轨道里随机选,B 站风格的凌乱感 */
+const TRACK_RANDOM_TOP_K = 5
+/** 飞行时长随机区间 [min, max] —— 不同速度,有快有慢 */
+const FLY_DURATION_MIN_MS = 6500
+const FLY_DURATION_MAX_MS = 11000
+/** 字号候选值 —— 低视觉负担,默认偏小 */
+const FONT_SIZES = [12, 13, 14]
 
 /** 当前正在飞的弹幕 */
 const flying = ref<DanmakuItem[]>([])
 
-/** 每条轨道上次发出弹幕的时间戳;选轨道时挑最久没发的那条 */
+/** 每条轨道上次发出弹幕的时间戳;选轨道时挑最早的几条里随机 */
 const trackLastUsedAt = ref<number[]>(new Array(TRACK_COUNT).fill(0))
 
 /** 清理 timer 集合,组件销毁时取消 */
@@ -55,22 +65,25 @@ function primeSeenSet(): void {
   for (const m of lt.chat) seenIds.value.add(m.id)
 }
 
-/** 取一条最久未使用的轨道,均衡分布避免某条轨道堆叠 */
+/**
+ * 瀑布流式选轨道 —— 取"上次使用最早"的前 K 条轨道里随机选 1 条
+ *
+ * 模拟瀑布流"挑最短列"语义:trackLastUsedAt 越早 = 该轨道弹幕飘得越远 =
+ * 该轨道剩余可用空间越大。在 top-K 中随机选避免每次都是同一条造成视觉规整。
+ */
 function pickTrack(): number {
   const now = Date.now()
-  let bestIdx = 0
-  let bestAge = -1
-  for (let i = 0; i < TRACK_COUNT; i++) {
-    const age = now - trackLastUsedAt.value[i]
-    if (age > bestAge) {
-      bestAge = age
-      bestIdx = i
-    }
-  }
-  /* 若最佳轨道也在冷却期内,仍然使用它(避免完全丢消息),
-   * 但 trackLastUsedAt 用 max(now, last+cooldown) 让下一条更晚 */
-  trackLastUsedAt.value[bestIdx] = Math.max(now, trackLastUsedAt.value[bestIdx] + TRACK_COOLDOWN_MS)
-  return bestIdx
+  const indexed = trackLastUsedAt.value.map((t, i) => ({ i, t }))
+  indexed.sort((a, b) => a.t - b.t)
+  const k = Math.min(TRACK_RANDOM_TOP_K, indexed.length)
+  const pick = indexed[Math.floor(Math.random() * k)].i
+  /* 若选中的轨道仍在冷却内,把 lastUsed 推到 now+cooldown 给后续条更晚的时间戳 */
+  trackLastUsedAt.value[pick] = Math.max(now, trackLastUsedAt.value[pick] + TRACK_COOLDOWN_MS)
+  return pick
+}
+
+function randInRange(min: number, max: number): number {
+  return min + Math.random() * (max - min)
 }
 
 function spawn(msg: ChatMsg): void {
@@ -79,6 +92,9 @@ function spawn(msg: ChatMsg): void {
 
   const isSelf = Boolean(msg.from?.userId && msg.from.userId === lt.myUserId)
   const nickname = msg.from?.nickname || '匿名'
+  /* 随机化速度和字号 —— B 站风格的快慢混合 + 大小不一 */
+  const duration = Math.round(randInRange(FLY_DURATION_MIN_MS, FLY_DURATION_MAX_MS))
+  const fontSize = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)]
 
   const item: DanmakuItem = {
     id: msg.id,
@@ -87,7 +103,8 @@ function spawn(msg: ChatMsg): void {
     nickname,
     isSelf,
     track: pickTrack(),
-    duration: FLY_DURATION_MS,
+    duration,
+    fontSize,
     startedAt: Date.now()
   }
   flying.value.push(item)
@@ -96,7 +113,7 @@ function spawn(msg: ChatMsg): void {
   const timer = setTimeout(() => {
     cleanupTimers.delete(timer)
     flying.value = flying.value.filter((d) => d.id !== item.id)
-  }, FLY_DURATION_MS + 500)
+  }, duration + 500)
   cleanupTimers.add(timer)
 }
 
@@ -149,8 +166,9 @@ onBeforeUnmount(() => {
       class="lt-danmaku-item"
       :class="{ self: d.isSelf }"
       :style="{
-        top: `calc(${(d.track / TRACK_COUNT) * 100}% + 8px)`,
-        animationDuration: `${d.duration}ms`
+        top: `calc(${(d.track / TRACK_COUNT) * 100}% + 4px)`,
+        animationDuration: `${d.duration}ms`,
+        fontSize: `${d.fontSize}px`
       }"
     >
       <img
@@ -168,9 +186,16 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* 弹幕区只覆盖歌词大致所在的"上半屏中部":
+ *  - top: 顶部操作栏 + 一点缓冲(预留给按钮),约 80px
+ *  - bottom: 50%(播放器一半,即垂直方向中点)
+ * 这样弹幕飘过的范围与歌词重叠但不挡播放控制 */
 .lt-danmaku-layer {
   position: absolute;
-  inset: 0;
+  top: 80px;
+  left: 0;
+  right: 0;
+  bottom: 50%;
   pointer-events: none;
   overflow: hidden;
   z-index: 5;
@@ -181,47 +206,48 @@ onBeforeUnmount(() => {
   left: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.42);
-  color: rgba(255, 255, 255, 0.94);
-  font-size: 14px;
+  /* 半透明 + 弱阴影,尽量不挡背景视野;字色偏淡也保持可读 */
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.82);
   line-height: 1.2;
   white-space: nowrap;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   animation-name: lt-danmaku-fly;
   animation-timing-function: linear;
   animation-iteration-count: 1;
   animation-fill-mode: forwards;
-  /* 一些字体在 inline-flex 下贴边,留点视觉缓冲 */
-  max-width: 70%;
+  max-width: 60%;
   text-overflow: ellipsis;
   overflow: hidden;
 }
 
 .lt-danmaku-item.self {
-  background: rgba(64, 158, 255, 0.55);
-  color: #fff;
+  /* 自己的弹幕用主题色但同样保持低不透明度 */
+  background: rgba(64, 158, 255, 0.38);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .lt-danmaku-avatar {
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .lt-danmaku-name {
-  font-weight: 600;
-  opacity: 0.92;
+  font-weight: 500;
+  opacity: 0.78;
 }
 
 .lt-danmaku-sep {
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .lt-danmaku-text {
