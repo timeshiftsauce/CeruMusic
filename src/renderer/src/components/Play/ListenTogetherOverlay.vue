@@ -91,7 +91,10 @@ function shareRoom(): void {
 }
 
 function leaveRoom(): void {
-  DialogPlugin.confirm({
+  /* tdesign DialogPlugin.confirm 的 onConfirm 默认不会关闭弹窗(等业务方
+   * 显式 destroy),所以需要拿到 dialog 引用,在 onConfirm/onCancel 里手动
+   * dialog.destroy() —— 否则会出现"已离开但弹窗还在"的现象。 */
+  const dialog = DialogPlugin.confirm({
     header: '确定离开房间？',
     body: lt.isOwner
       ? '你是房主，离开后房主会自动转移给其他成员。'
@@ -101,7 +104,10 @@ function leaveRoom(): void {
     onConfirm: () => {
       lt.leaveRoom()
       emit('close')
-    }
+      dialog.destroy()
+    },
+    onCancel: () => dialog.destroy(),
+    onClose: () => dialog.destroy()
   })
 }
 
