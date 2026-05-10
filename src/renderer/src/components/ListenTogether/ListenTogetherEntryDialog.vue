@@ -64,8 +64,7 @@ async function handleCreate(): Promise<void> {
         createForm.value.mode === 'intimate'
           ? undefined
           : createForm.value.name.trim() || undefined,
-      maxMembers:
-        createForm.value.mode === 'group' ? createForm.value.maxMembers : undefined
+      maxMembers: createForm.value.mode === 'group' ? createForm.value.maxMembers : undefined
     })
     MessagePlugin.success('房间已创建')
     closeAndOpenOverlay()
@@ -263,6 +262,7 @@ watch(
   :deep(.t-radio-button) {
     flex: 1;
     min-width: 0;
+    justify-content: center;
     text-align: center;
   }
 }
@@ -285,6 +285,9 @@ watch(
     min-width: 0;
     height: auto;
     padding: 8px 12px;
+    align-items: center;
+    justify-content: center;
+    display: flex;
     text-align: center;
     white-space: normal;
     line-height: 1.3;
