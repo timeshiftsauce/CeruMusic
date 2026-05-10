@@ -12,11 +12,12 @@ export function buildShareUrl(code: string): string {
 }
 
 export function buildShareText(nickname: string, code: string, appName = 'CeruMusic'): string {
+  // 控制昵称长度，避免恶意构造超长文案
   const safeNick = (nickname || '某位朋友').slice(0, 20)
   const url = buildShareUrl(code)
   return [
-    `「一起听」${safeNick}邀请你一起听歌～`,
-    `🎧 点击链接直达：${url}`,
+    `「一起听」${safeNick}：我的耳机分你一半,快和我一起听歌吧～`,
+    `点开看看：${url}`,
     `或复制本条打开 ${appName} 加入：#${code}#`
   ].join('\n')
 }
