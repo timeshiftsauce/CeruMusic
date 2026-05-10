@@ -839,6 +839,12 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     debouncedEmit(ClientEvents.CTL_SKIP, { seq: current.seq })
   }
 
+  /** 上一首 —— 与 skip 对称,共享列表模式按当前歌位置切前一首 */
+  function previous(): void {
+    if (!emitGuard()) return
+    debouncedEmit(ClientEvents.CTL_PREV, { seq: current.seq })
+  }
+
   function playQueueItem(itemId: string): void {
     if (!emitGuard()) return
     socket?.emit(ClientEvents.CTL_PLAY_QUEUE_ITEM, { itemId })
@@ -1457,6 +1463,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     changeSong,
     playQueueItem,
     skip,
+    previous,
     onSongEnded,
     markLocalLoadingSong,
     clearLocalLoadingSongIfMatch,
