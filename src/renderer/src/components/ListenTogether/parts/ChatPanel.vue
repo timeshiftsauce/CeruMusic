@@ -121,10 +121,22 @@ function sendEmojiOnly(e: string): void {
   stickToBottom.value = true
 }
 
-/* 回车发送 / shift+回车换行 —— t-textarea 的 keydown.enter 签名是 (value, ctx) */
-function onEnter(_value: unknown, ctx: { e: KeyboardEvent }): void {
-  if (ctx?.e?.shiftKey) return
-  ctx?.e?.preventDefault()
+/**
+ * t-textarea 的 keydown 事件签名是 (value, ctx: { e: KeyboardEvent }),
+ * Vue 的 `.enter` 修饰符会把第一个参数当原生 event 处理 → tdesign 内部
+ * `'key' in 51` 报错(value 是字符串/数字)。所以不能用 @keydown.enter,
+ * 手动取 ctx.e 判断按键。
+ *
+ * 行为:
+ *  - Enter:发送(preventDefault 阻止默认换行)
+ *  - Shift+Enter / Ctrl+Enter / Meta+Enter:让默认行为发生 → 换行
+ */
+function onTextareaKeydown(_value: unknown, ctx: { e: KeyboardEvent }): void {
+  const e = ctx?.e
+  if (!e) return
+  if (e.key !== 'Enter') return
+  if (e.shiftKey || e.ctrlKey || e.metaKey) return
+  e.preventDefault()
   sendText()
 }
 
@@ -194,6 +206,7 @@ const visibleChat = computed(() => {
         <t-button
           variant="text"
           shape="circle"
+          class="icon-btn"
           :title="showEmoji ? '收起表情' : '打开表情'"
           @click="showEmoji = !showEmoji"
         >
@@ -202,11 +215,17 @@ const visibleChat = computed(() => {
         <t-textarea
           v-model="draft"
           :autosize="{ minRows: 1, maxRows: 4 }"
-          placeholder="说点什么... (回车发送)"
+          placeholder="说点什么... (Enter 发送 / Shift+Enter 换行)"
           class="input-textarea"
-          @keydown.enter="onEnter"
+          @keydown="onTextareaKeydown"
         />
-        <t-button theme="primary" shape="circle" :disabled="!draft.trim()" @click="sendText">
+        <t-button
+          theme="primary"
+          shape="circle"
+          class="icon-btn"
+          :disabled="!draft.trim()"
+          @click="sendText"
+        >
           <SendIcon />
         </t-button>
       </div>
@@ -228,14 +247,22 @@ const visibleChat = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* 与播放列表的全屏滚动条统一观感:8px 宽,半透明白 thumb,无 track */
   scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.25);
-    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
   }
 }
 
@@ -353,6 +380,30 @@ const visibleChat = computed(() => {
 
 .input-textarea {
   flex: 1;
+}
+
+/* 深色浮层背景下,t-button variant=text 默认 icon 颜色对比度差 ——
+ * 用 :deep 强制 emoji/send icon 用半透明白,与浮层风格统一。
+ * 主题按钮(send 在 disabled 时)也避免变灰看不见。 */
+.icon-btn :deep(.t-icon) {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 20px;
+}
+.icon-btn:hover :deep(.t-icon) {
+  color: rgba(255, 255, 255, 0.95);
+}
+.icon-btn.t-is-disabled :deep(.t-icon),
+.icon-btn[disabled] :deep(.t-icon) {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* tdesign t-button hover 默认底色偏浅(几乎白),配白 icon 对比度全无 ——
+ * 强制 hover/active 用半透明白底,与浮层深色风格协调。 */
+.icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+.icon-btn:active {
+  background-color: rgba(255, 255, 255, 0.18) !important;
 }
 
 .emoji-panel {
