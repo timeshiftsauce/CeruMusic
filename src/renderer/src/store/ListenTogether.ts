@@ -766,12 +766,43 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /** 跳过当前歌（自动播下一首） —— 队列空则停止 */
   function skip(): void {
     if (!emitGuard()) return
-    debouncedEmit(ClientEvents.CTL_SKIP, {})
+    /* 带上当前 seq —— 服务端会做幂等检查:多 admin 同时点 next 只跳一首。
+     * 没有 song 时也允许 skip(队列首播场景),不返回。 */
+    debouncedEmit(ClientEvents.CTL_SKIP, { seq: current.seq })
   }
 
   function playQueueItem(itemId: string): void {
     if (!emitGuard()) return
     socket?.emit(ClientEvents.CTL_PLAY_QUEUE_ITEM, { itemId })
+  }
+
+  /**
+   * 用户主动切歌时由 globaPlayList 调用 —— 标记"我正在本地加载这首歌"
+   *
+   * 防止 host 双击切歌后,server SYNC 回包到达,触发 ensureRoomSongLoadedAndSynced
+   * 在 audio.src 暂时清空(playSong 内 removeAttribute('src') + load() 期间)
+   * 看到 hasLoadedAudio=false 时再次进入 song-load 分支,与正在跑的 playSong 互相
+   * 抢占,产生死循环("下一首加载完成又回到上一首"循环)。
+   *
+   * 用 source::songmid 作为 key,与 ensureRoom 内部使用的 loadingSongKey 共用,
+   * SYNC handler 看到 loadingSongKey === target 直接走 applySnapshot 路径。
+   */
+  function markLocalLoadingSong(source: string | null, songmid?: string | null): void {
+    if (!source || !songmid) {
+      loadingSongKey = null
+      return
+    }
+    loadingSongKey = `${source}::${songmid}`
+  }
+
+  /**
+   * 仅当当前 loadingSongKey 等于指定歌曲时才清掉 —— 防止用户连续切歌时,
+   * 前一次 playSong 的 finally 误清掉后一次刚标记的 key。
+   */
+  function clearLocalLoadingSongIfMatch(source: string, songmid: string): void {
+    if (loadingSongKey === `${source}::${songmid}`) {
+      loadingSongKey = null
+    }
   }
 
   /**
@@ -1350,6 +1381,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     playQueueItem,
     skip,
     onSongEnded,
+    markLocalLoadingSong,
+    clearLocalLoadingSongIfMatch,
 
     // 队列 / 点歌
     requestSong,
