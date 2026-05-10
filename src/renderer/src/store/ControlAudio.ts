@@ -274,14 +274,18 @@ export const ControlAudioStore = defineStore(
       const playSetting = usePlaySettingStore()
       const volume = Audio.volume
       if (Audio.audio) {
+        const audioEl = Audio.audio
         /* 一起听:房间内强制走"无过渡"路径,绕过 transitionVolume。
          * 过渡的渐变 ~150ms 会让真实播放比 SYNC 应用慢,跨设备就不同步了。
          * 不修改用户设置,只在房间状态下 bypass。 */
         if (!playSetting.getIsPauseTransition || isLtInRoom()) {
           try {
-            Audio.audio.volume = volume / 100
-            await Audio.audio.play()
-            Audio.isPlay = true
+            audioEl.volume = volume / 100
+            await audioEl.play()
+            /* 关键:用 audio 元素当前真实状态决定 isPlay,不要无脑设 true ——
+             * 否则用户在 play() pending 期间立即点暂停,audio.pause() 已生效,
+             * 但 await 后这里把 isPlay 又设回 true,UI 出现"自己没暂停"现象。 */
+            Audio.isPlay = !audioEl.paused
             return Promise.resolve()
           } catch (error) {
             console.error('音频播放失败:', error)
@@ -290,13 +294,13 @@ export const ControlAudioStore = defineStore(
           }
         }
 
-        Audio.audio.volume = 0
+        audioEl.volume = 0
         try {
-          await Audio.audio.play()
-          Audio.isPlay = true
-          return transitionVolume(Audio.audio, volume / 100, true, true)
+          await audioEl.play()
+          Audio.isPlay = !audioEl.paused
+          return transitionVolume(audioEl, volume / 100, true, true)
         } catch (error) {
-          Audio.audio.volume = volume / 100
+          audioEl.volume = volume / 100
           console.error('音频播放失败:', error)
           Audio.isPlay = false
           throw new Error('音频播放失败，请检查音频URL是否有效')
