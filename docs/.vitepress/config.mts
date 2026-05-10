@@ -60,6 +60,7 @@ export default defineConfig({
               { text: '音效与均衡器', link: '/guide/used/audio-effects' },
               { text: '快捷键', link: '/guide/used/hotkeys' },
               { text: '听歌识曲与分享', link: '/guide/used/recognize-and-share' },
+              { text: '一起听', link: '/guide/used/listen-together' },
               { text: '数据存储', link: '/guide/used/storage' },
               { text: 'Scheme URL', link: '/guide/used/scheme-url' }
             ]
@@ -74,7 +75,8 @@ export default defineConfig({
         items: [
           { text: '插件类使用', link: '/guide/CeruMusicPluginHost' },
           { text: '澜音插件开发文档（重点）', link: '/guide/CeruMusicPluginDev' },
-          { text: '澜音后端对接文档', link: '/guide/api' }
+          { text: '澜音后端对接文档', link: '/guide/api' },
+          { text: '一起听 · 接口对接（开发者）', link: '/guide/listen-together-api' }
         ]
       },
       {
