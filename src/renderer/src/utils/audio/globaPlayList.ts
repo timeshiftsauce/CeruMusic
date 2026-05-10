@@ -213,13 +213,15 @@ const playSong = async (
    *
    * 三种情形:
    *  1. 房间内、有控制权(host/admin)、song != current.song
-   *     → 发 lt.changeSong 命令,实际加载由收到 SYNC 后 ensureRoomSongLoadedAndSynced 走。
-   *     这就是"host 也按 sync 应用"原则,host/member 走完全相同的播放路径。
+   *     → host 立即本地播放(不等 SYNC),同时 markLocalLoadingSong 防止 SYNC 回声
+   *     触发再次加载。URL 取到后通过 lt.changeSong 携带广播给 member,member 直接
+   *     setUrl 跳过自己的 getSongRealUrl(节省 ~1-2 秒)。
    *  2. 房间内、song == current.song
    *     → 这次调用源自 ensureRoomSongLoadedAndSynced 的远端同步,放行进入实际加载逻辑。
    *  3. 房间内、无控制权、song != current.song
    *     → 提示并 return,member 不能自己切歌。
    */
+  let isHostInitiatedChange = false
   const lt = await getListenTogetherStore()
   if (lt.isInRoom) {
     const remoteSongmid = lt.current.song?.songmid
@@ -234,21 +236,35 @@ const playSong = async (
         MessagePlugin.warning('当前在一起听房间中,无播放控制权。请先退出房间再切歌。')
         return
       }
-      /* host/admin 切歌 → 发命令,等服务端 SYNC 回来再走加载流程 */
-      lt.changeSong({
-        songmid: String(song.songmid),
-        source: song.source,
-        name: song.name,
-        singer: song.singer,
-        cover: song.img,
-        albumName: song.albumName,
-        albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
-        hash: song.hash,
-        types: song.types,
-        lrc: song.lrc ?? null
-      })
-      return
+      /* 标记本地加载,防止后续 server SYNC 在 audio.src 暂时清空时被
+       * ensureRoom 误判需要"重新加载"导致死循环 */
+      lt.markLocalLoadingSong(song.source, String(song.songmid))
+      isHostInitiatedChange = true
+      /* 不 return —— host 直接走下面的本地加载播放流程 */
     }
+  }
+
+  /* 拿到有效 URL 后调用,把切歌意图 + URL 一起广播给 member ——
+   * 让 member 跳过自己的 getSongRealUrl(节省 ~1-2 秒)。
+   * 单次触发(broadcastedChange flag),candidates 换源场景下用最终成功的 URL。 */
+  let broadcastedChange = false
+  const broadcastChangeSongIfNeeded = (urlToBroadcast: string): void => {
+    if (!isHostInitiatedChange || broadcastedChange) return
+    if (!urlToBroadcast || urlToBroadcast.includes('error')) return
+    broadcastedChange = true
+    lt.changeSong({
+      songmid: String(song.songmid),
+      source: song.source,
+      name: song.name,
+      singer: song.singer,
+      cover: song.img,
+      albumName: song.albumName,
+      albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
+      hash: song.hash,
+      types: song.types,
+      lrc: song.lrc ?? null,
+      url: urlToBroadcast
+    })
   }
 
   // 使用当前时间戳作为请求ID，解决快速切歌的竞态问题
@@ -350,6 +366,8 @@ const playSong = async (
 
             if (!url || typeof url !== 'string' || url.includes('error')) continue
 
+            /* 一起听:换源成功也要广播 URL 给 member */
+            broadcastChangeSongIfNeeded(url)
             setUrl(url)
             if (Audio.value.audio) {
               const a = Audio.value.audio
@@ -406,6 +424,9 @@ const playSong = async (
         a.removeAttribute('src')
         a.load()
       }
+      /* 一起听:在 setUrl 即将让 audio 开始加载之前,把切歌意图 + URL 广播给房间。
+       * 此时 URL 已确认有效,member 直接 setUrl 就能播放,跳过自己的 getSongRealUrl。 */
+      broadcastChangeSongIfNeeded(urlToPlay)
       setUrl(urlToPlay)
       try {
         if (Audio.value.audio) {
@@ -584,6 +605,13 @@ const playSong = async (
     // 只有当前请求才能关闭 loading
     if (currentPlayRequestId === requestId) {
       isLoadingSong.value = false
+    }
+    /* 一起听:无论成功/失败/cancel,清掉本地加载标记。
+     * 用 IfMatch 版避免误清:用户连续切歌时前一次 finally 不应清掉后一次刚标记的 key。
+     * 若 broadcastedChange=false 说明 URL 全部解析失败,playSong 会走 tryAutoNext,
+     * 此时不广播 changeSong —— 让 host 自己跳过的歌不污染房间状态。 */
+    if (isHostInitiatedChange) {
+      lt.clearLocalLoadingSongIfMatch(song.source, String(song.songmid))
     }
   }
 }
