@@ -233,7 +233,21 @@ const playSong = async (
 
     if (!isApplyingRemoteSync) {
       if (!lt.canControl) {
-        MessagePlugin.warning('当前在一起听房间中,无播放控制权。请先退出房间再切歌。')
+        /* member 点歌:提交审批 + 提示,不动本地 list/audio。
+         * 服务端把请求加入 pending,广播 PENDING_UPDATE,管理员可在 PendingPanel 审批。 */
+        lt.requestSong({
+          songmid: String(song.songmid),
+          source: song.source,
+          name: song.name,
+          singer: song.singer,
+          cover: song.img,
+          albumName: song.albumName,
+          albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
+          hash: song.hash,
+          types: song.types,
+          lrc: song.lrc ?? null
+        })
+        MessagePlugin.success(`已提交点歌《${song.name || '?'}》,等待管理员审核`)
         return
       }
       /* 标记本地加载,防止后续 server SYNC 在 audio.src 暂时清空时被

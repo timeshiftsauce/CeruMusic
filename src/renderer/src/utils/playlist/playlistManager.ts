@@ -5,6 +5,39 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { calculateBestQuality } from '@common/utils/quality'
 
+/**
+ * 一起听场景下的"member 点歌"分流 —— addToPlaylistAndPlay/End/replacePlaylist
+ * 这些操作对 member 来说都不应直接修改本地播放列表(否则与房间同步状态脱节),
+ * 而是提交 lt.requestSong 进入 pending 等管理员审批。
+ *
+ * 返回 true 表示已提交点歌请求并提示用户,调用方应早 return 不继续后续逻辑。
+ *
+ * 用动态 import 避免与 ListenTogether store 形成循环依赖。
+ */
+async function tryRequestSongAsMember(song: SongList): Promise<boolean> {
+  try {
+    const { useListenTogetherStore } = await import('@renderer/store')
+    const lt = useListenTogetherStore()
+    if (!lt.isInRoom || lt.canControl) return false
+    lt.requestSong({
+      songmid: String(song.songmid),
+      source: song.source,
+      name: song.name,
+      singer: song.singer,
+      cover: (song as any).img,
+      albumName: song.albumName,
+      albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
+      hash: song.hash,
+      types: song.types,
+      lrc: (song as any).lrc ?? null
+    })
+    await MessagePlugin.success(`已提交点歌《${song.name || '?'}》,等待管理员审核`)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // 事件类型定义
 type PlaylistEvents = {
   addToPlaylistAndPlay: SongList
@@ -96,6 +129,8 @@ export async function addToPlaylistAndPlay(
   localUserStore: any,
   playSongCallback: (song: SongList) => Promise<void>
 ) {
+  /* 一起听 member:不修改本地 list,不调 playSong,直接提交点歌请求 */
+  if (await tryRequestSongAsMember(song)) return
   if (!localUserStore.userSource.pluginId && song.source !== 'local' && !(song as any).url) {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
@@ -146,6 +181,8 @@ export async function addToPlaylistAndPlay(
  * @param localUserStore LocalUserDetail store实例
  */
 export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
+  /* 一起听 member:走点歌审核,不修改本地 list */
+  if (await tryRequestSongAsMember(song)) return
   try {
     // 检查歌曲是否已在播放列表中
     const existingIndex = localUserStore.list.findIndex(
@@ -181,6 +218,30 @@ export async function replacePlaylist(
   try {
     if (songs.length === 0) {
       await MessagePlugin.warning('歌曲列表为空')
+      return
+    }
+
+    /* 一起听 member:批量替换列表语义不适合"点歌"流程,只取第一首作为点歌请求,
+     * 其它歌曲忽略 + 提示用户。avoid 改本地共享列表破坏房间同步状态。 */
+    const { useListenTogetherStore } = await import('@renderer/store')
+    const lt = useListenTogetherStore()
+    if (lt.isInRoom && !lt.canControl) {
+      const first = songs[0]
+      if (first) {
+        lt.requestSong({
+          songmid: String(first.songmid),
+          source: first.source,
+          name: first.name,
+          singer: first.singer,
+          cover: (first as any).img,
+          albumName: first.albumName,
+          albumId: first.albumId !== undefined ? String(first.albumId) : undefined,
+          hash: first.hash,
+          types: first.types,
+          lrc: (first as any).lrc ?? null
+        })
+        await MessagePlugin.success(`已提交点歌《${first.name || '?'}》,等待管理员审核(房间内一次只能点一首)`)
+      }
       return
     }
 
