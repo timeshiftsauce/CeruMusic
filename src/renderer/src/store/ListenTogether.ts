@@ -11,10 +11,9 @@
  *     - member 端：收到 sync 后应用到本地 ControlAudio
  *     - 用 isApplyingRemote flag 防止回声（远端 -> 本地 -> 又广播）
  *
- * 不做的事（留给 P3 / P4）：
+ * 不做的事（留给 P4）：
  *  - 房间页 UI
  *  - 入口按钮（操作栏二级菜单）
- *  - 远端切歌时的本地拉流（需要 P3 集成音乐源 SDK）
  *  - cerumusic://room/{code} 协议处理（P4）
  */
 
@@ -196,6 +195,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   let playlistSyncTimer: ReturnType<typeof setTimeout> | null = null
   let isReplacingSharedPlaylist = false
   let playlistBeforeRoom: SongList[] | null = null
+  let roomSongApplyToken = 0
 
   /**
    * "正在应用远端事件" 标记 —— 防止回声广播
@@ -343,7 +343,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
       // 进房后立即应用一次同步（万一进房时就有歌在播）
       if (state.current.song) {
-        void applySnapshot(state.current)
+        void ensureRoomSongLoadedAndSynced(state.current, { immediate: true })
       }
     })
 
@@ -381,7 +381,9 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         payload: PlaybackSnapshot & { action?: string; operatorId?: string }
       ) => {
         Object.assign(current, payload)
-        void applySnapshot(payload)
+        void ensureRoomSongLoadedAndSynced(payload, {
+          immediate: payload.action === 'play-queue-item' || payload.action === 'change-song'
+        })
       }
     )
 
@@ -472,7 +474,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     // ownerId 即是当前 logto sub —— 我们存到 myUserId 给后续 sync 防回声用
     myUserId.value = room.ownerId
     await joinByCode(room.code)
-    await runClockSyncBurst()
     await syncRoomContextFromLocal()
     return room
   }
@@ -744,9 +745,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
      *
      * 设计权衡：
      *  - 用 watch 在 store 内自动响应，房间状态变化即生效，不需要 UI 层介入
-     *  - 跳过逻辑：自己刚切的歌（isApplyingSongChange=true 时） / 和当前歌相同
-     *  - 切到新歌时设置 isApplyingSongChange=true，3s 后自动 reset
-     *    覆盖 playSong 异步链路（拉 URL ~1-2s + setUrl + start）的回声窗口
+     *  - 收到新歌后立即确保本地已加载目标音频，再应用服务器进度
      */
     /* GlobalPlayStatus 提前实例化 —— 给 member watch 和 host watch 共用 */
     const globalPlayStatus = useGlobalPlayStatusStore()
@@ -756,71 +755,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       async (newKey, oldKey) => {
         if (!current.song) return
         if (newKey === oldKey) return
-        if (isApplyingSongChange) return // 自己发起的切歌，跳过
-
-        try {
-          isApplyingSongChange = true
-          const ca = ControlAudioStore()
-          if (ca.Audio.audio) {
-            try {
-              ca.Audio.audio.pause()
-            } catch {}
-          }
-          ca.Audio.isPlay = false
-          // 动态导入避免循环依赖：globaPlayList 内部依赖很多 store
-          const mod = await import('@renderer/utils/audio/globaPlayList')
-          // 把 SongRef 还原成完整 SongList —— host 已经传了大部分字段
-          const ref = current.song
-          /* 用 JSON 深克隆去 reactive proxy
-           *
-           * 必要性：current.song 是 reactive 状态，从它取出的字段（特别是
-           * 嵌套数组 types）仍带响应式 Proxy。后续 playSong → getSongRealUrl
-           * → requestSdk 走 Electron IPC，结构化克隆遇到 Proxy 会抛
-           * "An object could not be cloned"。
-           *
-           * JSON.parse(JSON.stringify(...)) 一步去 proxy，对纯数据对象足够
-           * （SongList 不含 Date/Map/Set/Function 等不可序列化类型）。
-           */
-          const songList = JSON.parse(
-            JSON.stringify({
-              songmid: ref.songmid,
-              source: ref.source,
-              name: ref.name || '',
-              singer: ref.singer || '',
-              albumName: ref.albumName || '',
-              albumId: ref.albumId || '',
-              interval: ref.duration ? formatInterval(ref.duration) : '',
-              img: ref.cover || '',
-              hash: ref.hash,
-              lrc: ref.lrc ?? null,
-              // types 用于切音质 —— host 传了就用 host 的，没传则空数组
-              types: ref.types || [],
-              // _types 是插件内部数据，跨设备不通用，让 playSong 内部自己重建
-              _types: {}
-            })
-          )
-
-          /* 先手动同步 GlobalPlayStatus.player.songInfo 让 UI 立即更新
-           *
-           * 为什么必须显式调：GlobalPlayStatus 内部的 watch 依赖
-           * `localUserStore.list.find(s => s.songmid === newId)` —— 远端房主点的歌
-           * **不在 member 本地播放列表里**，所以 list.find 返回 undefined，
-           * updatePlayerInfo 不会被自动触发，导致页面歌名/歌手/封面停在旧歌。
-           * 直接调一次 updatePlayerInfo 绕开这个限制。
-           */
-          globalPlayStatus.updatePlayerInfo(songList)
-
-          // 再调 playSong 走完整拉流流程（拉 URL + setUrl + start）
-          await mod.playSong(songList)
-          await applySnapshot(current)
-        } catch (e) {
-          console.warn('[lt] member 切歌拉流失败:', e)
-        } finally {
-          // 3s 窗口覆盖 playSong 整个异步链
-          setTimeout(() => {
-            isApplyingSongChange = false
-          }, 3000)
-        }
+        await ensureRoomSongLoadedAndSynced(current, { immediate: true })
       }
     )
     audioUnsubs.push(() => stopSongWatch())
@@ -830,8 +765,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
      * 用户在歌单/搜索/最近播放页双击歌曲 → globaPlayList.playSong → songInfo 更新。
      * 这个 watcher 自动把切歌广播给房间所有人，不需要改 globaPlayList 的代码（低侵入）。
      *
-     * 配合 member 端 watch + isApplyingSongChange flag，两个 watch 互相靠这个
-     * 标记跳过对方触发的链，避免回声死循环。
+     * 配合 ensureRoomSongLoadedAndSynced 的 isApplyingSongChange flag，
+     * 避免远端拉流触发本地播放事件后又广播回服务器。
      */
     const stopHostSongWatch = watch(
       () => globalPlayStatus.player.songInfo?.songmid,
@@ -900,16 +835,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         playlistSyncTimer = null
       }
     })
-  }
-
-  /**
-   * 把秒数转成 mm:ss 字符串 —— SongList.interval 用的格式
-   */
-  function formatInterval(seconds: number): string {
-    const s = Math.max(0, Math.floor(seconds))
-    const m = Math.floor(s / 60)
-    const r = s % 60
-    return `${m}:${r.toString().padStart(2, '0')}`
   }
 
   /**
@@ -1001,6 +926,58 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }, 0)
   }
 
+  async function ensureRoomSongLoadedAndSynced(
+    snapshot: PlaybackSnapshot,
+    options: { immediate?: boolean } = {}
+  ): Promise<void> {
+    if (!snapshot.song) {
+      await applySnapshot(snapshot)
+      return
+    }
+
+    const ca = ControlAudioStore()
+    const globalPlayStatus = useGlobalPlayStatusStore()
+    const localSong = globalPlayStatus.player.songInfo
+    const sameLocalSong =
+      localSong?.songmid !== undefined &&
+      String(localSong.songmid) === String(snapshot.song.songmid) &&
+      localSong.source === snapshot.song.source
+    const hasLoadedAudio = Boolean(ca.Audio.audio?.src)
+
+    if (sameLocalSong && hasLoadedAudio) {
+      await applySnapshot(snapshot)
+      return
+    }
+
+    const token = ++roomSongApplyToken
+    isApplyingSongChange = true
+    try {
+      if (ca.Audio.audio) {
+        try {
+          ca.Audio.audio.pause()
+        } catch {}
+      }
+      ca.Audio.isPlay = false
+
+      const songList = songRefToSongList(snapshot.song)
+      globalPlayStatus.updatePlayerInfo(songList)
+
+      const mod = await import('@renderer/utils/audio/globaPlayList')
+      if (token !== roomSongApplyToken) return
+      await mod.playSong(songList, { immediate: options.immediate })
+      if (token !== roomSongApplyToken) return
+      await applySnapshot(snapshot)
+    } catch (e) {
+      console.warn('[lt] 房间歌曲同步失败:', e)
+    } finally {
+      if (token === roomSongApplyToken) {
+        setTimeout(() => {
+          if (token === roomSongApplyToken) isApplyingSongChange = false
+        }, 500)
+      }
+    }
+  }
+
   /**
    * 应用远端播放快照到本地 ControlAudio
    *
@@ -1010,8 +987,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    *  3. 比对本地 currentTime，漂移超过阈值就硬 seek
    *  4. 同步播放 / 暂停状态
    *
-   * 切歌（song 变更）的实际拉流由 P3 阶段处理 —— 此处仅记录 current.song，
-   * P3 会监听 current.song 变化触发 url 切换。
+   * 歌曲加载由 ensureRoomSongLoadedAndSynced 负责；这里只做进度和播放状态校准。
    */
   async function applySnapshot(snapshot: PlaybackSnapshot): Promise<void> {
     const ca = ControlAudioStore()
