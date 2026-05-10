@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { transitionVolume } from '@renderer/utils/audio/volume'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { usePlaySettingStore } from '@renderer/store'
+import { isLtInRoom } from '@renderer/utils/listenTogether/state'
 
 import type {
   AudioEventCallback,
@@ -273,8 +274,10 @@ export const ControlAudioStore = defineStore(
       const playSetting = usePlaySettingStore()
       const volume = Audio.volume
       if (Audio.audio) {
-        // 如果关闭了暂停播放过渡，直接播放
-        if (!playSetting.getIsPauseTransition) {
+        /* 一起听:房间内强制走"无过渡"路径,绕过 transitionVolume。
+         * 过渡的渐变 ~150ms 会让真实播放比 SYNC 应用慢,跨设备就不同步了。
+         * 不修改用户设置,只在房间状态下 bypass。 */
+        if (!playSetting.getIsPauseTransition || isLtInRoom()) {
           try {
             Audio.audio.volume = volume / 100
             await Audio.audio.play()
@@ -305,8 +308,8 @@ export const ControlAudioStore = defineStore(
       const playSetting = usePlaySettingStore()
       if (Audio.audio) {
         Audio.isPlay = false
-        // 如果关闭了暂停播放过渡，直接暂停
-        if (!playSetting.getIsPauseTransition) {
+        /* 一起听:房间内强制无过渡暂停,与 start 对称 */
+        if (!playSetting.getIsPauseTransition || isLtInRoom()) {
           Audio.audio.pause()
           return Promise.resolve()
         }

@@ -56,6 +56,7 @@ import {
 import { useAuthStore } from '@renderer/store/Auth'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
+import { setLtInRoom } from '@renderer/utils/listenTogether/state'
 import type { SongList } from '@renderer/types/audio'
 
 /* ---------------- 连接配置 ---------------- */
@@ -161,6 +162,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
   /** 是否处于房间中 */
   const isInRoom = computed(() => !!meta.value)
+
+  /* 同步给 ControlAudio / crossfade 等模块的热路径访问点 ——
+   * 这些模块判断"是否在房间内"时不能 import 本 store(循环依赖),通过 state.ts 中转。 */
+  watch(isInRoom, (value) => setLtInRoom(value), { immediate: true })
 
   /**
    * 当前用户是否有控制权
@@ -714,11 +719,13 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function seek(time: number): void {
     if (!emitGuard()) return
     if (!current.song) return
-    /* 乐观更新 —— 同时改本地 audio.currentTime 和 current 的 anchor,使:
-     *  1. 进度条立即响应,不会因等 SYNC 回程而"跳回"老位置;
-     *  2. drift 循环看到的 current.anchorPos/anchorAt 与即将到来的 SYNC 一致,
-     *     不会用旧 anchor 把刚 seek 的音频再拉回去。
-     * SYNC 回来后 applySnapshot 在 'seek' action 下会再做一次精确对齐(无视漂移阈值)。 */
+    /* 乐观更新 + 陈旧 anchor 防御 ——
+     *  1. 立即把本地 audio 移到目标位置,进度条不会"跳回"老位置;
+     *  2. 同步更新 current 的 anchor,使 drift 循环看到与即将到来的 SYNC 一致;
+     *  3. 记录 lastLocalSeekAt:在 seek 的 SYNC 回包到来前,丢弃任何 anchorAt 早于
+     *     此时刻的非-seek SYNC(防止之前 ctl:play 的 SYNC 因排队后到达而把刚 seek
+     *     的进度又拉回老位置)。
+     * SYNC 回来后 applySnapshot 在 'seek' action 下会做一次精确对齐(forceAlign)。 */
     const ca = ControlAudioStore()
     if (ca.Audio.audio) {
       try {
@@ -726,8 +733,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       } catch {}
     }
     ca.setCurrentTime(time)
+    const nowServer = Date.now() + clockOffset
     current.anchorPos = time
-    current.anchorAt = Date.now() + clockOffset
+    current.anchorAt = nowServer
+    lastLocalSeekAt = nowServer
     debouncedEmit(ClientEvents.CTL_SEEK, { time })
   }
 
