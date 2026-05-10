@@ -43,7 +43,10 @@ export function songRefToSongList(ref: SongRef): SongList {
       hash: ref.hash,
       lrc: ref.lrc ?? null,
       types: ref.types || [],
-      _types: {}
+      _types: {},
+      /* 透传 URL —— 让 playSong 内部直接用,跳过 getSongRealUrl 的网络拉取
+       * (getSongRealUrl 顶部已有 `if (song.url) return song.url` 的快路径) */
+      url: ref.url
     })
   )
 }

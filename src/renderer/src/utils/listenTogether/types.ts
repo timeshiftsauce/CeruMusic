@@ -72,6 +72,15 @@ export interface SongRef {
   types?: string[]
   /** 歌词原始文本 —— 公共数据可以传，避免 member 重新拉歌词 */
   lrc?: string | null
+  /**
+   * 实际播放 URL —— host 切歌时把已解析的播放地址带过来,
+   * member 直接 setUrl 跳过自己的 getSongRealUrl(节省 1-2 秒)
+   *
+   * 注意:URL 通常是带签名的临时地址(QQ/KG/KW/MG 都是分钟级 TTL),
+   * 跨设备/跨 IP 一般可用,过期则 audio 元素会触发 error,playSong 内的
+   * candidates 自动换源逻辑会兜底。
+   */
+  url?: string
 }
 
 /**
