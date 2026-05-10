@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * 点歌队列面板 —— 一起听浮层内的"队列" Tab
+ * 共享播放列表面板 —— 一起听浮层内的"列表" Tab
  *
- * 展示已通过审批、即将自动播放的曲目列表
- * 操作权限：admin+ 可删任意；普通成员仅自己点的可删
+ * 这里展示的是房间权威播放列表。房主/admin 可直接点歌切换；
+ * 普通成员只能查看，或移除自己点过的歌。
  */
 import { useListenTogetherStore } from '@renderer/store'
 import { CloseIcon, MusicIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import type { QueueItem } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
@@ -21,6 +22,27 @@ function handleRemove(item: QueueItem): void {
   lt.removeFromQueue(item.itemId)
 }
 
+function handlePlay(item: QueueItem): void {
+  if (!lt.canControl) {
+    MessagePlugin.warning('当前没有播放控制权')
+    return
+  }
+  if (isCurrentItem(item)) {
+    lt.seek(0)
+    lt.play(0)
+    return
+  }
+  lt.playQueueItem(item.itemId)
+}
+
+function isCurrentItem(item: QueueItem): boolean {
+  return (
+    Boolean(lt.current.song) &&
+    String(item.song.songmid) === String(lt.current.song?.songmid) &&
+    item.song.source === lt.current.song?.source
+  )
+}
+
 function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
@@ -30,14 +52,20 @@ function fmtTime(ts: number): string {
   <div class="queue-panel">
     <div v-if="!lt.queue.length" class="empty">
       <MusicIcon size="32" />
-      <p>队列空空如也</p>
+      <p>共享播放列表为空</p>
       <p class="hint">
-        {{ lt.canControl ? '在歌单/搜索页选首歌就能加进队列' : '点歌请等管理员审批通过' }}
+        {{ lt.canControl ? '修改播放列表会同步给房间成员' : '房主或管理员更新后会自动同步' }}
       </p>
     </div>
 
     <ul v-else class="items">
-      <li v-for="(item, i) in lt.queue" :key="item.itemId" class="item">
+      <li
+        v-for="(item, i) in lt.queue"
+        :key="item.itemId"
+        class="item"
+        :class="{ active: isCurrentItem(item), clickable: lt.canControl }"
+        @click="handlePlay(item)"
+      >
         <div class="index">{{ i + 1 }}</div>
         <div class="cover">
           <img v-if="item.song.cover" :src="item.song.cover" alt="cover" />
@@ -50,7 +78,7 @@ function fmtTime(ts: number): string {
           <div class="sub">
             <span>{{ item.song.singer || '—' }}</span>
             <span class="dot">·</span>
-            <span class="requester">{{ item.requesterName }} 点</span>
+            <span class="requester">由 {{ item.requesterName }} 添加</span>
             <span class="dot">·</span>
             <span>{{ fmtTime(item.addedAt) }}</span>
           </div>
@@ -60,8 +88,8 @@ function fmtTime(ts: number): string {
           variant="text"
           shape="circle"
           size="small"
-          :title="lt.canControl ? '从队列删除' : '取消我的点歌'"
-          @click="handleRemove(item)"
+          :title="lt.canControl ? '从共享列表移除' : '取消我的点歌'"
+          @click.stop="handleRemove(item)"
         >
           <CloseIcon />
         </t-button>
@@ -115,6 +143,23 @@ function fmtTime(ts: number): string {
 
   &:hover {
     background: rgba(255, 255, 255, 0.06);
+  }
+
+  &.clickable {
+    cursor: pointer;
+  }
+
+  &.active {
+    background: rgba(255, 255, 255, 0.1);
+
+    .index {
+      color: var(--lt-accent-soft, #82aaff);
+      font-weight: 700;
+    }
+
+    .title {
+      color: var(--lt-accent-soft, #82aaff);
+    }
   }
 }
 

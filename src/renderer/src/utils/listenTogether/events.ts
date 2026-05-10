@@ -75,9 +75,12 @@ export const ErrorCodes = {
 /**
  * 进度漂移阈值（秒）—— 超过此值才硬 seek，否则不动让其自然追上
  *
- * 1.5s 是经验值：人耳对轻微滞后不敏感，但 2s+ 就会明显感觉"对方比我慢"。
+ * 一起听需要更紧的阈值：超过 300ms 就自动校准，避免明显前后拍。
  */
-export const DRIFT_HARD_SEEK_THRESHOLD = 1.5
+export const DRIFT_HARD_SEEK_THRESHOLD = 0.3
+
+/** 房主/admin 进度上报间隔（毫秒） */
+export const PROGRESS_REPORT_INTERVAL_MS = 1500
 
 /**
  * NTP 时钟同步 ping 间隔（毫秒）
