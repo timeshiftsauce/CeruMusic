@@ -34,8 +34,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "@applemusic-like-lyrics/lyric": "^0.4.1",
-    "@applemusic-like-lyrics/vue": "^0.4.0",
+    "@applemusic-like-lyrics/lyric": "^1.0.0",
+    "@applemusic-like-lyrics/vue": "^0.4.2",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@langchain/core": "^0.3.71",
