@@ -104,4 +104,12 @@ export function setupDeepLinks() {
   deepLinkRouter.get('share', (window, url) => {
     handleShareDeepLink(window, url, pendingShareIds, 'share-open', '分享')
   })
+
+  /* cerumusic://lt/<code> —— 一起听落地。
+   * 网页端"在 澜音 中打开"按钮已经把 #CODE# 写进了系统剪贴板,
+   * 这里只需要把窗口拉起聚焦(由 DeepLinkRouter.match 自动完成),
+   * 渲染层"发现"页 onActivated 钩子会读剪贴板自动识别口令并弹出加入对话框。 */
+  deepLinkRouter.get('lt', (_, url) => {
+    console.log('收到一起听 DeepLink:', url)
+  })
 }
