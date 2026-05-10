@@ -83,7 +83,10 @@ function copyCode(): void {
 function shareRoom(): void {
   const meta = lt.meta
   if (!meta) return
-  const text = buildShareText('我', meta.code)
+  /* 用自己在房间内的真实昵称生成分享文案,而不是硬编码 "我" */
+  const me = lt.members.find((m) => m.userId === lt.myUserId)
+  const myNickname = me?.nickname || '某位朋友'
+  const text = buildShareText(myNickname, meta.code)
   navigator.clipboard
     ?.writeText(text)
     .then(() => MessagePlugin.success('分享文案已复制，去粘贴给朋友吧'))
