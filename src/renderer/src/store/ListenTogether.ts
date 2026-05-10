@@ -32,7 +32,6 @@ import {
   ErrorCodes,
   CONTROL_DEBOUNCE_MS,
   DRIFT_HARD_SEEK_THRESHOLD,
-  PROGRESS_REPORT_INTERVAL_MS,
   PING_BURST_COUNT,
   PING_BURST_INTERVAL_MS,
   PING_INTERVAL_MS
@@ -137,8 +136,24 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     song: null,
     isPlaying: false,
     anchorPos: 0,
-    anchorAt: 0
+    anchorAt: 0,
+    seq: 0
   })
+
+  /**
+   * 已应用的最高 SYNC 版本号
+   *
+   * 客户端只接受 `payload.seq > localSeq` 的 SYNC,丢弃乱序/陈旧包。
+   * 加入房间时 ROOM_STATE.current.seq 即为初始值。
+   */
+  const localSeq = ref(0)
+
+  /**
+   * 是否处于重连过程中 —— socket disconnect 到 reconnect 之间为 true
+   *
+   * UI 可据此显示"正在重连"提示;墓碑期内续连会自动恢复,无需用户感知。
+   */
+  const isReconnecting = ref(false)
 
   /* ============================================================
    *  Getters（computed）
@@ -186,35 +201,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /** 周期性 ping 定时器 */
   let pingTimer: ReturnType<typeof setInterval> | null = null
 
-  /** 周期性播放漂移校准定时器 */
-  let driftTimer: ReturnType<typeof setInterval> | null = null
-  let isDriftChecking = false
-
-  /** 房主/admin 周期性向服务端上报当前播放进度 */
-  let progressReportTimer: ReturnType<typeof setInterval> | null = null
   let playlistSyncTimer: ReturnType<typeof setTimeout> | null = null
   let isReplacingSharedPlaylist = false
   let playlistBeforeRoom: SongList[] | null = null
   let roomSongApplyToken = 0
-
-  /**
-   * "正在应用远端事件" 标记 —— 防止回声广播
-   *
-   * 远端 sync -> 调用 ControlAudio -> 触发 publish('play') -> 又被订阅器捕获
-   *  -> 如果不拦截就会再广播 ctl:play -> 服务器再 sync 回来 -> 死循环
-   * 设置此标记后，订阅器会跳过该次 publish。
-   */
-  let isApplyingRemote = false
-
-  /**
-   * 远端切歌进行中标记 —— 单独的、更长时间窗的 flag
-   *
-   * 切歌路径：sync(change-song) -> watcher -> playSong (异步拉 URL ~1-2s)
-   *  -> setUrl -> start -> 才 publish('play')
-   * 普通的 isApplyingRemote 100ms 窗口太短，会被 publish('play') 触发广播。
-   * 这个 flag 在切歌发起时打开，3s 后自动 reset。
-   */
-  let isApplyingSongChange = false
 
   /** ControlAudio 订阅取消函数 —— 离开房间时统一清理 */
   const audioUnsubs: Array<() => void> = []
@@ -309,14 +299,29 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       // io server disconnect 表示服务器主动踢（如鉴权失败）
       // 其它原因都属于网络问题，会自动重连
       console.warn('[lt] socket disconnected:', reason)
-      connectionStatus.value =
-        reason === 'io server disconnect' ? 'disconnected' : 'reconnecting'
+      if (reason === 'io server disconnect') {
+        connectionStatus.value = 'disconnected'
+        isReconnecting.value = false
+      } else {
+        connectionStatus.value = 'reconnecting'
+        isReconnecting.value = true
+      }
     })
 
-    sock.on('reconnect', () => {
+    sock.on('reconnect', async () => {
       connectionStatus.value = 'connected'
       // 重连后重新同步时钟（网络变化可能影响 RTT）
       void runClockSyncBurst()
+
+      /* 30s 墓碑期内续连:发 ROOM_RESUME 让服务端取消清理 + 推完整状态。
+       * 服务端若墓碑已过期或不匹配,会回退为正常 join 流程,客户端体验上等同重新进入。 */
+      if (meta.value && socket) {
+        socket.emit(ClientEvents.ROOM_RESUME, {
+          code: meta.value.code,
+          lastSeq: localSeq.value
+        })
+      }
+      isReconnecting.value = false
     })
 
     /* ---- 业务错误 ---- */
@@ -327,13 +332,15 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
     /* ---- 房间状态广播 ---- */
     sock.on(ServerEvents.ROOM_STATE, (state: RoomState) => {
-      // 完整快照覆盖 —— 由 join 触发
+      // 完整快照覆盖 —— 由 join / resume 触发
       meta.value = state.meta
       members.value = state.members
       queue.value = state.queue
       pending.value = state.pending
       chat.value = state.chat
       Object.assign(current, state.current)
+      /* localSeq 初始化:重连/续连时也以服务端权威为准,避免应用旧 SYNC */
+      localSeq.value = state.current.seq || 0
       if (state.queue.length || state.current.song) {
         replaceLocalPlaylistFromQueue(state.queue, state.current.song)
       }
@@ -368,6 +375,22 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       }
     )
 
+    /* ---- 墓碑期内同 userId 续连 —— 不触发 leave/join 跳动 ---- */
+    sock.on(
+      ServerEvents.MEMBER_RECONNECT,
+      (payload: { userId: string; nickname?: string }) => {
+        // 仅刷新成员存在状态,不动 members(他没真离开过)。
+        // 实际的 UI 提示也可以选择不处理 —— 这就是续连的目的:静默恢复。
+        if (!members.value.some((x) => x.userId === payload.userId) && payload.nickname) {
+          members.value.push({
+            userId: payload.userId,
+            nickname: payload.nickname,
+            role: 'member'
+          })
+        }
+      }
+    )
+
     sock.on(ServerEvents.MEMBER_KICKED, (payload: { byUser: { nickname: string } }) => {
       // 自己被踢
       MessagePlugin.warning(`你被 ${payload.byUser.nickname} 移出了房间`)
@@ -380,7 +403,14 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       (
         payload: PlaybackSnapshot & { action?: string; operatorId?: string }
       ) => {
+        /* seq 单调递增校验:旧/重复 SYNC 直接丢弃,防止乱序 */
+        if (typeof payload.seq === 'number' && payload.seq <= localSeq.value) {
+          return
+        }
         Object.assign(current, payload)
+        if (typeof payload.seq === 'number') {
+          localSeq.value = payload.seq
+        }
         void ensureRoomSongLoadedAndSynced(payload, {
           immediate: payload.action === 'play-queue-item' || payload.action === 'change-song'
         })
@@ -454,6 +484,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         return '你已经在另一个房间中'
       case ErrorCodes.PERMISSION_DENIED:
         return '权限不足'
+      case ErrorCodes.NO_SONG:
+        return '当前房间还没有歌曲,请先选歌'
       default:
         return err.message || '操作失败'
     }
@@ -516,8 +548,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         startAudioHooks()
         void runClockSyncBurst()
         startPingLoop()
-        startDriftLoop()
-        startProgressReportLoop()
         resolve(state.meta)
       }
       const onError = (err: ServerError) => {
@@ -577,12 +607,12 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       song: null,
       isPlaying: false,
       anchorPos: 0,
-      anchorAt: 0
+      anchorAt: 0,
+      seq: 0
     })
+    localSeq.value = 0
     clearAudioHooks()
     stopPingLoop()
-    stopDriftLoop()
-    stopProgressReportLoop()
   }
 
   /* ============================================================
@@ -592,14 +622,19 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /**
    * 播放（仅在自己有控制权时生效）
    *
-   * 注意：本方法**不直接调 ControlAudio.start()**，而是发广播给服务器；
-   * 服务器收到后 sync 回来，所有人（包括自己）才同步执行播放。
-   * 这样可以保证：自己看到的进度 = 服务器权威进度，避免本地与广播打架。
+   * 注意：本方法**不直接调 ControlAudio.start()**,而是发广播给服务器;
+   * 服务器收到后 SYNC 回来,所有人(包括自己)才同步执行播放。
+   * 这样保证:自己看到的进度 = 服务器权威进度,host/member 走相同路径,无回声风险。
    *
-   * 如果自己已经在房间但没控制权（group 模式 member），调用会被忽略。
+   * 如果当前房间无歌(current.song = null),前置守卫直接 toast 提示,不发空命令。
+   * 如果自己已经在房间但没控制权(group 模式 member),emitGuard 拦截。
    */
   function play(time?: number): void {
     if (!emitGuard()) return
+    if (!current.song) {
+      MessagePlugin.warning('当前房间还没有歌曲,请先选歌')
+      return
+    }
     debouncedEmit(ClientEvents.CTL_PLAY, {
       time: time ?? ControlAudioStore().Audio.currentTime
     })
@@ -607,6 +642,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
   function pause(time?: number): void {
     if (!emitGuard()) return
+    if (!current.song) return
     debouncedEmit(ClientEvents.CTL_PAUSE, {
       time: time ?? ControlAudioStore().Audio.currentTime
     })
@@ -614,6 +650,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
   function seek(time: number): void {
     if (!emitGuard()) return
+    if (!current.song) return
     debouncedEmit(ClientEvents.CTL_SEEK, { time })
   }
 
@@ -637,6 +674,22 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function playQueueItem(itemId: string): void {
     if (!emitGuard()) return
     socket?.emit(ClientEvents.CTL_PLAY_QUEUE_ITEM, { itemId })
+  }
+
+  /**
+   * 当前歌曲自然播完 —— 由 GlobalAudio 的 ended 事件调用(host/admin 触发)
+   *
+   * 设计:服务端按 (songmid, source, seq) 幂等去重,即便多客户端同时报 ended
+   * 也只推进一次。member 不应调用此方法 —— 服务端会以 PERMISSION_DENIED 拒绝。
+   */
+  function onSongEnded(): void {
+    if (!socket?.connected || !isInRoom.value || !canControl.value) return
+    if (!current.song) return
+    socket.emit(ClientEvents.CTL_SONG_ENDED, {
+      songmid: current.song.songmid,
+      source: current.song.source,
+      seq: current.seq
+    })
   }
 
   /* ============================================================
@@ -711,45 +764,27 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    * ============================================================ */
 
   /**
-   * 开始监听本地 ControlAudio 的 publish 事件 —— 自动转广播
+   * 启动房间内的 ControlAudio 桥接 —— 命令式同步架构,host 也按 SYNC 应用
    *
-   * 仅 host / admin+ 在播放控制类操作时广播；其余角色由服务器忽略权限不足
-   * 的请求，但客户端这里也做权限闸门省一次 round-trip。
+   * 设计变化(相比旧版):
+   *  - 不再订阅 ControlAudio 的 publish('play'/'pause'/'seeked') 自动广播
+   *  - 不再监听 GlobalPlayStatus.songInfo 自动广播切歌
+   *  - 所有播放控制走 UI -> lt.play()/lt.pause()/lt.seek()/lt.changeSong() 显式命令
+   *  - 服务端确权后回 SYNC,client 据此驱动本地 audio
    *
-   * 同时启动 member 端的切歌 watcher：当 current.song.songmid 变化（且不是
-   * 自己刚切的）时，调用本地 playSong 走完整的拉流流程。
+   * 这里只保留两类钩子:
+   *  1. member 端 current.song 变化 → 加载新歌(使用 ensureRoomSongLoadedAndSynced)
+   *  2. host 端本地共享列表(LocalUserDetailStore.list)变化 → 节流上传 queue
    */
   function startAudioHooks(): void {
     clearAudioHooks() // 防重
-    const ca = ControlAudioStore()
     const localUserStore = LocalUserDetailStore()
 
-    audioUnsubs.push(
-      ca.subscribe('play', () => {
-        if (isApplyingRemote || isApplyingSongChange || !canControl.value) return
-        debouncedEmit(ClientEvents.CTL_PLAY, { time: ca.Audio.currentTime })
-      }),
-      ca.subscribe('pause', () => {
-        if (isApplyingRemote || isApplyingSongChange || !canControl.value) return
-        debouncedEmit(ClientEvents.CTL_PAUSE, { time: ca.Audio.currentTime })
-      }),
-      ca.subscribe('seeked', () => {
-        if (isApplyingRemote || isApplyingSongChange || !canControl.value) return
-        debouncedEmit(ClientEvents.CTL_SEEK, { time: ca.Audio.currentTime })
-      })
-      // ended 不广播 —— 由服务器/UI 决定是否 skip
-      // timeupdate 不广播 —— 太频繁，由 anchorPos/anchorAt 自然推算
-    )
-
-    /* member 端切歌响应：监听 current.song 变化 → 触发本地 playSong 拉流
+    /* member 端切歌响应:监听 current.song 变化 → 触发本地 playSong 拉流
      *
-     * 设计权衡：
-     *  - 用 watch 在 store 内自动响应，房间状态变化即生效，不需要 UI 层介入
-     *  - 收到新歌后立即确保本地已加载目标音频，再应用服务器进度
+     * host 也走这里(因为 host 不再自己 audio.play(),也是从 SYNC 收到 song),
+     * 但通常 host 自己已经播过这首,sameLocalSong 检查会跳过重新加载。
      */
-    /* GlobalPlayStatus 提前实例化 —— 给 member watch 和 host watch 共用 */
-    const globalPlayStatus = useGlobalPlayStatusStore()
-
     const stopSongWatch = watch(
       () => `${current.song?.source ?? ''}::${current.song?.songmid ?? ''}`,
       async (newKey, oldKey) => {
@@ -760,62 +795,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     )
     audioUnsubs.push(() => stopSongWatch())
 
-    /* host 端自动切歌广播：监听本地 GlobalPlayStatus.player.songInfo 变化
-     *
-     * 用户在歌单/搜索/最近播放页双击歌曲 → globaPlayList.playSong → songInfo 更新。
-     * 这个 watcher 自动把切歌广播给房间所有人，不需要改 globaPlayList 的代码（低侵入）。
-     *
-     * 配合 ensureRoomSongLoadedAndSynced 的 isApplyingSongChange flag，
-     * 避免远端拉流触发本地播放事件后又广播回服务器。
-     */
-    const stopHostSongWatch = watch(
-      () => globalPlayStatus.player.songInfo?.songmid,
-      (newId, oldId) => {
-        // 没控制权的成员不广播
-        if (!canControl.value) return
-        // 正在应用远端切歌时不广播（防回声）
-        if (isApplyingSongChange) return
-        if (!newId || newId === oldId) return
-
-        const info = globalPlayStatus.player.songInfo
-        if (!info) return
-
-        // 与房间当前歌相同则跳过 —— 避免重复广播
-        if (
-          current.song?.songmid === String(info.songmid) &&
-          current.song?.source === info.source
-        ) {
-          return
-        }
-
-        // 标记自己刚切，避免 sync 回来又触发 member watch
-        isApplyingSongChange = true
-        setTimeout(() => {
-          isApplyingSongChange = false
-        }, 3000)
-
-        socket?.emit(ClientEvents.CTL_CHANGE_SONG, {
-          song: {
-            songmid: String(info.songmid),
-            source: info.source,
-            name: info.name,
-            singer: info.singer,
-            cover: info.img,
-            duration: parseInterval(info.interval),
-            albumName: info.albumName,
-            // PlayList.albumId 可能是 number，转 string 保持协议一致
-            albumId: info.albumId !== undefined ? String(info.albumId) : undefined,
-            hash: info.hash,
-            // types: 直接透传，让 member 端能切音质
-            types: info.types,
-            // 歌词是公共数据，传给 member 省得他再拉一次
-            lrc: info.lrc
-          }
-        })
-      }
-    )
-    audioUnsubs.push(() => stopHostSongWatch())
-
+    /* host 端共享列表上传:本地 list 变 → 节流后上传 queue */
     const stopPlaylistWatch = watch(
       () => localUserStore.list,
       () => {
@@ -823,7 +803,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         if (playlistSyncTimer) clearTimeout(playlistSyncTimer)
         playlistSyncTimer = setTimeout(() => {
           playlistSyncTimer = null
-          void syncRoomContextFromLocal()
+          void syncRoomContextFromLocal({ queueOnly: true })
         }, 300)
       },
       { deep: true }
@@ -838,7 +818,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   }
 
   /**
-   * 把 mm:ss 字符串转回秒数 —— host 端广播切歌时用
+   * 把 mm:ss 字符串转回秒数 —— buildSongRef 解析时长用
    *
    * 容错：解析失败返回 undefined，不阻塞流程
    */
@@ -875,7 +855,17 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }
   }
 
-  async function syncRoomContextFromLocal(): Promise<void> {
+  /**
+   * host 进房或共享列表变更时,把本地状态上传到服务端
+   *
+   * @param options.queueOnly true = 只上传 queue,不带 current(避免重置当前歌进度)
+   *
+   * 设计原则:这是"初次状态同步"的通道,不是"周期性进度上报"。后续播放控制
+   * 一律走 ctl:* 显式命令路径。
+   */
+  async function syncRoomContextFromLocal(
+    options: { queueOnly?: boolean } = {}
+  ): Promise<void> {
     if (!socket?.connected || !isInRoom.value || !canControl.value) return
 
     const ca = ControlAudioStore()
@@ -895,12 +885,16 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         : playlistSongs
 
     socket.emit(ClientEvents.ROOM_SYNC_CONTEXT, {
-      current: {
-        song: currentSong,
-        isPlaying: Boolean(ca.Audio.isPlay),
-        anchorPos: currentTime,
-        anchorAt: Date.now() + clockOffset
-      },
+      ...(options.queueOnly
+        ? {}
+        : {
+            current: {
+              song: currentSong,
+              isPlaying: Boolean(ca.Audio.isPlay),
+              anchorPos: currentTime,
+              anchorAt: Date.now() + clockOffset
+            }
+          }),
       queue: queueSongs
     })
   }
@@ -950,7 +944,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }
 
     const token = ++roomSongApplyToken
-    isApplyingSongChange = true
     try {
       if (ca.Audio.audio) {
         try {
@@ -967,7 +960,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       await mod.playSong(songList, {
         immediate: options.immediate,
         shouldAutoStart: () =>
-          token === roomSongApplyToken &&
           current.isPlaying &&
           current.song?.songmid === snapshot.song?.songmid &&
           current.song?.source === snapshot.song?.source
@@ -976,12 +968,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       await applySnapshot(snapshot)
     } catch (e) {
       console.warn('[lt] 房间歌曲同步失败:', e)
-    } finally {
-      if (token === roomSongApplyToken) {
-        setTimeout(() => {
-          if (token === roomSongApplyToken) isApplyingSongChange = false
-        }, 500)
-      }
     }
   }
 
@@ -989,57 +975,66 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    * 应用远端播放快照到本地 ControlAudio
    *
    * 流程：
-   *  1. 计算服务器视角的"现在"：clientNow + clockOffset
-   *  2. 推算应到达的播放位置：anchorPos + (now - anchorAt) / 1000
-   *  3. 比对本地 currentTime，漂移超过阈值就硬 seek
-   *  4. 同步播放 / 暂停状态
+   *  1. 校验 seq —— 旧/重复 SYNC 直接丢弃
+   *  2. 计算服务器视角的"现在"：clientNow + clockOffset
+   *  3. 推算应到达的播放位置：anchorPos + (now - anchorAt) / 1000
+   *  4. 比对本地 currentTime,漂移超过阈值就硬 seek
+   *  5. 同步播放 / 暂停状态
    *
-   * 歌曲加载由 ensureRoomSongLoadedAndSynced 负责；这里只做进度和播放状态校准。
+   * 歌曲加载由 ensureRoomSongLoadedAndSynced 负责;这里只做进度和播放状态校准。
+   * 注意:本架构下 ControlAudio 没有自动广播订阅器,所以不再需要 isApplyingRemote 标记
+   * 防回声 —— 远端 SYNC 直接驱动 audio,audio play/pause 事件不会回流到 emit。
    */
   async function applySnapshot(snapshot: PlaybackSnapshot): Promise<void> {
+    /* seq 校验:仅当 snapshot 来自 current(共享 ref)时绕过(此时 seq 已是当前),
+     * 来自远端 payload 的 snapshot 必须严格大于 localSeq 才应用。
+     * snapshot === current 时引用相等可识别,不需额外参数。 */
+    if (snapshot !== current) {
+      if (snapshot.seq <= localSeq.value && snapshot.seq !== 0) {
+        return
+      }
+      localSeq.value = Math.max(localSeq.value, snapshot.seq)
+    }
+
     const ca = ControlAudioStore()
-    isApplyingRemote = true
-    try {
-      // 1. 估算服务器"现在"
-      const nowServer = Date.now() + clockOffset
-      const elapsed = snapshot.isPlaying
-        ? Math.max((nowServer - snapshot.anchorAt) / 1000, 0)
-        : 0
-      const targetPos = snapshot.anchorPos + elapsed
+    // 1. 估算服务器"现在"
+    const nowServer = Date.now() + clockOffset
+    const elapsed = snapshot.isPlaying
+      ? Math.max((nowServer - snapshot.anchorAt) / 1000, 0)
+      : 0
+    const targetPos = snapshot.anchorPos + elapsed
 
-      // 2. 进度漂移 —— 大于阈值才硬 seek，否则相信本地自然推进
-      const audioEl = ca.Audio.audio
-      if (audioEl && snapshot.song) {
-        const drift = Math.abs(audioEl.currentTime - targetPos)
-        if (drift > DRIFT_HARD_SEEK_THRESHOLD) {
-          try {
-            audioEl.currentTime = targetPos
-            ca.setCurrentTime(targetPos)
-          } catch (e) {
-            console.warn('[lt] hard seek failed:', e)
-          }
+    // 2. 进度漂移 —— 大于阈值才硬 seek，否则相信本地自然推进
+    const audioEl = ca.Audio.audio
+    if (audioEl && snapshot.song) {
+      const drift = Math.abs(audioEl.currentTime - targetPos)
+      if (drift > DRIFT_HARD_SEEK_THRESHOLD) {
+        try {
+          audioEl.currentTime = targetPos
+          ca.setCurrentTime(targetPos)
+        } catch (e) {
+          console.warn('[lt] hard seek failed:', e)
         }
       }
+    }
 
-      // 3. 播放 / 暂停状态
-      if (snapshot.isPlaying && !ca.Audio.isPlay && audioEl?.src) {
-        try {
-          await ca.start()
-        } catch (e) {
-          console.warn('[lt] remote play failed:', e)
-        }
-      } else if (!snapshot.isPlaying && ca.Audio.isPlay) {
-        try {
-          await ca.stop()
-        } catch (e) {
-          console.warn('[lt] remote pause failed:', e)
-        }
+    // 3. 播放 / 暂停状态
+    // 以真实 audio.paused 为准；ControlAudio.isPlay 在双槽/淡出/异步拉流时可能滞后。
+    const actuallyPlaying = audioEl ? !audioEl.paused : ca.Audio.isPlay
+    if (snapshot.isPlaying && !actuallyPlaying && audioEl?.src) {
+      try {
+        await ca.start()
+      } catch (e) {
+        console.warn('[lt] remote play failed:', e)
       }
-    } finally {
-      // 覆盖一次 play/pause 事件和可能的暂停淡出动画，避免回声广播。
-      setTimeout(() => {
-        isApplyingRemote = false
-      }, 700)
+    } else if (!snapshot.isPlaying && (actuallyPlaying || ca.Audio.isPlay)) {
+      try {
+        await ca.stop()
+      } catch (e) {
+        console.warn('[lt] remote pause failed:', e)
+      }
+    } else if (!snapshot.isPlaying) {
+      ca.Audio.isPlay = false
     }
   }
 
@@ -1113,49 +1108,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }
   }
 
-  function startDriftLoop(): void {
-    stopDriftLoop()
-    driftTimer = setInterval(() => {
-      if (!isInRoom.value || !current.song || isDriftChecking) return
-      isDriftChecking = true
-      void applySnapshot(current).finally(() => {
-        isDriftChecking = false
-      })
-    }, 1000)
-  }
-
-  function stopDriftLoop(): void {
-    if (driftTimer) {
-      clearInterval(driftTimer)
-      driftTimer = null
-    }
-    isDriftChecking = false
-  }
-
-  function startProgressReportLoop(): void {
-    stopProgressReportLoop()
-    progressReportTimer = setInterval(() => {
-      if (!socket?.connected || !isInRoom.value || !canControl.value || !current.song) return
-      const ca = ControlAudioStore()
-      const localSong = buildSongRef(useGlobalPlayStatusStore().player.songInfo as Record<string, any>)
-      socket.emit(ClientEvents.ROOM_SYNC_CONTEXT, {
-        current: {
-          song: localSong ?? current.song,
-          isPlaying: Boolean(ca.Audio.isPlay),
-          anchorPos: Number(ca.Audio.currentTime || ca.Audio.audio?.currentTime || 0),
-          anchorAt: Date.now() + clockOffset
-        }
-      })
-    }, PROGRESS_REPORT_INTERVAL_MS)
-  }
-
-  function stopProgressReportLoop(): void {
-    if (progressReportTimer) {
-      clearInterval(progressReportTimer)
-      progressReportTimer = null
-    }
-  }
-
   /* ============================================================
    *  辅助
    * ============================================================ */
@@ -1221,6 +1173,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     pending,
     chat,
     current,
+    isReconnecting,
     overlayVisible,
 
     // getters
@@ -1251,6 +1204,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     changeSong,
     playQueueItem,
     skip,
+    onSongEnded,
 
     // 队列 / 点歌
     requestSong,
