@@ -27,6 +27,7 @@ import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
 import CommentsOverlay from './CommentsOverlay.vue'
 import ListenTogetherOverlay from './ListenTogetherOverlay.vue'
+import LtDanmakuLayer from '@renderer/components/ListenTogether/LtDanmakuLayer.vue'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
@@ -1007,6 +1008,8 @@ onUnmounted(() => {
       :main-color="lightMainColor"
       @close="emit('update:showListenTogether', false)"
     />
+    <!-- 一起听弹幕层 —— 房间内自动激活,房外什么都不渲染 -->
+    <LtDanmakuLayer />
   </div>
 </template>
 
