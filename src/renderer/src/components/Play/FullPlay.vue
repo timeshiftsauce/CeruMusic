@@ -26,6 +26,7 @@ import { usePlaySettingStore } from '@renderer/store'
 import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
 import CommentsOverlay from './CommentsOverlay.vue'
+import ListenTogetherOverlay from './ListenTogetherOverlay.vue'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
@@ -202,6 +203,8 @@ onUnmounted(() => {
 interface Props {
   show?: boolean
   showComments?: boolean
+  /** 一起听浮层是否可见 —— 与 store.overlayVisible 双向绑定 */
+  showListenTogether?: boolean
   coverImage?: string
   songId?: string | null
   songInfo: SongList | { songmid: number | null | string; lrc: string | null }
@@ -212,13 +215,19 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   show: false,
   showComments: false,
+  showListenTogether: false,
   coverImage: '@assets/images/Default.jpg',
   songId: '',
   mainColor: '#rgb(0,0,0)',
   disableAutoHide: false
 })
 // 定义事件
-const emit = defineEmits(['toggle-fullscreen', 'idle-change', 'update:showComments'])
+const emit = defineEmits([
+  'toggle-fullscreen',
+  'idle-change',
+  'update:showComments',
+  'update:showListenTogether'
+])
 
 // 跟踪全屏状态
 const isFullscreen = ref(false)
@@ -991,6 +1000,12 @@ onUnmounted(() => {
       :show="props.showComments"
       :main-color="lightMainColor"
       @close="emit('update:showComments', false)"
+    />
+    <!-- 一起听浮层 —— 与 CommentsOverlay 平行的浮层，由 store.overlayVisible 控制 -->
+    <ListenTogetherOverlay
+      :show="props.showListenTogether"
+      :main-color="lightMainColor"
+      @close="emit('update:showListenTogether', false)"
     />
   </div>
 </template>

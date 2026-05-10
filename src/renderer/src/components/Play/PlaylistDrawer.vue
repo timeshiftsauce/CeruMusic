@@ -2,6 +2,8 @@
 import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useListenTogetherStore } from '@renderer/store'
+import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
 import { MessagePlugin, Popconfirm } from 'tdesign-vue-next'
 import { LocationIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { useVirtualList } from '@vueuse/core'
@@ -27,12 +29,52 @@ const emit = defineEmits<{
 // Stores
 const localUserStore = LocalUserDetailStore()
 const { list } = storeToRefs(localUserStore)
+const lt = useListenTogetherStore()
 
-// 虚拟滚动
-const sourceList = ref([...list.value])
+/**
+ * 显示用列表 —— 在一起听房间时显示房间队列，否则显示本地播放列表
+ *
+ * 房间队列结构：[当前播放的歌] + [lt.queue 待播队列]
+ *  - 当前歌从 lt.current.song 取（与房间权威状态一致）
+ *  - 待播队列从 lt.queue 取，转成 SongList 兼容现有渲染
+ *
+ * 注意：不动 localUserStore.list —— 退出房间后用户的本地列表还在原处。
+ */
+const displayList = computed<SongList[]>(() => {
+  if (!lt.isInRoom) return list.value
+  const result: SongList[] = []
+  if (lt.current.song) result.push(songRefToSongList(lt.current.song))
+  for (const item of lt.queue) {
+    result.push(songRefToSongList(item.song))
+  }
+  return result
+})
+
+const isRoomCurrentIndex = (index: number) => lt.isInRoom && index === 0 && Boolean(lt.current.song)
+
+const queueItemAtDisplayIndex = (index: number) => {
+  if (!lt.isInRoom) return null
+  const queueIndex = lt.current.song ? index - 1 : index
+  if (queueIndex < 0) return null
+  return lt.queue[queueIndex] ?? null
+}
+
+/**
+ * 房间内的高亮歌 ID —— 房间正在播的歌
+ *
+ * 不能用 props.currentSongId（那是基于 LocalUserDetail.lastPlaySongId 的，
+ * member 端可能滞后），改用 lt.current.song.songmid 保证高亮跟着房间走。
+ */
+const effectiveCurrentSongId = computed<string | number | null | undefined>(() => {
+  if (lt.isInRoom) return lt.current.song?.songmid ?? null
+  return props.currentSongId
+})
+
+// 虚拟滚动数据源 —— 跟随 displayList 变化
+const sourceList = ref<SongList[]>([...displayList.value])
 
 watch(
-  list,
+  displayList,
   (newVal) => {
     sourceList.value = [...newVal]
   },
@@ -85,11 +127,12 @@ const formatTime = (seconds: number) => {
 
 // 滚动到当前播放歌曲
 const scrollToCurrentSong = () => {
-  if (!props.currentSongId) return
+  const targetSongId = effectiveCurrentSongId.value
+  if (!targetSongId) return
 
   // 使用 nextTick 确保 DOM 已更新
   nextTick(() => {
-    const index = list.value.findIndex((song) => song.songmid === props.currentSongId)
+    const index = displayList.value.findIndex((song) => song.songmid === targetSongId)
     if (index !== -1) {
       const container = document.querySelector('.playlist-content')
       if (container) {
@@ -199,6 +242,11 @@ const handlePointerStart = (
   song: any,
   isTouch: boolean
 ) => {
+  if (lt.isInRoom && !lt.canControl) {
+    MessagePlugin.warning('当前没有播放控制权')
+    return
+  }
+
   event.preventDefault()
   event.stopPropagation()
 
@@ -268,7 +316,7 @@ const handlePointerStart = (
     ) {
       // 短暂延迟后播放，确保状态已经稳定
       setTimeout(() => {
-        emit('playSong', currentOperatingSong.value)
+        playDisplayItem(index, currentOperatingSong.value)
         wasLongPressed.value = false
         isDragStarted.value = false
         currentOperatingSong.value = null
@@ -298,6 +346,8 @@ const handlePointerStart = (
 }
 
 const startDragSort = (index: number, song: any) => {
+  if (lt.isInRoom) return
+
   // 隐藏悬停提示
   hideTip()
 
@@ -478,6 +528,10 @@ onUnmounted(() => {
 
 // 清空播放列表
 const handleClearPlaylist = () => {
+  if (lt.isInRoom) {
+    MessagePlugin.info('一起听房间内请逐首移除队列歌曲')
+    return
+  }
   if (list.value.length === 0) {
     MessagePlugin.warning('播放列表已为空')
     return
@@ -489,18 +543,52 @@ const handleClearPlaylist = () => {
 
 // 定位到当前播放歌曲
 const handleLocateCurrentSong = () => {
-  if (!props.currentSongId) {
+  if (!effectiveCurrentSongId.value) {
     MessagePlugin.info('当前没有正在播放的歌曲')
     return
   }
 
-  const currentSongExists = list.value.some((song) => song.songmid === props.currentSongId)
+  const currentSongExists = displayList.value.some(
+    (song) => song.songmid === effectiveCurrentSongId.value
+  )
   if (!currentSongExists) {
     MessagePlugin.warning('当前播放的歌曲不在播放列表中')
     return
   }
 
   scrollToCurrentSong()
+}
+
+const playDisplayItem = (index: number, song: SongList) => {
+  if (!lt.isInRoom) {
+    emit('playSong', song)
+    return
+  }
+  if (!lt.canControl) {
+    MessagePlugin.warning('当前没有播放控制权')
+    return
+  }
+  if (isRoomCurrentIndex(index)) {
+    lt.seek(0)
+    lt.play(0)
+    return
+  }
+  const item = queueItemAtDisplayIndex(index)
+  if (!item) return
+  lt.playQueueItem(item.itemId)
+}
+
+const removeDisplayItem = (index: number, song: SongList) => {
+  if (!lt.isInRoom) {
+    localUserStore.removeSong(song.songmid)
+    return
+  }
+  const item = queueItemAtDisplayIndex(index)
+  if (!item) {
+    MessagePlugin.info('当前播放中的歌曲不能从队列移除')
+    return
+  }
+  lt.removeFromQueue(item.itemId)
 }
 
 // 暴露方法给父组件
@@ -520,16 +608,29 @@ defineExpose({
       @click.stop
     >
       <div class="playlist-header">
-        <div class="playlist-title">播放列表 ({{ list.length }})</div>
+        <div class="playlist-title">
+          <template v-if="lt.isInRoom">
+            <span class="lt-tag">一起听</span>
+            房间队列 ({{ displayList.length }})
+            <span class="room-name" :title="lt.meta?.name">· {{ lt.meta?.name }}</span>
+          </template>
+          <template v-else> 播放列表 ({{ list.length }}) </template>
+        </div>
         <button class="playlist-close" @click.stop="handleClose">
           <span class="iconfont icon-guanbi"></span>
         </button>
       </div>
 
       <div class="playlist-content" v-bind="containerProps">
-        <div v-if="list.length === 0" class="playlist-empty">
-          <p>播放列表为空</p>
-          <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
+        <div v-if="displayList.length === 0" class="playlist-empty">
+          <template v-if="lt.isInRoom">
+            <p>房间队列暂时为空</p>
+            <p>{{ lt.canControl ? '在歌单/搜索页选歌即可加入队列' : '点歌请等管理员审批通过' }}</p>
+          </template>
+          <template v-else>
+            <p>播放列表为空</p>
+            <p>请添加歌曲到播放列表，也可在设置中导入歌曲列表</p>
+          </template>
         </div>
         <div v-else :class="playlistSongsClass" :style="wrapperProps.style">
           <div
@@ -537,7 +638,7 @@ defineExpose({
             :key="item.data.songmid"
             class="playlist-song"
             :class="{
-              active: item.data.songmid === currentSongId,
+              active: item.data.songmid === effectiveCurrentSongId,
               dragging: isDragSorting && item.index === draggedIndex
             }"
             @mousedown="handleMouseDown($event, item.index, item.data)"
@@ -565,7 +666,7 @@ defineExpose({
               </div>
               <button
                 class="song-remove"
-                @click.stop="localUserStore.removeSong(item.data.songmid)"
+                @click.stop="removeDisplayItem(item.index, item.data)"
               >
                 <span class="iconfont icon-xuanxiangshanchu"></span>
               </button>
