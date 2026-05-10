@@ -47,8 +47,7 @@ const queueItemForSong = (song: SongList) => {
   return (
     lt.queue.find(
       (item) =>
-        String(item.song.songmid) === String(song.songmid) &&
-        item.song.source === song.source
+        String(item.song.songmid) === String(song.songmid) && item.song.source === song.source
     ) ?? null
   )
 }
@@ -553,7 +552,7 @@ const handleLocateCurrentSong = () => {
   scrollToCurrentSong()
 }
 
-const playDisplayItem = (index: number, song: SongList) => {
+const playDisplayItem = (_index: number, song: SongList) => {
   if (!lt.isInRoom) {
     emit('playSong', song)
     return
@@ -572,7 +571,7 @@ const playDisplayItem = (index: number, song: SongList) => {
   lt.playQueueItem(item.itemId)
 }
 
-const removeDisplayItem = (index: number, song: SongList) => {
+const removeDisplayItem = (_index: number, song: SongList) => {
   if (!lt.isInRoom) {
     localUserStore.removeSong(song.songmid)
     return
@@ -619,7 +618,9 @@ defineExpose({
         <div v-if="displayList.length === 0" class="playlist-empty">
           <template v-if="lt.isInRoom">
             <p>共享播放列表暂时为空</p>
-            <p>{{ lt.canControl ? '修改播放列表后会自动同步给房间成员' : '点歌请等管理员审批通过' }}</p>
+            <p>
+              {{ lt.canControl ? '修改播放列表后会自动同步给房间成员' : '点歌请等管理员审批通过' }}
+            </p>
           </template>
           <template v-else>
             <p>播放列表为空</p>
@@ -658,10 +659,7 @@ defineExpose({
                     : formatTime(parseInt(item.data.interval) / 1000)
                 }}
               </div>
-              <button
-                class="song-remove"
-                @click.stop="removeDisplayItem(item.index, item.data)"
-              >
+              <button class="song-remove" @click.stop="removeDisplayItem(item.index, item.data)">
                 <span class="iconfont icon-xuanxiangshanchu"></span>
               </button>
             </div>
@@ -691,8 +689,15 @@ defineExpose({
           <span>定位当前播放</span>
         </button>
         <Popconfirm
-          :content="lt.isInRoom ? '一起听房间内不能一键清空共享播放列表。' : '确定要清空播放列表吗？此操作不可撤销。'"
-          :confirm-btn="{ content: lt.isInRoom ? '知道了' : '确认清空', theme: lt.isInRoom ? 'default' : 'danger' }"
+          :content="
+            lt.isInRoom
+              ? '一起听房间内不能一键清空共享播放列表。'
+              : '确定要清空播放列表吗？此操作不可撤销。'
+          "
+          :confirm-btn="{
+            content: lt.isInRoom ? '知道了' : '确认清空',
+            theme: lt.isInRoom ? 'default' : 'danger'
+          }"
           cancel-btn="取消"
           placement="top"
           theme="warning"

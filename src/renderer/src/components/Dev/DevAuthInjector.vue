@@ -131,9 +131,7 @@ function paste(): void {
         </t-button>
       </div>
 
-      <p class="hint sub">
-        当前用户状态：{{ auth.isAuthenticated ? '已登录' : '未登录' }}
-      </p>
+      <p class="hint sub">当前用户状态：{{ auth.isAuthenticated ? '已登录' : '未登录' }}</p>
     </div>
   </div>
 </template>
@@ -159,7 +157,9 @@ function paste(): void {
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(255, 100, 60, 0.35);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
 
   &:hover {
     transform: translateY(-1px);
