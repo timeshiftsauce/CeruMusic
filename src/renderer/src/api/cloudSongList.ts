@@ -1,5 +1,6 @@
 import { Request, unwrap } from '@renderer/utils/request'
 import { base64ToFile, isBase64 } from '@renderer/utils/file'
+import config from '@common/api/config.json'
 
 // Define types locally or export them
 export interface CloudSongList {
@@ -48,7 +49,7 @@ export interface UpdateUserSongListDto {
   songlist?: CloudSongDto[]
 }
 
-const API_URL = 'https://api.ceru.shiqianjiang.cn/api'
+const API_URL = config.baseUrl[0].url
 const request = new Request(API_URL)
 
 const BASE_URL = '/user-songlist'

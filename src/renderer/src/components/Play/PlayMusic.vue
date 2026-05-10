@@ -43,7 +43,8 @@ import {
   EllipsisIcon,
   ShareIcon,
   SoundIcon,
-  TimeIcon
+  TimeIcon,
+  UsergroupIcon
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
@@ -51,6 +52,8 @@ import { useDlnaStore } from '@renderer/store/dlna'
 import { crossfadeState, crossfadeManager } from '@renderer/utils/audio/crossfade'
 import CrossfadeHint from './CrossfadeHint.vue'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
+import ListenTogetherEntryDialog from '@renderer/components/ListenTogether/ListenTogetherEntryDialog.vue'
+import { useListenTogetherStore } from '@renderer/store'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
 
@@ -649,6 +652,73 @@ const onDownload = async () => {
 // 分享对话框
 const shareDialogVisible = ref(false)
 
+// 一起听入口对话框（创建/加入二选一）
+const listenTogetherEntryVisible = ref(false)
+const listenTogetherEntryMode = ref<'create' | 'join'>('create')
+
+// 一起听浮层显示状态 —— 与 store 双向绑定
+//   - 浮层挂在 FullPlay 内部（参考 CommentsOverlay 的模式）
+//   - 任何地方调用 lt.openOverlay() 都会让浮层弹出，下面的 watch 会顺手把 FullPlay 也展开
+const listenTogetherStore = useListenTogetherStore()
+const showListenTogether = computed({
+  get: () => listenTogetherStore.overlayVisible,
+  set: (v: boolean) => {
+    if (v) listenTogetherStore.openOverlay()
+    else listenTogetherStore.closeOverlay()
+  }
+})
+
+// 浮层一打开就展开 FullPlay（如果还没展开）—— 让用户立刻看到房间面板
+watch(showListenTogether, (visible) => {
+  if (visible && !showFullPlay.value) {
+    showFullPlay.value = true
+  }
+})
+
+/**
+ * 一起听权限锁 —— 在房间但无控制权时为 true
+ *
+ * 用途：操作栏上下曲/播放暂停按钮 UI 视觉禁用 + click 提示
+ *  - 不能用真 :disabled 因为我们要让点击触发提示
+ *  - 用 .lt-locked 样式类灰化、:title 显示无权限文案
+ *  - click 守卫：lockedByLT 时拦截 + MessagePlugin
+ */
+const lockedByLT = computed(
+  () => listenTogetherStore.isInRoom && !listenTogetherStore.canControl
+)
+
+/** 拦截器：返回 true 表示放行，false 表示已拦截（弹了提示） */
+function guardLT(): boolean {
+  if (lockedByLT.value) {
+    MessagePlugin.warning('当前在一起听房间中，无播放控制权')
+    return false
+  }
+  return true
+}
+
+/* 三个核心按钮的 click 守卫 wrapper —— 模板里替代直接调 */
+function onPlayPrevious(): void {
+  if (!guardLT()) return
+  if (listenTogetherStore.isInRoom) {
+    MessagePlugin.info('一起听房间暂不支持上一首')
+    return
+  }
+  void playPrevious()
+}
+function onPlayNext(): void {
+  if (!guardLT()) return
+  if (listenTogetherStore.isInRoom) {
+    listenTogetherStore.skip()
+    return
+  }
+  void playNext()
+}
+function onTogglePlayPause(): void {
+  if (isLoadingSong.value) return
+  if (!guardLT()) return
+  void togglePlayPause()
+}
+
 // 更多菜单是否打开（打开时阻止控制栏自动隐藏）
 const isMoreMenuOpen = ref(false)
 
@@ -821,6 +891,49 @@ const moreMenuOptions = computed(() => {
     }
   ]
 
+  /* 一起听入口（低侵入：放在分享下方，与音质/倍速并列）
+   *
+   * 在房间中时显示"前往房间"+"离开房间"两个子项；
+   * 不在房间则显示"创建房间"+"加入房间"。
+   */
+  const lt = useListenTogetherStore()
+  if (lt.isInRoom) {
+    opts.push({
+      label: `一起听 · ${lt.meta?.name ?? '房间'}`,
+      key: 'listen-together-go',
+      icon: () => h(UsergroupIcon, { size: '16' }),
+      children: [
+        {
+          label: '前往房间',
+          key: 'lt:go',
+          icon: () => h(UsergroupIcon, { size: '14' })
+        },
+        {
+          label: '离开房间',
+          key: 'lt:leave',
+          icon: () =>
+            h(UsergroupIcon, { size: '14', style: { color: 'var(--td-error-color)' } })
+        }
+      ]
+    })
+  } else {
+    opts.push({
+      label: '一起听',
+      key: 'listen-together',
+      icon: () => h(UsergroupIcon, { size: '16' }),
+      children: [
+        {
+          label: '创建房间',
+          key: 'lt:create'
+        },
+        {
+          label: '加入房间（口令 / 链接）',
+          key: 'lt:join'
+        }
+      ]
+    })
+  }
+
   if (currentSourceQualities.value.length > 0) {
     const cur = currentQuality.value
     opts.push({
@@ -862,6 +975,31 @@ const handleMoreMenuSelect = (key: string) => {
   if (key === 'share') {
     if (!songInfo.value.songmid) return
     shareDialogVisible.value = true
+    return
+  }
+  /* 一起听菜单分发：4 种状态分别处理 */
+  if (key === 'lt:create') {
+    listenTogetherEntryMode.value = 'create'
+    listenTogetherEntryVisible.value = true
+    return
+  }
+  if (key === 'lt:join') {
+    listenTogetherEntryMode.value = 'join'
+    listenTogetherEntryVisible.value = true
+    return
+  }
+  if (key === 'lt:go') {
+    /* 打开一起听浮层（叠加在 FullPlay 内部）
+     *
+     * 这里不再跳 router.push —— store.openOverlay 会触发 lt.overlayVisible=true，
+     * 下面的 watch(lt.overlayVisible) 会自动把 FullPlay 也展开，
+     * FullPlay 内部挂的 ListenTogetherOverlay 显示房间内容。
+     */
+    useListenTogetherStore().openOverlay()
+    return
+  }
+  if (key === 'lt:leave') {
+    useListenTogetherStore().leaveRoom()
     return
   }
   if (typeof key === 'string' && key.startsWith('quality:')) {
@@ -1276,13 +1414,22 @@ watch(showFullPlay, (val) => {
 
       <!-- 中间：核心播放控制 -->
       <div class="center-controls">
-        <t-button class="control-btn" variant="text" shape="circle" @click.stop="playPrevious">
+        <t-button
+          class="control-btn"
+          :class="{ 'lt-locked': lockedByLT }"
+          :title="lockedByLT ? '一起听中无控制权' : ''"
+          variant="text"
+          shape="circle"
+          @click.stop="onPlayPrevious"
+        >
           <span class="iconfont icon-shangyishou"></span>
         </t-button>
         <button
           class="control-btn play-btn"
+          :class="{ 'lt-locked': lockedByLT }"
+          :title="lockedByLT ? '一起听中无控制权' : ''"
           :disabled="isLoadingSong"
-          @click.stop="() => !isLoadingSong && togglePlayPause()"
+          @click.stop="onTogglePlayPause"
         >
           <transition name="fade" mode="out-in">
             <div v-if="isLoadingSong" key="loading" class="loading-spinner play-loading"></div>
@@ -1290,7 +1437,14 @@ watch(showFullPlay, (val) => {
             <span v-else key="pause" class="iconfont icon-bofang"></span>
           </transition>
         </button>
-        <t-button class="control-btn" shape="circle" variant="text" @click.stop="playNext">
+        <t-button
+          class="control-btn"
+          :class="{ 'lt-locked': lockedByLT }"
+          :title="lockedByLT ? '一起听中无控制权' : ''"
+          shape="circle"
+          variant="text"
+          @click.stop="onPlayNext"
+        >
           <span class="iconfont icon-xiayishou"></span>
         </t-button>
       </div>
@@ -1390,6 +1544,7 @@ watch(showFullPlay, (val) => {
   <div class="fullbox">
     <FullPlay
       v-model:show-comments="showComments"
+      v-model:show-listen-together="showListenTogether"
       :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
       :show="showFullPlay"
       :cover-image="player.cover"
@@ -1416,6 +1571,12 @@ watch(showFullPlay, (val) => {
 
   <!-- 分享对话框 -->
   <ShareSongDialog v-model="shareDialogVisible" />
+
+  <!-- 一起听入口对话框 -->
+  <ListenTogetherEntryDialog
+    v-model="listenTogetherEntryVisible"
+    :mode="listenTogetherEntryMode"
+  />
 </template>
 
 <style lang="scss" scoped>
@@ -1845,6 +2006,13 @@ watch(showFullPlay, (val) => {
     &:disabled {
       cursor: not-allowed;
       opacity: 0.6;
+    }
+
+    /* 一起听无权限锁 —— 视觉灰化但保留 click（用于弹"无权限"提示） */
+    &.lt-locked {
+      cursor: not-allowed;
+      opacity: 0.45;
+      filter: grayscale(0.4);
     }
   }
 }

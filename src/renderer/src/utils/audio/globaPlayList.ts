@@ -145,6 +145,27 @@ const playSong = async (song: SongList) => {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
   }
+
+  /* 一起听守卫：member 端无控制权时禁止本地切歌
+   *
+   * 例外：远端 sync 触发的 playSong 必须放行（song.songmid 等于房间当前播的歌）。
+   * 这样可以区分"用户主动切歌"和"远端同步切歌"，前者拦截、后者通过。
+   *
+   * 用动态 import 避免和 ListenTogether store 形成静态循环依赖
+   * （ListenTogether store 内部已经动态 import 本文件）。
+   */
+  const { useListenTogetherStore } = await import('@renderer/store')
+  const lt = useListenTogetherStore()
+  if (lt.isInRoom && !lt.canControl) {
+    const remoteSongmid = lt.current.song?.songmid
+    const isApplyingRemoteSync =
+      remoteSongmid !== undefined && String(remoteSongmid) === String(song.songmid)
+    if (!isApplyingRemoteSync) {
+      MessagePlugin.warning('当前在一起听房间中，无播放控制权。请先退出房间再切歌。')
+      return
+    }
+  }
+
   // 使用当前时间戳作为请求ID，解决快速切歌的竞态问题
   const requestId = Date.now()
   // songInfo 上不存在 requestId 属性，移除该行；requestId 仅通过闭包变量跟踪即可
@@ -600,9 +621,19 @@ const getNextSong = (): SongList | null => {
   })
 }
 
+const getListenTogetherStore = async () => {
+  const { useListenTogetherStore } = await import('@renderer/store')
+  return useListenTogetherStore()
+}
+
 const playPrevious = async () => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
+    MessagePlugin.info('一起听房间暂不支持上一首')
+    return
+  }
   if (list.value.length === 0) return
   try {
     const currentIndex = list.value.findIndex(
@@ -620,6 +651,15 @@ const playPrevious = async () => {
 const playNext = async () => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
+    if (lt.canControl) {
+      lt.skip()
+    } else {
+      MessagePlugin.warning('当前在一起听房间中，无播放控制权')
+    }
+    return
+  }
   if (list.value.length === 0) return
   try {
     const nextSong = resolveNextSong({
@@ -637,6 +677,13 @@ const playNext = async () => {
 const playNextAutoNow = async () => {
   // 若无感过渡正在完成最后的推进，避免重复推进
   if (crossfadeManager.isFinalizingCurrentAdvance()) return
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
+    if (lt.canControl) {
+      lt.skip()
+    }
+    return
+  }
   if (list.value.length === 0) return
   try {
     if (playMode.value === PlayMode.SINGLE && userInfo.value.lastPlaySongId) {

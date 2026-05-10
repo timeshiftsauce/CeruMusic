@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { Request, unwrap } from '@renderer/utils/request'
+import config from '@common/api/config.json'
 
-const API_URL = 'https://api.ceru.shiqianjiang.cn/api'
+const API_URL = config.baseUrl[0].url
 const request = new Request(API_URL)
 
 const BASE = '/share'
