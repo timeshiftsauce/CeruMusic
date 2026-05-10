@@ -11,6 +11,7 @@ import {
   desktopCapturer,
   session,
   nativeImage,
+  clipboard,
   type WebContents,
   BrowserWindowConstructorOptions
 } from 'electron'
@@ -37,7 +38,8 @@ import { deepLinkRouter } from './router'
 import {
   setupDeepLinks,
   consumePendingShareIds,
-  consumePendingPlaylistShareIds
+  consumePendingPlaylistShareIds,
+  consumePendingLtCodes
 } from './router/routes'
 
 // Initialize deep link routes
@@ -941,6 +943,24 @@ ipcMain.handle('get-pending-share-ids', async () => {
 // 查询并清空待处理的歌单分享 DeepLink id 队列
 ipcMain.handle('get-pending-playlist-share-ids', async () => {
   return consumePendingPlaylistShareIds()
+})
+
+// 查询并清空待处理的一起听 DeepLink code 队列
+ipcMain.handle('get-pending-lt-codes', async () => {
+  return consumePendingLtCodes()
+})
+
+/* 主进程剪贴板读取 —— 比 renderer 的 navigator.clipboard.readText() 更可靠:
+ *  - 无需窗口焦点 / 用户手势
+ *  - 不受 Permissions Policy / 浏览器异步权限提示影响
+ *  - Electron 的 clipboard 模块同步读取系统剪贴板,直接返回纯文本 */
+ipcMain.handle('clipboard:read-text', async () => {
+  try {
+    return clipboard.readText() || ''
+  } catch (e) {
+    console.warn('clipboard:read-text failed', e)
+    return ''
+  }
 })
 
 // 系统音频采集 - 标记一次显式授权的采集会话

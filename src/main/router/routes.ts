@@ -5,6 +5,7 @@ import { sendPluginNotice } from '../events/pluginNotice'
 // 分享 DeepLink 缓冲区：渲染层就绪前暂存 id，由 IPC 拉取并清空。
 const pendingShareIds: string[] = []
 const pendingPlaylistShareIds: string[] = []
+const pendingLtCodes: string[] = []
 
 export function consumePendingShareIds(): string[] {
   const list = pendingShareIds.slice()
@@ -15,6 +16,12 @@ export function consumePendingShareIds(): string[] {
 export function consumePendingPlaylistShareIds(): string[] {
   const list = pendingPlaylistShareIds.slice()
   pendingPlaylistShareIds.length = 0
+  return list
+}
+
+export function consumePendingLtCodes(): string[] {
+  const list = pendingLtCodes.slice()
+  pendingLtCodes.length = 0
   return list
 }
 
@@ -107,9 +114,24 @@ export function setupDeepLinks() {
 
   /* cerumusic://lt/<code> —— 一起听落地。
    * 网页端"在 澜音 中打开"按钮已经把 #CODE# 写进了系统剪贴板,
-   * 这里只需要把窗口拉起聚焦(由 DeepLinkRouter.match 自动完成),
-   * 渲染层"发现"页 onActivated 钩子会读剪贴板自动识别口令并弹出加入对话框。 */
-  deepLinkRouter.get('lt', (_, url) => {
-    console.log('收到一起听 DeepLink:', url)
+   * 这里同时把 code 直接通过 IPC 推给渲染层 —— 避免渲染层因 Electron
+   * 焦点时序问题读不到剪贴板。渲染层若已经在房间 / 已弹过此 code 则会自行忽略。 */
+  deepLinkRouter.get('lt', (window, url) => {
+    const parsed = new URL(url)
+    const segs = parsed.pathname.split('/').filter(Boolean)
+    const code = (segs[segs.length - 1] || '').toUpperCase()
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
+      console.log('无效的一起听 DeepLink:', url)
+      return
+    }
+    console.log('收到一起听 DeepLink,code:', code)
+    if (!pendingLtCodes.includes(code)) pendingLtCodes.push(code)
+    try {
+      if (window && !window.webContents.isLoadingMainFrame()) {
+        window.webContents.send('lt-share-open', { code })
+      }
+    } catch (e) {
+      console.warn('lt-share-open send failed', e)
+    }
   })
 }
