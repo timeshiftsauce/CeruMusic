@@ -800,12 +800,17 @@ const playNextAuto = () => {
   cancelPendingAutoNext()
   if (list.value.length === 0) return
 
+  /* 一起听场景:不需要 1500ms 的 crossfade 缓冲(房间内不预加载下一首),
+   * 缩短到 100ms 提高切歌响应速度 —— 否则歌曲结束后会有 1.5s 的"假装在播"沉默。 */
+  const lt = cachedLtStore
+  const delay = lt?.isInRoom ? 100 : AUTO_NEXT_DELAY_MS
+
   const token = pendingAutoNextToken
   pendingAutoNextTimer = setTimeout(() => {
     if (token !== pendingAutoNextToken) return
     pendingAutoNextTimer = null
     void playNextAutoNow()
-  }, AUTO_NEXT_DELAY_MS)
+  }, delay)
 }
 
 const setVolume = (v: number) => controlAudio.setVolume(v)
