@@ -165,15 +165,23 @@ const handlePause = async () => {
 }
 
 const togglePlayPause = async () => {
-  /* 一起听:在房间且有控制权时,根据"服务端权威 isPlaying"决定 play/pause,
-   * 不再依赖本地 audio.paused —— 避免本地与服务端不一致时按错按钮。 */
+  /* 一起听:在房间且有控制权时,以"本地 audio 实际状态"判断按钮意图。
+   *
+   * 不能用 lt.current.isPlaying —— 那是服务端权威状态,在以下情形会与本地音频
+   * 不一致,导致按一次暂停按钮变成发 play 命令,自己不暂停:
+   *  - SYNC 应用失败(浏览器拒绝 play()/pause())
+   *  - 网络抖动期间状态短暂落后
+   *  - 漂移校准窗口
+   * 用户的意图永远是"我看到的状态的反面",所以以本地 audio.paused 为准最靠谱。 */
   const lt = await getListenTogetherStore()
   if (lt.isInRoom) {
     if (!lt.canControl) {
       MessagePlugin.warning('当前在一起听房间中,无播放控制权')
       return
     }
-    if (lt.current.isPlaying) {
+    const a = Audio.value.audio
+    const localPlaying = a ? !a.paused : Audio.value.isPlay
+    if (localPlaying) {
       lt.pause()
     } else {
       lt.play()
