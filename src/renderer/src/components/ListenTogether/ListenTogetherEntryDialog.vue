@@ -179,7 +179,7 @@ watch(
     <div v-if="activeTab === 'create'" class="lt-form">
       <t-form label-align="top" :data="createForm" :disabled="createSubmitting">
         <t-form-item label="房间类型" name="mode">
-          <t-radio-group v-model="createForm.mode" variant="default-filled">
+          <t-radio-group v-model="createForm.mode" variant="default-filled" class="mode-radio">
             <t-radio-button value="intimate">
               <span class="mode-title">亲密 · 2 人</span>
               <span class="mode-desc">双方对等，都可控制</span>
@@ -201,12 +201,14 @@ watch(
         </t-form-item>
 
         <t-form-item v-if="createForm.mode === 'group'" label="最大人数" name="maxMembers">
-          <t-slider
-            v-model="createForm.maxMembers"
-            :min="2"
-            :max="50"
-            :marks="{ 2: '2', 10: '10', 25: '25', 50: '50' }"
-          />
+          <div class="slider-wrap">
+            <t-slider
+              v-model="createForm.maxMembers"
+              :min="2"
+              :max="50"
+              :marks="{ 2: '2', 10: '10', 25: '25', 50: '50' }"
+            />
+          </div>
         </t-form-item>
       </t-form>
 
@@ -245,11 +247,22 @@ watch(
 </template>
 
 <style scoped lang="scss">
-.lt-tabs {
+/* 全局容器约束:确保表单内容(radio-group / slider 等)不会撑出 dialog 触发横向滚动 */
+.lt-tabs,
+.lt-form,
+.mode-radio,
+.slider-wrap {
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.lt-tabs {
   margin-bottom: 16px;
+  display: flex;
   :deep(.t-radio-button) {
     flex: 1;
+    min-width: 0;
     text-align: center;
   }
 }
@@ -258,6 +271,29 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* form 内的元素若有较长文本不要撑出宽度 */
+  :deep(.t-form__controls-content) {
+    min-width: 0;
+  }
+}
+
+/* 房间类型 radio-group:两个 button 平分宽,内部双行内容居中且能换行 */
+.mode-radio {
+  display: flex;
+  :deep(.t-radio-button) {
+    flex: 1;
+    min-width: 0;
+    height: auto;
+    padding: 8px 12px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.3;
+  }
+}
+
+/* slider 容器:留 marks 标签的余地,防止 50 那一格的 "50" 文字溢出右侧 */
+.slider-wrap {
+  padding: 0 14px;
 }
 
 .mode-title {
