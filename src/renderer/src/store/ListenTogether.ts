@@ -201,6 +201,16 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /** 周期性 ping 定时器 */
   let pingTimer: ReturnType<typeof setInterval> | null = null
 
+  /**
+   * 周期性漂移校准 —— 本地按 current 推算应播位置,与本地 audio 比对,超阈值则硬 seek
+   *
+   * 不广播,纯本地纠正。解决"无事件期间不发 SYNC 时,成员因时钟漂移/缓冲抖动逐渐
+   * 偏离 host 几秒"的长尾问题。
+   *
+   * 间隔取 3s:既能在 1 分钟内把累积的几百毫秒漂移压回阈值内,又不至于频繁打断播放。
+   */
+  let driftTimer: ReturnType<typeof setInterval> | null = null
+
   let playlistSyncTimer: ReturnType<typeof setTimeout> | null = null
   let isReplacingSharedPlaylist = false
   let playlistBeforeRoom: SongList[] | null = null
@@ -341,6 +351,15 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       Object.assign(current, state.current)
       /* localSeq 初始化:重连/续连时也以服务端权威为准,避免应用旧 SYNC */
       localSeq.value = state.current.seq || 0
+
+      /* 初次同步用 ROOM_STATE.serverTs 立即估算时钟偏差,避免 clockOffset 仍为 0 时
+       * applySnapshot 用本地时间推算 elapsed 产生几秒级误差(实测过 7-8s 差异都来源于此)。
+       * 这是粗估(忽略 ROOM_STATE 包的单程网络延迟,通常 <100ms),
+       * 几百 ms 后 ping burst 会用 RTT/2 收敛到更准的偏差。 */
+      if (state.serverTs && clockOffset === 0) {
+        clockOffset = state.serverTs - Date.now()
+      }
+
       if (state.queue.length || state.current.song) {
         replaceLocalPlaylistFromQueue(state.queue, state.current.song)
       }
@@ -350,7 +369,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
       // 进房后立即应用一次同步（万一进房时就有歌在播）
       if (state.current.song) {
-        void ensureRoomSongLoadedAndSynced(state.current, { immediate: true })
+        void ensureRoomSongLoadedAndSynced(state.current, {
+          immediate: true,
+          forceAlign: true
+        })
       }
     })
 
@@ -411,8 +433,15 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         if (typeof payload.seq === 'number') {
           localSeq.value = payload.seq
         }
+        /* 显式动作(seek/change-song/play-queue-item)需要忽略漂移阈值精确对齐;
+         * 普通 play/pause/room-sync-context 走漂移平滑。 */
+        const forceAlign =
+          payload.action === 'seek' ||
+          payload.action === 'change-song' ||
+          payload.action === 'play-queue-item'
         void ensureRoomSongLoadedAndSynced(payload, {
-          immediate: payload.action === 'play-queue-item' || payload.action === 'change-song'
+          immediate: payload.action === 'play-queue-item' || payload.action === 'change-song',
+          forceAlign
         })
       }
     )
@@ -548,6 +577,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         startAudioHooks()
         void runClockSyncBurst()
         startPingLoop()
+        startDriftLoop()
         resolve(state.meta)
       }
       const onError = (err: ServerError) => {
@@ -613,6 +643,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     localSeq.value = 0
     clearAudioHooks()
     stopPingLoop()
+    stopDriftLoop()
   }
 
   /* ============================================================
@@ -651,6 +682,20 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function seek(time: number): void {
     if (!emitGuard()) return
     if (!current.song) return
+    /* 乐观更新 —— 同时改本地 audio.currentTime 和 current 的 anchor,使:
+     *  1. 进度条立即响应,不会因等 SYNC 回程而"跳回"老位置;
+     *  2. drift 循环看到的 current.anchorPos/anchorAt 与即将到来的 SYNC 一致,
+     *     不会用旧 anchor 把刚 seek 的音频再拉回去。
+     * SYNC 回来后 applySnapshot 在 'seek' action 下会再做一次精确对齐(无视漂移阈值)。 */
+    const ca = ControlAudioStore()
+    if (ca.Audio.audio) {
+      try {
+        ca.Audio.audio.currentTime = time
+      } catch {}
+    }
+    ca.setCurrentTime(time)
+    current.anchorPos = time
+    current.anchorAt = Date.now() + clockOffset
     debouncedEmit(ClientEvents.CTL_SEEK, { time })
   }
 
@@ -922,10 +967,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
   async function ensureRoomSongLoadedAndSynced(
     snapshot: PlaybackSnapshot,
-    options: { immediate?: boolean } = {}
+    options: { immediate?: boolean; forceAlign?: boolean } = {}
   ): Promise<void> {
     if (!snapshot.song) {
-      await applySnapshot(snapshot)
+      await applySnapshot(snapshot, { forceAlign: options.forceAlign })
       return
     }
 
@@ -939,7 +984,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     const hasLoadedAudio = Boolean(ca.Audio.audio?.src)
 
     if (sameLocalSong && hasLoadedAudio) {
-      await applySnapshot(snapshot)
+      await applySnapshot(snapshot, { forceAlign: options.forceAlign })
       return
     }
 
@@ -965,7 +1010,9 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
           current.song?.source === snapshot.song?.source
       })
       if (token !== roomSongApplyToken) return
-      await applySnapshot(snapshot)
+      /* 切歌完成后 anchorPos 一般为 0,本地 audio 也刚加载完接近 0,
+       * 走默认漂移阈值即可,无需强对齐。 */
+      await applySnapshot(snapshot, { forceAlign: false })
     } catch (e) {
       console.warn('[lt] 房间歌曲同步失败:', e)
     }
@@ -974,18 +1021,13 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /**
    * 应用远端播放快照到本地 ControlAudio
    *
-   * 流程：
-   *  1. 校验 seq —— 旧/重复 SYNC 直接丢弃
-   *  2. 计算服务器视角的"现在"：clientNow + clockOffset
-   *  3. 推算应到达的播放位置：anchorPos + (now - anchorAt) / 1000
-   *  4. 比对本地 currentTime,漂移超过阈值就硬 seek
-   *  5. 同步播放 / 暂停状态
-   *
-   * 歌曲加载由 ensureRoomSongLoadedAndSynced 负责;这里只做进度和播放状态校准。
-   * 注意:本架构下 ControlAudio 没有自动广播订阅器,所以不再需要 isApplyingRemote 标记
-   * 防回声 —— 远端 SYNC 直接驱动 audio,audio play/pause 事件不会回流到 emit。
+   * forceAlign=true 时无视漂移阈值,强制硬 seek 到目标位置。
+   * 用于显式 seek 命令 —— 否则用户拖完进度条会因为漂移不大被忽略,出现"跳回"现象。
    */
-  async function applySnapshot(snapshot: PlaybackSnapshot): Promise<void> {
+  async function applySnapshot(
+    snapshot: PlaybackSnapshot,
+    options: { forceAlign?: boolean } = {}
+  ): Promise<void> {
     /* seq 校验:仅当 snapshot 来自 current(共享 ref)时绕过(此时 seq 已是当前),
      * 来自远端 payload 的 snapshot 必须严格大于 localSeq 才应用。
      * snapshot === current 时引用相等可识别,不需额外参数。 */
@@ -1004,11 +1046,11 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       : 0
     const targetPos = snapshot.anchorPos + elapsed
 
-    // 2. 进度漂移 —— 大于阈值才硬 seek，否则相信本地自然推进
+    // 2. 进度漂移 —— 大于阈值或 forceAlign 时硬 seek
     const audioEl = ca.Audio.audio
     if (audioEl && snapshot.song) {
       const drift = Math.abs(audioEl.currentTime - targetPos)
-      if (drift > DRIFT_HARD_SEEK_THRESHOLD) {
+      if (options.forceAlign || drift > DRIFT_HARD_SEEK_THRESHOLD) {
         try {
           audioEl.currentTime = targetPos
           ca.setCurrentTime(targetPos)
@@ -1021,7 +1063,11 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     // 3. 播放 / 暂停状态
     // 以真实 audio.paused 为准；ControlAudio.isPlay 在双槽/淡出/异步拉流时可能滞后。
     const actuallyPlaying = audioEl ? !audioEl.paused : ca.Audio.isPlay
-    if (snapshot.isPlaying && !actuallyPlaying && audioEl?.src) {
+    /* 已自然 ended 的音频不要重新 ca.start() —— 否则会立即再次 fire ended,
+     * 反复重置 autoNext 计时器,导致永远不会切下一首("回到开始并暂停"的死循环)。
+     * 让 GlobalAudio.handleEnded → autoNext → lt.onSongEnded 自然推进队列。 */
+    const audioEnded = Boolean(audioEl?.ended)
+    if (snapshot.isPlaying && !actuallyPlaying && audioEl?.src && !audioEnded) {
       try {
         await ca.start()
       } catch (e) {
@@ -1105,6 +1151,52 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     if (pingTimer) {
       clearInterval(pingTimer)
       pingTimer = null
+    }
+  }
+
+  /**
+   * 启动漂移校准循环 —— 加入房间后开启,离开/重置时停止
+   *
+   * 每 3s 用 current(reactive 的最新权威快照) 调一次 applySnapshot;
+   * applySnapshot 内的 seq 校验在 snapshot === current 时绕过,
+   * 漂移大于阈值即硬 seek 拉回。不广播,纯本地。
+   *
+   * 安全条件(任一不满足即跳过本次):
+   *  - 不在房间 / 无歌 / 服务端权威认为暂停 → 没有需要校准的"播放进度"
+   *  - 本地 audio 已 ended → 让 autoNext 自然推进,不要 ca.start() 触发死循环
+   *  - globalPlayStatus.songInfo 与 current.song 不一致 → 歌曲切换中,drift 校准
+   *    会拿新 anchor 校准旧 audio 元素,导致进度错乱
+   */
+  function startDriftLoop(): void {
+    stopDriftLoop()
+    driftTimer = setInterval(() => {
+      if (!isInRoom.value || !current.song || !current.isPlaying) return
+      const ca = ControlAudioStore()
+      const audioEl = ca.Audio.audio
+      if (!audioEl || audioEl.ended) return
+
+      /* 切歌期间 globalPlayStatus.songInfo 由 ensureRoomSongLoadedAndSynced 提前
+       * 写入,但 audio.src 加载尚未完成 —— 此时 drift 校准毫无意义,容易误伤。 */
+      const localSongmid = useGlobalPlayStatusStore().player.songInfo?.songmid
+      if (
+        localSongmid === undefined ||
+        String(localSongmid) !== String(current.song.songmid)
+      ) {
+        return
+      }
+
+      /* 音频还没准备好(刚 setUrl,数据未到 HAVE_CURRENT_DATA)时,不要 hard seek
+       * —— 否则会触发 audio 元素的诡异行为(seek 失败/卡死) */
+      if (audioEl.readyState < 2) return
+
+      void applySnapshot(current)
+    }, 3000)
+  }
+
+  function stopDriftLoop(): void {
+    if (driftTimer) {
+      clearInterval(driftTimer)
+      driftTimer = null
     }
   }
 
