@@ -458,38 +458,50 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
           return
         }
         /* 陈旧 anchor 防御:用户刚 seek 后,可能有更早 emit 的 ctl:* SYNC 因网络
-         * 抖动后到达 —— 该 SYNC 的 anchorAt 早于 lastLocalSeekAt,如果直接应用就会
-         * 用旧位置覆盖刚 seek 的位置("seek 后又跳回去了")。
-         * 例外:本次 SYNC 本身就是 seek 的回包,正常应用。 */
+         * 抖动后到达 —— 该 SYNC 的 anchorAt 早于 lastLocalSeekAt,如果直接应用
+         * anchor 字段会用旧位置覆盖刚 seek 的位置("seek 后又跳回去了")。
+         *
+         * 关键:只过滤 anchor 字段(anchorPos/anchorAt),保留 isPlaying/song/seq
+         * 等业务状态变化 —— 否则用户 seek 后立即点暂停,pause 的 SYNC 会被整体
+         * 丢弃,导致 host 自己没暂停但 member 暂停了的诡异状态。 */
+        let effective: PlaybackSnapshot & { action?: string; operatorId?: string } = payload
         if (
           lastLocalSeekAt > 0 &&
           payload.action !== 'seek' &&
           payload.anchorAt < lastLocalSeekAt
         ) {
-          if (typeof payload.seq === 'number') {
-            localSeq.value = payload.seq // 仍标记 seq 已见,后续 SYNC 才能正确比较
+          effective = {
+            ...payload,
+            anchorPos: current.anchorPos,
+            anchorAt: current.anchorAt
           }
-          return
         }
         /* 收到我们 seek 的回包后清掉守卫 */
         if (payload.action === 'seek') {
           lastLocalSeekAt = 0
         }
-        Object.assign(current, payload)
+        Object.assign(current, effective)
         if (typeof payload.seq === 'number') {
           localSeq.value = payload.seq
         }
         /* 显式动作(seek/change-song/play-queue-item/skip)需要忽略漂移阈值精确对齐;
          * 普通 play/pause/room-sync-context 走漂移平滑。skip 必须 forceAlign,
          * 否则切歌后 anchorPos=0 但本地 audio 仍在旧时间戳会因 drift > 阈值且 audio 已 ended
-         * 而无法正确播放新歌。 */
+         * 而无法正确播放新歌。
+         *
+         * 注意:host 自己发起的命令已经在 lt.play/pause/seek 里乐观本地执行了,
+         * applySnapshot 是幂等的(audio 状态已匹配 target 时不会重复 ca.start/stop),
+         * 所以不需要按 operatorId 跳过 —— 这同时也是 host 本地操作失败时的兜底。 */
         const forceAlign =
           payload.action === 'seek' ||
           payload.action === 'change-song' ||
           payload.action === 'play-queue-item' ||
           payload.action === 'skip'
-        void ensureRoomSongLoadedAndSynced(payload, {
-          immediate: payload.action === 'play-queue-item' || payload.action === 'change-song' || payload.action === 'skip',
+        void ensureRoomSongLoadedAndSynced(effective, {
+          immediate:
+            payload.action === 'play-queue-item' ||
+            payload.action === 'change-song' ||
+            payload.action === 'skip',
           forceAlign
         })
       }
@@ -700,14 +712,13 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    * ============================================================ */
 
   /**
-   * 播放（仅在自己有控制权时生效）
+   * 播放(仅在自己有控制权时生效)—— "自己率先响应,对方再跟上" 架构
    *
-   * 注意：本方法**不直接调 ControlAudio.start()**,而是发广播给服务器;
-   * 服务器收到后 SYNC 回来,所有人(包括自己)才同步执行播放。
-   * 这样保证:自己看到的进度 = 服务器权威进度,host/member 走相同路径,无回声风险。
+   * 流程:本地立即 ca.start() + 更新 current 锚点 + emit ctl:play。
+   * 服务端 SYNC 回包时,host 自己识别 operatorId 跳过 applySnapshot,只做 drift 微调;
+   * member 收到 SYNC 走完整 applySnapshot 跟上。
    *
-   * 如果当前房间无歌(current.song = null),前置守卫直接 toast 提示,不发空命令。
-   * 如果自己已经在房间但没控制权(group 模式 member),emitGuard 拦截。
+   * 当前房间无歌时(current.song = null)直接 toast 不发命令。
    */
   function play(time?: number): void {
     if (!emitGuard()) return
@@ -715,17 +726,28 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       MessagePlugin.warning('当前房间还没有歌曲,请先选歌')
       return
     }
-    debouncedEmit(ClientEvents.CTL_PLAY, {
-      time: time ?? ControlAudioStore().Audio.currentTime
-    })
+    const ca = ControlAudioStore()
+    const t = time ?? ca.Audio.currentTime
+    /* 乐观更新 current 锚点 —— 让 drift 循环和 SYNC 回包看到一致状态 */
+    current.isPlaying = true
+    current.anchorPos = t
+    current.anchorAt = Date.now() + clockOffset
+    /* 本地立即播放,fire-and-forget;失败不阻塞 emit */
+    void ca.start().catch(() => {})
+    debouncedEmit(ClientEvents.CTL_PLAY, { time: t })
   }
 
   function pause(time?: number): void {
     if (!emitGuard()) return
     if (!current.song) return
-    debouncedEmit(ClientEvents.CTL_PAUSE, {
-      time: time ?? ControlAudioStore().Audio.currentTime
-    })
+    const ca = ControlAudioStore()
+    const t = time ?? ca.Audio.currentTime
+    current.isPlaying = false
+    current.anchorPos = t
+    current.anchorAt = Date.now() + clockOffset
+    /* 本地立即暂停,即时反馈 */
+    void Promise.resolve(ca.stop()).catch(() => {})
+    debouncedEmit(ClientEvents.CTL_PAUSE, { time: t })
   }
 
   function seek(time: number): void {
