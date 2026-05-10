@@ -81,8 +81,37 @@ const PluginErrorMsgs = [
   '哥哥~ 你需要安装一个插件来播放歌曲哦~'
 ]
 
+/**
+ * 异步取一起听 store —— 用动态 import 避免循环依赖
+ *
+ * ListenTogether store 内部也动态 import 本文件;静态 import 会导致循环。
+ * 顶层声明后,handlePlay/handlePause/playSong 等都能在房间内分流到 lt.* 命令。
+ *
+ * 同时缓存一份同步引用 `cachedLtStore`,供 seekTo 等同步路径使用 ——
+ * 第一次成功取到后即缓存,后续调用立即可用。
+ */
+let cachedLtStore: any = null
+const getListenTogetherStore = async () => {
+  if (cachedLtStore) return cachedLtStore
+  const { useListenTogetherStore } = await import('@renderer/store')
+  cachedLtStore = useListenTogetherStore()
+  return cachedLtStore
+}
+
 const handlePlay = async () => {
   cancelPendingAutoNext()
+  /* 一起听:在房间且有控制权 → 发命令给服务端,不本地播放;
+   * 服务端 SYNC 回来后 ensureRoomSongLoadedAndSynced/applySnapshot 驱动本地 audio。
+   * 无控制权 → 提示并 return,避免与远端状态打架。 */
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
+    if (lt.canControl) {
+      lt.play()
+    } else {
+      MessagePlugin.warning('当前在一起听房间中,无播放控制权')
+    }
+    return
+  }
   if (!Audio.value.url) {
     if (list.value.length > 0) {
       await playSong(list.value[0])
@@ -115,6 +144,14 @@ const handlePlay = async () => {
 
 const handlePause = async () => {
   cancelPendingAutoNext()
+  /* 一起听:在房间且有控制权 → 发命令,不直接 stop 本地 */
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
+    if (lt.canControl) {
+      lt.pause()
+    }
+    return
+  }
   const a = Audio.value.audio
   if (Audio.value.url && a && !a.paused) {
     const stopResult = stop()
@@ -128,6 +165,21 @@ const handlePause = async () => {
 }
 
 const togglePlayPause = async () => {
+  /* 一起听:在房间且有控制权时,根据"服务端权威 isPlaying"决定 play/pause,
+   * 不再依赖本地 audio.paused —— 避免本地与服务端不一致时按错按钮。 */
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
+    if (!lt.canControl) {
+      MessagePlugin.warning('当前在一起听房间中,无播放控制权')
+      return
+    }
+    if (lt.current.isPlaying) {
+      lt.pause()
+    } else {
+      lt.play()
+    }
+    return
+  }
   const a = Audio.value.audio
   const isActuallyPlaying = a ? !a.paused : Audio.value.isPlay
   if (isActuallyPlaying) {
@@ -149,22 +201,44 @@ const playSong = async (
     return
   }
 
-  /* 一起听守卫：member 端无控制权时禁止本地切歌
+  /* 一起听守卫与路由
    *
-   * 例外：远端 sync 触发的 playSong 必须放行（song.songmid 等于房间当前播的歌）。
-   * 这样可以区分"用户主动切歌"和"远端同步切歌"，前者拦截、后者通过。
-   *
-   * 用动态 import 避免和 ListenTogether store 形成静态循环依赖
-   * （ListenTogether store 内部已经动态 import 本文件）。
+   * 三种情形:
+   *  1. 房间内、有控制权(host/admin)、song != current.song
+   *     → 发 lt.changeSong 命令,实际加载由收到 SYNC 后 ensureRoomSongLoadedAndSynced 走。
+   *     这就是"host 也按 sync 应用"原则,host/member 走完全相同的播放路径。
+   *  2. 房间内、song == current.song
+   *     → 这次调用源自 ensureRoomSongLoadedAndSynced 的远端同步,放行进入实际加载逻辑。
+   *  3. 房间内、无控制权、song != current.song
+   *     → 提示并 return,member 不能自己切歌。
    */
-  const { useListenTogetherStore } = await import('@renderer/store')
-  const lt = useListenTogetherStore()
-  if (lt.isInRoom && !lt.canControl) {
+  const lt = await getListenTogetherStore()
+  if (lt.isInRoom) {
     const remoteSongmid = lt.current.song?.songmid
+    const remoteSource = lt.current.song?.source
     const isApplyingRemoteSync =
-      remoteSongmid !== undefined && String(remoteSongmid) === String(song.songmid)
+      remoteSongmid !== undefined &&
+      String(remoteSongmid) === String(song.songmid) &&
+      remoteSource === song.source
+
     if (!isApplyingRemoteSync) {
-      MessagePlugin.warning('当前在一起听房间中，无播放控制权。请先退出房间再切歌。')
+      if (!lt.canControl) {
+        MessagePlugin.warning('当前在一起听房间中,无播放控制权。请先退出房间再切歌。')
+        return
+      }
+      /* host/admin 切歌 → 发命令,等服务端 SYNC 回来再走加载流程 */
+      lt.changeSong({
+        songmid: String(song.songmid),
+        source: song.source,
+        name: song.name,
+        singer: song.singer,
+        cover: song.img,
+        albumName: song.albumName,
+        albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
+        hash: song.hash,
+        types: song.types,
+        lrc: song.lrc ?? null
+      })
       return
     }
   }
@@ -634,11 +708,6 @@ const getNextSong = (): SongList | null => {
   })
 }
 
-const getListenTogetherStore = async () => {
-  const { useListenTogetherStore } = await import('@renderer/store')
-  return useListenTogetherStore()
-}
-
 const playPrevious = async () => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
@@ -692,8 +761,10 @@ const playNextAutoNow = async () => {
   if (crossfadeManager.isFinalizingCurrentAdvance()) return
   const lt = await getListenTogetherStore()
   if (lt.isInRoom) {
+    /* 一起听:歌曲自然结束(autoNext)走 onSongEnded —— 服务端按 (songmid, source, seq)
+     * 幂等去重,避免多客户端同时报 ended 重复推进。用户主动 next 仍走 lt.skip()。 */
     if (lt.canControl) {
-      lt.skip()
+      lt.onSongEnded()
     }
     return
   }
@@ -740,6 +811,15 @@ const playNextAuto = () => {
 const setVolume = (v: number) => controlAudio.setVolume(v)
 const seekTo = (time: number) => {
   cancelPendingAutoNext()
+  /* 一起听:用同步缓存的 store 引用判断;若有控制权则发命令,等 SYNC 回来再 seek 本地。
+   * 第一次进房的极短窗口内 cachedLtStore 可能尚未填充 —— 此时按非房间逻辑直接 seek
+   * 是安全的(此刻一定不在房间)。 */
+  if (cachedLtStore?.isInRoom) {
+    if (cachedLtStore.canControl) {
+      cachedLtStore.seek(time)
+    }
+    return
+  }
   setCurrentTime(time)
   if (Audio.value.audio) {
     Audio.value.audio.currentTime = time

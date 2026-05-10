@@ -86,6 +86,13 @@ export interface PlaybackSnapshot {
   isPlaying: boolean
   anchorPos: number
   anchorAt: number
+  /**
+   * 单调递增的状态版本号 —— 由服务端在每次 commit 时自增
+   *
+   * 客户端只接受 seq > localSeq 的 SYNC,丢弃乱序/陈旧包。
+   * 加入房间时 ROOM_STATE.current.seq 即客户端 localSeq 的初始值。
+   */
+  seq: number
 }
 
 /* ---------------- 队列 ---------------- */
