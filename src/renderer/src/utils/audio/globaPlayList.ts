@@ -137,7 +137,10 @@ const togglePlayPause = async () => {
   }
 }
 
-const playSong = async (song: SongList, options: { immediate?: boolean } = {}) => {
+const playSong = async (
+  song: SongList,
+  options: { immediate?: boolean; shouldAutoStart?: () => boolean } = {}
+) => {
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
   crossfadeManager.cancel()
@@ -395,6 +398,10 @@ const playSong = async (song: SongList, options: { immediate?: boolean } = {}) =
       artworkUrl: song.img || defaultCoverImg
     })
     isLoadingSong.value = false
+    if (options.shouldAutoStart && !options.shouldAutoStart()) {
+      mediaSessionController.updatePlaybackState('paused')
+      return
+    }
     start()
       .catch(async () => {
         if (currentPlayRequestId !== requestId) return
@@ -458,6 +465,10 @@ const playSong = async (song: SongList, options: { immediate?: boolean } = {}) =
 
                 MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                 playSuccess = true
+                if (options.shouldAutoStart && !options.shouldAutoStart()) {
+                  mediaSessionController.updatePlaybackState('paused')
+                  break
+                }
                 start().catch(() => {
                   if (currentPlayRequestId !== requestId) return
                   tryAutoNext('换源后启动播放失败')

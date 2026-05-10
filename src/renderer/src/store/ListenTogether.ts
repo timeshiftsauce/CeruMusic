@@ -964,7 +964,14 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
       const mod = await import('@renderer/utils/audio/globaPlayList')
       if (token !== roomSongApplyToken) return
-      await mod.playSong(songList, { immediate: options.immediate })
+      await mod.playSong(songList, {
+        immediate: options.immediate,
+        shouldAutoStart: () =>
+          token === roomSongApplyToken &&
+          current.isPlaying &&
+          current.song?.songmid === snapshot.song?.songmid &&
+          current.song?.source === snapshot.song?.source
+      })
       if (token !== roomSongApplyToken) return
       await applySnapshot(snapshot)
     } catch (e) {
@@ -1029,11 +1036,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         }
       }
     } finally {
-      // 100ms 内的 publish 都视作"远端触发"，避免回声
-      // 100ms 大于普通 audio 事件传递延迟，足够覆盖一次 play/pause
+      // 覆盖一次 play/pause 事件和可能的暂停淡出动画，避免回声广播。
       setTimeout(() => {
         isApplyingRemote = false
-      }, 100)
+      }, 700)
     }
   }
 
