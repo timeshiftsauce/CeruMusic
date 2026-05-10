@@ -235,6 +235,15 @@ interface CustomAPI {
     getPendingPlaylistShares: () => Promise<string[]>
   }
 
+  listenTogether: {
+    onShareOpen: (callback: (payload: { code: string }) => void) => () => void
+    getPendingCodes: () => Promise<string[]>
+  }
+
+  clipboard: {
+    readText: () => Promise<string>
+  }
+
   systemAudio: {
     /** 必须先调用此方法获取一次性媒体采集授权（10s 过期、最多 4 次请求） */
     prepareCapture: () => Promise<boolean>

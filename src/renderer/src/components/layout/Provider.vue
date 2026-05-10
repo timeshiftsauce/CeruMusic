@@ -40,6 +40,7 @@ import { useAuthStore } from '@renderer/store'
 import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
+import { tryShowListenTogetherInvite } from '@renderer/services/listenTogetherInvite'
 
 const userInfo = LocalUserDetailStore()
 
@@ -450,10 +451,31 @@ onMounted(() => {
         confirmImportPromptPath(p, fileName, silent)
       }
       authStore.init()
+
+      /* 一起听邀请:启动后(authStore.init() 已触发)再检查冷启动累积的 deeplink code
+       * + 剪贴板里可能有的 #CODE#。延迟到这里保证 authStore 已经从 localStorage 还原。 */
+      ;(window as any).api?.listenTogether
+        ?.getPendingCodes?.()
+        .then((codes: string[]) => {
+          for (const code of codes || []) {
+            void tryShowListenTogetherInvite('deeplink', code)
+          }
+        })
+        .catch(() => {})
+      void tryShowListenTogetherInvite('clipboard')
     }, 500)
   })
   // 教程初始化监听
   window.addEventListener('guide:init', handleGuideInit as any)
+
+  /* 监听主进程 cerumusic://lt/<code> 推过来的 code(运行时 deeplink) */
+  ;(window as any).api?.listenTogether?.onShareOpen?.((payload: { code: string }) => {
+    void tryShowListenTogetherInvite('deeplink', payload.code)
+  })
+
+  /* 窗口重新聚焦时检查剪贴板 —— 覆盖"用户在外面复制完文案再切回客户端"的场景。
+   * 用 'focus' 而不是 'visibilitychange' 因为后者在 macOS 下表现不一致。 */
+  window.addEventListener('focus', onWindowFocusForLt)
 })
 
 watch([appInteractiveReady, isWelcomeRoute], () => {
@@ -469,6 +491,15 @@ const confirmImportPromptPath = (path: string, fileName: string, silent: boolean
   } else {
     importPromptVisible.value = true
   }
+}
+
+/* 一起听:聚焦回客户端时再扫一次剪贴板 —— 节流防止 mac 频繁触发 focus */
+let ltFocusThrottle = 0
+function onWindowFocusForLt(): void {
+  const now = Date.now()
+  if (now - ltFocusThrottle < 1500) return
+  ltFocusThrottle = now
+  void tryShowListenTogetherInvite('clipboard')
 }
 
 // 基于现有主题文件的配置
@@ -610,6 +641,9 @@ onUnmounted(() => {
   }
   try {
     window.removeEventListener('guide:init', handleGuideInit as any)
+  } catch {}
+  try {
+    window.removeEventListener('focus', onWindowFocusForLt)
   } catch {}
 })
 </script>

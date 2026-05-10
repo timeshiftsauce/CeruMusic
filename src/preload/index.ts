@@ -454,6 +454,21 @@ const api = {
     /** 拉取并清空主进程缓冲的待处理歌单分享 id */
     getPendingPlaylistShares: (): Promise<string[]> =>
       ipcRenderer.invoke('get-pending-playlist-share-ids')
+  },
+  /* 一起听 deeplink 投递 —— 主进程 cerumusic://lt/<code> 触发时通过 IPC 直推 code,
+   * 配合主进程剪贴板兜底,绕过 renderer navigator.clipboard 的焦点限制。 */
+  listenTogether: {
+    onShareOpen: (callback: (payload: { code: string }) => void) => {
+      const handler = (_: any, payload: { code: string }) => callback(payload)
+      ipcRenderer.on('lt-share-open', handler)
+      return () => ipcRenderer.removeListener('lt-share-open', handler)
+    },
+    /** 拉取并清空主进程缓冲的待处理一起听 code(冷启动期间累积) */
+    getPendingCodes: (): Promise<string[]> => ipcRenderer.invoke('get-pending-lt-codes')
+  },
+  clipboard: {
+    /** 通过主进程读取系统剪贴板,绕过 renderer 焦点 / 权限限制 */
+    readText: (): Promise<string> => ipcRenderer.invoke('clipboard:read-text')
   }
 }
 

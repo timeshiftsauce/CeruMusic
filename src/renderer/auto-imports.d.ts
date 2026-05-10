@@ -6,8 +6,9 @@
 // biome-ignore lint: disable
 export {}
 declare global {
-  const DialogPlugin: (typeof import('tdesign-vue-next'))['DialogPlugin']
+  const DialogPlugin: typeof import('tdesign-vue-next')['DialogPlugin']
   const EffectScope: typeof import('vue')['EffectScope']
+  const MessagePlugin: typeof import('tdesign-vue-next')['MessagePlugin']
   const computed: typeof import('vue')['computed']
   const createApp: typeof import('vue')['createApp']
   const customRef: typeof import('vue')['customRef']
