@@ -772,7 +772,13 @@ const playPrevious = async () => {
   crossfadeManager.cancel()
   const lt = await getListenTogetherStore()
   if (lt.isInRoom) {
-    MessagePlugin.info('一起听房间暂不支持上一首')
+    /* 一起听:有控制权 → 发 ctl:prev 让 server 单点裁决推进队列;
+     * member 无控制权 → 提示。和 playNext 对称。 */
+    if (lt.canControl) {
+      lt.previous()
+    } else {
+      MessagePlugin.warning('当前在一起听房间中,无播放控制权')
+    }
     return
   }
   if (list.value.length === 0) return

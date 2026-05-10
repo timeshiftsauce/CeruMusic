@@ -21,6 +21,8 @@ export const ClientEvents = {
   CTL_CHANGE_SONG: 'ctl:change-song',
   CTL_PLAY_QUEUE_ITEM: 'ctl:play-queue-item',
   CTL_SKIP: 'ctl:skip',
+  /** 上一首 —— 共享列表模式按当前歌位置切前一首,与 skip 对称 */
+  CTL_PREV: 'ctl:prev',
   /** 当前歌曲自然播完信号 —— 仅 host/admin 上报,服务端单点裁决推进 */
   CTL_SONG_ENDED: 'ctl:song-ended',
 
