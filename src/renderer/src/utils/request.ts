@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
 import LogtoClient, { LogtoClientError } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
+import GlobaConfig from '@common/api/config.json'
 
 // 常量定义
 const DEFAULT_AUTH_URL = 'https://auth.shiqianjiang.cn'
@@ -118,7 +119,7 @@ export class Request {
           Authorization: `Bearer ${token}`
         }
       }
-      const isDev = process.env.NODE_ENV === 'development' && false
+      const isDev = process.env.NODE_ENV === 'development' && Boolean(GlobaConfig.enableDev)
       if (isDev && this.resource === 'https://api.ceru.shiqianjiang.cn/api') {
         finalConfig.baseURL = 'http://localhost:8000/api'
       }
