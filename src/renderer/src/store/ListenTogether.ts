@@ -1188,16 +1188,14 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     snapshot: PlaybackSnapshot,
     options: { forceAlign?: boolean } = {}
   ): Promise<void> {
-    /* seq 校验:仅当 snapshot 来自 current(共享 ref)时绕过(此时 seq 已是当前),
-     * 来自远端 payload 的 snapshot 必须严格大于 localSeq 才应用。
-     * snapshot === current 时引用相等可识别,不需额外参数。 */
-    if (snapshot !== current) {
-      if (snapshot.seq <= localSeq.value && snapshot.seq !== 0) {
-        return
-      }
-      localSeq.value = Math.max(localSeq.value, snapshot.seq)
-    }
-
+    /* 不在这里做 seq 校验:
+     *  - SYNC 路径:SYNC handler 已经在外层校验 seq + 更新 localSeq 到 payload.seq,
+     *    再 fire-and-forget 调 ensureRoom → applySnapshot。如果这里再校验 seq <= localSeq
+     *    会永远命中(snapshot.seq === localSeq),导致 member 端 ca.stop()/ca.start()
+     *    永不执行,出现"host 暂停了但 member 没同步"。
+     *  - drift 循环:snapshot === current,本身就是当前权威,不需要校验。
+     *  - 无论被哪条路径调,applySnapshot 自身是幂等的(audio 已是 target 状态时 no-op)。
+     */
     const ca = ControlAudioStore()
     // 1. 估算服务器"现在"
     const nowServer = Date.now() + clockOffset
