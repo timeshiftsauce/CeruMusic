@@ -370,8 +370,6 @@ const playSong = async (
 
             if (!url || typeof url !== 'string' || url.includes('error')) continue
 
-            /* 一起听:换源成功也要广播 URL 给 member */
-            broadcastChangeSongIfNeeded(url)
             setUrl(url)
             if (Audio.value.audio) {
               const a = Audio.value.audio
@@ -384,6 +382,10 @@ const playSong = async (
               try {
                 await waitForAudioReady(Audio.value.audio)
                 if (currentPlayRequestId !== requestId) return // 等待期间可能切歌
+
+                /* 一起听:audio ready 之后再广播 —— 确保广播给 member 的是真的能播
+                 * 的 URL,避免 member 收到失效 URL 反复换源"来回跳" */
+                broadcastChangeSongIfNeeded(url)
 
                 MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                 playSuccess = true
@@ -428,15 +430,15 @@ const playSong = async (
         a.removeAttribute('src')
         a.load()
       }
-      /* 一起听:在 setUrl 即将让 audio 开始加载之前,把切歌意图 + URL 广播给房间。
-       * 此时 URL 已确认有效,member 直接 setUrl 就能播放,跳过自己的 getSongRealUrl。 */
-      broadcastChangeSongIfNeeded(urlToPlay)
       setUrl(urlToPlay)
       try {
         if (Audio.value.audio) {
           await waitForAudioReady(Audio.value.audio)
         }
         if (currentPlayRequestId !== requestId) return
+        /* 一起听:audio ready 之后再广播 —— 确保 member 拿到的是真的能播的 URL,
+         * 失败/换源场景里 broadcastedChange flag 仍只让 emit 一次。 */
+        broadcastChangeSongIfNeeded(urlToPlay)
       } catch (e) {
         if (currentPlayRequestId !== requestId) return
         // 原源 URL 获取成功但播放/加载失败
@@ -463,6 +465,9 @@ const playSong = async (
                 try {
                   await waitForAudioReady(Audio.value.audio)
                   if (currentPlayRequestId !== requestId) return
+
+                  /* 一起听:audio ready 之后再广播 candidate URL,确保 member 拿到能播的 */
+                  broadcastChangeSongIfNeeded(url)
 
                   MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                   playSuccess = true

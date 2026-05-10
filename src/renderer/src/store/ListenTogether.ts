@@ -223,15 +223,21 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /**
    * 当前正在加载的歌曲 key —— 防止 song-load 分支被反复重入
    *
-   * playSong 内部为了换 URL 会先 removeAttribute('src') + load(),期间 audio.src
-   * 暂时为空。如果此时有新的 SYNC(或 ROOM_STATE)到达 ensureRoomSongLoadedAndSynced,
-   * `hasLoadedAudio` 会是 false,导致再次进入 song-load 分支重启 playSong,产生
-   * 死循环(日志表现为同一 URL 反复 setUrl)。
-   *
-   * 标志位记录当前正在加载的 source::songmid;如果新请求的歌就是它,直接走 apply
-   * 路径(等当前加载完即可)。
+   * playSong 加载新 URL 时会先 removeAttribute('src') + load() 清空
+   * audio.src 再 setUrl,期间如果 SYNC 反复到达 ensureRoomSongLoadedAndSynced,
+   * `hasLoadedAudio` 会是 false,导致它再次进入 song-load 分支重启 playSong,
+   * 产生死循环(日志表现为同一 URL 反复 setUrl)。
    */
   let loadingSongKey: string | null = null
+
+  /**
+   * 用户主动切歌的"本地加载中" key —— 与 loadingSongKey **故意分开**
+   *
+   * 之前两者共用一个变量,user-initiated playSong 的 finally 清掉的是 ensureRoom
+   * 自己的 loadingSongKey,导致 ensureRoom song-load 分支被反复重入产生死循环。
+   * 现在拆开:ensureRoom 入口检查两者其一命中即跳过 song-load,各自独立清理。
+   */
+  let hostUserLoadingKey: string | null = null
 
   /** ControlAudio 订阅取消函数 —— 离开房间时统一清理 */
   const audioUnsubs: Array<() => void> = []
@@ -249,6 +255,18 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    * 通过比对 payload.anchorAt 是否早于此值,识别并丢弃陈旧 anchor。
    */
   let lastLocalSeekAt = 0
+
+  /**
+   * 上次本地 play/pause 操作的服务端时间(估算)+ 当时的期望状态
+   *
+   * 解决"暂停后又自己播放"的竞态:host 切歌后立即点暂停,server 顺序广播
+   * SYNC1(change-song,isPlaying=true) 和 SYNC2(pause,isPlaying=false)。
+   * SYNC1 到达时 host 已本地 pause,applySnapshot 会调 ca.start() 把 audio
+   * 重新启动 —— 我们识别这是早于本地 pause 的陈旧 SYNC,把 isPlaying 字段
+   * 替换成本地期望状态,让陈旧 SYNC 不能反转 host 最近的 play/pause 意图。
+   */
+  let lastLocalControlAt = 0
+  let lastLocalDesiredIsPlaying = false
 
   /* ============================================================
    *  Socket 连接管理
@@ -471,14 +489,32 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
           payload.anchorAt < lastLocalSeekAt
         ) {
           effective = {
-            ...payload,
+            ...effective,
             anchorPos: current.anchorPos,
             anchorAt: current.anchorAt
           }
         }
+        /* 陈旧 isPlaying 防御:如果 SYNC 早于本地最近一次 play/pause 且与本地意图
+         * 相反,说明这是被本地操作"超车"的旧 SYNC(典型场景:切歌后立即暂停,
+         * change-song 的 SYNC isPlaying=true 后到,会把刚 pause 的 audio 又启动)。
+         * 把 isPlaying 替换为本地最近意图。
+         * 例外:本次 SYNC 本身是 pause/play 回包(action 匹配),正常应用。 */
+        if (
+          lastLocalControlAt > 0 &&
+          payload.action !== 'pause' &&
+          payload.action !== 'play' &&
+          payload.anchorAt < lastLocalControlAt &&
+          payload.isPlaying !== lastLocalDesiredIsPlaying
+        ) {
+          effective = { ...effective, isPlaying: lastLocalDesiredIsPlaying }
+        }
         /* 收到我们 seek 的回包后清掉守卫 */
         if (payload.action === 'seek') {
           lastLocalSeekAt = 0
+        }
+        /* 收到我们 play/pause 的回包后清掉守卫 */
+        if (payload.action === 'play' || payload.action === 'pause') {
+          lastLocalControlAt = 0
         }
         Object.assign(current, effective)
         if (typeof payload.seq === 'number') {
@@ -728,10 +764,14 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }
     const ca = ControlAudioStore()
     const t = time ?? ca.Audio.currentTime
+    const nowServer = Date.now() + clockOffset
     /* 乐观更新 current 锚点 —— 让 drift 循环和 SYNC 回包看到一致状态 */
     current.isPlaying = true
     current.anchorPos = t
-    current.anchorAt = Date.now() + clockOffset
+    current.anchorAt = nowServer
+    /* 记录本地操作意图,陈旧 SYNC 不能反转 */
+    lastLocalControlAt = nowServer
+    lastLocalDesiredIsPlaying = true
     /* 本地立即播放,fire-and-forget;失败不阻塞 emit */
     void ca.start().catch(() => {})
     debouncedEmit(ClientEvents.CTL_PLAY, { time: t })
@@ -742,9 +782,12 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     if (!current.song) return
     const ca = ControlAudioStore()
     const t = time ?? ca.Audio.currentTime
+    const nowServer = Date.now() + clockOffset
     current.isPlaying = false
     current.anchorPos = t
-    current.anchorAt = Date.now() + clockOffset
+    current.anchorAt = nowServer
+    lastLocalControlAt = nowServer
+    lastLocalDesiredIsPlaying = false
     /* 本地立即暂停,即时反馈 */
     void Promise.resolve(ca.stop()).catch(() => {})
     debouncedEmit(ClientEvents.CTL_PAUSE, { time: t })
@@ -811,19 +854,19 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    */
   function markLocalLoadingSong(source: string | null, songmid?: string | null): void {
     if (!source || !songmid) {
-      loadingSongKey = null
+      hostUserLoadingKey = null
       return
     }
-    loadingSongKey = `${source}::${songmid}`
+    hostUserLoadingKey = `${source}::${songmid}`
   }
 
   /**
-   * 仅当当前 loadingSongKey 等于指定歌曲时才清掉 —— 防止用户连续切歌时,
+   * 仅当当前 hostUserLoadingKey 等于指定歌曲时才清掉 —— 防止用户连续切歌时,
    * 前一次 playSong 的 finally 误清掉后一次刚标记的 key。
    */
   function clearLocalLoadingSongIfMatch(source: string, songmid: string): void {
-    if (loadingSongKey === `${source}::${songmid}`) {
-      loadingSongKey = null
+    if (hostUserLoadingKey === `${source}::${songmid}`) {
+      hostUserLoadingKey = null
     }
   }
 
@@ -1068,8 +1111,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
     const targetKey = `${snapshot.song.source}::${snapshot.song.songmid}`
 
-    /* 已经在加载这首歌 —— 不重启 playSong,只等加载完成,期间应用快照 */
-    if (loadingSongKey === targetKey) {
+    /* 已经在加载这首歌(无论是 ensureRoom 自己还是 user-initiated playSong),
+     * 不重启 playSong,只等加载完成期间应用快照。
+     * 两个 key 故意分开 —— 避免一方的 finally 清掉另一方的标记导致死循环。 */
+    if (loadingSongKey === targetKey || hostUserLoadingKey === targetKey) {
       await applySnapshot(snapshot, { forceAlign: options.forceAlign })
       return
     }
@@ -1084,6 +1129,15 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     const hasLoadedAudio = Boolean(ca.Audio.audio?.src)
 
     if (sameLocalSong && hasLoadedAudio) {
+      await applySnapshot(snapshot, { forceAlign: options.forceAlign })
+      return
+    }
+
+    /* 强力防御:globalPlayStatus 已经是 target song(playSong 内部 updatePlayerInfo
+     * 改的)且 audio readyState >= HAVE_METADATA(setUrl 已生效),即便 audio.src
+     * 暂时被 GlobalAudio watch 的 a.load() 重置看起来"空",我们也不应该再次进入
+     * song-load 分支重启 playSong —— 否则会出现同一 URL 反复 setUrl 的死循环。 */
+    if (sameLocalSong && ca.Audio.audio && ca.Audio.audio.readyState >= 1) {
       await applySnapshot(snapshot, { forceAlign: options.forceAlign })
       return
     }
