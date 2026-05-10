@@ -20,7 +20,7 @@ import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
 import { PlayMode } from '@renderer/types/audio'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import {
   playNext,
   playPrevious,
@@ -999,7 +999,23 @@ const handleMoreMenuSelect = (key: string) => {
     return
   }
   if (key === 'lt:leave') {
-    useListenTogetherStore().leaveRoom()
+    /* 二次确认 —— 与 ListenTogetherOverlay 的退出按钮行为一致,避免误触退房间。
+     * tdesign DialogPlugin.confirm 的 onConfirm 不自动 destroy,需手动。 */
+    const lt = useListenTogetherStore()
+    const dialog = DialogPlugin.confirm({
+      header: '确定离开房间？',
+      body: lt.isOwner
+        ? '你是房主，离开后房主会自动转移给其他成员。'
+        : '可以再回来，房间会保留 30 分钟。',
+      confirmBtn: { content: '离开', theme: 'danger' },
+      cancelBtn: '取消',
+      onConfirm: () => {
+        lt.leaveRoom()
+        dialog.destroy()
+      },
+      onCancel: () => dialog.destroy(),
+      onClose: () => dialog.destroy()
+    })
     return
   }
   if (typeof key === 'string' && key.startsWith('quality:')) {
