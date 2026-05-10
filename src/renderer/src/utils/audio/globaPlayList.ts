@@ -240,6 +240,10 @@ const playSong = async (
        * ensureRoom 误判需要"重新加载"导致死循环 */
       lt.markLocalLoadingSong(song.source, String(song.songmid))
       isHostInitiatedChange = true
+      /* 用户主动切歌:跳过 300ms 防抖等待,直接进入加载 ——
+       * currentPlayRequestId 已经能处理连点(后续 playSong 会覆盖 requestId 让前面 return),
+       * 这里的 sleep(300) 是早期为防误触加的,在房间内是 8s+ 体感延迟的主要来源之一。 */
+      options.immediate = true
       /* 不 return —— host 直接走下面的本地加载播放流程 */
     }
   }
