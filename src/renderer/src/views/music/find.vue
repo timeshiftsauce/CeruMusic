@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch, WatchHandle } from 'vue'
+import { ref, shallowRef, computed, h, onMounted, onUnmounted, watch, WatchHandle } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
 import LeaderBord from '@renderer/components/Find/LeaderBord.vue'
 import { ChevronDownIcon, PlayCircleIcon } from 'tdesign-icons-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { extractCodeFromShareText } from '@renderer/components/ListenTogether/parts/shareTextHelper'
+import { getRoomPreview, resolveRoom } from '@renderer/api/listenTogether'
+import { useAuthStore } from '@renderer/store/Auth'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 
 interface Playlist {
   id: string
@@ -200,6 +205,7 @@ onMounted(() => {
     { deep: true, immediate: true }
   )
   document.addEventListener('click', onDocClick)
+  scheduleClipboardRoomCheck()
 })
 
 onUnmounted(() => {
@@ -211,6 +217,10 @@ onUnmounted(() => {
     cancelAnimationFrame(scrollFrame)
     scrollFrame = 0
   }
+  if (clipboardCheckTimer) {
+    clearTimeout(clipboardCheckTimer)
+    clipboardCheckTimer = null
+  }
   document.removeEventListener('click', onDocClick)
 })
 
@@ -221,11 +231,173 @@ const songlistScrollRef = ref<HTMLDivElement>()
 onActivated(() => {
   backTop.value = true
   if (songlistScrollRef.value) songlistScrollRef.value.scrollTop = scrollTop.value
+  scheduleClipboardRoomCheck()
 })
 onDeactivated(() => {
   backTop.value = false
   if (songlistScrollRef.value) scrollTop.value = songlistScrollRef.value.scrollTop
 })
+
+/* ==========================================================================
+ * 一起听 · 剪贴板口令识别
+ *
+ * 触发场景:
+ *  1. 网页落地页 /r/<code> 点"在 澜音中打开" → 写剪贴板 `#CODE#` + 拉起 deeplink
+ *  2. 用户手动复制完整分享文案(含 `#CODE#`) → 直接打开客户端
+ *
+ * 两条路径在客户端这里合并 —— 切到"发现"页时(onMounted / onActivated)
+ * 读一次剪贴板,extract 出口令,弹"是否加入"对话框。
+ *
+ * dismissedCodes 是模块级 Set,只在本进程会话内防重弹;客户端重启会重新提示。
+ * ========================================================================== */
+const dismissedCodes = new Set<string>()
+let clipboardCheckTimer: ReturnType<typeof setTimeout> | null = null
+let clipboardCheckRunning = false
+
+function scheduleClipboardRoomCheck(): void {
+  if (clipboardCheckTimer) clearTimeout(clipboardCheckTimer)
+  // keep-alive 切换 + tab 切换会引起重排,延迟到下个 idle 再读剪贴板,避免抢焦点
+  clipboardCheckTimer = setTimeout(() => {
+    clipboardCheckTimer = null
+    void runClipboardRoomCheck()
+  }, 250)
+}
+
+async function runClipboardRoomCheck(): Promise<void> {
+  if (clipboardCheckRunning) return
+  clipboardCheckRunning = true
+  try {
+    const lt = useListenTogetherStore()
+    if (lt.isInRoom) return
+
+    let text = ''
+    try {
+      text = (await navigator.clipboard.readText()) || ''
+    } catch {
+      // 用户拒绝权限 / 焦点不在 / 不支持 — 静默
+      return
+    }
+    const code = extractCodeFromShareText(text)
+    if (!code) return
+    if (dismissedCodes.has(code)) return
+
+    const auth = useAuthStore()
+    const isLoggedIn = Boolean(auth.isAuthenticated)
+
+    if (!isLoggedIn) {
+      // 未登录路径:用公开 GET 接口拿房间名,弹"先去登录"
+      const preview = await getRoomPreview(code)
+      if (!preview) {
+        dismissedCodes.add(code)
+        return
+      }
+      dismissedCodes.add(code)
+      const dialog = DialogPlugin.confirm({
+        header: '加入一起听需要登录',
+        body: () =>
+          h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
+            h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
+              '检测到剪贴板里有一起听房间口令'
+            ]),
+            h(
+              'div',
+              {
+                style: 'font-size: 16px; font-weight: 600; color: var(--td-text-color-primary);'
+              },
+              [preview.name]
+            ),
+            h(
+              'div',
+              {
+                style: 'font-size: 12px; color: var(--td-text-color-secondary); margin-top: 6px;'
+              },
+              [`房间口令 #${preview.code}#`]
+            )
+          ]),
+        confirmBtn: '去登录',
+        cancelBtn: '稍后',
+        onConfirm: () => {
+          dialog.hide()
+          void auth.login()
+        },
+        onClose: () => dialog.hide()
+      })
+      return
+    }
+
+    // 已登录路径:用 POST /resolve 拿到 ownerId,识别"自己的房间"直接放行
+    let preview: Awaited<ReturnType<typeof resolveRoom>> = null
+    try {
+      preview = await resolveRoom({ code })
+    } catch {
+      // 网络异常:不要标记 dismissed,让用户切回来还能再试
+      return
+    }
+    if (!preview) {
+      dismissedCodes.add(code)
+      return
+    }
+
+    const myUserId = auth.user?.sub || lt.myUserId
+    if (myUserId && preview.ownerId === myUserId) {
+      // 自己的房间 —— 静默放行,不打扰
+      dismissedCodes.add(code)
+      return
+    }
+
+    dismissedCodes.add(code)
+    const modeLabel = preview.mode === 'intimate' ? '亲密模式' : '多人房间'
+    const dialog = DialogPlugin.confirm({
+      header: '加入一起听',
+      body: () =>
+        h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
+          h(
+            'div',
+            { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' },
+            ['朋友邀请你加入一起听房间']
+          ),
+          h(
+            'div',
+            {
+              style:
+                'font-size: 18px; font-weight: 700; color: var(--td-text-color-primary); margin-bottom: 6px;'
+            },
+            [preview.name]
+          ),
+          h(
+            'div',
+            {
+              style:
+                'display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--td-text-color-secondary);'
+            },
+            [`${modeLabel} · 最多 ${preview.maxMembers} 人`]
+          ),
+          h(
+            'div',
+            {
+              style:
+                'margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; letter-spacing: 3px; color: var(--td-text-color-primary);'
+            },
+            [`#${preview.code}#`]
+          )
+        ]),
+      confirmBtn: '立即加入',
+      cancelBtn: '稍后',
+      onConfirm: async () => {
+        dialog.hide()
+        try {
+          await lt.resolveAndJoin(preview!.code)
+          lt.openOverlay()
+        } catch (e: any) {
+          MessagePlugin.error(e?.message || '加入失败,请稍后重试')
+        }
+      },
+      onClose: () => dialog.hide()
+    })
+  } finally {
+    clipboardCheckRunning = false
+  }
+}
 </script>
 
 <template>

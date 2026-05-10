@@ -5,7 +5,7 @@
  * 注意：与后端 buildShareText 输出完全一致，两边改时同步更新
  */
 
-const SHARE_BASE_URL = 'https://cerumusic.top/r'
+const SHARE_BASE_URL = 'https://ceru.share.shiqianjiang.cn/r'
 
 export function buildShareUrl(code: string): string {
   return `${SHARE_BASE_URL}/${code}`
