@@ -1691,12 +1691,10 @@ onDeactivated(() => {
               <div class="playlist-meta">
                 <span>{{ playlist.source }}</span>
                 <span v-if="playlist.meta?.cloudUpdatedAt"
-                  >更新于
-                  {{ formatLocalTime(playlist.meta.cloudUpdatedAt) }}</span
+                  >更新于 {{ formatLocalTime(playlist.meta.cloudUpdatedAt) }}</span
                 >
                 <span v-else-if="playlist.createTime"
-                  >创建于
-                  {{ formatLocalTime(playlist.createTime) }}</span
+                  >创建于 {{ formatLocalTime(playlist.createTime) }}</span
                 >
               </div>
             </div>

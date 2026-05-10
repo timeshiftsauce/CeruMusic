@@ -2,6 +2,16 @@
 
 ## 日志
 
+- ###### 2026-05-11（[v1.12.0](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.12.0)）
+
+  本次更新主要新增以下功能：
+
+  ​ 🎧 一起听 - 全新「一起听」联机听歌：亲密 2 人 / 多人 50 人房间,服务端权威 + seq 同步架构;支持房主/管理员/成员三级权限、点歌审批、聊天弹幕、房主转移
+  ​ 🔗 分享落地 - 新增 `https://ceru.share.shiqianjiang.cn/r/<code>` Apple Music 风格分享页 + `cerumusic://lt/<code>` 协议唤起;客户端在窗口聚焦/切换发现页时自动识别剪贴板口令
+  ​ 💬 聊天 UI - 自己消息也显示头像,聊天输入框对比度大幅提升;角色徽章从 emoji 换成内联 SVG(房主皇冠/管理员盾牌)
+  ​ 🎵 同步算法 - host 切歌不等 SYNC 直接本地播放、URL 随广播传给 member;乐观更新 + 陈旧 anchor / isPlaying 双重防御,杜绝"暂停又自播""seek 跳回"等竞态
+  ​ 🛠 后端 - 一起听 WebSocket 事件全量入 Swagger 文档(/api-docs);审计日志 cron 化(@nestjs/schedule),按 AUDIT_LOG_RETENTION_DAYS 自动清理(默认 90 天)
+
 - ###### 2026-02-24（[v1.9.4](https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.9.4)）
 
   本次更新主要新增以下功能：

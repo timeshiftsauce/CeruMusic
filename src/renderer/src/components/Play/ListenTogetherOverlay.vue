@@ -139,11 +139,7 @@ function onKeyDown(e: KeyboardEvent): void {
           <div class="room-info">
             <h2 class="room-name">{{ lt.meta?.name || '一起听' }}</h2>
             <div class="room-meta">
-              <span
-                class="code-chip"
-                :title="`点击复制口令 ${lt.meta?.code}`"
-                @click="copyCode"
-              >
+              <span class="code-chip" :title="`点击复制口令 ${lt.meta?.code}`" @click="copyCode">
                 <CopyIcon size="12" />
                 {{ lt.meta?.code }}
               </span>
@@ -164,9 +160,7 @@ function onKeyDown(e: KeyboardEvent): void {
               <ShareIcon size="16" />
               <span>分享</span>
             </button>
-            <button class="action-btn danger" @click="leaveRoom">
-              退出
-            </button>
+            <button class="action-btn danger" @click="leaveRoom">退出</button>
           </div>
         </header>
 
@@ -439,10 +433,14 @@ function onKeyDown(e: KeyboardEvent): void {
 
 .lt-overlay-fade-enter-active,
 .lt-overlay-fade-leave-active {
-  transition: opacity 0.25s ease, backdrop-filter 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    backdrop-filter 0.25s ease;
 
   .lt-card {
-    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
+    transition:
+      transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 0.25s ease;
   }
 }
 

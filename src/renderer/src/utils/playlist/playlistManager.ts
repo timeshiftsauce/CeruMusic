@@ -240,7 +240,9 @@ export async function replacePlaylist(
           types: first.types,
           lrc: (first as any).lrc ?? null
         })
-        await MessagePlugin.success(`已提交点歌《${first.name || '?'}》,等待管理员审核(房间内一次只能点一首)`)
+        await MessagePlugin.success(
+          `已提交点歌《${first.name || '?'}》,等待管理员审核(房间内一次只能点一首)`
+        )
       }
       return
     }
