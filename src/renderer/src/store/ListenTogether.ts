@@ -222,6 +222,17 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /** 控制事件去抖：记录最后一次 emit 时间避免短时间内连发 */
   const lastEmitAt: Record<string, number> = {}
 
+  /**
+   * 上次本地发起 seek 的服务端时间(估算) —— 用于丢弃陈旧 SYNC
+   *
+   * 场景:用户在 host 端发出 ctl:play 后立即拖动进度条 seek。ctl:play 的 SYNC
+   * 在网络上比 seek 先发送,但可能因排队/路由抖动后到达 —— 该 SYNC 的 anchorAt
+   * 早于 seek,如果直接应用就会把刚 seek 的进度条又拉回 play 时的位置。
+   *
+   * 通过比对 payload.anchorAt 是否早于此值,识别并丢弃陈旧 anchor。
+   */
+  let lastLocalSeekAt = 0
+
   /* ============================================================
    *  Socket 连接管理
    * ============================================================ */
@@ -429,18 +440,39 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         if (typeof payload.seq === 'number' && payload.seq <= localSeq.value) {
           return
         }
+        /* 陈旧 anchor 防御:用户刚 seek 后,可能有更早 emit 的 ctl:* SYNC 因网络
+         * 抖动后到达 —— 该 SYNC 的 anchorAt 早于 lastLocalSeekAt,如果直接应用就会
+         * 用旧位置覆盖刚 seek 的位置("seek 后又跳回去了")。
+         * 例外:本次 SYNC 本身就是 seek 的回包,正常应用。 */
+        if (
+          lastLocalSeekAt > 0 &&
+          payload.action !== 'seek' &&
+          payload.anchorAt < lastLocalSeekAt
+        ) {
+          if (typeof payload.seq === 'number') {
+            localSeq.value = payload.seq // 仍标记 seq 已见,后续 SYNC 才能正确比较
+          }
+          return
+        }
+        /* 收到我们 seek 的回包后清掉守卫 */
+        if (payload.action === 'seek') {
+          lastLocalSeekAt = 0
+        }
         Object.assign(current, payload)
         if (typeof payload.seq === 'number') {
           localSeq.value = payload.seq
         }
-        /* 显式动作(seek/change-song/play-queue-item)需要忽略漂移阈值精确对齐;
-         * 普通 play/pause/room-sync-context 走漂移平滑。 */
+        /* 显式动作(seek/change-song/play-queue-item/skip)需要忽略漂移阈值精确对齐;
+         * 普通 play/pause/room-sync-context 走漂移平滑。skip 必须 forceAlign,
+         * 否则切歌后 anchorPos=0 但本地 audio 仍在旧时间戳会因 drift > 阈值且 audio 已 ended
+         * 而无法正确播放新歌。 */
         const forceAlign =
           payload.action === 'seek' ||
           payload.action === 'change-song' ||
-          payload.action === 'play-queue-item'
+          payload.action === 'play-queue-item' ||
+          payload.action === 'skip'
         void ensureRoomSongLoadedAndSynced(payload, {
-          immediate: payload.action === 'play-queue-item' || payload.action === 'change-song',
+          immediate: payload.action === 'play-queue-item' || payload.action === 'change-song' || payload.action === 'skip',
           forceAlign
         })
       }
@@ -816,29 +848,14 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    *  - 不再监听 GlobalPlayStatus.songInfo 自动广播切歌
    *  - 所有播放控制走 UI -> lt.play()/lt.pause()/lt.seek()/lt.changeSong() 显式命令
    *  - 服务端确权后回 SYNC,client 据此驱动本地 audio
+   *  - 切歌响应也由 SYNC handler 单点驱动 —— 之前的 watch(current.song) 与
+   *    SYNC handler 并发调 ensureRoomSongLoadedAndSynced 会触发"切到新歌又跳回"的竞态
    *
-   * 这里只保留两类钩子:
-   *  1. member 端 current.song 变化 → 加载新歌(使用 ensureRoomSongLoadedAndSynced)
-   *  2. host 端本地共享列表(LocalUserDetailStore.list)变化 → 节流上传 queue
+   * 这里只保留一类钩子:host 端共享列表(LocalUserDetailStore.list)变化 → 节流上传 queue
    */
   function startAudioHooks(): void {
     clearAudioHooks() // 防重
     const localUserStore = LocalUserDetailStore()
-
-    /* member 端切歌响应:监听 current.song 变化 → 触发本地 playSong 拉流
-     *
-     * host 也走这里(因为 host 不再自己 audio.play(),也是从 SYNC 收到 song),
-     * 但通常 host 自己已经播过这首,sameLocalSong 检查会跳过重新加载。
-     */
-    const stopSongWatch = watch(
-      () => `${current.song?.source ?? ''}::${current.song?.songmid ?? ''}`,
-      async (newKey, oldKey) => {
-        if (!current.song) return
-        if (newKey === oldKey) return
-        await ensureRoomSongLoadedAndSynced(current, { immediate: true })
-      }
-    )
-    audioUnsubs.push(() => stopSongWatch())
 
     /* host 端共享列表上传:本地 list 变 → 节流后上传 queue */
     const stopPlaylistWatch = watch(
