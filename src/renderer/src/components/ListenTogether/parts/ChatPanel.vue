@@ -96,9 +96,36 @@ const draft = ref('')
 const showEmoji = ref(false)
 
 const EMOJIS = [
-  '😀', '😂', '🥰', '😍', '😎', '🤔', '😢', '😡', '🤯', '🥳',
-  '👍', '👎', '👏', '🙏', '💪', '🔥', '✨', '🎵', '🎶', '🎉',
-  '❤️', '💔', '🥺', '😴', '🤤', '😈', '👻', '🙈', '🙉', '🙊'
+  '😀',
+  '😂',
+  '🥰',
+  '😍',
+  '😎',
+  '🤔',
+  '😢',
+  '😡',
+  '🤯',
+  '🥳',
+  '👍',
+  '👎',
+  '👏',
+  '🙏',
+  '💪',
+  '🔥',
+  '✨',
+  '🎵',
+  '🎶',
+  '🎉',
+  '❤️',
+  '💔',
+  '🥺',
+  '😴',
+  '🤤',
+  '😈',
+  '👻',
+  '🙈',
+  '🙉',
+  '🙊'
 ]
 
 function insertEmoji(e: string): void {
@@ -174,14 +201,14 @@ const visibleChat = computed(() => {
         </div>
 
         <div v-else class="msg-row" :class="{ 'is-self': isSelf(msg) }">
-          <div v-if="!isSelf(msg)" class="msg-avatar">
+          <div class="msg-avatar">
             <img v-if="msg.from?.avatar" :src="msg.from.avatar" />
-            <div v-else class="avatar-fallback">
+            <div v-else class="avatar-fallback" :class="{ 'is-self': isSelf(msg) }">
               {{ (msg.from?.nickname || '?').slice(0, 1).toUpperCase() }}
             </div>
           </div>
 
-          <div class="msg-bubble-wrap">
+          <div class="msg-bubble-wrap" :class="{ 'is-self': isSelf(msg) }">
             <div v-if="!isSelf(msg)" class="msg-name">{{ msg.from?.nickname }}</div>
             <div
               class="msg-bubble"
@@ -254,6 +281,7 @@ const visibleChat = computed(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  font-family: 'PingFangSC-Semibold', 'Courier New', Courier, monospace;
 }
 
 .chat-scroll {
@@ -344,12 +372,20 @@ const visibleChat = computed(() => {
   color: #fff;
   font-size: 12px;
   font-weight: 600;
+  /* 自己头像用主题色调,与气泡色一致,直观区分 */
+  &.is-self {
+    background: linear-gradient(135deg, var(--lt-accent, #4080ff), #6aa5ff);
+  }
 }
 
 .msg-bubble-wrap {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* 自己的消息气泡靠右贴边对齐,避免 row-reverse 下气泡里的文字偏左不自然 */
+  &.is-self {
+    align-items: flex-end;
+  }
 }
 
 .msg-name {
@@ -361,21 +397,26 @@ const visibleChat = computed(() => {
 .msg-bubble {
   padding: 8px 12px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.16);
+  font-family: 'PingFangSC-Semibold', Helvetica, Arial, sans-serif;
+  color: #fff;
   font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap;
   backdrop-filter: blur(4px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  letter-spacing: 0.06em;
 
   &.is-self-bubble {
-    background: var(--lt-accent, rgba(64, 128, 255, 0.85));
+    background: var(--td-brand-color-5);
     color: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
   }
 
   &.is-emoji-large {
     background: transparent;
+    box-shadow: none;
     font-size: 32px;
     padding: 0;
     line-height: 1;
@@ -384,45 +425,54 @@ const visibleChat = computed(() => {
 }
 
 .chat-input {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 10px 12px;
+  /* 给输入区一层比消息流稍亮的底色,跟消息气泡区拉开层次 */
+  background: rgba(0, 0, 0, 0.18);
 }
 
 .input-row {
   display: flex;
   align-items: flex-end;
   gap: 6px;
+  overflow: hidden;
 }
 
 .input-textarea {
   flex: 1;
-  /* native textarea 沉浸样式 —— 与浮层深色背景协调 */
+  /* 提亮 textarea: bg / 边框 / placeholder 都明显加重,
+   * 解决"在深色浮层背景上看不见输入框"的对比度问题 */
   min-height: 32px;
   max-height: 96px;
   padding: 6px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
   font-size: 13px;
   line-height: 1.5;
   font-family: inherit;
   resize: none;
   outline: none;
-  transition: border-color 0.15s, background 0.15s;
+  overflow: auto;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.58);
   }
   &:hover {
-    background: rgba(255, 255, 255, 0.09);
-    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.34);
   }
   &:focus {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
   }
   &::-webkit-scrollbar {
     width: 6px;
@@ -491,7 +541,9 @@ const visibleChat = computed(() => {
 
 .emoji-fade-enter-active,
 .emoji-fade-leave-active {
-  transition: opacity 0.15s, transform 0.15s;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
 }
 .emoji-fade-enter-from,
 .emoji-fade-leave-to {

@@ -453,24 +453,27 @@ onMounted(() => {
       authStore.init()
 
       /* 一起听邀请:启动后(authStore.init() 已触发)再检查冷启动累积的 deeplink code
-       * + 剪贴板里可能有的 #CODE#。延迟到这里保证 authStore 已经从 localStorage 还原。 */
-      ;(window as any).api?.listenTogether
-        ?.getPendingCodes?.()
+       * + 剪贴板里可能有的 #CODE#。具体是否真的弹由 maybeTriggerLtInvite 内的 welcome
+       * 守卫决定 —— 用户没过完欢迎页前先攒着,等 isWelcomeRoute 变 false 时再发。 */
+      window.electron?.ipcRenderer
+        ?.invoke?.('get-pending-lt-codes')
         .then((codes: string[]) => {
-          for (const code of codes || []) {
-            void tryShowListenTogetherInvite('deeplink', code)
-          }
+          if (codes?.length) console.log('[lt] 取回冷启动 pending codes:', codes)
+          for (const code of codes || []) queueLtDeeplinkCode(code)
         })
-        .catch(() => {})
-      void tryShowListenTogetherInvite('clipboard')
+        .catch((e: any) => console.warn('[lt] getPendingCodes failed', e))
+      requestLtClipboardCheck()
     }, 500)
   })
   // 教程初始化监听
   window.addEventListener('guide:init', handleGuideInit as any)
 
-  /* 监听主进程 cerumusic://lt/<code> 推过来的 code(运行时 deeplink) */
-  ;(window as any).api?.listenTogether?.onShareOpen?.((payload: { code: string }) => {
-    void tryShowListenTogetherInvite('deeplink', payload.code)
+  /* 监听主进程 cerumusic://lt/<code> 推过来的 code(运行时 deeplink) ——
+   * 用 electron.ipcRenderer 直连,而不是 window.api.listenTogether.onShareOpen,
+   * 避免 preload bundle 未重编时拿不到包装层。 */
+  window.electron?.ipcRenderer?.on?.('lt-share-open', (_: any, payload: { code: string }) => {
+    console.log('[lt] 收到 deeplink IPC:', payload)
+    if (payload?.code) queueLtDeeplinkCode(payload.code)
   })
 
   /* 窗口重新聚焦时检查剪贴板 —— 覆盖"用户在外面复制完文案再切回客户端"的场景。
@@ -493,14 +496,56 @@ const confirmImportPromptPath = (path: string, fileName: string, silent: boolean
   }
 }
 
-/* 一起听:聚焦回客户端时再扫一次剪贴板 —— 节流防止 mac 频繁触发 focus */
+/* ==========================================================================
+ * 一起听邀请触发 —— 用户没过完欢迎页之前先攒着,过完才弹
+ *
+ * 触发点(deeplink IPC / 启动剪贴板 / 窗口聚焦 / find onActivated)都走
+ * `queueLtDeeplinkCode` / `requestLtClipboardCheck`,内部检查 isWelcomeRoute
+ * 决定立即调还是排队。watch isWelcomeRoute / appInteractiveReady 在条件
+ * 满足时一次性 drain 排队的所有请求。
+ * ========================================================================== */
+const pendingLtDeeplinkCodes: string[] = []
+let pendingLtClipboardCheck = false
 let ltFocusThrottle = 0
+
+const ltInviteReady = computed(() => appInteractiveReady.value && !isWelcomeRoute.value)
+
+function queueLtDeeplinkCode(code: string): void {
+  if (ltInviteReady.value) {
+    void tryShowListenTogetherInvite('deeplink', code)
+  } else {
+    if (!pendingLtDeeplinkCodes.includes(code)) pendingLtDeeplinkCodes.push(code)
+  }
+}
+
+function requestLtClipboardCheck(): void {
+  if (ltInviteReady.value) {
+    void tryShowListenTogetherInvite('clipboard')
+  } else {
+    pendingLtClipboardCheck = true
+  }
+}
+
+/* 一起听:聚焦回客户端时再扫一次剪贴板 —— 节流防止 mac 频繁触发 focus */
 function onWindowFocusForLt(): void {
   const now = Date.now()
   if (now - ltFocusThrottle < 1500) return
   ltFocusThrottle = now
-  void tryShowListenTogetherInvite('clipboard')
+  requestLtClipboardCheck()
 }
+
+watch(ltInviteReady, (ready) => {
+  if (!ready) return
+  // 排队的 deeplink 全部消化
+  while (pendingLtDeeplinkCodes.length) {
+    const code = pendingLtDeeplinkCodes.shift()!
+    void tryShowListenTogetherInvite('deeplink', code)
+  }
+  if (pendingLtClipboardCheck) {
+    pendingLtClipboardCheck = false
+    void tryShowListenTogetherInvite('clipboard')
+  }
+})
 
 // 基于现有主题文件的配置
 const themes = [

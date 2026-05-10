@@ -27,12 +27,21 @@ export type InviteTriggerSource = 'deeplink' | 'clipboard'
 
 /** 读剪贴板 —— 优先主进程,失败时降级到 navigator.clipboard */
 async function readClipboardText(): Promise<string> {
+  /* 1) 通过 electron.ipcRenderer.invoke 直接调主进程 IPC ——
+   *    与 Provider.vue 中其他主进程调用保持一致,不依赖 preload 的 window.api.* 包装层,
+   *    避免 preload bundle 未重编时 window.api.clipboard 是 undefined。 */
   try {
-    const fromMain = await (window as any).api?.clipboard?.readText?.()
+    const fromMain = await (window as any).electron?.ipcRenderer?.invoke?.('clipboard:read-text')
     if (typeof fromMain === 'string' && fromMain.length > 0) return fromMain
   } catch (e) {
-    console.warn('[lt-invite] 主进程剪贴板读取失败:', e)
+    console.warn('[lt-invite] 主进程剪贴板 IPC 失败:', e)
   }
+  /* 2) 同样作为兜底也试一下 window.api.clipboard(若 preload 重编了) */
+  try {
+    const fromApi = await (window as any).api?.clipboard?.readText?.()
+    if (typeof fromApi === 'string' && fromApi.length > 0) return fromApi
+  } catch {}
+  /* 3) 最后兜底:navigator.clipboard —— 焦点时序不对可能返回空,可接受 */
   try {
     return (await navigator.clipboard.readText()) || ''
   } catch (e) {
@@ -81,11 +90,9 @@ export async function tryShowListenTogetherInvite(
         header: '加入一起听需要登录',
         body: () =>
           h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
-            h(
-              'div',
-              { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' },
-              ['检测到剪贴板里有一起听房间口令']
-            ),
+            h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
+              '检测到剪贴板里有一起听房间口令'
+            ]),
             h(
               'div',
               {
@@ -139,11 +146,9 @@ export async function tryShowListenTogetherInvite(
       header: '加入一起听',
       body: () =>
         h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
-          h(
-            'div',
-            { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' },
-            [source === 'deeplink' ? '来自分享链接的一起听邀请' : '朋友邀请你加入一起听房间']
-          ),
+          h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
+            source === 'deeplink' ? '来自分享链接的一起听邀请' : '朋友邀请你加入一起听房间'
+          ]),
           h(
             'div',
             {

@@ -54,11 +54,6 @@ function handleAction(action: string, m: RoomMember): void {
 function initials(nickname: string): string {
   return (nickname || '?').slice(0, 1).toUpperCase()
 }
-
-/** 角色徽章字符 —— 用 emoji 比图标更轻量 */
-function roleBadge(role: RoomRole): string {
-  return role === 'owner' ? '👑' : role === 'admin' ? '🛡️' : ''
-}
 </script>
 
 <template>
@@ -85,14 +80,75 @@ function roleBadge(role: RoomRole): string {
         <div class="avatar-wrap clickable">
           <img v-if="m.avatar" :src="m.avatar" class="avatar" :alt="m.nickname" />
           <div v-else class="avatar avatar-fallback">{{ initials(m.nickname) }}</div>
-          <span v-if="roleBadge(m.role)" class="role-badge">{{ roleBadge(m.role) }}</span>
+          <span
+            v-if="m.role !== 'member'"
+            class="role-badge"
+            :class="`role-${m.role}`"
+            :title="m.role === 'owner' ? '房主' : '管理员'"
+          >
+            <!-- 房主皇冠 / 管理员盾牌 — 内联 SVG 比 emoji 显得克制专业 -->
+            <svg
+              v-if="m.role === 'owner'"
+              viewBox="0 0 24 24"
+              width="10"
+              height="10"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 3.5L8.6 8.2 4 5.6l1.5 9.4h13L20 5.6l-4.6 2.6L12 3.5zm-6.5 13h13v2h-13v-2z"
+              />
+            </svg>
+            <svg
+              v-else
+              viewBox="0 0 24 24"
+              width="10"
+              height="10"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 2L4 5v6c0 4.6 3.4 8.9 8 10 4.6-1.1 8-5.4 8-10V5l-8-3zm-1.3 13.3L7 11.6l1.4-1.4 2.3 2.3 4.9-4.9L17 9z"
+              />
+            </svg>
+          </span>
         </div>
       </t-dropdown>
 
       <div v-else class="avatar-wrap">
         <img v-if="m.avatar" :src="m.avatar" class="avatar" :alt="m.nickname" />
         <div v-else class="avatar avatar-fallback">{{ initials(m.nickname) }}</div>
-        <span v-if="roleBadge(m.role)" class="role-badge">{{ roleBadge(m.role) }}</span>
+        <span
+          v-if="m.role !== 'member'"
+          class="role-badge"
+          :class="`role-${m.role}`"
+          :title="m.role === 'owner' ? '房主' : '管理员'"
+        >
+          <svg
+            v-if="m.role === 'owner'"
+            viewBox="0 0 24 24"
+            width="10"
+            height="10"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 3.5L8.6 8.2 4 5.6l1.5 9.4h13L20 5.6l-4.6 2.6L12 3.5zm-6.5 13h13v2h-13v-2z"
+            />
+          </svg>
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+            width="10"
+            height="10"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 2L4 5v6c0 4.6 3.4 8.9 8 10 4.6-1.1 8-5.4 8-10V5l-8-3zm-1.3 13.3L7 11.6l1.4-1.4 2.3 2.3 4.9-4.9L17 9z"
+            />
+          </svg>
+        </span>
       </div>
 
       <span class="nickname">{{ m.nickname }}</span>
@@ -107,6 +163,7 @@ function roleBadge(role: RoomRole): string {
   padding: 8px 4px;
   overflow-x: auto;
   scrollbar-width: thin;
+  font-family: 'PingFangSC-Semibold', Helvetica, Arial, sans-serif;
 
   &::-webkit-scrollbar {
     height: 4px;
@@ -166,17 +223,33 @@ function roleBadge(role: RoomRole): string {
 
 .role-badge {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
-  font-size: 12px;
-  background: var(--td-bg-color-container, #fff);
-  border-radius: 50%;
+  bottom: -3px;
+  right: -3px;
   width: 16px;
   height: 16px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  color: #fff;
+  /* 与头像背景拉开层次的细描边,让徽章像贴上去的小贴纸 */
+  box-shadow:
+    0 0 0 2px var(--td-bg-color-container, #fff),
+    0 1px 3px rgba(0, 0, 0, 0.18);
+
+  &.role-owner {
+    /* 房主:暖金渐变,皇冠 + 富贵感 */
+    background: linear-gradient(135deg, #f7c948 0%, #e09a1f 100%);
+  }
+  &.role-admin {
+    /* 管理员:主题色一档,与气泡保持视觉一致 */
+    background: var(--td-brand-color-5, #366ef4);
+  }
+
+  svg {
+    display: block;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+  }
 }
 
 .nickname {
