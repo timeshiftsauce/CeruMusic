@@ -287,45 +287,77 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     /* 取 access token —— 必须使用 ceru-backend 的 resource 才能拿到正确 audience */
     const logto = config.instance
     if (!logto) throw new Error('Logto 未初始化')
-    const token = await logto.getAccessToken(CERU_API_RESOURCE)
+    let token = await logto.getAccessToken(CERU_API_RESOURCE)
     if (!token) throw new Error('未登录或 token 已失效')
+    /* 诊断日志:出 AUTH_FAILED 时能看到客户端取到的 token 长度/前缀,与后端日志对照 */
+    console.debug(`[lt] socket auth token len=${token.length} prefix=${token.slice(0, 20)}...`)
     const authStore = useAuthStore()
     if (!authStore.user) {
       await authStore.updateUserInfo()
     }
     myUserId.value = authStore.user?.sub || myUserId.value
 
-    /* 创建 socket —— 复用同一连接，重连不丢监听 */
-    socket = ioClient(`${SOCKET_URL}/lt`, {
-      transports: ['websocket'],
-      auth: { token },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 800,
-      reconnectionDelayMax: 5000
-    })
+    const tryConnect = (authToken: string): Promise<void> => {
+      return new Promise<void>((resolve, reject) => {
+        socket = ioClient(`${SOCKET_URL}/lt`, {
+          transports: ['websocket'],
+          auth: { token: authToken },
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 800,
+          reconnectionDelayMax: 5000
+        })
+        bindSocketEvents(socket)
+        const onConnect = () => {
+          cleanup()
+          connectionStatus.value = 'connected'
+          resolve()
+        }
+        const onError = (err: Error) => {
+          cleanup()
+          reject(err)
+        }
+        const cleanup = () => {
+          socket?.off('connect', onConnect)
+          socket?.off('connect_error', onError)
+        }
+        socket?.once('connect', onConnect)
+        socket?.once('connect_error', onError)
+      })
+    }
 
-    bindSocketEvents(socket)
-
-    /* 等待握手完成（连接成功 / 失败） */
-    await new Promise<void>((resolve, reject) => {
-      const onConnect = () => {
-        cleanup()
-        connectionStatus.value = 'connected'
-        resolve()
-      }
-      const onError = (err: Error) => {
-        cleanup()
+    try {
+      await tryConnect(token)
+    } catch (err) {
+      const msg = (err as Error)?.message || ''
+      const looksLikeAuth =
+        msg.toLowerCase().includes('auth') || msg.includes('token') || msg.includes('AUTH_FAILED')
+      if (!looksLikeAuth) {
         connectionStatus.value = 'disconnected'
-        reject(err)
+        throw err
       }
-      const cleanup = () => {
-        socket?.off('connect', onConnect)
-        socket?.off('connect_error', onError)
+      /* 强制刷新:清掉 logto 缓存的 access token,下次 getAccessToken 必须走 refresh。
+       * 解决"HTTP 能用但 socket 报 AUTH_FAILED"的边缘:HTTP 走 axios interceptor 每次
+       * 重取 token 触发自动刷新,socket 连接拿到的是 logto 内存里旧的(过期/被吊销)token。
+       *
+       * 关键:不能 clearAllTokens(),那会把 refresh token 也清掉导致下次拿不到。 */
+      console.warn('[lt] socket 首次鉴权失败,清缓存 token 重试:', msg)
+      try {
+        ;(logto as { clearAccessToken?: () => void }).clearAccessToken?.()
+      } catch {}
+      token = await logto.getAccessToken(CERU_API_RESOURCE)
+      if (!token) {
+        connectionStatus.value = 'disconnected'
+        throw new Error('刷新 token 失败,请重新登录')
       }
-      socket?.once('connect', onConnect)
-      socket?.once('connect_error', onError)
-    })
+      console.debug(`[lt] socket 重试 token len=${token.length} prefix=${token.slice(0, 20)}...`)
+      try {
+        socket?.removeAllListeners()
+        socket?.disconnect()
+        socket = null
+      } catch {}
+      await tryConnect(token)
+    }
   }
 
   /**
