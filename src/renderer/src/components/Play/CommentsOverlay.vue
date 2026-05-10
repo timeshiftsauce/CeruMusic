@@ -105,18 +105,29 @@ const formatNumber = (num: number) => {
 
 const currentUserKeys = computed(() => {
   const keys = new Set<string>()
-  const user = authStore.user
-  if (user?.sub) keys.add(String(user.sub))
-  if (user?.username) keys.add(String(user.username))
-  if (user?.name) keys.add(String(user.name))
+  const user = authStore.user as Record<string, unknown> | null
+  const candidates = [
+    user?.sub,
+    user?.username,
+    user?.name,
+    user?.email,
+    user?.nickname,
+    user?.preferred_username
+  ]
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue
+    keys.add(normalizeUserKey(candidate))
+  }
   return keys
 })
+
+const normalizeUserKey = (value: unknown): string => String(value).trim().toLowerCase()
 
 const isSelfComment = (item: { userId?: number | string; userName?: string }) => {
   const keys = currentUserKeys.value
   if (!keys.size) return false
-  if (item.userId !== undefined && keys.has(String(item.userId))) return true
-  if (item.userName && keys.has(String(item.userName))) return true
+  if (item.userId !== undefined && keys.has(normalizeUserKey(item.userId))) return true
+  if (item.userName && keys.has(normalizeUserKey(item.userName))) return true
   return false
 }
 

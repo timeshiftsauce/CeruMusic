@@ -13,7 +13,7 @@
  *   ├──────────────────────────────────────┤
  *   │  成员条（横向头像）                  │
  *   ├──────────────────────────────────────┤
- *   │  Tab：聊天 / 队列 / 待审批           │
+ *   │  Tab：聊天 / 共享列表 / 待审批       │
  *   │  ┌────────────────────────────────┐  │
  *   │  │ 内容区                          │  │
  *   │  └────────────────────────────────┘  │
@@ -180,7 +180,7 @@ function onKeyDown(e: KeyboardEvent): void {
             :class="{ active: activeTab === 'queue' }"
             @click="activeTab = 'queue'"
           >
-            点歌队列
+            共享列表
             <span v-if="lt.queue.length" class="count">{{ lt.queue.length }}</span>
           </div>
           <div

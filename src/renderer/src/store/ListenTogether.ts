@@ -33,6 +33,7 @@ import {
   ErrorCodes,
   CONTROL_DEBOUNCE_MS,
   DRIFT_HARD_SEEK_THRESHOLD,
+  PROGRESS_REPORT_INTERVAL_MS,
   PING_BURST_COUNT,
   PING_BURST_INTERVAL_MS,
   PING_INTERVAL_MS
@@ -56,6 +57,8 @@ import {
 } from '@renderer/api/listenTogether'
 import { useAuthStore } from '@renderer/store/Auth'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
+import type { SongList } from '@renderer/types/audio'
 
 /* ---------------- 连接配置 ---------------- */
 
@@ -183,6 +186,16 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
   /** 周期性 ping 定时器 */
   let pingTimer: ReturnType<typeof setInterval> | null = null
+
+  /** 周期性播放漂移校准定时器 */
+  let driftTimer: ReturnType<typeof setInterval> | null = null
+  let isDriftChecking = false
+
+  /** 房主/admin 周期性向服务端上报当前播放进度 */
+  let progressReportTimer: ReturnType<typeof setInterval> | null = null
+  let playlistSyncTimer: ReturnType<typeof setTimeout> | null = null
+  let isReplacingSharedPlaylist = false
+  let playlistBeforeRoom: SongList[] | null = null
 
   /**
    * "正在应用远端事件" 标记 —— 防止回声广播
@@ -321,6 +334,9 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       pending.value = state.pending
       chat.value = state.chat
       Object.assign(current, state.current)
+      if (state.queue.length || state.current.song) {
+        replaceLocalPlaylistFromQueue(state.queue, state.current.song)
+      }
 
       // 找到自己的角色
       syncMyRoleFromMembers(state.members)
@@ -333,7 +349,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
     sock.on(ServerEvents.ROOM_DISMISSED, () => {
       MessagePlugin.info('房间已被解散')
-      resetRoomState()
+      resetRoomState({ restorePlaylist: true })
     })
 
     /* ---- 成员变更 ---- */
@@ -355,7 +371,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     sock.on(ServerEvents.MEMBER_KICKED, (payload: { byUser: { nickname: string } }) => {
       // 自己被踢
       MessagePlugin.warning(`你被 ${payload.byUser.nickname} 移出了房间`)
-      resetRoomState()
+      resetRoomState({ restorePlaylist: true })
     })
 
     /* ---- 同步信号 —— 同步算法的核心 ---- */
@@ -364,12 +380,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       (
         payload: PlaybackSnapshot & { action?: string; operatorId?: string }
       ) => {
-        // 自己刚发的事件 -> 忽略本地回声
-        if (payload.operatorId === myUserId.value) {
-          // 但还是要更新 current 让 UI 反映状态（仅状态，不重新 seek）
-          Object.assign(current, payload)
-          return
-        }
         Object.assign(current, payload)
         void applySnapshot(payload)
       }
@@ -378,6 +388,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     /* ---- 队列 ---- */
     sock.on(ServerEvents.QUEUE_UPDATE, (payload: { queue: QueueItem[] }) => {
       queue.value = payload.queue
+      replaceLocalPlaylistFromQueue(payload.queue, current.song)
     })
 
     sock.on(ServerEvents.PENDING_UPDATE, (payload: { pending: PendingItem[] }) => {
@@ -461,6 +472,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     // ownerId 即是当前 logto sub —— 我们存到 myUserId 给后续 sync 防回声用
     myUserId.value = room.ownerId
     await joinByCode(room.code)
+    await runClockSyncBurst()
     await syncRoomContextFromLocal()
     return room
   }
@@ -485,6 +497,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    */
   async function joinByCode(code: string): Promise<RoomMeta> {
     if (!socket) throw new Error('socket 未连接')
+    const localUserStore = LocalUserDetailStore()
+    playlistBeforeRoom = [...localUserStore.list]
     return new Promise<RoomMeta>((resolve, reject) => {
       let settled = false
       const onState = (state: RoomState) => {
@@ -501,6 +515,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         startAudioHooks()
         void runClockSyncBurst()
         startPingLoop()
+        startDriftLoop()
+        startProgressReportLoop()
         resolve(state.meta)
       }
       const onError = (err: ServerError) => {
@@ -536,11 +552,20 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function leaveRoom(): void {
     if (!isInRoom.value) return
     socket?.emit(ClientEvents.ROOM_LEAVE)
-    resetRoomState()
+    resetRoomState({ restorePlaylist: true })
   }
 
   /** 清空房间相关本地状态 + 取消 ControlAudio 订阅 + 停 ping */
-  function resetRoomState(): void {
+  function resetRoomState(options: { restorePlaylist?: boolean } = {}): void {
+    if (options.restorePlaylist && playlistBeforeRoom) {
+      const localUserStore = LocalUserDetailStore()
+      isReplacingSharedPlaylist = true
+      localUserStore.replaceSongList(playlistBeforeRoom)
+      setTimeout(() => {
+        isReplacingSharedPlaylist = false
+      }, 0)
+    }
+    playlistBeforeRoom = null
     meta.value = null
     myRole.value = null
     members.value = []
@@ -555,6 +580,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     })
     clearAudioHooks()
     stopPingLoop()
+    stopDriftLoop()
+    stopProgressReportLoop()
   }
 
   /* ============================================================
@@ -694,6 +721,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function startAudioHooks(): void {
     clearAudioHooks() // 防重
     const ca = ControlAudioStore()
+    const localUserStore = LocalUserDetailStore()
 
     audioUnsubs.push(
       ca.subscribe('play', () => {
@@ -732,6 +760,13 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
         try {
           isApplyingSongChange = true
+          const ca = ControlAudioStore()
+          if (ca.Audio.audio) {
+            try {
+              ca.Audio.audio.pause()
+            } catch {}
+          }
+          ca.Audio.isPlay = false
           // 动态导入避免循环依赖：globaPlayList 内部依赖很多 store
           const mod = await import('@renderer/utils/audio/globaPlayList')
           // 把 SongRef 还原成完整 SongList —— host 已经传了大部分字段
@@ -777,6 +812,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
           // 再调 playSong 走完整拉流流程（拉 URL + setUrl + start）
           await mod.playSong(songList)
+          await applySnapshot(current)
         } catch (e) {
           console.warn('[lt] member 切歌拉流失败:', e)
         } finally {
@@ -844,6 +880,26 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       }
     )
     audioUnsubs.push(() => stopHostSongWatch())
+
+    const stopPlaylistWatch = watch(
+      () => localUserStore.list,
+      () => {
+        if (!isInRoom.value || !canControl.value || isReplacingSharedPlaylist) return
+        if (playlistSyncTimer) clearTimeout(playlistSyncTimer)
+        playlistSyncTimer = setTimeout(() => {
+          playlistSyncTimer = null
+          void syncRoomContextFromLocal()
+        }, 300)
+      },
+      { deep: true }
+    )
+    audioUnsubs.push(() => {
+      stopPlaylistWatch()
+      if (playlistSyncTimer) {
+        clearTimeout(playlistSyncTimer)
+        playlistSyncTimer = null
+      }
+    })
   }
 
   /**
@@ -902,20 +958,47 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     const localUserStore = LocalUserDetailStore()
     const currentSong = buildSongRef(globalPlayStatus.player.songInfo as Record<string, any>)
     const currentTime = Number(ca.Audio.currentTime || ca.Audio.audio?.currentTime || 0)
-    const queueSongs = localUserStore.list
-      .filter((song) => String(song.songmid) !== String(globalPlayStatus.player.songInfo?.songmid))
+    const playlistSongs = localUserStore.list
       .map((song) => buildSongRef(song as unknown as Record<string, any>))
       .filter((song): song is SongRef => Boolean(song))
+    const queueSongs =
+      currentSong &&
+      !playlistSongs.some(
+        (song) => song.songmid === currentSong.songmid && song.source === currentSong.source
+      )
+        ? [currentSong, ...playlistSongs]
+        : playlistSongs
 
     socket.emit(ClientEvents.ROOM_SYNC_CONTEXT, {
       current: {
         song: currentSong,
         isPlaying: Boolean(ca.Audio.isPlay),
         anchorPos: currentTime,
-        anchorAt: Date.now()
+        anchorAt: Date.now() + clockOffset
       },
       queue: queueSongs
     })
+  }
+
+  function replaceLocalPlaylistFromQueue(items: QueueItem[], fallbackCurrent?: SongRef | null): void {
+    if (!isInRoom.value) return
+    const localUserStore = LocalUserDetailStore()
+    const songs = items.map((item) => songRefToSongList(item.song))
+    if (
+      fallbackCurrent &&
+      !songs.some(
+        (song) =>
+          String(song.songmid) === String(fallbackCurrent.songmid) &&
+          song.source === fallbackCurrent.source
+      )
+    ) {
+      songs.unshift(songRefToSongList(fallbackCurrent))
+    }
+    isReplacingSharedPlaylist = true
+    localUserStore.replaceSongList(songs)
+    setTimeout(() => {
+      isReplacingSharedPlaylist = false
+    }, 0)
   }
 
   /**
@@ -1045,6 +1128,49 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     if (pingTimer) {
       clearInterval(pingTimer)
       pingTimer = null
+    }
+  }
+
+  function startDriftLoop(): void {
+    stopDriftLoop()
+    driftTimer = setInterval(() => {
+      if (!isInRoom.value || !current.song || isDriftChecking) return
+      isDriftChecking = true
+      void applySnapshot(current).finally(() => {
+        isDriftChecking = false
+      })
+    }, 1000)
+  }
+
+  function stopDriftLoop(): void {
+    if (driftTimer) {
+      clearInterval(driftTimer)
+      driftTimer = null
+    }
+    isDriftChecking = false
+  }
+
+  function startProgressReportLoop(): void {
+    stopProgressReportLoop()
+    progressReportTimer = setInterval(() => {
+      if (!socket?.connected || !isInRoom.value || !canControl.value || !current.song) return
+      const ca = ControlAudioStore()
+      const localSong = buildSongRef(useGlobalPlayStatusStore().player.songInfo as Record<string, any>)
+      socket.emit(ClientEvents.ROOM_SYNC_CONTEXT, {
+        current: {
+          song: localSong ?? current.song,
+          isPlaying: Boolean(ca.Audio.isPlay),
+          anchorPos: Number(ca.Audio.currentTime || ca.Audio.audio?.currentTime || 0),
+          anchorAt: Date.now() + clockOffset
+        }
+      })
+    }, PROGRESS_REPORT_INTERVAL_MS)
+  }
+
+  function stopProgressReportLoop(): void {
+    if (progressReportTimer) {
+      clearInterval(progressReportTimer)
+      progressReportTimer = null
     }
   }
 

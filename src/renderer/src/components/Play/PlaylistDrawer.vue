@@ -3,7 +3,6 @@ import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useListenTogetherStore } from '@renderer/store'
-import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
 import { MessagePlugin, Popconfirm } from 'tdesign-vue-next'
 import { LocationIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { useVirtualList } from '@vueuse/core'
@@ -32,31 +31,26 @@ const { list } = storeToRefs(localUserStore)
 const lt = useListenTogetherStore()
 
 /**
- * 显示用列表 —— 在一起听房间时显示房间队列，否则显示本地播放列表
- *
- * 房间队列结构：[当前播放的歌] + [lt.queue 待播队列]
- *  - 当前歌从 lt.current.song 取（与房间权威状态一致）
- *  - 待播队列从 lt.queue 取，转成 SongList 兼容现有渲染
- *
- * 注意：不动 localUserStore.list —— 退出房间后用户的本地列表还在原处。
+ * 进房后 LocalUserDetail.list 会被共享播放列表替换。
+ * 所以抽屉始终展示同一份列表，不再临时拼接“当前歌 + 队列”。
  */
-const displayList = computed<SongList[]>(() => {
-  if (!lt.isInRoom) return list.value
-  const result: SongList[] = []
-  if (lt.current.song) result.push(songRefToSongList(lt.current.song))
-  for (const item of lt.queue) {
-    result.push(songRefToSongList(item.song))
-  }
-  return result
-})
+const displayList = computed<SongList[]>(() => list.value)
 
-const isRoomCurrentIndex = (index: number) => lt.isInRoom && index === 0 && Boolean(lt.current.song)
+const isRoomCurrentSong = (song: SongList) =>
+  lt.isInRoom &&
+  Boolean(lt.current.song) &&
+  String(song.songmid) === String(lt.current.song?.songmid) &&
+  song.source === lt.current.song?.source
 
-const queueItemAtDisplayIndex = (index: number) => {
+const queueItemForSong = (song: SongList) => {
   if (!lt.isInRoom) return null
-  const queueIndex = lt.current.song ? index - 1 : index
-  if (queueIndex < 0) return null
-  return lt.queue[queueIndex] ?? null
+  return (
+    lt.queue.find(
+      (item) =>
+        String(item.song.songmid) === String(song.songmid) &&
+        item.song.source === song.source
+    ) ?? null
+  )
 }
 
 /**
@@ -529,7 +523,7 @@ onUnmounted(() => {
 // 清空播放列表
 const handleClearPlaylist = () => {
   if (lt.isInRoom) {
-    MessagePlugin.info('一起听房间内请逐首移除队列歌曲')
+    MessagePlugin.info('一起听房间内请逐首移除共享列表歌曲')
     return
   }
   if (list.value.length === 0) {
@@ -568,12 +562,12 @@ const playDisplayItem = (index: number, song: SongList) => {
     MessagePlugin.warning('当前没有播放控制权')
     return
   }
-  if (isRoomCurrentIndex(index)) {
+  if (isRoomCurrentSong(song)) {
     lt.seek(0)
     lt.play(0)
     return
   }
-  const item = queueItemAtDisplayIndex(index)
+  const item = queueItemForSong(song)
   if (!item) return
   lt.playQueueItem(item.itemId)
 }
@@ -583,9 +577,9 @@ const removeDisplayItem = (index: number, song: SongList) => {
     localUserStore.removeSong(song.songmid)
     return
   }
-  const item = queueItemAtDisplayIndex(index)
+  const item = queueItemForSong(song)
   if (!item) {
-    MessagePlugin.info('当前播放中的歌曲不能从队列移除')
+    MessagePlugin.info('未找到对应的共享列表歌曲')
     return
   }
   lt.removeFromQueue(item.itemId)
@@ -611,7 +605,7 @@ defineExpose({
         <div class="playlist-title">
           <template v-if="lt.isInRoom">
             <span class="lt-tag">一起听</span>
-            房间队列 ({{ displayList.length }})
+            共享播放列表 ({{ displayList.length }})
             <span class="room-name" :title="lt.meta?.name">· {{ lt.meta?.name }}</span>
           </template>
           <template v-else> 播放列表 ({{ list.length }}) </template>
@@ -624,8 +618,8 @@ defineExpose({
       <div class="playlist-content" v-bind="containerProps">
         <div v-if="displayList.length === 0" class="playlist-empty">
           <template v-if="lt.isInRoom">
-            <p>房间队列暂时为空</p>
-            <p>{{ lt.canControl ? '在歌单/搜索页选歌即可加入队列' : '点歌请等管理员审批通过' }}</p>
+            <p>共享播放列表暂时为空</p>
+            <p>{{ lt.canControl ? '修改播放列表后会自动同步给房间成员' : '点歌请等管理员审批通过' }}</p>
           </template>
           <template v-else>
             <p>播放列表为空</p>
@@ -687,18 +681,18 @@ defineExpose({
       </div>
 
       <!-- 底部操作按钮 -->
-      <div v-if="list.length > 0" class="playlist-footer">
+      <div v-if="displayList.length > 0" class="playlist-footer">
         <button
           class="playlist-action-btn locate-btn"
-          :disabled="!currentSongId"
+          :disabled="!effectiveCurrentSongId"
           @click="handleLocateCurrentSong"
         >
           <LocationIcon size="16" />
           <span>定位当前播放</span>
         </button>
         <Popconfirm
-          content="确定要清空播放列表吗？此操作不可撤销。"
-          :confirm-btn="{ content: '确认清空', theme: 'danger' }"
+          :content="lt.isInRoom ? '一起听房间内不能一键清空共享播放列表。' : '确定要清空播放列表吗？此操作不可撤销。'"
+          :confirm-btn="{ content: lt.isInRoom ? '知道了' : '确认清空', theme: lt.isInRoom ? 'default' : 'danger' }"
           cancel-btn="取消"
           placement="top"
           theme="warning"
@@ -710,7 +704,7 @@ defineExpose({
         >
           <button class="playlist-action-btn clear-btn">
             <DeleteIcon size="16" />
-            <span>清空播放列表</span>
+            <span>{{ lt.isInRoom ? '管理共享列表' : '清空播放列表' }}</span>
           </button>
         </Popconfirm>
       </div>

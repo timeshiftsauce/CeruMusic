@@ -10,10 +10,12 @@
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useListenTogetherStore } from '@renderer/store'
+import { useAuthStore } from '@renderer/store/Auth'
 import { SmileIcon, SendIcon } from 'tdesign-icons-vue-next'
 import type { ChatMsg } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
+const authStore = useAuthStore()
 
 /** 系统消息模板 —— 把后端 content (key) 转成可读中文 */
 function renderSystem(msg: ChatMsg): string {
@@ -38,8 +40,22 @@ function renderSystem(msg: ChatMsg): string {
   }
 }
 
+const selfKeys = computed(() => {
+  const keys = new Set<string>()
+  const user = authStore.user
+  if (lt.myUserId) keys.add(String(lt.myUserId))
+  if (user?.sub) keys.add(String(user.sub))
+  if (user?.username) keys.add(String(user.username))
+  if (user?.name) keys.add(String(user.name))
+  return keys
+})
+
 function isSelf(msg: ChatMsg): boolean {
-  return msg.from?.userId === lt.myUserId
+  if (!msg.from) return false
+  const keys = selfKeys.value
+  const ownMember = lt.members.find((m) => m.userId === lt.myUserId)
+  if (msg.from.userId && keys.has(String(msg.from.userId))) return true
+  return Boolean(ownMember?.nickname && msg.from.nickname === ownMember.nickname)
 }
 
 function formatTime(ts: number): string {
