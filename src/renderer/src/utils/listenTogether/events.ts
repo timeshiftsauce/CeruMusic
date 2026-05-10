@@ -10,6 +10,8 @@ export const ClientEvents = {
   /* 进出房间 */
   ROOM_JOIN: 'room:join',
   ROOM_LEAVE: 'room:leave',
+  /** 重连续连 —— 30s 墓碑期内同 userId 回来时使用,避免重新走 join 流程 */
+  ROOM_RESUME: 'room:resume',
   ROOM_SYNC_CONTEXT: 'room:sync-context',
 
   /* 播放控制 */
@@ -19,6 +21,8 @@ export const ClientEvents = {
   CTL_CHANGE_SONG: 'ctl:change-song',
   CTL_PLAY_QUEUE_ITEM: 'ctl:play-queue-item',
   CTL_SKIP: 'ctl:skip',
+  /** 当前歌曲自然播完信号 —— 仅 host/admin 上报,服务端单点裁决推进 */
+  CTL_SONG_ENDED: 'ctl:song-ended',
 
   /* 点歌 */
   QUEUE_REQUEST: 'queue:request',
@@ -48,6 +52,8 @@ export const ServerEvents = {
   MEMBER_JOIN: 'member:join',
   MEMBER_LEAVE: 'member:leave',
   MEMBER_KICKED: 'member:kicked',
+  /** 墓碑期内同 userId 重连成功 */
+  MEMBER_RECONNECT: 'member:reconnect',
   SYNC: 'sync',
   QUEUE_UPDATE: 'queue:update',
   PENDING_UPDATE: 'pending:update',
@@ -67,6 +73,8 @@ export const ErrorCodes = {
   ALREADY_IN_ROOM: 'ALREADY_IN_ROOM',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   INVALID_PAYLOAD: 'INVALID_PAYLOAD',
+  /** 当前房间无歌可播 —— play/pause/seek/skip 等控制需要先有 song */
+  NO_SONG: 'NO_SONG',
   INTERNAL_ERROR: 'INTERNAL_ERROR'
 } as const
 
@@ -75,12 +83,10 @@ export const ErrorCodes = {
 /**
  * 进度漂移阈值（秒）—— 超过此值才硬 seek，否则不动让其自然追上
  *
- * 一起听需要更紧的阈值：超过 300ms 就自动校准，避免明显前后拍。
+ * 主流派对/一起听产品都使用 0.5~1s 的容忍带:既能保证同步感受,又避免每次 SYNC
+ * 到达都强制 seek 造成爆音/重新缓冲。
  */
-export const DRIFT_HARD_SEEK_THRESHOLD = 0.3
-
-/** 房主/admin 进度上报间隔（毫秒） */
-export const PROGRESS_REPORT_INTERVAL_MS = 1500
+export const DRIFT_HARD_SEEK_THRESHOLD = 1.0
 
 /**
  * NTP 时钟同步 ping 间隔（毫秒）
@@ -93,7 +99,5 @@ export const PING_BURST_INTERVAL_MS = 200
 
 /**
  * 控制事件的去抖窗口（毫秒）—— 防止用户连点产生大量广播
- *
- * 实测 80ms 足以覆盖快速点击；过长会感觉迟钝。
  */
 export const CONTROL_DEBOUNCE_MS = 80
