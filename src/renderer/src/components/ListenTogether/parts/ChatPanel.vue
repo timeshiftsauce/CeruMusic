@@ -122,23 +122,37 @@ function sendEmojiOnly(e: string): void {
 }
 
 /**
- * t-textarea 的 keydown 事件签名是 (value, ctx: { e: KeyboardEvent }),
- * Vue 的 `.enter` 修饰符会把第一个参数当原生 event 处理 → tdesign 内部
- * `'key' in 51` 报错(value 是字符串/数字)。所以不能用 @keydown.enter,
- * 手动取 ctx.e 判断按键。
+ * 原生 textarea 的 keydown handler —— 替代 t-textarea
  *
- * 行为:
- *  - Enter:发送(preventDefault 阻止默认换行)
- *  - Shift+Enter / Ctrl+Enter / Meta+Enter:让默认行为发生 → 换行
+ * 之前 t-textarea 的 keydown 是包装事件 (value, ctx),Vue .enter 修饰符
+ * 出错;且即便取 ctx.e,Shift+Enter 的 native 换行行为也被 tdesign 内部
+ * 干扰。换成 native <textarea> 后,e 是真原生事件,行为完全可控:
+ *  - Enter:preventDefault + 发送
+ *  - Shift/Ctrl/Meta+Enter:不 preventDefault → native 换行
  */
-function onTextareaKeydown(_value: unknown, ctx: { e: KeyboardEvent }): void {
-  const e = ctx?.e
-  if (!e) return
+function onTextareaKeydown(e: KeyboardEvent): void {
+  /* 输入法组合按键(中文输入候选)—— 不拦截,由 IME 自己处理 */
+  if (e.isComposing || (e as KeyboardEvent & { keyCode: number }).keyCode === 229) return
   if (e.key !== 'Enter') return
   if (e.shiftKey || e.ctrlKey || e.metaKey) return
   e.preventDefault()
   sendText()
 }
+
+/* 自动高度 —— 替代 t-textarea 的 autosize,native 实现:每次输入后用
+ * scrollHeight 推算行数,限制 1~4 行。 */
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+function autoResize(): void {
+  const ta = textareaRef.value
+  if (!ta) return
+  ta.style.height = 'auto'
+  /* 限制最多 4 行高度 */
+  const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 20
+  const maxHeight = lineHeight * 4 + 16 // padding 缓冲
+  ta.style.height = `${Math.min(ta.scrollHeight, maxHeight)}px`
+}
+watch(draft, () => void nextTick(autoResize))
+onMounted(() => autoResize())
 
 const visibleChat = computed(() => {
   const list = lt.chat
@@ -212,12 +226,14 @@ const visibleChat = computed(() => {
         >
           <SmileIcon />
         </t-button>
-        <t-textarea
+        <textarea
+          ref="textareaRef"
           v-model="draft"
-          :autosize="{ minRows: 1, maxRows: 4 }"
-          placeholder="说点什么... (Enter 发送 / Shift+Enter 换行)"
           class="input-textarea"
+          rows="1"
+          placeholder="说点什么... (Enter 发送 / Shift+Enter 换行)"
           @keydown="onTextareaKeydown"
+          @input="autoResize"
         />
         <t-button
           theme="primary"
@@ -380,6 +396,41 @@ const visibleChat = computed(() => {
 
 .input-textarea {
   flex: 1;
+  /* native textarea 沉浸样式 —— 与浮层深色背景协调 */
+  min-height: 32px;
+  max-height: 96px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+  }
+  &:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+  &:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
 }
 
 /* 深色浮层背景下,t-button variant=text 默认 icon 颜色对比度差 ——
