@@ -435,29 +435,23 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       syncMyRoleFromMembers()
     })
 
-    sock.on(
-      ServerEvents.MEMBER_LEAVE,
-      (payload: { userId: string; reason?: string }) => {
-        members.value = members.value.filter((x) => x.userId !== payload.userId)
-        syncMyRoleFromMembers()
-      }
-    )
+    sock.on(ServerEvents.MEMBER_LEAVE, (payload: { userId: string; reason?: string }) => {
+      members.value = members.value.filter((x) => x.userId !== payload.userId)
+      syncMyRoleFromMembers()
+    })
 
     /* ---- 墓碑期内同 userId 续连 —— 不触发 leave/join 跳动 ---- */
-    sock.on(
-      ServerEvents.MEMBER_RECONNECT,
-      (payload: { userId: string; nickname?: string }) => {
-        // 仅刷新成员存在状态,不动 members(他没真离开过)。
-        // 实际的 UI 提示也可以选择不处理 —— 这就是续连的目的:静默恢复。
-        if (!members.value.some((x) => x.userId === payload.userId) && payload.nickname) {
-          members.value.push({
-            userId: payload.userId,
-            nickname: payload.nickname,
-            role: 'member'
-          })
-        }
+    sock.on(ServerEvents.MEMBER_RECONNECT, (payload: { userId: string; nickname?: string }) => {
+      // 仅刷新成员存在状态,不动 members(他没真离开过)。
+      // 实际的 UI 提示也可以选择不处理 —— 这就是续连的目的:静默恢复。
+      if (!members.value.some((x) => x.userId === payload.userId) && payload.nickname) {
+        members.value.push({
+          userId: payload.userId,
+          nickname: payload.nickname,
+          role: 'member'
+        })
       }
-    )
+    })
 
     sock.on(ServerEvents.MEMBER_KICKED, (payload: { byUser: { nickname: string } }) => {
       // 自己被踢
@@ -468,9 +462,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     /* ---- 同步信号 —— 同步算法的核心 ---- */
     sock.on(
       ServerEvents.SYNC,
-      (
-        payload: PlaybackSnapshot & { action?: string; operatorId?: string }
-      ) => {
+      (payload: PlaybackSnapshot & { action?: string; operatorId?: string }) => {
         /* seq 单调递增校验:旧/重复 SYNC 直接丢弃,防止乱序 */
         if (typeof payload.seq === 'number' && payload.seq <= localSeq.value) {
           return
@@ -953,10 +945,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    *  聊天
    * ============================================================ */
 
-  function sendChat(
-    type: 'text' | 'emoji' | 'sticker',
-    content: string
-  ): void {
+  function sendChat(type: 'text' | 'emoji' | 'sticker', content: string): void {
     if (!isInRoom.value) return
     if (!content) return
     socket?.emit(ClientEvents.CHAT_SEND, { type, content })
@@ -1051,9 +1040,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    * 设计原则:这是"初次状态同步"的通道,不是"周期性进度上报"。后续播放控制
    * 一律走 ctl:* 显式命令路径。
    */
-  async function syncRoomContextFromLocal(
-    options: { queueOnly?: boolean } = {}
-  ): Promise<void> {
+  async function syncRoomContextFromLocal(options: { queueOnly?: boolean } = {}): Promise<void> {
     if (!socket?.connected || !isInRoom.value || !canControl.value) return
 
     const ca = ControlAudioStore()
@@ -1087,7 +1074,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     })
   }
 
-  function replaceLocalPlaylistFromQueue(items: QueueItem[], fallbackCurrent?: SongRef | null): void {
+  function replaceLocalPlaylistFromQueue(
+    items: QueueItem[],
+    fallbackCurrent?: SongRef | null
+  ): void {
     if (!isInRoom.value) return
     const localUserStore = LocalUserDetailStore()
     const songs = items.map((item) => songRefToSongList(item.song))
@@ -1208,9 +1198,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     const ca = ControlAudioStore()
     // 1. 估算服务器"现在"
     const nowServer = Date.now() + clockOffset
-    const elapsed = snapshot.isPlaying
-      ? Math.max((nowServer - snapshot.anchorAt) / 1000, 0)
-      : 0
+    const elapsed = snapshot.isPlaying ? Math.max((nowServer - snapshot.anchorAt) / 1000, 0) : 0
     const targetPos = snapshot.anchorPos + elapsed
 
     // 2. 进度漂移 —— 大于阈值或 forceAlign 时硬 seek
@@ -1272,9 +1260,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     if (samples.length === 0) return
     samples.sort((a, b) => a - b)
     clockOffset = samples[Math.floor(samples.length / 2)]
-    console.debug(
-      `[lt] clock offset = ${clockOffset.toFixed(0)}ms (${samples.length} samples)`
-    )
+    console.debug(`[lt] clock offset = ${clockOffset.toFixed(0)}ms (${samples.length} samples)`)
   }
 
   /** 单次 ping —— 返回估算的时钟偏差，超时返回 null */
@@ -1345,10 +1331,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       /* 切歌期间 globalPlayStatus.songInfo 由 ensureRoomSongLoadedAndSynced 提前
        * 写入,但 audio.src 加载尚未完成 —— 此时 drift 校准毫无意义,容易误伤。 */
       const localSongmid = useGlobalPlayStatusStore().player.songInfo?.songmid
-      if (
-        localSongmid === undefined ||
-        String(localSongmid) !== String(current.song.songmid)
-      ) {
+      if (localSongmid === undefined || String(localSongmid) !== String(current.song.songmid)) {
         return
       }
 
