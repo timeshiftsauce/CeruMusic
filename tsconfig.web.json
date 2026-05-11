@@ -17,16 +17,14 @@
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
+    /* moduleResolution=bundler:让 ts 识别 package.json 的 exports 字段(同 Vite 解析风格),
+     * 支持像 'nsfwjs/core' / 'nsfwjs/models/mobilenet_v2' 这样的子路径 import,
+     * 用于按需只打入需要的子模块、避免全量打包(nsfwjs 默认入口会打入 33MB 模型)。 */
+    "moduleResolution": "bundler",
     "paths": {
-      "@renderer/*": [
-        "src/renderer/src/*"
-      ],
-      "@common/*":[
-        "src/common/*"
-      ],
-      "@types/*": [
-        "src/renderer/src/types/*"
-      ]
+      "@renderer/*": ["src/renderer/src/*"],
+      "@common/*": ["src/common/*"],
+      "@types/*": ["src/renderer/src/types/*"]
     }
   }
 }
