@@ -114,7 +114,10 @@ const handlePlay = async () => {
   }
   if (!Audio.value.url) {
     if (list.value.length > 0) {
-      await playSong(list.value[0])
+      const lastId = userInfo.value.lastPlaySongId
+      const target =
+        (lastId != null && list.value.find((s) => s.songmid === lastId)) || list.value[0]
+      await playSong(target)
     } else {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
     }
