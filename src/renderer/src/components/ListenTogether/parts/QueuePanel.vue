@@ -4,10 +4,15 @@
  *
  * 这里展示的是房间权威播放列表。房主/admin 可直接点歌切换；
  * 普通成员只能查看，或移除自己点过的歌。
+ *
+ * 使用 useVirtualList 虚拟滚动 —— 队列大(几百首)时只渲染可见行 + 缓冲,
+ * 避免一次性挂载几百个 DOM 节点影响主线程。
  */
+import { computed } from 'vue'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
-import { CloseIcon, MusicIcon } from 'tdesign-icons-vue-next'
+import { CloseIcon, MusicIcon, ChevronUpIcon, ChevronDownIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { useVirtualList } from '@vueuse/core'
 import type { QueueItem } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
@@ -46,6 +51,32 @@ function isCurrentItem(item: QueueItem): boolean {
 function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
+
+/**
+ * 上下移动一格 —— 用 patch API(只发 itemId+toIndex)而不是全量 reorderQueue,
+ * 大队列(7000+)能省 ~200KB 带宽。
+ *
+ * 不本地乐观更新 lt.queue —— 让 QUEUE_UPDATE 来权威同步,避免与 server 不一致。
+ */
+function moveItem(index: number, delta: -1 | 1): void {
+  if (!lt.canControl) return
+  const queue = lt.queue
+  const targetIndex = index + delta
+  if (targetIndex < 0 || targetIndex >= queue.length) return
+  lt.moveQueueItem(queue[index].itemId, targetIndex)
+}
+
+/**
+ * 虚拟滚动:itemHeight 58px(= 8px padding 上下 + 36px 封面 + 6px 行间隙)。
+ * overscan 5 行,滚动时减少白屏。
+ *
+ * lt.queue 是 ref,直接传给 useVirtualList(@vueuse/core 内部会响应)。
+ */
+const queueRef = computed(() => lt.queue)
+const { list: virtualList, containerProps, wrapperProps } = useVirtualList(queueRef, {
+  itemHeight: 58,
+  overscan: 5
+})
 </script>
 
 <template>
@@ -58,48 +89,83 @@ function fmtTime(ts: number): string {
       </p>
     </div>
 
-    <ul v-else class="items">
-      <li
-        v-for="(item, i) in lt.queue"
-        :key="item.itemId"
-        class="item"
-        :class="{ active: isCurrentItem(item), clickable: lt.canControl }"
-        @click="handlePlay(item)"
-      >
-        <div class="index">{{ i + 1 }}</div>
-        <div class="cover">
-          <img v-if="item.song.cover" :src="item.song.cover" alt="cover" />
-          <MusicIcon v-else size="20" />
-        </div>
-        <div class="info">
-          <div class="title" :title="item.song.name">
-            {{ item.song.name || '未知歌曲' }}
-          </div>
-          <div class="sub">
-            <span>{{ item.song.singer || '—' }}</span>
-            <span class="dot">·</span>
-            <span class="requester">由 {{ item.requesterName }} 添加</span>
-            <span class="dot">·</span>
-            <span>{{ fmtTime(item.addedAt) }}</span>
-          </div>
-        </div>
-        <t-button
-          v-if="canRemove(item)"
-          variant="text"
-          shape="circle"
-          size="small"
-          :title="lt.canControl ? '从共享列表移除' : '取消我的点歌'"
-          @click.stop="handleRemove(item)"
+    <div v-else v-bind="containerProps" class="virtual-scroll">
+      <div v-bind="wrapperProps">
+        <div
+          v-for="v in virtualList"
+          :key="v.data.itemId"
+          class="item"
+          :class="{ active: isCurrentItem(v.data), clickable: lt.canControl }"
+          :style="{ height: '58px' }"
+          @click="handlePlay(v.data)"
         >
-          <CloseIcon />
-        </t-button>
-      </li>
-    </ul>
+          <div class="index">{{ v.index + 1 }}</div>
+          <div class="cover">
+            <img v-if="v.data.song.cover" :src="v.data.song.cover" alt="cover" />
+            <MusicIcon v-else size="20" />
+          </div>
+          <div class="info">
+            <div class="title" :title="v.data.song.name">
+              {{ v.data.song.name || '未知歌曲' }}
+            </div>
+            <div class="sub">
+              <span>{{ v.data.song.singer || '—' }}</span>
+              <span class="dot">·</span>
+              <span class="requester">由 {{ v.data.requesterName }} 添加</span>
+              <span class="dot">·</span>
+              <span>{{ fmtTime(v.data.addedAt) }}</span>
+            </div>
+          </div>
+          <div class="actions">
+            <t-button
+              v-if="lt.canControl"
+              variant="text"
+              shape="circle"
+              size="small"
+              :disabled="v.index === 0"
+              title="上移"
+              @click.stop="moveItem(v.index, -1)"
+            >
+              <ChevronUpIcon />
+            </t-button>
+            <t-button
+              v-if="lt.canControl"
+              variant="text"
+              shape="circle"
+              size="small"
+              :disabled="v.index === lt.queue.length - 1"
+              title="下移"
+              @click.stop="moveItem(v.index, 1)"
+            >
+              <ChevronDownIcon />
+            </t-button>
+            <t-button
+              v-if="canRemove(v.data)"
+              variant="text"
+              shape="circle"
+              size="small"
+              :title="lt.canControl ? '从共享列表移除' : '取消我的点歌'"
+              @click.stop="handleRemove(v.data)"
+            >
+              <CloseIcon />
+            </t-button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .queue-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 虚拟滚动容器:占据剩余高度,内部 wrapper 由 useVirtualList 控制总高 */
+.virtual-scroll {
+  flex: 1;
   height: 100%;
   overflow-y: auto;
   /* 与 ChatPanel 一致的沉浸滚动条:8px 宽,半透明白 thumb,无 track */
@@ -136,12 +202,6 @@ function fmtTime(ts: number): string {
   }
 }
 
-.items {
-  list-style: none;
-  margin: 0;
-  padding: 8px 0;
-}
-
 .item {
   display: flex;
   align-items: center;
@@ -149,6 +209,7 @@ function fmtTime(ts: number): string {
   padding: 8px 12px;
   border-radius: 8px;
   transition: background 0.15s;
+  box-sizing: border-box;
 
   &:hover {
     background: rgba(255, 255, 255, 0.06);
@@ -233,12 +294,27 @@ function fmtTime(ts: number): string {
   }
 }
 
+/* 右侧 ↑ ↓ × 按钮组 */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 /* 删除按钮的 icon 在深色背景下用半透明白,hover 加深;disabled 时更淡 */
 .item :deep(.t-button) {
   color: rgba(255, 255, 255, 0.55);
   &:hover {
     color: rgba(255, 255, 255, 0.92);
     background-color: rgba(255, 255, 255, 0.12) !important;
+  }
+  &.t-is-disabled,
+  &[disabled] {
+    color: rgba(255, 255, 255, 0.18);
+    &:hover {
+      background-color: transparent !important;
+    }
   }
 }
 .item :deep(.t-icon) {

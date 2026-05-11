@@ -649,7 +649,16 @@ defineExpose({
 
             <div class="song-info">
               <div class="song-name">{{ item.data.name }}</div>
-              <div class="song-artist">{{ item.data.singer }}</div>
+              <div class="song-artist">
+                <span>{{ item.data.singer }}</span>
+                <span
+                  v-if="queueItemForSong(item.data)?.requesterName"
+                  class="song-requester"
+                  :title="`由 ${queueItemForSong(item.data)?.requesterName} 添加`"
+                >
+                  · 由 {{ queueItemForSong(item.data)?.requesterName }} 加
+                </span>
+              </div>
             </div>
             <div class="song-actions">
               <div class="song-duration">
@@ -1016,6 +1025,14 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 一起听:行二行末尾的"· 由 X 加"小标签 —— 与歌手同行,主题色弱化标记 */
+.playlist-song .song-requester {
+  color: var(--td-brand-color, #4080ff);
+  opacity: 0.78;
+  margin-left: 2px;
+  font-size: 12px;
 }
 
 .playlist-song .song-duration {
