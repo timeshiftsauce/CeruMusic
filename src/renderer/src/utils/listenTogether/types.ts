@@ -173,4 +173,6 @@ export interface RoomPreview {
 export interface ServerError {
   code: string
   message: string
+  /** 部分错误带结构化数据,如 KICK_COOLDOWN 的 { remaining: 秒数 } */
+  data?: Record<string, unknown>
 }
