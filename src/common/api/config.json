@@ -2,7 +2,8 @@
   "baseUrl": [
     {
       "name": "CeruMusic-Backend",
-      "url": "https://api.ceru.shiqianjiang.cn/api"
+      "url": "https://api.ceru.shiqianjiang.cn/api",
+      "developmentUrl": "http://localhost:8000/api"
     }
   ],
   "enableDev": true
