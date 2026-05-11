@@ -569,6 +569,14 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         return '权限不足'
       case ErrorCodes.NO_SONG:
         return '当前房间还没有歌曲,请先选歌'
+      case ErrorCodes.KICK_COOLDOWN: {
+        const remaining = Number(err.data?.remaining) || 0
+        if (remaining <= 0) return '你已被移出该房间,稍后再试'
+        const mm = Math.floor(remaining / 60)
+        const ss = remaining % 60
+        const hint = mm > 0 ? `${mm} 分 ${ss} 秒` : `${ss} 秒`
+        return `你已被移出该房间,${hint}后才能重新加入`
+      }
       default:
         return err.message || '操作失败'
     }

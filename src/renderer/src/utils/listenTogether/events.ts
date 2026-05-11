@@ -79,6 +79,8 @@ export const ErrorCodes = {
   INVALID_PAYLOAD: 'INVALID_PAYLOAD',
   /** 当前房间无歌可播 —— play/pause/seek/skip 等控制需要先有 song */
   NO_SONG: 'NO_SONG',
+  /** 被踢冷却中 —— 服务端 data.remaining 给剩余秒数 */
+  KICK_COOLDOWN: 'KICK_COOLDOWN',
   INTERNAL_ERROR: 'INTERNAL_ERROR'
 } as const
 
