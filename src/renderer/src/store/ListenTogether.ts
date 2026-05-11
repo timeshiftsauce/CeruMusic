@@ -19,11 +19,10 @@
 
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
-import { io as ioClient, type Socket } from 'socket.io-client'
+import { type Socket } from 'socket.io-client'
+import { SocketRequest } from '@renderer/utils/request'
 import { MessagePlugin } from 'tdesign-vue-next'
 
-import config from '@renderer/config'
-import GlobaConfig from '@common/api/config.json'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import {
@@ -62,27 +61,11 @@ import type { SongList } from '@renderer/types/audio'
 /* ---------------- 连接配置 ---------------- */
 
 /**
- * 后端基础 URL —— 与 utils/request.ts 的 dev 切换逻辑保持一致
+ * Logto resource indicator —— 必须与 token aud 一致,永远用生产 URL
  *
- * 切换规则：`NODE_ENV=development && config.json.enableDev=true` 时走本地后端，
- * 否则走生产。Socket.IO 和 REST 同步切换，避免"REST 走本地、socket 走生产"的不一致。
- *
- * 注意：Logto access token 的 aud 永远是生产 URL（CERU_API_RESOURCE），
- *       本地后端的 .env SOURCE_URL 也配的是生产 URL，所以同一个 token 两端都能用。
+ * Socket.IO 的连接 URL / dev-prod 切换都由 SocketRequest 内部根据
+ * common/api/config.json 的 baseUrl 配置自动决定,不需要再手动算。
  */
-const PROD_BASE = 'https://api.ceru.shiqianjiang.cn'
-const DEV_BASE = 'http://localhost:8000'
-const isDevBackend = process.env.NODE_ENV === 'development' && Boolean(GlobaConfig.enableDev)
-
-/**
- * Socket.IO 连接 URL —— 命名空间 `/lt` 挂在根，不带 /api 前缀
- *
- * 后端 setGlobalPrefix('api') 只影响 HTTP routes，WebSocket Gateway 的
- * namespace 直接挂 root，所以这里**没有 /api**。
- */
-const SOCKET_URL = isDevBackend ? DEV_BASE : PROD_BASE
-
-/** Logto resource indicator —— 必须与 token aud 一致，永远用生产 URL */
 const CERU_API_RESOURCE = 'https://api.ceru.shiqianjiang.cn/api'
 
 /**
@@ -273,92 +256,34 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /**
    * 建立 Socket 连接 —— 必须先调用此方法才能进/出房
    *
-   * 自动从 Logto 取 access token 用作鉴权；
-   * 内部带自动重连（默认 5 次，间隔指数退避）。
+   * 实际的鉴权 + 重试逻辑被抽到 `SocketRequest`(utils/request.ts):
+   *  - 复用 logto 链路取 access token
+   *  - dev/prod baseURL 自动切换
+   *  - 首次 AUTH_FAILED 自动刷新 token 重试一次
+   * 这里只负责注册业务事件 + 维护 connectionStatus 状态。
    */
+  const socketRequest = new SocketRequest('/lt', CERU_API_RESOURCE)
+
   async function connect(): Promise<void> {
     if (socket?.connected) return
     if (connectionStatus.value === 'connecting') return
 
     connectionStatus.value = 'connecting'
 
-    /* 取 access token —— 必须使用 ceru-backend 的 resource 才能拿到正确 audience */
-    const logto = config.instance
-    if (!logto) throw new Error('Logto 未初始化')
-    let token = await logto.getAccessToken(CERU_API_RESOURCE)
-    if (!token) throw new Error('未登录或 token 已失效')
-    /* 诊断日志:出 AUTH_FAILED 时能看到客户端取到的 token 长度/前缀,与后端日志对照 */
-    console.debug(`[lt] socket auth token len=${token.length} prefix=${token.slice(0, 20)}...`)
+    /* 顺手同步 myUserId —— 后续 SYNC handler 用它区分 self/other 来源 */
     const authStore = useAuthStore()
     if (!authStore.user) {
       await authStore.updateUserInfo()
     }
     myUserId.value = authStore.user?.sub || myUserId.value
 
-    const tryConnect = (authToken: string): Promise<void> => {
-      return new Promise<void>((resolve, reject) => {
-        socket = ioClient(`${SOCKET_URL}/lt`, {
-          transports: ['websocket'],
-          auth: { token: authToken },
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 800,
-          reconnectionDelayMax: 5000
-        })
-        bindSocketEvents(socket)
-        const onConnect = () => {
-          cleanup()
-          connectionStatus.value = 'connected'
-          resolve()
-        }
-        const onError = (err: Error) => {
-          cleanup()
-          reject(err)
-        }
-        const cleanup = () => {
-          socket?.off('connect', onConnect)
-          socket?.off('connect_error', onError)
-        }
-        socket?.once('connect', onConnect)
-        socket?.once('connect_error', onError)
-      })
-    }
-
     try {
-      await tryConnect(token)
+      socket = await socketRequest.connect()
+      bindSocketEvents(socket)
+      connectionStatus.value = 'connected'
     } catch (err) {
-      const msg = (err as Error)?.message || ''
-      const looksLikeAuth =
-        msg.toLowerCase().includes('auth') || msg.includes('token') || msg.includes('AUTH_FAILED')
-      if (!looksLikeAuth) {
-        connectionStatus.value = 'disconnected'
-        throw err
-      }
-      /* 强制刷新 logto 缓存的 access token。多重保险:
-       *  1. clearAccessToken() —— 标准方式,但部分 logto-vue 版本可能没有此 API
-       *  2. fetchUserInfo() —— 调用 userinfo endpoint 会让 sdk 主动 refresh access token
-       *  3. 短暂等待让 sdk 内部 store 完成 refresh + 让 server JWKS 缓存稳定
-       * 完成后用新 token 重连一次。 */
-      console.warn('[lt] socket 首次鉴权失败,清缓存 token 重试:', msg)
-      try {
-        ;(logto as { clearAccessToken?: () => void }).clearAccessToken?.()
-      } catch {}
-      try {
-        await (logto as { fetchUserInfo?: () => Promise<unknown> }).fetchUserInfo?.()
-      } catch {}
-      await new Promise((r) => setTimeout(r, 500))
-      token = await logto.getAccessToken(CERU_API_RESOURCE)
-      if (!token) {
-        connectionStatus.value = 'disconnected'
-        throw new Error('刷新 token 失败,请重新登录')
-      }
-      console.debug(`[lt] socket 重试 token len=${token.length} prefix=${token.slice(0, 20)}...`)
-      try {
-        socket?.removeAllListeners()
-        socket?.disconnect()
-        socket = null
-      } catch {}
-      await tryConnect(token)
+      connectionStatus.value = 'disconnected'
+      throw err
     }
   }
 
