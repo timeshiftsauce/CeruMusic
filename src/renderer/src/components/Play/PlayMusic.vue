@@ -681,6 +681,16 @@ watch(showListenTogether, (visible) => {
   }
 })
 
+/* showFullPlay 单向镜像到 lt store —— LtChatToast 等挂在 root 的组件靠它判断
+ * 走弹幕还是 toast。immediate 同步初始值,避免冷启动期间状态空窗。 */
+watch(
+  showFullPlay,
+  (v) => {
+    listenTogetherStore.setFullPlayVisible(v)
+  },
+  { immediate: true }
+)
+
 /**
  * 一起听权限锁 —— 在房间但无控制权时为 true
  *

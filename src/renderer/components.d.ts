@@ -38,6 +38,7 @@ declare module 'vue' {
     ListenTogetherEntryDialog: typeof import('./src/components/ListenTogether/ListenTogetherEntryDialog.vue')['default']
     ListenTogetherOverlay: typeof import('./src/components/Play/ListenTogetherOverlay.vue')['default']
     LocalTagEditor: typeof import('./src/components/Music/LocalTagEditor.vue')['default']
+    LtChatToast: typeof import('./src/components/ListenTogether/LtChatToast.vue')['default']
     LtDanmakuLayer: typeof import('./src/components/ListenTogether/LtDanmakuLayer.vue')['default']
     LyricAdapter: typeof import('./src/components/Play/Lyric/LyricAdapter.vue')['default']
     LyricFontSettings: typeof import('./src/components/Settings/LyricFontSettings.vue')['default']

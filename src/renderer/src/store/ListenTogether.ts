@@ -119,6 +119,18 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    */
   const overlayVisible = ref(false)
 
+  /**
+   * 全屏播放器是否展开 —— 由 PlayMusic.vue 单向同步进来
+   *
+   * 设计:LtChatToast/LtDanmakuLayer 等组件需要根据 FullPlay 状态决定渲染方式
+   * (全屏开 → 弹幕飘过;关 → toast 提示)。FullPlay 状态原本是 PlayMusic.vue 的
+   * 本地 ref,这里加一个全局镜像,任何挂在 root 的组件都能感知,无需 props 透传。
+   */
+  const fullPlayVisible = ref(false)
+  function setFullPlayVisible(v: boolean): void {
+    fullPlayVisible.value = v
+  }
+
   /** 当前播放快照 —— 由服务器广播的 sync 决定 */
   const current = reactive<PlaybackSnapshot>({
     song: null,
@@ -1445,6 +1457,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     current,
     isReconnecting,
     overlayVisible,
+    fullPlayVisible,
 
     // getters
     isInRoom,
@@ -1455,6 +1468,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     openOverlay,
     closeOverlay,
     toggleOverlay,
+    setFullPlayVisible,
     syncRoomContextFromLocal,
 
     // 连接管理
