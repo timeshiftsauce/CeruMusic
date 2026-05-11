@@ -79,12 +79,26 @@ async function ensurePermission(): Promise<NotificationPermission> {
 /* ---------------- 通用底层 ---------------- */
 
 function activate(): void {
-  /* 即便 Notification 自身的 onclick 在某些平台不会自动聚焦窗口，
-   * 主动 window.focus() 在 Electron BrowserWindow 上能把窗口拉到前台。 */
-  try {
-    window.focus()
-  } catch {
-    /* ignore */
+  /* 让主进程把窗口拉前台 —— 单走 renderer 的 window.focus() 在以下场景失效:
+   *   - 窗口被托盘 hide(closeToTray): focus 无效要先 show
+   *   - 窗口最小化: focus 不会还原
+   *   - Windows 下窗口被其它应用盖住时 SetForegroundWindow 有限制
+   * 主进程的 BrowserWindow.show/restore/focus 系统级权重更高,几乎都能成功。
+   * preload 没暴露 api.show 时(老版本)回落到 renderer 自己 focus,起码非
+   * hidden 状态下能用。 */
+  const w = window as unknown as { api?: { show?: () => void } }
+  if (typeof w.api?.show === 'function') {
+    try {
+      w.api.show()
+    } catch {
+      /* ignore */
+    }
+  } else {
+    try {
+      window.focus()
+    } catch {
+      /* ignore */
+    }
   }
   config?.onActivate?.()
 }
@@ -149,11 +163,7 @@ function flushChatBuffer(): void {
  * @param roomName 当前房间名（用作通知标题）
  * @param ctx 上下文：是否被 @
  */
-export function notifyChat(
-  msg: ChatMsg,
-  roomName: string,
-  ctx: { mentionedSelf: boolean }
-): void {
+export function notifyChat(msg: ChatMsg, roomName: string, ctx: { mentionedSelf: boolean }): void {
   initListeners()
 
   /* 在前台 → 不打扰(无论一起听面板开没开) */
