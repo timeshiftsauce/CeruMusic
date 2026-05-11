@@ -102,13 +102,22 @@ function fmtTime(ts: number): string {
 .queue-panel {
   height: 100%;
   overflow-y: auto;
+  /* 与 ChatPanel 一致的沉浸滚动条:8px 宽,半透明白 thumb,无 track */
   scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
   }
 }
 
@@ -222,5 +231,18 @@ function fmtTime(ts: number): string {
   .requester {
     color: var(--lt-accent-soft, #82aaff);
   }
+}
+
+/* 删除按钮的 icon 在深色背景下用半透明白,hover 加深;disabled 时更淡 */
+.item :deep(.t-button) {
+  color: rgba(255, 255, 255, 0.55);
+  &:hover {
+    color: rgba(255, 255, 255, 0.92);
+    background-color: rgba(255, 255, 255, 0.12) !important;
+  }
+}
+.item :deep(.t-icon) {
+  color: inherit;
+  font-size: 16px;
 }
 </style>
