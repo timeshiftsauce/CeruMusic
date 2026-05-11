@@ -74,7 +74,7 @@ export default defineConfig({
            * 拆分目标:
            *  - vendor-vue        Vue + 周边运行时(高频共用,放在主入口附近)
            *  - vendor-tdesign    UI 组件库(体积大,跨多个页面用)
-               * - vendor-amll       Apple Music 歌词渲染器(只在 FullPlay 用,可懒)
+           * - vendor-amll       Apple Music 歌词渲染器(只在 FullPlay 用,可懒)
            *  - vendor-tfjs       TensorFlow.js (仅 nsfwCheck 路径用,已 dynamic import)
            *  - vendor-logto      Logto 鉴权
            *  - vendor-socketio   Socket.IO client (一起听用)
@@ -83,10 +83,16 @@ export default defineConfig({
           manualChunks(id: string) {
             if (!id.includes('node_modules')) return undefined
             // 匹配优先级从特定到一般
-            if (/[\\/]node_modules[\\/]@vue[\\/]/.test(id) || /[\\/]node_modules[\\/]vue[\\/]/.test(id)) {
+            if (
+              /[\\/]node_modules[\\/]@vue[\\/]/.test(id) ||
+              /[\\/]node_modules[\\/]vue[\\/]/.test(id)
+            ) {
               return 'vendor-vue'
             }
-            if (/[\\/]node_modules[\\/]pinia[\\/]/.test(id) || /[\\/]node_modules[\\/]vue-router[\\/]/.test(id)) {
+            if (
+              /[\\/]node_modules[\\/]pinia[\\/]/.test(id) ||
+              /[\\/]node_modules[\\/]vue-router[\\/]/.test(id)
+            ) {
               return 'vendor-vue'
             }
             if (/[\\/]node_modules[\\/]tdesign-vue-next[\\/]/.test(id)) {
@@ -95,13 +101,19 @@ export default defineConfig({
             if (/[\\/]node_modules[\\/]@applemusic-like-lyrics[\\/]/.test(id)) {
               return 'vendor-amll'
             }
-            if (/[\\/]node_modules[\\/]@tensorflow[\\/]/.test(id) || /[\\/]node_modules[\\/]nsfwjs[\\/]/.test(id)) {
+            if (
+              /[\\/]node_modules[\\/]@tensorflow[\\/]/.test(id) ||
+              /[\\/]node_modules[\\/]nsfwjs[\\/]/.test(id)
+            ) {
               return 'vendor-tfjs'
             }
             if (/[\\/]node_modules[\\/]@logto[\\/]/.test(id)) {
               return 'vendor-logto'
             }
-            if (/[\\/]node_modules[\\/]socket\.io-client[\\/]/.test(id) || /[\\/]node_modules[\\/]engine\.io-client[\\/]/.test(id)) {
+            if (
+              /[\\/]node_modules[\\/]socket\.io-client[\\/]/.test(id) ||
+              /[\\/]node_modules[\\/]engine\.io-client[\\/]/.test(id)
+            ) {
               return 'vendor-socketio'
             }
             /* 其它 node_modules 都打到 vendor-misc,避免每个小依赖单独成 chunk */

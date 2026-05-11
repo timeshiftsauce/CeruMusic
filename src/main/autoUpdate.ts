@@ -34,7 +34,17 @@ let isDifferentialDownloading = false
 let electronUpdaterInitialized = false
 
 const UPDATE_SERVER = 'https://update.cerumusic.top'
-const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${app.getVersion()}`
+
+// 把 Node 的 process.arch 收敛到服务器认识的三种取值。
+// 我们目前只发 x64/ia32/arm64 三种安装包,其它架构当 x64 兜底。
+function normalizeArchForServer(a: string): 'x64' | 'ia32' | 'arm64' {
+  if (a === 'arm64') return 'arm64'
+  if (a === 'ia32' || a === 'x32') return 'ia32'
+  return 'x64'
+}
+const CLIENT_ARCH = normalizeArchForServer(process.arch)
+
+const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${CLIENT_ARCH}/${app.getVersion()}`
 
 function ymlNameForPlatform(): string {
   if (process.platform === 'darwin') return 'latest-mac.yml'
@@ -273,7 +283,11 @@ async function fetchHazelUpdateInfo(): Promise<UpdateInfo | null> {
   try {
     const res = await fetchWithDohFallback(UPDATE_API_URL, {
       method: 'GET',
-      headers: { Accept: 'application/json', 'User-Agent': 'CeruMusic-AutoUpdater' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'CeruMusic-AutoUpdater',
+        'X-Arch': CLIENT_ARCH
+      },
       timeoutMs: 10000
     })
     if (res.status === 204) return null
@@ -333,10 +347,20 @@ function isNewerVersion(remoteVersion: string, currentVersion: string): boolean 
 }
 
 function resolveDownloadUrlForCurrentArch(url: string): string {
-  if (process.platform !== 'darwin' || !url) return url
-  const want = process.arch === 'arm64' ? 'arm64' : 'x64'
-  const other = want === 'arm64' ? 'x64' : 'arm64'
-  return url.replace(new RegExp(`-${other}(\\.[a-z0-9]+)(\\?.*)?$`, 'i'), `-${want}$1$2`)
+  if (!url) return url
+  const want = CLIENT_ARCH
+  // 防御性纠正:即使服务端配错或 CDN 拿到旧 yml,客户端也能把 URL 改回当前架构。
+  if (process.platform === 'darwin') {
+    const other = want === 'arm64' ? 'x64' : 'arm64'
+    return url.replace(new RegExp(`-${other}(\\.(?:dmg|zip))(\\?.*)?$`, 'i'), `-${want}$1$2`)
+  }
+  if (process.platform === 'win32') {
+    return url.replace(
+      /-win-(x64|ia32|arm64)-setup\.exe(\?.*)?$/i,
+      (_m, _arch, qs) => `-win-${want}-setup.exe${qs || ''}`
+    )
+  }
+  return url
 }
 
 // ============================================================
@@ -349,6 +373,11 @@ function initElectronUpdater() {
   electronAutoUpdater.autoDownload = false
   electronAutoUpdater.autoInstallOnAppQuit = false
   electronAutoUpdater.disableWebInstaller = true
+  // X-Arch 让服务器知道当前客户端真实 arch,从而:
+  // - latest.yml/latest-mac.yml 顶层 path/sha512 指向正确架构的安装包
+  // - blockmap / 安装包请求也带上,服务端日志可观测
+  // electron-updater 会把 requestHeaders 透传到 yml、blockmap、installer 三种请求。
+  electronAutoUpdater.requestHeaders = { 'X-Arch': CLIENT_ARCH }
 
   electronAutoUpdater.on('download-progress', (p) => {
     downloadProgress = {

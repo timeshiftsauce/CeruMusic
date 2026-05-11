@@ -23,6 +23,8 @@ function renderSystem(msg: ChatMsg): string {
   switch (msg.content) {
     case 'member-join':
       return `${m.user || '某人'} 加入了房间`
+    case 'member-leave':
+      return `${m.user || '某人'} 离开了房间`
     case 'queue-request':
       return `${m.user || '某人'} 申请点歌《${m.song || '?'}》`
     case 'queue-approved':
@@ -33,8 +35,18 @@ function renderSystem(msg: ChatMsg): string {
       return `${m.user || '某人'} 被提升为管理员`
     case 'role-demote':
       return `${m.user || '某人'} 不再是管理员`
+    case 'owner-transfer':
+      return `${m.user || '某人'} 成为了新房主`
     case 'kick':
-      return `${m.user || '某人'} 被移出了房间`
+      return `${m.user || '某人'} 被 ${m.admin || '管理员'} 移出了房间`
+    case 'song-change':
+      return `${m.admin || '管理员'} 切歌到《${m.song || '?'}》`
+    case 'song-pick':
+      return `${m.admin || '管理员'} 选播《${m.song || '?'}》`
+    case 'song-skip':
+      return `${m.admin || '管理员'} 跳到下一首《${m.song || '?'}》`
+    case 'song-prev':
+      return `${m.admin || '管理员'} 切回上一首《${m.song || '?'}》`
     default:
       return msg.content
   }
