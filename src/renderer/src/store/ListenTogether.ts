@@ -327,14 +327,19 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       void runClockSyncBurst()
 
       /* 30s 墓碑期内续连:发 ROOM_RESUME 让服务端取消清理 + 推完整状态。
-       * 服务端若墓碑已过期或不匹配,会回退为正常 join 流程,客户端体验上等同重新进入。 */
+       * 服务端若墓碑已过期或不匹配,会回退为正常 join 流程,客户端体验上等同重新进入。
+       *
+       * 注意:isReconnecting 保持 true 直到 ROOM_STATE 回来 —— 期间 emitGuard 会
+       * 拦截用户主动 emit,避免 server data.roomCode 还没设时发出去触发误报错。 */
       if (meta.value && socket) {
         socket.emit(ClientEvents.ROOM_RESUME, {
           code: meta.value.code,
           lastSeq: localSeq.value
         })
+      } else {
+        /* 没在房间内,无需等 RESUME,直接结束重连状态 */
+        isReconnecting.value = false
       }
-      isReconnecting.value = false
     })
 
     /* ---- 业务错误 ---- */
@@ -354,6 +359,9 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       Object.assign(current, state.current)
       /* localSeq 初始化:重连/续连时也以服务端权威为准,避免应用旧 SYNC */
       localSeq.value = state.current.seq || 0
+      /* ROOM_STATE 标志着 server 端 socket.data.roomCode 已经设好(handleJoin/Resume
+       * 在 emit ROOM_STATE 之前设的)—— 此时清掉 isReconnecting,放开 emit gate。 */
+      isReconnecting.value = false
 
       /* 初次同步用 ROOM_STATE.serverTs 立即估算时钟偏差,避免 clockOffset 仍为 0 时
        * applySnapshot 用本地时间推算 elapsed 产生几秒级误差(实测过 7-8s 差异都来源于此)。
@@ -1289,6 +1297,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function emitGuard(): boolean {
     if (!socket?.connected) return false
     if (!isInRoom.value) return false
+    /* reconnect 过渡期:client 已 connect 但 server 端 ROOM_RESUME/JOIN 还没把
+     * data.roomCode 设上,如果此时让用户主动 emit 会触发 server 误报 PERMISSION_DENIED。
+     * 等 ROOM_STATE 回来(isReconnecting=false)再放行。 */
+    if (isReconnecting.value) return false
     if (!canControl.value) {
       MessagePlugin.warning('当前没有播放控制权')
       return false
