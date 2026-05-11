@@ -626,6 +626,10 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         return '权限不足'
       case ErrorCodes.NO_SONG:
         return '当前房间还没有歌曲,请先选歌'
+      case ErrorCodes.SONG_ALREADY_QUEUED:
+        return '这首歌已经在播放队列里了'
+      case ErrorCodes.SONG_ALREADY_REQUESTED:
+        return '你已经申请过这首歌,等待管理员审批'
       case ErrorCodes.KICK_COOLDOWN: {
         const remaining = Number(err.data?.remaining) || 0
         if (remaining <= 0) return '你已被移出该房间,稍后再试'

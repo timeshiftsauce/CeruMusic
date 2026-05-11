@@ -49,7 +49,7 @@ const playLabel = computed(() => {
   return '立即播放'
 })
 const playHint = computed(() => {
-  if (lt.isInRoom && !lt.canControl) return '点歌需要管理员审批,你将看到一条提示'
+  if (lt.isInRoom && !lt.canControl) return '点歌需要管理员审批'
   if (lt.isInRoom) return '会直接切到这首歌,房间内所有人同步播放'
   return '加入当前播放列表并开始播放'
 })
@@ -132,7 +132,7 @@ async function playNow(): Promise<void> {
    * 这里 NotifyPlugin 右下角是补一份 dialog 风格的明确反馈。 */
   const songLabel = `《${song.name || '未知歌曲'}》`
   if (lt.isInRoom && !lt.canControl) {
-    notify('success', '已申请点歌', `${songLabel} 已提交,等待管理员审核`)
+    // notify('success', '已申请点歌', `${songLabel} 已提交,等待管理员审核`)
   } else if (lt.isInRoom) {
     notify('success', '已切歌', `房间内所有成员将同步播放 ${songLabel}`)
   } else {

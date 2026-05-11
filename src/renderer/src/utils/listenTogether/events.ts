@@ -81,6 +81,10 @@ export const ErrorCodes = {
   NO_SONG: 'NO_SONG',
   /** 被踢冷却中 —— 服务端 data.remaining 给剩余秒数 */
   KICK_COOLDOWN: 'KICK_COOLDOWN',
+  /** 这首歌已经在播放队列里 —— 点歌/直接入队时去重拦截 */
+  SONG_ALREADY_QUEUED: 'SONG_ALREADY_QUEUED',
+  /** 同一用户已申请过这首歌 —— pending 列表里去重拦截 */
+  SONG_ALREADY_REQUESTED: 'SONG_ALREADY_REQUESTED',
   INTERNAL_ERROR: 'INTERNAL_ERROR'
 } as const
 
