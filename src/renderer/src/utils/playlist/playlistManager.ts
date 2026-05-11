@@ -19,9 +19,31 @@ async function tryRequestSongAsMember(song: SongList): Promise<boolean> {
     const { useListenTogetherStore } = await import('@renderer/store')
     const lt = useListenTogetherStore()
     if (!lt.isInRoom || lt.canControl) return false
+
+    /* 本地预检 —— 服务端虽然也会拦截,但乐观 success 会先弹一条紧接着错误警告
+     * 两条消息互相打架,UX 很怪。在 emit 之前先按本地 state 拦一下,常见场景
+     * (双击点歌按钮 / 同曲重复点)能立刻提示而不用等服务端往返。 */
+    const songmid = String(song.songmid)
+    const source = song.source
+    const queueDup = lt.queue.some((q) => q.song?.songmid === songmid && q.song?.source === source)
+    if (queueDup) {
+      await MessagePlugin.warning(`《${song.name || '?'}》已在播放队列里了`)
+      return true /* 已"处理" → 阻止调用方继续走默认播放路径 */
+    }
+    const myUserId = lt.myUserId
+    const pendingDup = lt.pending.some((p) => {
+      if (p.song?.songmid !== songmid || p.song?.source !== source) return false
+      const reqs = Array.isArray(p.requesters) ? p.requesters : [{ userId: p.requesterId }]
+      return reqs.some((r) => r.userId === myUserId)
+    })
+    if (pendingDup) {
+      await MessagePlugin.warning(`你已经申请过《${song.name || '?'}》,等待管理员审批`)
+      return true
+    }
+
     lt.requestSong({
-      songmid: String(song.songmid),
-      source: song.source,
+      songmid,
+      source,
       name: song.name,
       singer: song.singer,
       cover: (song as any).img,
@@ -51,9 +73,17 @@ async function tryAddToQueueAsHost(song: SongList): Promise<boolean> {
     const { useListenTogetherStore } = await import('@renderer/store')
     const lt = useListenTogetherStore()
     if (!lt.isInRoom || !lt.canControl) return false
+    /* 本地预检 —— 同曲已在 queue 立刻提示,避免发到服务端再吃 SONG_ALREADY_QUEUED */
+    const songmid = String(song.songmid)
+    const source = song.source
+    const queueDup = lt.queue.some((q) => q.song?.songmid === songmid && q.song?.source === source)
+    if (queueDup) {
+      await MessagePlugin.warning(`《${song.name || '?'}》已在播放队列里了`)
+      return true
+    }
     lt.addToQueue({
-      songmid: String(song.songmid),
-      source: song.source,
+      songmid,
+      source,
       name: song.name,
       singer: song.singer,
       cover: (song as any).img,
