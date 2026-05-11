@@ -485,6 +485,19 @@ const endDragSort = () => {
   // 停止自动滚动
   stopAutoScroll()
 
+  /* 一起听房间内:本地拖拽期间已经乐观更新了 list,但 server queue 还是原顺序,
+   * 下一次 QUEUE_UPDATE 会把 list 拉回来。这里在松手时把最终位置 patch 给
+   * server,触发权威 reorder + 全房间广播。
+   *
+   * member 没控制权时不发,server 会拒;同时下一次 QUEUE_UPDATE 把本地拖拽
+   * 痕迹覆盖回服务端顺序(member 看到的视觉效果是"拖了一下又弹回",可接受)。 */
+  if (lt.isInRoom && lt.canControl && draggedSong.value && draggedIndex.value >= 0) {
+    const item = queueItemForSong(draggedSong.value as SongList)
+    if (item) {
+      lt.moveQueueItem(item.itemId, draggedIndex.value)
+    }
+  }
+
   // 由于实时预览已经更新了列表，这里只需要确保保存
   // list.value 的变化会被 watch 监听器自动保存到 localStorage
 
