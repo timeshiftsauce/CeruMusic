@@ -339,7 +339,10 @@ const handlePointerStart = (
 }
 
 const startDragSort = (index: number, song: any) => {
-  if (lt.isInRoom) return
+  /* 房间内只有有控制权(host/admin)才允许拖拽 —— member 无权改 queue 顺序,
+   * 早期为了避免数据冲突直接禁止了所有人,现在 endDragSort 已经把最终位置
+   * 通过 moveQueueItem patch 同步给 server,host/admin 可以正常用。 */
+  if (lt.isInRoom && !lt.canControl) return
 
   // 隐藏悬停提示
   hideTip()
