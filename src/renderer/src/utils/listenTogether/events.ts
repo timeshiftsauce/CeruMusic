@@ -33,6 +33,8 @@ export const ClientEvents = {
   QUEUE_REJECT: 'queue:reject',
   QUEUE_REMOVE: 'queue:remove',
   QUEUE_REORDER: 'queue:reorder',
+  /** admin+ 单项移动 patch —— 大队列(7000+)省带宽,只传 { itemId, toIndex } */
+  QUEUE_MOVE: 'queue:move',
 
   /* 角色 / 成员 */
   ROLE_PROMOTE: 'role:promote',
