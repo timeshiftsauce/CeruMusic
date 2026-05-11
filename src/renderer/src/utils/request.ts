@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
 import LogtoClient, { LogtoClientError } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { io as ioClient, type Socket } from 'socket.io-client'
 import GlobaConfig from '@common/api/config.json'
 
 // 常量定义
@@ -194,4 +195,168 @@ export const unwrap = async <T>(promise: Promise<any>): Promise<T> => {
     return (res as any).data
   }
   return res
+}
+
+/* ============================================================
+ *  SocketRequest —— Socket.IO 鉴权连接封装
+ * ============================================================
+ *
+ * 与 Request 共享 logto token 获取链路 + dev/prod URL 切换 + AUTH_FAILED
+ * 自动 refresh-token 重试。业务层只需 new SocketRequest('/lt', resource)
+ * 然后 await connect() 拿到已鉴权的 socket。
+ */
+
+export interface SocketConnectOptions {
+  transports?: string[]
+  reconnection?: boolean
+  reconnectionAttempts?: number
+  reconnectionDelay?: number
+  reconnectionDelayMax?: number
+  /** 额外注入的 query 参数(例如 nickname) */
+  query?: Record<string, string>
+}
+
+export class SocketRequest {
+  /** namespace 例如 '/lt'。空串表示根命名空间。 */
+  private namespace: string
+  /** logto resource indicator —— 与 Request 一致,决定 token aud */
+  private resource: string
+  private socket: Socket | null = null
+
+  /**
+   * @param namespace Socket.IO namespace,需以 '/' 开头(如 '/lt')。空串则连根。
+   * @param resource Logto resource indicator(同 Request 的 resource),决定 token aud
+   *                 与服务端 baseURL。
+   */
+  constructor(namespace: string, resource: string) {
+    this.namespace = namespace.startsWith('/') ? namespace : `/${namespace}`
+    if (this.namespace === '/') this.namespace = ''
+    this.resource = resource
+  }
+
+  /** 当前 socket 实例,未连接则 null */
+  get instance(): Socket | null {
+    return this.socket
+  }
+
+  /** 取 baseURL —— dev 模式按 config.json 切到对应 developmentUrl
+   *
+   * 数据驱动:在 `common/api/config.json` 的 baseUrl 列表里查 url 等于
+   * this.resource 的条目,启用 dev 时用 developmentUrl,否则用 url。
+   * 用 URL.origin 提取 socket 的 root(`https://x.com/api` → `https://x.com`)。
+   */
+  private resolveBaseURL(): string {
+    if (!this.resource) return DEFAULT_AUTH_URL
+    const isDev = process.env.NODE_ENV === 'development' && Boolean(GlobaConfig.enableDev)
+    const list = (GlobaConfig as { baseUrl?: Array<{ url: string; developmentUrl?: string }> })
+      .baseUrl
+    const entry = list?.find((e) => e.url === this.resource)
+    const target = isDev && entry?.developmentUrl ? entry.developmentUrl : this.resource
+    try {
+      return new URL(target).origin
+    } catch {
+      return DEFAULT_AUTH_URL
+    }
+  }
+
+  private async getAccessToken(): Promise<string> {
+    if (!logtoClientInstance) {
+      throw new Error(ERROR_MESSAGES.NOT_INITIALIZED)
+    }
+    const token = await logtoClientInstance.getAccessToken(this.resource)
+    if (!token) {
+      throw new Error('未登录或 token 已失效')
+    }
+    return token
+  }
+
+  /** 强制刷新 token —— AUTH_FAILED 重试前调用 */
+  private async refreshTokenForcefully(): Promise<void> {
+    const client = logtoClientInstance as unknown as {
+      clearAccessToken?: () => void
+      fetchUserInfo?: () => Promise<unknown>
+    }
+    try {
+      client.clearAccessToken?.()
+    } catch {}
+    try {
+      await client.fetchUserInfo?.()
+    } catch {}
+    /* 等一点点让 sdk 完成 refresh + server JWKS 缓存稳定 */
+    await new Promise((r) => setTimeout(r, 500))
+  }
+
+  /** 用给定 token 建立一次 socket 连接,resolve on 'connect',reject on 'connect_error' */
+  private doConnect(token: string, options: SocketConnectOptions = {}): Promise<Socket> {
+    const baseURL = this.resolveBaseURL()
+    return new Promise<Socket>((resolve, reject) => {
+      const sock = ioClient(`${baseURL}${this.namespace}`, {
+        transports: options.transports || ['websocket'],
+        auth: { token },
+        reconnection: options.reconnection ?? true,
+        reconnectionAttempts: options.reconnectionAttempts ?? 5,
+        reconnectionDelay: options.reconnectionDelay ?? 800,
+        reconnectionDelayMax: options.reconnectionDelayMax ?? 5000,
+        query: options.query
+      })
+      const cleanup = () => {
+        sock.off('connect', onConnect)
+        sock.off('connect_error', onError)
+      }
+      const onConnect = () => {
+        cleanup()
+        this.socket = sock
+        resolve(sock)
+      }
+      const onError = (err: Error) => {
+        cleanup()
+        try {
+          sock.removeAllListeners()
+          sock.disconnect()
+        } catch {}
+        reject(err)
+      }
+      sock.once('connect', onConnect)
+      sock.once('connect_error', onError)
+    })
+  }
+
+  /**
+   * 建立连接 —— 自动取 token,失败时刷新 token 重试一次
+   *
+   * 解决:
+   *  - 首次连接 token 已 expired/被吊销(HTTP 自动 refresh,socket 拿旧 token 失败)
+   *  - 服务端 JWKS cold cache 抖动导致首次 AUTH_FAILED
+   *
+   * 返回值是已 'connect' 过的 socket。业务层立即可以 emit/on 事件。
+   */
+  async connect(options: SocketConnectOptions = {}): Promise<Socket> {
+    /* 已经连了同一个 socket 就复用 —— 调用方 idempotent */
+    if (this.socket?.connected) return this.socket
+
+    let token = await this.getAccessToken()
+    try {
+      return await this.doConnect(token, options)
+    } catch (err) {
+      const msg = (err as Error)?.message || ''
+      const looksLikeAuth =
+        msg.toLowerCase().includes('auth') || msg.includes('token') || msg.includes('AUTH_FAILED')
+      if (!looksLikeAuth) throw err
+
+      console.warn('[SocketRequest] 首次鉴权失败,刷新 token 重试:', msg)
+      await this.refreshTokenForcefully()
+      token = await this.getAccessToken()
+      return await this.doConnect(token, options)
+    }
+  }
+
+  /** 主动断开 + 清理监听 */
+  disconnect(): void {
+    if (!this.socket) return
+    try {
+      this.socket.removeAllListeners()
+      this.socket.disconnect()
+    } catch {}
+    this.socket = null
+  }
 }
