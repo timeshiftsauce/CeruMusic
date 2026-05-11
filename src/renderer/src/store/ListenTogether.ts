@@ -882,6 +882,33 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     socket?.emit(ClientEvents.QUEUE_REMOVE, { itemId })
   }
 
+  /**
+   * admin+ 重排队列 —— 传入新的 itemId 顺序数组
+   *
+   * 服务端会严格校验数组与当前 queue 的完整匹配,不匹配返回 INVALID_PAYLOAD,
+   * 客户端通过下一次 QUEUE_UPDATE 自然回到服务端权威顺序。
+   *
+   * 仅用于"全量重排"场景(如拖拽 drag-and-drop)。"上下移动一格"用更轻量的
+   * moveQueueItem 节省带宽,大队列(7000+)差距很明显。
+   */
+  function reorderQueue(itemIds: string[]): void {
+    if (!canControl.value) return
+    if (!Array.isArray(itemIds) || itemIds.length === 0) return
+    socket?.emit(ClientEvents.QUEUE_REORDER, { itemIds })
+  }
+
+  /**
+   * admin+ 单项移动 patch —— { itemId, toIndex }
+   *
+   * 比 reorderQueue 的全量数组省带宽:7000 项 list 全量 ~200KB,patch ~50B。
+   * 服务端验证 itemId 存在 + toIndex 合法,通过则广播 QUEUE_UPDATE。
+   */
+  function moveQueueItem(itemId: string, toIndex: number): void {
+    if (!canControl.value) return
+    if (typeof itemId !== 'string' || typeof toIndex !== 'number') return
+    socket?.emit(ClientEvents.QUEUE_MOVE, { itemId, toIndex })
+  }
+
   /* ============================================================
    *  角色 / 成员管理（owner 独有）
    * ============================================================ */
@@ -1400,6 +1427,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     approveSong,
     rejectSong,
     removeFromQueue,
+    reorderQueue,
+    moveQueueItem,
 
     // 角色 / 成员
     promoteAdmin,
