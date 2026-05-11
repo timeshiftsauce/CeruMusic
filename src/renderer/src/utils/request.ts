@@ -120,9 +120,16 @@ export class Request {
           Authorization: `Bearer ${token}`
         }
       }
+      /* dev 切换:从 config.json 的 baseUrl 列表里查 url 等于 this.resource 的条目,
+       * 启用 dev 时用 developmentUrl 覆盖 baseURL。与 SocketRequest.resolveBaseURL 同款数据驱动。 */
       const isDev = process.env.NODE_ENV === 'development' && Boolean(GlobaConfig.enableDev)
-      if (isDev && this.resource === 'https://api.ceru.shiqianjiang.cn/api') {
-        finalConfig.baseURL = 'http://localhost:8000/api'
+      if (isDev) {
+        const list = (GlobaConfig as { baseUrl?: Array<{ url: string; developmentUrl?: string }> })
+          .baseUrl
+        const entry = list?.find((e) => e.url === this.resource)
+        if (entry?.developmentUrl) {
+          finalConfig.baseURL = entry.developmentUrl
+        }
       }
       // 设置默认 Content-Type (非 FormData 时)
       if (
