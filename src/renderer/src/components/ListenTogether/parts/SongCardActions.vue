@@ -2,17 +2,23 @@
 /**
  * 单曲卡片二级动作面板
  *
- * 用户在聊天里点了单曲卡片后弹这个 dialog,提供两条路径:
- *  - 直接播放:走 musicEmitter('addToPlaylistAndPlay'),playlistManager 内部
- *    会按 LT 角色分流(member 自动转 requestSong / admin 自动转 addToQueue /
- *    不在房间则正常播放),所以这里不需要重复角色判断
- *  - 加入歌单:列出本地歌单让用户挑一个,调 songList API 加进去
+ * 自定义深色玻璃拟态 modal —— 在 ChatPanel(深色玻璃)/FullPlay(动态封面背景)
+ * 这种"已经是浮层中的浮层"的语境里,默认 t-dialog 的白底很格格不入。手写
+ * Teleport 到 body 的轻量 modal 更贴 LT 风格。
  *
- * 因为复用了 playlistManager 的角色分流,管理员/普通成员/非房间用户的差异
- * 完全交给底层处理,UI 层不感知 —— 体验上一致都是"播放"按钮。
+ * 按角色出按钮:
+ *  - 不在房间 / 房主 / admin → "立即播放"(默认主按钮) + "加入歌单"
+ *  - 房间成员 → "申请点歌" + "加入歌单"(用 emit('addToPlaylistAndPlay'),
+ *    playlistManager 内部会按角色分流到 lt.requestSong/addToQueue/普通播放,
+ *    所以这里只改 UI label,底下逻辑不变)
+ *
+ * 操作反馈:
+ *  - 所有动作完成 → NotifyPlugin 右下角卡片,按情景给文案
+ *  - 失败 → NotifyPlugin.warning,不静默
  */
-import { ref, onMounted, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { ref, computed, watch } from 'vue'
+import { NotifyPlugin } from 'tdesign-vue-next'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import type { ShareDetail } from '@renderer/api/share'
 
 const props = defineProps<{
@@ -22,6 +28,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
 }>()
+
+const lt = useListenTogetherStore()
 
 interface LocalPlaylist {
   hashId: string
@@ -33,8 +41,19 @@ interface LocalPlaylist {
 const playlists = ref<LocalPlaylist[]>([])
 const playlistsLoaded = ref(false)
 const showPicker = ref(false)
+const acting = ref(false)
 
-/* 第一次打开时拉一次本地歌单;再次打开如果用户新建了歌单,这里看不到也无伤大雅 */
+/** 当前角色下"播放" 按钮的标签和语义 */
+const playLabel = computed(() => {
+  if (lt.isInRoom && !lt.canControl) return '申请点歌'
+  return '立即播放'
+})
+const playHint = computed(() => {
+  if (lt.isInRoom && !lt.canControl) return '点歌需要管理员审批,你将看到一条提示'
+  if (lt.isInRoom) return '会直接切到这首歌,房间内所有人同步播放'
+  return '加入当前播放列表并开始播放'
+})
+
 watch(
   () => props.visible,
   async (v) => {
@@ -53,7 +72,10 @@ watch(
       }
       playlistsLoaded.value = true
     }
-    if (!v) showPicker.value = false
+    if (!v) {
+      showPicker.value = false
+      acting.value = false
+    }
   }
 )
 
@@ -64,8 +86,6 @@ function close(): void {
 function buildSongPayload(): any {
   if (!props.detail) return null
   const s = props.detail.song
-  /* 先 spread s 兜底,再用显式字段覆盖 —— playlistManager 的 LT 分流读
-   * source/songmid/etc 必须是字符串/标准形态,spread 之后再 normalize。 */
   return {
     ...s,
     songmid: s.songmid,
@@ -82,136 +102,216 @@ function buildSongPayload(): any {
   }
 }
 
-function playNow(): void {
+function notify(
+  level: 'success' | 'info' | 'warning' | 'error',
+  title: string,
+  content: string
+): void {
+  /* 右下角通知卡片 —— 与 LtChatToast 一致,避免位置散落 */
+  NotifyPlugin[level]({
+    title,
+    content,
+    duration: 3000,
+    placement: 'bottom-right',
+    closeBtn: true
+  })
+}
+
+async function playNow(): Promise<void> {
   const song = buildSongPayload()
   if (!song) return
   const emitter = (window as any).musicEmitter
   if (!emitter) {
-    MessagePlugin.error('播放器未就绪')
+    notify('error', '播放器未就绪', '请稍候重试')
     return
   }
+  acting.value = true
   emitter.emit('addToPlaylistAndPlay', song)
+
+  /* 反馈文案按角色定制 —— playlistManager 内部对 member 会先弹自己的 success,
+   * 这里 NotifyPlugin 右下角是补一份 dialog 风格的明确反馈。 */
+  const songLabel = `《${song.name || '未知歌曲'}》`
+  if (lt.isInRoom && !lt.canControl) {
+    notify('success', '已申请点歌', `${songLabel} 已提交,等待管理员审核`)
+  } else if (lt.isInRoom) {
+    notify('success', '已切歌', `房间内所有成员将同步播放 ${songLabel}`)
+  } else {
+    notify('success', '开始播放', songLabel)
+  }
   close()
 }
 
 async function addToList(pl: LocalPlaylist): Promise<void> {
   const song = buildSongPayload()
   if (!song) return
+  acting.value = true
   try {
     const res = await window.api?.songList?.addSongs(pl.hashId, [song])
     const ok =
       (res as any)?.success !== false && (res as any)?.code !== -1 && (res as any) !== false
     if (ok) {
-      MessagePlugin.success(`已加入歌单《${pl.name}》`)
+      notify('success', '已加入歌单', `《${song.name}》→ ${pl.name}`)
     } else {
-      MessagePlugin.warning((res as any)?.message || '加入失败')
+      notify('warning', '加入失败', (res as any)?.message || '请稍后再试')
     }
   } catch (e: any) {
-    MessagePlugin.error(e?.message || '加入歌单失败')
+    notify('error', '加入歌单失败', e?.message || '未知错误')
+  } finally {
+    acting.value = false
+    close()
   }
-  close()
 }
-
-onMounted(() => {
-  /* nothing extra —— watch(visible) 已处理懒加载 */
-})
-
-defineExpose({ playNow })
 </script>
 
 <template>
-  <t-dialog
-    :visible="visible"
-    :header="false"
-    :footer="false"
-    placement="center"
-    width="360"
-    :close-on-overlay-click="true"
-    @close="close"
-    @update:visible="(v: boolean) => emit('update:visible', v)"
-  >
-    <div v-if="detail" class="song-actions">
-      <!-- 顶部:封面 + 信息 -->
-      <div class="song-hero">
-        <img v-if="detail.song.img" class="song-hero-cover" :src="detail.song.img" alt="" />
-        <div v-else class="song-hero-cover song-hero-cover-fallback">♪</div>
-        <div class="song-hero-meta">
-          <div class="song-hero-title">{{ detail.song.name }}</div>
-          <div class="song-hero-singer">{{ detail.song.singer || '未知歌手' }}</div>
-          <div class="song-hero-source">来自 {{ detail.username }} 的分享</div>
-        </div>
-      </div>
-
-      <!-- 动作区 -->
-      <div v-if="!showPicker" class="song-actions-row">
-        <t-button theme="primary" block @click="playNow">直接播放</t-button>
-        <t-button theme="default" variant="outline" block @click="showPicker = true">
-          加入歌单
-        </t-button>
-      </div>
-
-      <!-- 歌单选择 -->
-      <div v-else class="song-picker">
-        <div class="song-picker-header">
-          <span>选择要加入的歌单</span>
-          <button class="song-picker-back" @click="showPicker = false">返回</button>
-        </div>
-        <div v-if="!playlistsLoaded" class="song-picker-empty">加载中...</div>
-        <div v-else-if="playlists.length === 0" class="song-picker-empty">
-          还没有任何歌单,去本地音乐页新建一个
-        </div>
-        <div v-else class="song-picker-list">
-          <button
-            v-for="pl in playlists"
-            :key="pl.hashId"
-            class="song-picker-item"
-            @click="addToList(pl)"
-          >
+  <Teleport to="body">
+    <Transition name="song-modal-fade">
+      <div v-if="visible" class="song-modal-mask" @click.self="close">
+        <div class="song-modal" @click.stop>
+          <!-- 顶部 hero -->
+          <div v-if="detail" class="song-hero">
             <img
-              v-if="pl.cover"
-              class="song-picker-cover"
-              :src="pl.cover"
+              v-if="detail.song.img"
+              class="song-hero-cover"
+              :src="detail.song.img"
               alt=""
               @error="($event.target as HTMLImageElement).style.display = 'none'"
             />
-            <div v-else class="song-picker-cover song-picker-cover-fallback">♬</div>
-            <div class="song-picker-meta">
-              <div class="song-picker-name">{{ pl.name }}</div>
-              <div v-if="pl.total" class="song-picker-count">{{ pl.total }} 首</div>
+            <div v-else class="song-hero-cover song-hero-cover-fallback">♪</div>
+            <div class="song-hero-meta">
+              <div class="song-hero-title">{{ detail.song.name }}</div>
+              <div class="song-hero-singer">{{ detail.song.singer || '未知歌手' }}</div>
+              <div class="song-hero-source">来自 {{ detail.username }} 的分享</div>
             </div>
-          </button>
+            <button class="song-modal-close" title="关闭" @click="close">✕</button>
+          </div>
+
+          <!-- 角色徽标 -->
+          <div v-if="lt.isInRoom" class="song-role-hint">
+            <span
+              class="role-badge"
+              :class="lt.canControl ? 'role-badge-admin' : 'role-badge-member'"
+            >
+              {{ lt.canControl ? '你是管理员' : '你是房间成员' }}
+            </span>
+          </div>
+
+          <!-- 动作区 -->
+          <div v-if="!showPicker" class="song-actions">
+            <button
+              class="song-action-btn song-action-primary"
+              :disabled="acting"
+              :title="playHint"
+              @click="playNow"
+            >
+              <span class="song-action-icon">▶</span>
+              <div class="song-action-body">
+                <div class="song-action-title">{{ playLabel }}</div>
+                <div class="song-action-sub">{{ playHint }}</div>
+              </div>
+            </button>
+
+            <button class="song-action-btn" :disabled="acting" @click="showPicker = true">
+              <span class="song-action-icon">＋</span>
+              <div class="song-action-body">
+                <div class="song-action-title">加入歌单</div>
+                <div class="song-action-sub">添加到你自己的某个歌单</div>
+              </div>
+            </button>
+          </div>
+
+          <!-- 歌单选择 -->
+          <div v-else class="song-picker">
+            <div class="song-picker-header">
+              <button class="song-picker-back" @click="showPicker = false">← 返回</button>
+              <span>选择要加入的歌单</span>
+              <span></span>
+            </div>
+            <div v-if="!playlistsLoaded" class="song-picker-empty">加载中...</div>
+            <div v-else-if="playlists.length === 0" class="song-picker-empty">
+              还没有任何歌单,去本地音乐页新建一个
+            </div>
+            <div v-else class="song-picker-list">
+              <button
+                v-for="pl in playlists"
+                :key="pl.hashId"
+                class="song-picker-item"
+                :disabled="acting"
+                @click="addToList(pl)"
+              >
+                <img
+                  v-if="pl.cover"
+                  class="song-picker-cover"
+                  :src="pl.cover"
+                  alt=""
+                  @error="($event.target as HTMLImageElement).style.display = 'none'"
+                />
+                <div v-else class="song-picker-cover song-picker-cover-fallback">♬</div>
+                <div class="song-picker-meta">
+                  <div class="song-picker-name">{{ pl.name }}</div>
+                  <div v-if="pl.total" class="song-picker-count">{{ pl.total }} 首</div>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </t-dialog>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped lang="scss">
-.song-actions {
+.song-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 3000;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
 
-.song-hero {
+.song-modal {
+  width: 100%;
+  max-width: 380px;
+  background: rgba(28, 30, 38, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: #fff;
+  overflow: hidden;
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+}
+
+/* ---- hero ---- */
+.song-hero {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding: 20px 20px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
 }
 
 .song-hero-cover {
   flex: 0 0 auto;
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
   object-fit: cover;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 .song-hero-cover-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  color: rgba(255, 255, 255, 0.65);
+  font-size: 36px;
+  color: rgba(255, 255, 255, 0.7);
   background: linear-gradient(135deg, #6691ff, #93b6ff);
 }
 
@@ -220,70 +320,216 @@ defineExpose({ playNow })
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
+  gap: 3px;
 }
 .song-hero-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .song-hero-singer {
   font-size: 13px;
-  color: var(--td-text-color-secondary);
+  color: rgba(255, 255, 255, 0.78);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .song-hero-source {
   font-size: 11px;
-  color: var(--td-text-color-placeholder);
+  color: rgba(255, 255, 255, 0.5);
   margin-top: 2px;
 }
 
-.song-actions-row {
+.song-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.12s,
+    color 0.12s;
+  &:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+  }
 }
 
-.song-picker {
+/* ---- 角色提示 ---- */
+.song-role-hint {
+  padding: 0 20px;
+  margin-bottom: 12px;
+}
+.role-badge {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.role-badge-admin {
+  background: rgba(64, 158, 255, 0.22);
+  color: #6aa5ff;
+}
+.role-badge-member {
+  background: rgba(227, 115, 24, 0.22);
+  color: #ffc080;
+}
+
+/* ---- 动作按钮 ---- */
+.song-actions {
+  padding: 4px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.song-action-btn {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.16);
+    transform: translateY(-1px);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.song-action-primary {
+  background: linear-gradient(135deg, #4080ff, #6aa5ff);
+  border-color: transparent;
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5090ff, #7ab5ff);
+    border-color: transparent;
+  }
+}
+
+.song-action-icon {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+.song-action-primary .song-action-icon {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.song-action-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.song-action-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.song-action-sub {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.song-action-primary .song-action-sub {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ---- 歌单选择 ---- */
+.song-picker {
+  padding: 4px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .song-picker-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 60px 1fr 60px;
   align-items: center;
-  justify-content: space-between;
   font-size: 13px;
-  color: var(--td-text-color-secondary);
+  color: rgba(255, 255, 255, 0.78);
+  letter-spacing: 0.02em;
+  text-align: center;
+  padding: 4px 0 8px;
 
   .song-picker-back {
     border: none;
     background: transparent;
-    color: var(--td-brand-color-5);
+    color: rgba(255, 255, 255, 0.7);
     cursor: pointer;
     font-size: 12px;
-    padding: 2px 4px;
+    padding: 4px;
+    text-align: left;
     &:hover {
-      text-decoration: underline;
+      color: #fff;
     }
   }
 }
 
 .song-picker-empty {
-  padding: 16px 0;
+  padding: 24px 0;
   text-align: center;
-  color: var(--td-text-color-placeholder);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 13px;
 }
 
 .song-picker-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   max-height: 280px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
 }
 
 .song-picker-item {
@@ -292,23 +538,29 @@ defineExpose({ playNow })
   align-items: center;
   padding: 8px;
   background: transparent;
-  border: 1px solid var(--td-component-border);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
+  color: #fff;
+  font-family: inherit;
   transition:
     background 0.12s,
     border-color 0.12s;
 
-  &:hover {
-    background: var(--td-bg-color-container-hover);
-    border-color: var(--td-brand-color-5);
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .song-picker-cover {
     width: 36px;
     height: 36px;
-    border-radius: 5px;
+    border-radius: 6px;
     object-fit: cover;
     flex: 0 0 auto;
   }
@@ -316,8 +568,8 @@ defineExpose({ playNow })
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--td-bg-color-component);
-    color: var(--td-text-color-secondary);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
   }
 
   .song-picker-meta {
@@ -325,7 +577,7 @@ defineExpose({ playNow })
     min-width: 0;
   }
   .song-picker-name {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -333,7 +585,28 @@ defineExpose({ playNow })
   }
   .song-picker-count {
     font-size: 11px;
-    color: var(--td-text-color-placeholder);
+    color: rgba(255, 255, 255, 0.55);
+  }
+}
+
+/* ---- 进入/退出动画 ---- */
+.song-modal-fade-enter-active,
+.song-modal-fade-leave-active {
+  transition:
+    opacity 0.2s ease,
+    backdrop-filter 0.2s ease;
+  .song-modal {
+    transition:
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.2s ease;
+  }
+}
+.song-modal-fade-enter-from,
+.song-modal-fade-leave-to {
+  opacity: 0;
+  .song-modal {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
   }
 }
 </style>
