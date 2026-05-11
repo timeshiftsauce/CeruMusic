@@ -691,6 +691,14 @@ watch(
   { immediate: true }
 )
 
+/* 监听外部关 FullPlay 请求 —— ChatPanel 点击歌单卡片时先收 FullPlay 再跳路由 */
+watch(
+  () => listenTogetherStore.closeFullPlayRequested,
+  () => {
+    if (showFullPlay.value) showFullPlay.value = false
+  }
+)
+
 /**
  * 一起听权限锁 —— 在房间但无控制权时为 true
  *

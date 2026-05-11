@@ -131,6 +131,18 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     fullPlayVisible.value = v
   }
 
+  /**
+   * 关 FullPlay 的请求信号 —— ChatPanel 点击歌单分享卡片时跳路由前要先收起 FullPlay
+   *
+   * 用单调递增的时间戳而不是 boolean,这样连续点两次卡片也能各触发一次 watch
+   * (boolean 在已经是 false 时再 set false 不触发 watcher)。PlayMusic.vue 单一处
+   * watch 它,把本地 showFullPlay 置 false。
+   */
+  const closeFullPlayRequested = ref(0)
+  function requestCloseFullPlay(): void {
+    closeFullPlayRequested.value = Date.now()
+  }
+
   /** 当前播放快照 —— 由服务器广播的 sync 决定 */
   const current = reactive<PlaybackSnapshot>({
     song: null,
@@ -1458,6 +1470,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     isReconnecting,
     overlayVisible,
     fullPlayVisible,
+    closeFullPlayRequested,
 
     // getters
     isInRoom,
@@ -1469,6 +1482,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     closeOverlay,
     toggleOverlay,
     setFullPlayVisible,
+    requestCloseFullPlay,
     syncRoomContextFromLocal,
 
     // 连接管理
