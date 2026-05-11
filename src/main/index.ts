@@ -303,11 +303,16 @@ function setupTray(): void {
     app.once('before-quit', () => {
       menuBarLyric.onEnabledChange(null)
       menuBarLyric.setTray(null)
-      try {
-        tray?.destroy()
-      } catch {}
-      tray = null
-      g.__ceru_tray__ = null
+      // macOS: 不要 destroy 托盘 —— 让 AppKit 在进程退出时自然销毁 NSStatusItem,
+      // GUID 绑定的位置才会被刷到 user defaults。手动 destroy 会在保存前移除 item,
+      // 导致下次启动时 Cmd+拖动调好的位置丢失。
+      if (process.platform !== 'darwin') {
+        try {
+          tray?.destroy()
+        } catch {}
+        tray = null
+        g.__ceru_tray__ = null
+      }
     })
     g.__ceru_tray_before_quit_bound__ = true
   }
