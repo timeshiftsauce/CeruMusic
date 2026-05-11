@@ -12,6 +12,7 @@
  *  - 复制：消息悬停 → 把 content 写入剪贴板
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useAuthStore } from '@renderer/store/Auth'
 import { SmileIcon, SendIcon } from 'tdesign-icons-vue-next'
@@ -19,10 +20,15 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { ContextMenu } from '@renderer/components/ContextMenu'
 import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
 import { createMenuItem, createSeparator } from '@renderer/components/ContextMenu/utils'
+import { parseShareLink } from '@renderer/utils/listenTogether/shareLink'
+import MessageCard from './MessageCard.vue'
+import SongCardActions from './SongCardActions.vue'
+import type { ShareDetail, PlaylistShareDetail } from '@renderer/api/share'
 import type { ChatMsg, RoomMember } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
 const authStore = useAuthStore()
+const router = useRouter()
 
 /** 系统消息模板 —— 把后端 content (key) 转成可读中文 */
 function renderSystem(msg: ChatMsg): string {
@@ -306,6 +312,48 @@ async function copyMessage(msg: ChatMsg): Promise<void> {
 }
 
 /* ============================================================
+ *  分享卡片点击
+ * ============================================================ */
+
+const songActionsVisible = ref(false)
+const songActionsDetail = ref<ShareDetail | null>(null)
+
+function onCardSongAction(detail: ShareDetail): void {
+  songActionsDetail.value = detail
+  songActionsVisible.value = true
+}
+
+async function onCardPlaylistAction(detail: PlaylistShareDetail): Promise<void> {
+  /* 1. 先收 FullPlay + 浮层 —— 否则跳路由后 FullPlay 还盖在最前面看不到列表 */
+  lt.closeOverlay()
+  lt.requestCloseFullPlay()
+  /* 2. 跳到歌单页 —— query 与 App.vue 的 playlistShareQueue.handler 对齐,
+   *    复用同一份 /views/music/list.vue 的 share 入参渲染逻辑 */
+  await router.push({
+    name: 'list',
+    params: { id: detail.id },
+    query: {
+      title: detail.playlist.name,
+      author: detail.username || 'share',
+      cover: detail.playlist.cover || '',
+      total: String(detail.playlist.total || 0),
+      source: 'share',
+      type: 'playlist_share',
+      description: detail.playlist.describe || '',
+      cloudId: detail.playlist.id,
+      meta: JSON.stringify({
+        cloudId: detail.playlist.id,
+        playlistShareId: detail.id,
+        sourceShare: true,
+        canPlay: detail.canPlay,
+        playExpiresAt: detail.playExpiresAt,
+        openInAppScheme: detail.openInAppScheme
+      })
+    }
+  })
+}
+
+/* ============================================================
  *  右键菜单 —— 复制 / 回复 / @TA 都进这里,不占气泡周围的视觉空间
  * ============================================================ */
 
@@ -411,7 +459,8 @@ function sendText(): void {
   if (!t) return
   /* 组装 meta:
    *   - mentions:只保留 nickname 文本还在 draft 里的 userId(用户改/删 @ 文本要同步丢弃)
-   *   - replyTo*:有引用就塞进去,后端按白名单透传 */
+   *   - replyTo*:有引用就塞进去,后端按白名单透传
+   *   - cardType/cardId:自动检测 ceru 分享链接,接收端按 cardId 调分享 API 渲染卡片 */
   const meta: Record<string, string> = {}
   const stillMentioned = selectedMentions.value
     .filter((m) => t.includes(`@${m.nickname}`))
@@ -421,6 +470,11 @@ function sendText(): void {
     meta.replyToId = replyTo.value.id
     meta.replyToFrom = replyTo.value.from
     meta.replyToPreview = replyTo.value.preview
+  }
+  const card = parseShareLink(t)
+  if (card) {
+    meta.cardType = card.cardType
+    meta.cardId = card.cardId
   }
   lt.sendChat('text', t, Object.keys(meta).length ? meta : undefined)
   draft.value = ''
@@ -532,7 +586,8 @@ const visibleChat = computed(() => {
               class="msg-bubble"
               :class="{
                 'is-emoji-large': msg.type === 'emoji',
-                'is-self-bubble': isSelf(msg)
+                'is-self-bubble': isSelf(msg),
+                'is-card': !!msg.meta?.cardType
               }"
             >
               <div
@@ -544,7 +599,18 @@ const visibleChat = computed(() => {
                 <span class="msg-quote-from">{{ msg.meta.replyToFrom || '回复' }}</span>
                 <span class="msg-quote-text">{{ msg.meta.replyToPreview || '' }}</span>
               </div>
-              <div class="msg-bubble-body">
+
+              <!-- 分享卡片 —— 单曲/歌单,有 meta.cardType 时优先渲染卡片,
+                   原始文本作为悄悄保留的 fallback(老客户端/盲文 reader 看得到) -->
+              <MessageCard
+                v-if="msg.meta?.cardType && msg.meta?.cardId"
+                :card-type="msg.meta.cardType"
+                :card-id="msg.meta.cardId"
+                @action-song="onCardSongAction"
+                @action-playlist="onCardPlaylistAction"
+              />
+
+              <div v-else class="msg-bubble-body">
                 <template v-for="(seg, segIdx) in renderMessageSegments(msg)" :key="segIdx">
                   <span
                     v-if="seg.type === 'mention'"
@@ -652,6 +718,9 @@ const visibleChat = computed(() => {
       :items="ctxMenuItems"
       @close="closeMessageContextMenu"
     />
+
+    <!-- 单曲卡片点击后的二级动作面板 -->
+    <SongCardActions v-model:visible="songActionsVisible" :detail="songActionsDetail" />
   </div>
 </template>
 
@@ -799,6 +868,14 @@ const visibleChat = computed(() => {
     font-size: 32px;
     padding: 0;
     line-height: 1;
+    backdrop-filter: none;
+  }
+
+  /* 卡片消息气泡 —— 卡片自带 padding,气泡背景隐去避免重影 */
+  &.is-card {
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
     backdrop-filter: none;
   }
 }
