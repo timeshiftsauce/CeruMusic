@@ -2,7 +2,7 @@
 import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { MessagePlugin, Popconfirm } from 'tdesign-vue-next'
 import { LocationIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { useVirtualList } from '@vueuse/core'

@@ -27,7 +27,7 @@
 import { computed, ref, watch } from 'vue'
 import { CloseIcon, CopyIcon, ShareIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import MemberStrip from '@renderer/components/ListenTogether/parts/MemberStrip.vue'
 import ChatPanel from '@renderer/components/ListenTogether/parts/ChatPanel.vue'
 import QueuePanel from '@renderer/components/ListenTogether/parts/QueuePanel.vue'

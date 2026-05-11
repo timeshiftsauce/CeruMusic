@@ -10,7 +10,7 @@
  *  - 同一时刻多条:每个弹幕独立 lifetime,内部自维持 list,UI 用 v-for 渲染
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import type { ChatMsg } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()

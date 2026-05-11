@@ -8,7 +8,7 @@
  * 普通成员视角也能看到此面板（透明），但操作按钮 disabled。
  * 是否显示该 Tab 由 ListenTogetherOverlay 根据 canControl 控制。
  */
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { CheckIcon, CloseIcon, MusicIcon } from 'tdesign-icons-vue-next'
 import type { PendingItem } from '@renderer/utils/listenTogether/types'
 
