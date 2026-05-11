@@ -115,12 +115,26 @@ export interface QueueItem {
   addedAt: number
 }
 
-/** 待审批点歌请求（仅 group 模式） */
+/** 待审批点歌请求（仅 group 模式）
+ *
+ * 同一首歌被多人申请会合并到同一个 PendingItem,服务端保证:
+ *   - 同一用户对同一首歌只能在 requesters 里出现一次
+ *   - requesterId/requesterName 始终指向第一个申请人(向后兼容老 UI)
+ *   - requesters 列表按申请时间升序
+ */
+export interface PendingRequester {
+  userId: string
+  nickname: string
+  avatar?: string
+}
+
 export interface PendingItem {
   reqId: string
   song: SongRef
   requesterId: string
   requesterName: string
+  /** 全部申请人(去重)。旧服务端版本可能没有,前端读时回落到 [{requesterId, requesterName}] */
+  requesters?: PendingRequester[]
   requestedAt: number
 }
 
