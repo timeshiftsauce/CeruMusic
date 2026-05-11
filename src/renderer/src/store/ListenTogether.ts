@@ -216,8 +216,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    */
   let driftTimer: ReturnType<typeof setInterval> | null = null
 
-  let playlistSyncTimer: ReturnType<typeof setTimeout> | null = null
-  let isReplacingSharedPlaylist = false
   let playlistBeforeRoom: SongList[] | null = null
   let roomSongApplyToken = 0
   /**
@@ -336,15 +334,19 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         connectionStatus.value = 'disconnected'
         throw err
       }
-      /* 强制刷新:清掉 logto 缓存的 access token,下次 getAccessToken 必须走 refresh。
-       * 解决"HTTP 能用但 socket 报 AUTH_FAILED"的边缘:HTTP 走 axios interceptor 每次
-       * 重取 token 触发自动刷新,socket 连接拿到的是 logto 内存里旧的(过期/被吊销)token。
-       *
-       * 关键:不能 clearAllTokens(),那会把 refresh token 也清掉导致下次拿不到。 */
+      /* 强制刷新 logto 缓存的 access token。多重保险:
+       *  1. clearAccessToken() —— 标准方式,但部分 logto-vue 版本可能没有此 API
+       *  2. fetchUserInfo() —— 调用 userinfo endpoint 会让 sdk 主动 refresh access token
+       *  3. 短暂等待让 sdk 内部 store 完成 refresh + 让 server JWKS 缓存稳定
+       * 完成后用新 token 重连一次。 */
       console.warn('[lt] socket 首次鉴权失败,清缓存 token 重试:', msg)
       try {
         ;(logto as { clearAccessToken?: () => void }).clearAccessToken?.()
       } catch {}
+      try {
+        await (logto as { fetchUserInfo?: () => Promise<unknown> }).fetchUserInfo?.()
+      } catch {}
+      await new Promise((r) => setTimeout(r, 500))
       token = await logto.getAccessToken(CERU_API_RESOURCE)
       if (!token) {
         connectionStatus.value = 'disconnected'
@@ -741,11 +743,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function resetRoomState(options: { restorePlaylist?: boolean } = {}): void {
     if (options.restorePlaylist && playlistBeforeRoom) {
       const localUserStore = LocalUserDetailStore()
-      isReplacingSharedPlaylist = true
       localUserStore.replaceSongList(playlistBeforeRoom)
-      setTimeout(() => {
-        isReplacingSharedPlaylist = false
-      }, 0)
     }
     playlistBeforeRoom = null
     meta.value = null
@@ -997,33 +995,15 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    *  - 服务端确权后回 SYNC,client 据此驱动本地 audio
    *  - 切歌响应也由 SYNC handler 单点驱动 —— 之前的 watch(current.song) 与
    *    SYNC handler 并发调 ensureRoomSongLoadedAndSynced 会触发"切到新歌又跳回"的竞态
-   *
-   * 这里只保留一类钩子:host 端共享列表(LocalUserDetailStore.list)变化 → 节流上传 queue
+   *  - **不再** 监听 host 本地 list 变化反复上传 queue —— 那会让 host 双击切歌时
+   *    本地 list 被插入新歌后整体覆盖 server queue,把 member 加的歌全冲掉。
+   *    queue 现在完全由 server 增量管理(初次 syncRoomContextFromLocal +
+   *    ctl:queue-add / queue-request+approve)。
    */
   function startAudioHooks(): void {
     clearAudioHooks() // 防重
-    const localUserStore = LocalUserDetailStore()
-
-    /* host 端共享列表上传:本地 list 变 → 节流后上传 queue */
-    const stopPlaylistWatch = watch(
-      () => localUserStore.list,
-      () => {
-        if (!isInRoom.value || !canControl.value || isReplacingSharedPlaylist) return
-        if (playlistSyncTimer) clearTimeout(playlistSyncTimer)
-        playlistSyncTimer = setTimeout(() => {
-          playlistSyncTimer = null
-          void syncRoomContextFromLocal({ queueOnly: true })
-        }, 300)
-      },
-      { deep: true }
-    )
-    audioUnsubs.push(() => {
-      stopPlaylistWatch()
-      if (playlistSyncTimer) {
-        clearTimeout(playlistSyncTimer)
-        playlistSyncTimer = null
-      }
-    })
+    /* 当前没有需要在房间内自动同步的本地状态。
+     * 如果后续要加(比如本地歌词偏移、播放速率),都用显式命令上传,不要 watch 本地 store。 */
   }
 
   /**
@@ -1123,11 +1103,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     ) {
       songs.unshift(songRefToSongList(fallbackCurrent))
     }
-    isReplacingSharedPlaylist = true
     localUserStore.replaceSongList(songs)
-    setTimeout(() => {
-      isReplacingSharedPlaylist = false
-    }, 0)
   }
 
   async function ensureRoomSongLoadedAndSynced(
