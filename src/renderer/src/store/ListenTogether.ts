@@ -57,6 +57,12 @@ import { useAuthStore } from '@renderer/store/Auth'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
 import { setLtInRoom } from '@renderer/utils/listenTogether/state'
+import {
+  configureNotifier,
+  notifyChat,
+  notifyPending,
+  resetNotifierBuffers
+} from '@renderer/utils/listenTogether/notifier'
 import type { SongList } from '@renderer/types/audio'
 
 /* ---------------- 连接配置 ----------------
@@ -507,6 +513,20 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     })
 
     sock.on(ServerEvents.PENDING_UPDATE, (payload: { pending: PendingItem[] }) => {
+      /* 差量算出"新出现"的 reqId —— PENDING_UPDATE 是全量替换语义,
+       * 自己拿不到 PENDING_ADD,只能用旧列表减新列表算增量。
+       * 仅 canControl(intimate 全员 / group 的 owner+admin)才推审批通知。 */
+      if (canControl.value && meta.value) {
+        const prevIds = new Set(pending.value.map((p) => p.reqId))
+        const newItems = payload.pending.filter((p) => !prevIds.has(p.reqId))
+        if (newItems.length > 0) {
+          /* 过滤掉自己点的歌(自己点的不需要通知自己审批) */
+          const fromOthers = newItems.filter((p) => p.requesterId !== myUserId.value)
+          if (fromOthers.length > 0) {
+            notifyPending(fromOthers, meta.value.name || '一起听')
+          }
+        }
+      }
       pending.value = payload.pending
     })
 
@@ -540,6 +560,19 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       chat.value.push(msg)
       // 客户端内存里也限制数量（避免长时间运行内存爆）
       if (chat.value.length > 500) chat.value.splice(0, chat.value.length - 500)
+
+      /* 系统通知 —— 跳过自己发的消息;@你 的消息会绕过节流强提示。
+       * 仅文本/表情/贴纸触发通知,系统消息走 CHAT_SYSTEM 分支不打扰。 */
+      if (
+        meta.value &&
+        msg.from?.userId &&
+        msg.from.userId !== myUserId.value &&
+        msg.type !== 'system'
+      ) {
+        const mentions = (msg.meta?.mentions || '').split(',').filter(Boolean)
+        const mentionedSelf = !!myUserId.value && mentions.includes(myUserId.value)
+        notifyChat(msg, meta.value.name || '一起听', { mentionedSelf })
+      }
     })
 
     sock.on(ServerEvents.CHAT_SYSTEM, (msg: ChatMsg) => {
@@ -680,6 +713,8 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
 
   /** 清空房间相关本地状态 + 取消 ControlAudio 订阅 + 停 ping */
   function resetRoomState(options: { restorePlaylist?: boolean } = {}): void {
+    /* 清掉还在节流缓冲里的通知 —— 否则换房后旧房间的待推消息会顶着新房名弹 */
+    resetNotifierBuffers()
     if (options.restorePlaylist && playlistBeforeRoom) {
       const localUserStore = LocalUserDetailStore()
       localUserStore.replaceSongList(playlistBeforeRoom)
@@ -941,10 +976,20 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    *  聊天
    * ============================================================ */
 
-  function sendChat(type: 'text' | 'emoji' | 'sticker', content: string): void {
+  function sendChat(
+    type: 'text' | 'emoji' | 'sticker',
+    content: string,
+    meta?: Record<string, string>
+  ): void {
     if (!isInRoom.value) return
     if (!content) return
-    socket?.emit(ClientEvents.CHAT_SEND, { type, content })
+    /* meta 仅在有内容时透传,空对象不发,避免后端做无意义的白名单过滤 */
+    const payload: { type: typeof type; content: string; meta?: Record<string, string> } = {
+      type,
+      content
+    }
+    if (meta && Object.keys(meta).length > 0) payload.meta = meta
+    socket?.emit(ClientEvents.CHAT_SEND, payload)
   }
 
   /* ============================================================
@@ -1377,6 +1422,11 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   function toggleOverlay(): void {
     overlayVisible.value = !overlayVisible.value
   }
+
+  /* 注入通知激活回调 —— 点击系统通知时把浮层拉开。
+   * 用 configureNotifier 注入而不是 notifier 直接 import store,
+   * 是为了避免 store -> notifier -> store 的循环依赖。 */
+  configureNotifier({ onActivate: openOverlay })
 
   /* ============================================================
    *  导出

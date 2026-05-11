@@ -7,12 +7,19 @@
  *  - 输入区：emoji 快捷面板 + 文本框，回车发送
  *  - 自动滚动到底（除非用户主动往上滑了）
  *  - 系统消息模板渲染：member-join / queue-request / queue-approved 等
+ *  - @ 提及：输入 @ 触发成员浮层,选中插入 @昵称 并记录 userId 进 meta.mentions
+ *  - 回复：消息悬停 → 引用条进输入区,发送时 meta.replyTo* 透传
+ *  - 复制：消息悬停 → 把 content 写入剪贴板
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useAuthStore } from '@renderer/store/Auth'
 import { SmileIcon, SendIcon } from 'tdesign-icons-vue-next'
-import type { ChatMsg } from '@renderer/utils/listenTogether/types'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { ContextMenu } from '@renderer/components/ContextMenu'
+import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
+import { createMenuItem, createSeparator } from '@renderer/components/ContextMenu/utils'
+import type { ChatMsg, RoomMember } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
 const authStore = useAuthStore()
@@ -145,11 +152,281 @@ function insertEmoji(e: string): void {
   showEmoji.value = false
 }
 
+/* ============================================================
+ *  @ 提及 / 回复 / 复制
+ *
+ * 设计要点:
+ *   - selectedMentions:当前 draft 已选过的 (userId, nickname),send 时若昵称
+ *     文本还在,就把 userId 拼进 meta.mentions;若用户把文本删了,就自动丢弃。
+ *   - 浮层触发规则:光标前最近的 "@xxx"(没有空白)且 @ 前是行首/空白时激活,
+ *     避免邮箱、变量名里的 @ 误触。
+ *   - 渲染 mention 高亮:用 mentions 里的 userId 查当前 members 的 nickname,
+ *     再在 content 里按昵称长度降序匹配,避免 "@张三" 吃掉 "@张三丰"。
+ * ============================================================ */
+
+const selectedMentions = ref<Array<{ userId: string; nickname: string }>>([])
+const mentionActive = ref(false)
+const mentionQuery = ref('')
+const mentionAtIndex = ref(-1)
+const mentionHighlight = ref(0)
+
+const mentionCandidates = computed<RoomMember[]>(() => {
+  if (!mentionActive.value) return []
+  const me = lt.myUserId
+  const q = mentionQuery.value.toLowerCase()
+  return lt.members
+    .filter((m) => m.userId !== me)
+    .filter((m) => !q || (m.nickname || '').toLowerCase().includes(q))
+    .slice(0, 8)
+})
+
+function refreshMentionContext(): void {
+  const ta = textareaRef.value
+  if (!ta) {
+    mentionActive.value = false
+    return
+  }
+  const cursor = ta.selectionStart
+  const text = draft.value
+  let atIdx = -1
+  /* 光标前最多回看 16 字符找最近的 @,遇到空白就停 */
+  for (let i = cursor - 1; i >= 0 && cursor - i <= 16; i--) {
+    const ch = text[i]
+    if (ch === '@') {
+      atIdx = i
+      break
+    }
+    if (ch === ' ' || ch === '\n' || ch === '\t') break
+  }
+  if (atIdx < 0) {
+    mentionActive.value = false
+    return
+  }
+  /* @ 前必须是行首/空白 —— 避免 user@host 这种邮箱误触 */
+  if (atIdx > 0) {
+    const prev = text[atIdx - 1]
+    if (prev !== ' ' && prev !== '\n' && prev !== '\t') {
+      mentionActive.value = false
+      return
+    }
+  }
+  mentionActive.value = true
+  mentionAtIndex.value = atIdx
+  mentionQuery.value = text.slice(atIdx + 1, cursor)
+  mentionHighlight.value = 0
+}
+
+function pickMention(m: RoomMember): void {
+  const ta = textareaRef.value
+  if (!ta || mentionAtIndex.value < 0) return
+  const cursor = ta.selectionStart
+  const before = draft.value.slice(0, mentionAtIndex.value)
+  const after = draft.value.slice(cursor)
+  const insert = `@${m.nickname} `
+  draft.value = before + insert + after
+  if (!selectedMentions.value.find((x) => x.userId === m.userId)) {
+    selectedMentions.value.push({ userId: m.userId, nickname: m.nickname })
+  }
+  mentionActive.value = false
+  nextTick(() => {
+    if (!textareaRef.value) return
+    const pos = before.length + insert.length
+    textareaRef.value.setSelectionRange(pos, pos)
+    textareaRef.value.focus()
+    autoResize()
+  })
+}
+
+function mentionUser(from: { userId?: string; nickname?: string } | null | undefined): void {
+  if (!from?.userId) return
+  const member = lt.members.find((x) => x.userId === from.userId)
+  if (!member) return
+  const sep = draft.value && !/\s$/.test(draft.value) ? ' ' : ''
+  draft.value += `${sep}@${member.nickname} `
+  if (!selectedMentions.value.find((x) => x.userId === member.userId)) {
+    selectedMentions.value.push({ userId: member.userId, nickname: member.nickname })
+  }
+  nextTick(() => {
+    textareaRef.value?.focus()
+    autoResize()
+  })
+}
+
+/* 回复 */
+const replyTo = ref<{ id: string; from: string; preview: string } | null>(null)
+
+function replyToMessage(msg: ChatMsg): void {
+  if (msg.type === 'system') return
+  replyTo.value = {
+    id: msg.id,
+    from: msg.from?.nickname || '某人',
+    preview: (msg.content || '').slice(0, 40)
+  }
+  nextTick(() => textareaRef.value?.focus())
+}
+
+function clearReply(): void {
+  replyTo.value = null
+}
+
+/** 点击引用条 —— 把视图滚到被引用的原消息位置并高亮一下 */
+const highlightedMsgId = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
+function jumpToReplied(replyToId: string | undefined): void {
+  if (!replyToId) return
+  const scroller = scrollerRef.value
+  if (!scroller) return
+  const target = scroller.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(replyToId)}"]`)
+  if (!target) {
+    /* 原消息已被环形缓冲冲掉,引用条只剩 preview —— 给个友好提示 */
+    MessagePlugin.warning('原消息已不可见')
+    return
+  }
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  highlightedMsgId.value = replyToId
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    highlightedMsgId.value = null
+    highlightTimer = null
+  }, 1600)
+  /* 用户主动跳走时取消"贴底"状态,否则下一条新消息会把视图又拽回最底部 */
+  stickToBottom.value = false
+}
+
+/* 复制 */
+async function copyMessage(msg: ChatMsg): Promise<void> {
+  const text = msg.content || ''
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    MessagePlugin.success('已复制')
+  } catch {
+    MessagePlugin.warning('复制失败')
+  }
+}
+
+/* ============================================================
+ *  右键菜单 —— 复制 / 回复 / @TA 都进这里,不占气泡周围的视觉空间
+ * ============================================================ */
+
+const ctxMenuVisible = ref(false)
+const ctxMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
+const ctxMenuItems = ref<ContextMenuItem[]>([])
+
+function openMessageContextMenu(event: MouseEvent, msg: ChatMsg): void {
+  event.preventDefault()
+  event.stopPropagation()
+  const items: ContextMenuItem[] = []
+  items.push(
+    createMenuItem('copy', '复制', {
+      onClick: () => void copyMessage(msg)
+    })
+  )
+  items.push(
+    createMenuItem('reply', '回复', {
+      onClick: () => replyToMessage(msg)
+    })
+  )
+  /* 只有他人消息能 @TA;自己回复自己没意义 */
+  if (!isSelf(msg) && msg.from?.userId) {
+    items.push(createSeparator())
+    items.push(
+      createMenuItem('mention', `@ ${msg.from?.nickname || 'TA'}`, {
+        onClick: () => mentionUser(msg.from)
+      })
+    )
+  }
+  ctxMenuItems.value = items
+  ctxMenuPosition.value = { x: event.clientX, y: event.clientY }
+  ctxMenuVisible.value = true
+}
+
+function closeMessageContextMenu(): void {
+  ctxMenuVisible.value = false
+}
+
+/* ============================================================
+ *  输入区辅助
+ * ============================================================ */
+
+function onInput(): void {
+  autoResize()
+  refreshMentionContext()
+}
+
+function onTextareaBlur(): void {
+  /* 略延迟关闭 @ 浮层 —— 否则点击候选项时 blur 先触发会让点击丢失 */
+  setTimeout(() => {
+    mentionActive.value = false
+  }, 120)
+}
+
+/* 把消息按 @昵称 切片,渲染时给 mention 套高亮 chip */
+interface ContentSegment {
+  type: 'text' | 'mention'
+  text: string
+  isSelf?: boolean
+}
+function renderMessageSegments(msg: ChatMsg): ContentSegment[] {
+  const content = msg.content || ''
+  const mentionIds = (msg.meta?.mentions || '').split(',').filter(Boolean)
+  if (mentionIds.length === 0) return [{ type: 'text', text: content }]
+  const known = mentionIds
+    .map((id) => {
+      const member = lt.members.find((m) => m.userId === id)
+      if (!member?.nickname) return null
+      return { nickname: member.nickname, isSelf: id === lt.myUserId }
+    })
+    .filter((x): x is { nickname: string; isSelf: boolean } => !!x)
+    .sort((a, b) => b.nickname.length - a.nickname.length)
+  if (known.length === 0) return [{ type: 'text', text: content }]
+
+  const segs: ContentSegment[] = []
+  let i = 0
+  while (i < content.length) {
+    if (content[i] === '@') {
+      let matched: { nickname: string; isSelf: boolean } | null = null
+      for (const n of known) {
+        if (content.startsWith(n.nickname, i + 1)) {
+          matched = n
+          break
+        }
+      }
+      if (matched) {
+        segs.push({ type: 'mention', text: '@' + matched.nickname, isSelf: matched.isSelf })
+        i += matched.nickname.length + 1
+        continue
+      }
+    }
+    const last = segs[segs.length - 1]
+    if (last && last.type === 'text') last.text += content[i]
+    else segs.push({ type: 'text', text: content[i] })
+    i++
+  }
+  return segs
+}
+
 function sendText(): void {
   const t = draft.value.trim()
   if (!t) return
-  lt.sendChat('text', t)
+  /* 组装 meta:
+   *   - mentions:只保留 nickname 文本还在 draft 里的 userId(用户改/删 @ 文本要同步丢弃)
+   *   - replyTo*:有引用就塞进去,后端按白名单透传 */
+  const meta: Record<string, string> = {}
+  const stillMentioned = selectedMentions.value
+    .filter((m) => t.includes(`@${m.nickname}`))
+    .map((m) => m.userId)
+  if (stillMentioned.length > 0) meta.mentions = stillMentioned.join(',')
+  if (replyTo.value) {
+    meta.replyToId = replyTo.value.id
+    meta.replyToFrom = replyTo.value.from
+    meta.replyToPreview = replyTo.value.preview
+  }
+  lt.sendChat('text', t, Object.keys(meta).length ? meta : undefined)
   draft.value = ''
+  selectedMentions.value = []
+  replyTo.value = null
+  mentionActive.value = false
   stickToBottom.value = true
 }
 
@@ -170,8 +447,31 @@ function sendEmojiOnly(e: string): void {
  *  - Shift/Ctrl/Meta+Enter:不 preventDefault → native 换行
  */
 function onTextareaKeydown(e: KeyboardEvent): void {
-  /* 输入法组合按键(中文输入候选)—— 不拦截,由 IME 自己处理 */
-  if (e.isComposing || (e as KeyboardEvent & { keyCode: number }).keyCode === 229) return
+  if (mentionActive.value && mentionCandidates.value.length > 0) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      mentionHighlight.value = (mentionHighlight.value + 1) % mentionCandidates.value.length
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      mentionHighlight.value =
+        (mentionHighlight.value - 1 + mentionCandidates.value.length) %
+        mentionCandidates.value.length
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      pickMention(mentionCandidates.value[mentionHighlight.value])
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      mentionActive.value = false
+      return
+    }
+  }
+
   if (e.key !== 'Enter') return
   if (e.shiftKey || e.ctrlKey || e.metaKey) return
   e.preventDefault()
@@ -212,7 +512,13 @@ const visibleChat = computed(() => {
           {{ renderSystem(msg) }}
         </div>
 
-        <div v-else class="msg-row" :class="{ 'is-self': isSelf(msg) }">
+        <div
+          v-else
+          class="msg-row"
+          :class="{ 'is-self': isSelf(msg), 'is-highlighted': highlightedMsgId === msg.id }"
+          :data-msg-id="msg.id"
+          @contextmenu="openMessageContextMenu($event, msg)"
+        >
           <div class="msg-avatar">
             <img v-if="msg.from?.avatar" :src="msg.from.avatar" />
             <div v-else class="avatar-fallback" :class="{ 'is-self': isSelf(msg) }">
@@ -229,7 +535,26 @@ const visibleChat = computed(() => {
                 'is-self-bubble': isSelf(msg)
               }"
             >
-              {{ msg.content }}
+              <div
+                v-if="msg.meta?.replyToId"
+                class="msg-quote"
+                :title="`跳转到 ${msg.meta.replyToFrom || '原消息'}`"
+                @click="jumpToReplied(msg.meta.replyToId)"
+              >
+                <span class="msg-quote-from">{{ msg.meta.replyToFrom || '回复' }}</span>
+                <span class="msg-quote-text">{{ msg.meta.replyToPreview || '' }}</span>
+              </div>
+              <div class="msg-bubble-body">
+                <template v-for="(seg, segIdx) in renderMessageSegments(msg)" :key="segIdx">
+                  <span
+                    v-if="seg.type === 'mention'"
+                    class="msg-mention"
+                    :class="{ 'is-self-mention': seg.isSelf }"
+                    >{{ seg.text }}</span
+                  >
+                  <template v-else>{{ seg.text }}</template>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -239,6 +564,38 @@ const visibleChat = computed(() => {
     </div>
 
     <div class="chat-input">
+      <!-- @ 提及候选浮层 -->
+      <transition name="emoji-fade">
+        <div v-if="mentionActive && mentionCandidates.length" class="mention-popup">
+          <button
+            v-for="(m, idx) in mentionCandidates"
+            :key="m.userId"
+            class="mention-item"
+            :class="{ active: idx === mentionHighlight }"
+            @click="pickMention(m)"
+            @mouseenter="mentionHighlight = idx"
+          >
+            <img v-if="m.avatar" :src="m.avatar" class="mention-avatar" />
+            <div v-else class="mention-avatar mention-avatar-fallback">
+              {{ (m.nickname || '?').slice(0, 1).toUpperCase() }}
+            </div>
+            <span class="mention-name">{{ m.nickname }}</span>
+            <span v-if="m.role !== 'member'" class="mention-role">{{ m.role }}</span>
+          </button>
+        </div>
+      </transition>
+
+      <!-- 回复引用条 -->
+      <transition name="emoji-fade">
+        <div v-if="replyTo" class="reply-chip">
+          <div class="reply-chip-body">
+            <div class="reply-chip-title">回复 {{ replyTo.from }}</div>
+            <div class="reply-chip-preview">{{ replyTo.preview }}</div>
+          </div>
+          <button class="reply-chip-x" title="取消回复" @click="clearReply">✕</button>
+        </div>
+      </transition>
+
       <transition name="emoji-fade">
         <div v-if="showEmoji" class="emoji-panel">
           <button
@@ -270,9 +627,11 @@ const visibleChat = computed(() => {
           v-model="draft"
           class="input-textarea"
           rows="1"
-          placeholder="说点什么... (Enter 发送 / Shift+Enter 换行)"
+          placeholder="说点什么... (@ 提及成员 · Enter 发送 · Shift+Enter 换行)"
           @keydown="onTextareaKeydown"
-          @input="autoResize"
+          @input="onInput"
+          @click="refreshMentionContext"
+          @blur="onTextareaBlur"
         />
         <t-button
           theme="primary"
@@ -285,6 +644,14 @@ const visibleChat = computed(() => {
         </t-button>
       </div>
     </div>
+
+    <!-- 消息右键菜单(复制 / 回复 / @TA) -->
+    <ContextMenu
+      v-model:visible="ctxMenuVisible"
+      :position="ctxMenuPosition"
+      :items="ctxMenuItems"
+      @close="closeMessageContextMenu"
+    />
   </div>
 </template>
 
@@ -561,5 +928,271 @@ const visibleChat = computed(() => {
 .emoji-fade-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+/* ---- 引用条(气泡内顶部) ---- */
+.msg-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px 5px 10px;
+  margin-bottom: 6px;
+  position: relative;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  max-width: 260px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.15s;
+
+  /* 左侧色条 —— 用伪元素以便 hover 时拓宽更顺滑 */
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: rgba(255, 255, 255, 0.45);
+    transition: background 0.15s;
+  }
+  &:hover {
+    background: rgba(0, 0, 0, 0.32);
+    transform: translateX(1px);
+    &::before {
+      background: var(--td-brand-color-5, #4080ff);
+    }
+  }
+
+  .msg-quote-from {
+    color: rgba(255, 255, 255, 0.92);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+  .msg-quote-text {
+    color: rgba(255, 255, 255, 0.62);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* 自己气泡里的引用条调色 —— 主题色背景上需要更亮的对比 */
+.msg-bubble.is-self-bubble .msg-quote {
+  background: rgba(255, 255, 255, 0.16);
+  &::before {
+    background: rgba(255, 255, 255, 0.7);
+  }
+  &:hover {
+    background: rgba(255, 255, 255, 0.24);
+    &::before {
+      background: #fff;
+    }
+  }
+  .msg-quote-text {
+    color: rgba(255, 255, 255, 0.82);
+  }
+}
+
+/* 气泡内容主体 —— 把 mention 与文本统一在一个 inline 容器,避免 flex 影响 */
+.msg-bubble-body {
+  display: inline;
+}
+
+/* ---- @ 提及高亮 ---- */
+.msg-mention {
+  /* 不用方框,改用颜色 + 下划线呼应 IM 通用风格,视觉更轻 */
+  color: var(--td-brand-color-5, #4080ff);
+  font-weight: 600;
+  padding: 0 1px;
+}
+
+/* @你 —— 整段加底色与角标,真正突出 */
+.msg-mention.is-self-mention {
+  color: #fff;
+  background: var(--td-warning-color, #e37318);
+  padding: 0 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(227, 115, 24, 0.4);
+}
+
+/* 自己气泡(主题色底)里的 mention —— 反白显眼 */
+.msg-bubble.is-self-bubble .msg-mention {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255, 255, 255, 0.55);
+}
+.msg-bubble.is-self-bubble .msg-mention.is-self-mention {
+  background: var(--td-warning-color, #e37318);
+  text-decoration: none;
+}
+
+/* 跳转高亮 —— 点击引用条时的目标消息脉冲 */
+.msg-row.is-highlighted .msg-bubble {
+  animation: msg-jump-pulse 1.6s ease-out;
+}
+
+@keyframes msg-jump-pulse {
+  0%,
+  100% {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+  20% {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.18),
+      0 0 0 4px rgba(64, 128, 255, 0.45);
+  }
+  60% {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.18),
+      0 0 0 6px rgba(64, 128, 255, 0);
+  }
+}
+
+/* ---- 回复引用条(输入区上方) ---- */
+.reply-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  margin-bottom: 8px;
+  position: relative;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--td-brand-color-5, #4080ff);
+  }
+
+  .reply-chip-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .reply-chip-title {
+    font-size: 11px;
+    color: var(--td-brand-color-5, #4080ff);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .reply-chip-preview {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .reply-chip-x {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background 0.12s,
+      color 0.12s;
+    &:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+    }
+  }
+}
+
+/* ---- @ 候选浮层 ---- */
+.mention-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: rgba(20, 22, 28, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-height: 240px;
+  overflow-y: auto;
+
+  .mention-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    color: #fff;
+    cursor: pointer;
+    text-align: left;
+    transition:
+      background 0.12s,
+      transform 0.12s;
+    font-family: inherit;
+
+    &.active {
+      background: var(--td-brand-color-5, #4080ff);
+      transform: translateX(2px);
+    }
+    &:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .mention-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .mention-avatar-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #6691ff, #93b6ff);
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+    }
+    .mention-name {
+      flex: 1;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+    .mention-role {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.16);
+      color: rgba(255, 255, 255, 0.78);
+      letter-spacing: 0.04em;
+    }
+    &.active .mention-role {
+      background: rgba(255, 255, 255, 0.28);
+      color: #fff;
+    }
+  }
 }
 </style>
