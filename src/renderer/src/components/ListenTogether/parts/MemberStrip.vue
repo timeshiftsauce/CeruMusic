@@ -41,14 +41,33 @@ function handleAction(action: string, m: RoomMember): void {
     return
   }
   if (action === 'kick') {
-    DialogPlugin.confirm({
+    /* tdesign DialogPlugin.confirm 的 onConfirm/Cancel/Close 默认不自动 destroy,
+     * 必须显式 dialog.destroy() —— 否则会出现"点击确认看似无反应"(其实操作执行
+     * 了但弹窗一直挂着挡住后续交互)。 */
+    const dialog = DialogPlugin.confirm({
       header: `把 ${m.nickname} 移出房间？`,
       body: '此操作不可撤销，被踢用户可重新通过口令加入。',
       confirmBtn: { content: '确认踢出', theme: 'danger' },
       cancelBtn: '取消',
-      onConfirm: () => lt.kick(m.userId)
+      onConfirm: () => {
+        lt.kick(m.userId)
+        dialog.destroy()
+      },
+      onCancel: () => dialog.destroy(),
+      onClose: () => dialog.destroy()
     })
   }
+}
+
+/** 构造 dropdown options —— 把 onClick 直接挂在 option 上,
+ * 避免依赖 t-dropdown @click 的事件签名(版本间可能不一致) */
+function buildOptions(m: RoomMember) {
+  return actionsFor(m).map((a) => ({
+    content: a === 'promote' ? '设为管理员' : a === 'demote' ? '撤销管理员' : '踢出房间',
+    value: a,
+    theme: a === 'kick' ? ('error' as const) : ('default' as const),
+    onClick: () => handleAction(a, m)
+  }))
 }
 
 function initials(nickname: string): string {
@@ -68,14 +87,7 @@ function initials(nickname: string): string {
       <t-dropdown
         v-if="actionsFor(m).length"
         trigger="click"
-        :options="
-          actionsFor(m).map((a) => ({
-            content: a === 'promote' ? '设为管理员' : a === 'demote' ? '撤销管理员' : '踢出房间',
-            value: a,
-            theme: a === 'kick' ? 'error' : 'default'
-          }))
-        "
-        @click="(d: any) => handleAction(String(d.value), m)"
+        :options="buildOptions(m)"
       >
         <div class="avatar-wrap clickable">
           <img v-if="m.avatar" :src="m.avatar" class="avatar" :alt="m.nickname" />
