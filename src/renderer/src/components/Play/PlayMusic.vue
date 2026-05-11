@@ -1477,6 +1477,21 @@ watch(showFullPlay, (val) => {
         </div>
 
         <div class="extra-controls">
+          <!-- 一起听房间面板入口 —— 仅在房间内显示,点击直接展开房间浮层 -->
+          <t-tooltip
+            v-if="listenTogetherStore.isInRoom"
+            :content="`一起听 · ${listenTogetherStore.meta?.name ?? '房间'} · 点击进入面板`"
+          >
+            <t-button
+              class="control-btn lt-room-btn"
+              shape="circle"
+              variant="text"
+              @click.stop="listenTogetherStore.openOverlay()"
+            >
+              <UsergroupIcon size="20" />
+            </t-button>
+          </t-tooltip>
+
           <!-- 播放模式按钮 -->
           <t-tooltip :content="playModeTip">
             <t-button
@@ -1669,6 +1684,18 @@ watch(showFullPlay, (val) => {
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes lt-room-btn-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 6px currentColor);
   }
 }
 
@@ -2146,6 +2173,18 @@ watch(showFullPlay, (val) => {
 
       &:hover {
         color: v-bind(hoverColor);
+      }
+
+      &.lt-room-btn {
+        color: v-bind(maincolor);
+        animation: lt-room-btn-pulse 2.4s ease-in-out infinite;
+        transition: transform 0.15s ease;
+
+        &:hover {
+          color: v-bind(maincolor);
+          animation-play-state: paused;
+          transform: scale(1.12);
+        }
       }
 
       &.lyric-btn .lyric-check,
