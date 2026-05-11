@@ -66,6 +66,46 @@ export default defineConfig({
             if (imgReg.test(chunkInfo.names[0])) return 'images/[name]-[hash].[ext]'
             // 其他资源
             return 'assets/[name]-[hash].[ext]'
+          },
+          /**
+           * 手动拆分 vendor chunks —— 只对 node_modules 内的大包分组,
+           * 业务代码不动,避免破坏模块初始化顺序导致 build 后异常。
+           *
+           * 拆分目标:
+           *  - vendor-vue        Vue + 周边运行时(高频共用,放在主入口附近)
+           *  - vendor-tdesign    UI 组件库(体积大,跨多个页面用)
+               * - vendor-amll       Apple Music 歌词渲染器(只在 FullPlay 用,可懒)
+           *  - vendor-tfjs       TensorFlow.js (仅 nsfwCheck 路径用,已 dynamic import)
+           *  - vendor-logto      Logto 鉴权
+           *  - vendor-socketio   Socket.IO client (一起听用)
+           *  - vendor-misc       其余 node_modules,合并防止碎片化
+           */
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined
+            // 匹配优先级从特定到一般
+            if (/[\\/]node_modules[\\/]@vue[\\/]/.test(id) || /[\\/]node_modules[\\/]vue[\\/]/.test(id)) {
+              return 'vendor-vue'
+            }
+            if (/[\\/]node_modules[\\/]pinia[\\/]/.test(id) || /[\\/]node_modules[\\/]vue-router[\\/]/.test(id)) {
+              return 'vendor-vue'
+            }
+            if (/[\\/]node_modules[\\/]tdesign-vue-next[\\/]/.test(id)) {
+              return 'vendor-tdesign'
+            }
+            if (/[\\/]node_modules[\\/]@applemusic-like-lyrics[\\/]/.test(id)) {
+              return 'vendor-amll'
+            }
+            if (/[\\/]node_modules[\\/]@tensorflow[\\/]/.test(id) || /[\\/]node_modules[\\/]nsfwjs[\\/]/.test(id)) {
+              return 'vendor-tfjs'
+            }
+            if (/[\\/]node_modules[\\/]@logto[\\/]/.test(id)) {
+              return 'vendor-logto'
+            }
+            if (/[\\/]node_modules[\\/]socket\.io-client[\\/]/.test(id) || /[\\/]node_modules[\\/]engine\.io-client[\\/]/.test(id)) {
+              return 'vendor-socketio'
+            }
+            /* 其它 node_modules 都打到 vendor-misc,避免每个小依赖单独成 chunk */
+            return 'vendor-misc'
           }
         }
       }
