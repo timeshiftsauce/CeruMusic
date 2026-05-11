@@ -13,6 +13,8 @@ interface CustomAPI {
   maximize: () => void
   close: () => void
   setMiniMode: (isMini: boolean) => void
+  /** 把主窗口拉到前台 —— 系统通知点击时用 */
+  show: () => void
   toggleFullscreen: () => void
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void
   onMusicCtrl: (callback: (event: Event, args: any) => void) => () => void

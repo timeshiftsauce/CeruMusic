@@ -26,6 +26,10 @@ const api = {
     console.log('preload: 发送 window-mini-mode 事件，isMini:', isMini)
     ipcRenderer.send('window-mini-mode', isMini)
   },
+  /** 把主窗口拉到前台 —— 系统通知点击时用,主进程会处理 show/restore/focus */
+  show: () => {
+    ipcRenderer.send('window-show')
+  },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
   /** 监听主进程窗口化全屏状态变化 */
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => {

@@ -76,6 +76,23 @@ function basisEvent(mainWindow: BrowserWindow) {
     }
   })
 
+  /**
+   * 把主窗口拉到前台
+   *
+   * 用途:渲染端的系统通知(一起听新消息等)被用户点击后,需要把窗口拉前台。
+   * 单走 renderer 的 window.focus() 在多数场景下不够:
+   *   - 窗口被托盘 hide 了 → focus 无效,要先 show
+   *   - 窗口最小化了 → focus 不会还原,要先 restore
+   *   - 窗口被其它应用盖住了 → focus 在 Windows 上有 SetForegroundWindow 限制,
+   *     主进程调 BrowserWindow.focus 系统级权重更高
+   */
+  ipcMain.on('window-show', () => {
+    if (!mainWindow) return
+    if (!mainWindow.isVisible()) mainWindow.show()
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  })
+
   // 全屏模式 IPC：转发到 main/index.ts 的窗口化全屏 toggle
   ipcMain.on('window-toggle-fullscreen', () => {
     ipcMain.emit('app-toggle-fullscreen-internal')
