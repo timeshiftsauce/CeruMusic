@@ -53,7 +53,7 @@ import { crossfadeState, crossfadeManager } from '@renderer/utils/audio/crossfad
 import CrossfadeHint from './CrossfadeHint.vue'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 import ListenTogetherEntryDialog from '@renderer/components/ListenTogether/ListenTogetherEntryDialog.vue'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
 

@@ -9,7 +9,7 @@
  */
 import { computed } from 'vue'
 import { DialogPlugin } from 'tdesign-vue-next'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import type { RoomMember, RoomRole } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()

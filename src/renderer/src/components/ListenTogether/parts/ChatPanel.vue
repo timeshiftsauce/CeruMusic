@@ -9,7 +9,7 @@
  *  - 系统消息模板渲染：member-join / queue-request / queue-approved 等
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useAuthStore } from '@renderer/store/Auth'
 import { SmileIcon, SendIcon } from 'tdesign-icons-vue-next'
 import type { ChatMsg } from '@renderer/utils/listenTogether/types'
