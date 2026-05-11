@@ -38,6 +38,37 @@ async function tryRequestSongAsMember(song: SongList): Promise<boolean> {
   }
 }
 
+/**
+ * host/admin 在房间内添加歌曲到共享列表 —— 调 ctl:queue-add 让 server 增量入队
+ *
+ * 走这条路径而不是 syncRoomContextFromLocal 整体上传是关键:
+ * 整体上传会用 host 本地 list 覆盖 server queue,把 member 加的歌全冲掉。
+ * ctl:queue-add 只新增一首,server 广播 QUEUE_UPDATE 让所有人(包括 host 自己)
+ * 通过 replaceLocalPlaylistFromQueue 同步本地 list。
+ */
+async function tryAddToQueueAsHost(song: SongList): Promise<boolean> {
+  try {
+    const { useListenTogetherStore } = await import('@renderer/store')
+    const lt = useListenTogetherStore()
+    if (!lt.isInRoom || !lt.canControl) return false
+    lt.addToQueue({
+      songmid: String(song.songmid),
+      source: song.source,
+      name: song.name,
+      singer: song.singer,
+      cover: (song as any).img,
+      albumName: song.albumName,
+      albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
+      hash: song.hash,
+      types: song.types,
+      lrc: (song as any).lrc ?? null
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // 事件类型定义
 type PlaylistEvents = {
   addToPlaylistAndPlay: SongList
@@ -131,6 +162,9 @@ export async function addToPlaylistAndPlay(
 ) {
   /* 一起听 member:不修改本地 list,不调 playSong,直接提交点歌请求 */
   if (await tryRequestSongAsMember(song)) return
+  /* 一起听 host/admin:先 ctl:queue-add 让 server 增量入队,广播 QUEUE_UPDATE 同步给
+   * 所有成员;不阻塞后续 playSong 切歌流程(切歌走 ctl:change-song 单独的命令)。 */
+  void tryAddToQueueAsHost(song)
   if (!localUserStore.userSource.pluginId && song.source !== 'local' && !(song as any).url) {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
@@ -183,6 +217,8 @@ export async function addToPlaylistAndPlay(
 export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
   /* 一起听 member:走点歌审核,不修改本地 list */
   if (await tryRequestSongAsMember(song)) return
+  /* 一起听 host/admin:增量入队 server queue,member 通过 QUEUE_UPDATE 看到 */
+  void tryAddToQueueAsHost(song)
   try {
     // 检查歌曲是否已在播放列表中
     const existingIndex = localUserStore.list.findIndex(
@@ -248,6 +284,13 @@ export async function replacePlaylist(
     }
 
     localUserStore.replaceSongList(songs)
+
+    /* 一起听 host/admin:整体替换共享列表是明确意图(用户换了个歌单),需要把整个 list
+     * 同步到 server queue 让 member 看到。走 syncRoomContextFromLocal 整体上传。
+     * 已加 canControl 守卫(上面 member 路径已早 return)。 */
+    if (lt.isInRoom && lt.canControl) {
+      await lt.syncRoomContextFromLocal({ queueOnly: true })
+    }
 
     // 播放第一首歌曲
     if (songs[0]) {

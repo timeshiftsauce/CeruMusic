@@ -341,19 +341,33 @@ export class SocketRequest {
     /* 已经连了同一个 socket 就复用 —— 调用方 idempotent */
     if (this.socket?.connected) return this.socket
 
+    const isAuthFail = (err: unknown): boolean => {
+      const msg = (err as Error)?.message || ''
+      return (
+        msg.toLowerCase().includes('auth') || msg.includes('token') || msg.includes('AUTH_FAILED')
+      )
+    }
+
     let token = await this.getAccessToken()
     try {
       return await this.doConnect(token, options)
     } catch (err) {
-      const msg = (err as Error)?.message || ''
-      const looksLikeAuth =
-        msg.toLowerCase().includes('auth') || msg.includes('token') || msg.includes('AUTH_FAILED')
-      if (!looksLikeAuth) throw err
+      if (!isAuthFail(err)) throw err
 
-      console.warn('[SocketRequest] 首次鉴权失败,刷新 token 重试:', msg)
+      /* 第 1 次 AUTH_FAILED:清缓存 + fetchUserInfo + 等 500ms 重试 */
+      console.warn('[SocketRequest] 首次鉴权失败,刷新 token 重试:', (err as Error).message)
       await this.refreshTokenForcefully()
       token = await this.getAccessToken()
-      return await this.doConnect(token, options)
+      try {
+        return await this.doConnect(token, options)
+      } catch (err2) {
+        if (!isAuthFail(err2)) throw err2
+        /* 第 2 次还失败:再等更久(给后端 JWKS / sdk store 充分时间) */
+        console.warn('[SocketRequest] 第 1 次重试仍失败,等更久再试:', (err2 as Error).message)
+        await new Promise((r) => setTimeout(r, 1500))
+        token = await this.getAccessToken()
+        return await this.doConnect(token, options)
+      }
     }
   }
 

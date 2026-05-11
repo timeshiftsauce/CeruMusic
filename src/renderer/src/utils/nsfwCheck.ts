@@ -1,4 +1,9 @@
-import * as nsfwjs from 'nsfwjs'
+/* 关键:不要 `import * as nsfwjs from 'nsfwjs'` —— 那会通过 default_models.js
+ * 同时打入 InceptionV3 (~28MB) + MobileNetV2 (3.5MB) + MobileNetV2Mid (5.5MB)
+ * 三套模型权重,即便实际只用一个,体积也会膨胀 ~33MB+。
+ * 通过 nsfwjs/core + 单独的 mobilenet_v2 子入口,只把轻量模型(3.5MB)打进 bundle。 */
+import { load, type NSFWJS } from 'nsfwjs/core'
+import { MobileNetV2Model } from 'nsfwjs/models/mobilenet_v2'
 
 /**
  * NSFW (Not Safe For Work) 图像检测工具类
@@ -6,7 +11,7 @@ import * as nsfwjs from 'nsfwjs'
  */
 export class NsfwCheckTool {
   private static instance: NsfwCheckTool
-  private model: nsfwjs.NSFWJS | null = null
+  private model: NSFWJS | null = null
   private isLoading: boolean = false
 
   // 默认的不安全类别及阈值（0到1之间，数值越小越严格）
@@ -45,9 +50,10 @@ export class NsfwCheckTool {
 
     try {
       this.isLoading = true
-      // 加载默认模型（MobileNetV2）
-      // 注意：首次加载需要下载模型文件，取决于网络环境
-      this.model = await nsfwjs.load()
+      /* 用 nsfwjs/core 的 load,显式传 modelDefinitions=[MobileNetV2Model] 覆盖
+       * 默认 DEFAULT_MODELS。这样只把 3.5MB 的轻量模型权重打进 bundle,跳过
+       * nsfwjs/index.js 的 default_models.js 注入的 InceptionV3 + MobileNetV2Mid。 */
+      this.model = await load('MobileNetV2', { modelDefinitions: [MobileNetV2Model] })
     } catch (error) {
       console.error('NSFW 模型加载失败:', error)
       throw new Error('鉴黄模型加载失败，请检查网络环境')
