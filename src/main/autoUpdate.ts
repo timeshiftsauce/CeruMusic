@@ -35,14 +35,19 @@ let electronUpdaterInitialized = false
 
 const UPDATE_SERVER = 'https://update.cerumusic.top'
 
-// 把 Node 的 process.arch 收敛到服务器认识的三种取值。
-// 我们目前只发 x64/ia32/arm64 三种安装包,其它架构当 x64 兜底。
+// 把 Node 的 process.arch 收敛到服务器认识的三种取值:
+//   arm64 = Apple Silicon Mac (M1/M2/...) / Windows ARM
+//   x64   = Intel Mac / Windows 64 位 (Node 里 x64 就是 x86_64,Intel Mac 走这里)
+//   ia32  = Windows 32 位
+// 其它(mips/ppc 等我们不发包的架构)兜底当 x64。
 function normalizeArchForServer(a: string): 'x64' | 'ia32' | 'arm64' {
   if (a === 'arm64') return 'arm64'
   if (a === 'ia32' || a === 'x32') return 'ia32'
   return 'x64'
 }
 const CLIENT_ARCH = normalizeArchForServer(process.arch)
+
+console.log(`AutoUpdater initialized with arch=${process.arch}, normalizedArch=${CLIENT_ARCH}`)
 
 const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${CLIENT_ARCH}/${app.getVersion()}`
 
