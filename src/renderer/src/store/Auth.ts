@@ -4,11 +4,12 @@ import LogtoClient, { UserInfoResponse } from '@logto/browser'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { defaultRequest, Request } from '@renderer/utils/request'
 import { settingsSyncService } from '@renderer/services/SettingsSyncService'
+import { CERU_API_RESOURCE } from '@common/api/resources'
 import config from '../config'
 import router from '@renderer/router'
 
 const { redirectUri, postLogoutRedirectUri } = config
-const ceruRequest = new Request('https://api.ceru.shiqianjiang.cn/api')
+const ceruRequest = new Request(CERU_API_RESOURCE)
 
 export const useAuthStore = defineStore(
   'auth',

@@ -4,10 +4,10 @@ import { Request } from '@renderer/utils/request'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import { useAuthStore } from '@renderer/store/Auth'
+import { CERU_API_RESOURCE } from '@common/api/resources'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 
-const API_URL = 'https://api.ceru.shiqianjiang.cn/api'
-const request = new Request(API_URL)
+const request = new Request(CERU_API_RESOURCE)
 
 interface CloudSettings {
   appSettings: any
