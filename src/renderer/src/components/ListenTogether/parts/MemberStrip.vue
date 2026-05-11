@@ -84,11 +84,7 @@ function initials(nickname: string): string {
       :class="{ 'is-self': m.userId === lt.myUserId }"
       :title="`${m.nickname} · ${m.role}`"
     >
-      <t-dropdown
-        v-if="actionsFor(m).length"
-        trigger="click"
-        :options="buildOptions(m)"
-      >
+      <t-dropdown v-if="actionsFor(m).length" trigger="click" :options="buildOptions(m)">
         <div class="avatar-wrap clickable">
           <img v-if="m.avatar" :src="m.avatar" class="avatar" :alt="m.nickname" />
           <div v-else class="avatar avatar-fallback">{{ initials(m.nickname) }}</div>

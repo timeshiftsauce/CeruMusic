@@ -73,7 +73,11 @@ function moveItem(index: number, delta: -1 | 1): void {
  * lt.queue 是 ref,直接传给 useVirtualList(@vueuse/core 内部会响应)。
  */
 const queueRef = computed(() => lt.queue)
-const { list: virtualList, containerProps, wrapperProps } = useVirtualList(queueRef, {
+const {
+  list: virtualList,
+  containerProps,
+  wrapperProps
+} = useVirtualList(queueRef, {
   itemHeight: 58,
   overscan: 5
 })
