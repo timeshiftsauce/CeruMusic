@@ -83,13 +83,22 @@ function fmtTime(ts: number): string {
 .pending-panel {
   height: 100%;
   overflow-y: auto;
+  /* 与 ChatPanel/QueuePanel 一致的沉浸滚动条 */
   scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
   }
 }
 
