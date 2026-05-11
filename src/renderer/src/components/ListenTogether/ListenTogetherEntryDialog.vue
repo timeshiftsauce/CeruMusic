@@ -11,7 +11,7 @@
  */
 import { ref, watch, computed, nextTick } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import type { RoomMode } from '@renderer/utils/listenTogether/types'
 
 const props = defineProps<{

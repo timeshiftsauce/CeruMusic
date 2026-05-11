@@ -5,7 +5,7 @@
  * 这里展示的是房间权威播放列表。房主/admin 可直接点歌切换；
  * 普通成员只能查看，或移除自己点过的歌。
  */
-import { useListenTogetherStore } from '@renderer/store'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { CloseIcon, MusicIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { QueueItem } from '@renderer/utils/listenTogether/types'
