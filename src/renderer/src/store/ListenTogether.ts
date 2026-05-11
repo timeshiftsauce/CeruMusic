@@ -21,6 +21,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 import { type Socket } from 'socket.io-client'
 import { SocketRequest } from '@renderer/utils/request'
+import { CERU_API_RESOURCE } from '@common/api/resources'
 import { MessagePlugin } from 'tdesign-vue-next'
 
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
@@ -58,15 +59,12 @@ import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
 import { setLtInRoom } from '@renderer/utils/listenTogether/state'
 import type { SongList } from '@renderer/types/audio'
 
-/* ---------------- 连接配置 ---------------- */
-
-/**
- * Logto resource indicator —— 必须与 token aud 一致,永远用生产 URL
+/* ---------------- 连接配置 ----------------
  *
  * Socket.IO 的连接 URL / dev-prod 切换都由 SocketRequest 内部根据
- * common/api/config.json 的 baseUrl 配置自动决定,不需要再手动算。
+ * common/api/config.json 的 baseUrl 配置自动决定。
+ * Logto resource indicator(token aud)统一从 @common/api/resources 导入。
  */
-const CERU_API_RESOURCE = 'https://api.ceru.shiqianjiang.cn/api'
 
 /**
  * 一起听 Pinia Store
