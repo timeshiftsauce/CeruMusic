@@ -146,9 +146,24 @@ const userAvatar = computed(() => {
 interface SecurityItem {
   label: string
   path: string
-  identifierFrom?: 'email' | 'phone' | 'username'
+  identifierFrom?: 'email' | 'phone' | 'username' | 'social'
   fallbackSub?: string
 }
+
+const SOCIAL_TARGET_LABELS: Record<string, string> = {
+  qq: 'QQ',
+  wechat: '微信',
+  weixin: '微信',
+  github: 'GitHub',
+  google: 'Google',
+  apple: 'Apple',
+  alipay: '支付宝',
+  microsoft: 'Microsoft',
+  dingtalk: '钉钉',
+  feishu: '飞书'
+}
+const labelForSocialTarget = (t: string): string =>
+  SOCIAL_TARGET_LABELS[t.toLowerCase()] ?? t
 interface SecurityGroup {
   title: string
   items: SecurityItem[]
@@ -231,6 +246,17 @@ const securityGroups: SecurityGroup[] = [
         fallbackSub: '查看剩余可用的备份码'
       }
     ]
+  },
+  {
+    title: '第三方登录',
+    items: [
+      {
+        label: '管理第三方登录',
+        path: '/account/security',
+        identifierFrom: 'social',
+        fallbackSub: '绑定或解绑 QQ、微信、Google 等账号'
+      }
+    ]
   }
 ]
 
@@ -250,6 +276,13 @@ function resolveIdentifier(item: SecurityItem): string {
 }
 
 function resolveSub(item: SecurityItem): string {
+  if (item.identifierFrom === 'social') {
+    const ids = (authStore.user as any)?.identities || {}
+    const targets = Object.keys(ids)
+    return targets.length > 0
+      ? '已绑定:' + targets.map(labelForSocialTarget).join('、')
+      : item.fallbackSub || ''
+  }
   const id = resolveIdentifier(item)
   return id || item.fallbackSub || ''
 }
