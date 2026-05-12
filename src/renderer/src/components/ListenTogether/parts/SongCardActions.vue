@@ -19,6 +19,7 @@
 import { ref, computed, watch } from 'vue'
 import { NotifyPlugin } from 'tdesign-vue-next'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import type { ShareDetail } from '@renderer/api/share'
 
 const props = defineProps<{
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 }>()
 
 const lt = useListenTogetherStore()
+const globalPlayStatus = useGlobalPlayStatusStore()
 
 interface LocalPlaylist {
   hashId: string
@@ -43,12 +45,31 @@ const playlistsLoaded = ref(false)
 const showPicker = ref(false)
 const acting = ref(false)
 
+/**
+ * 这首歌是否正在播放 —— 房间内取房间播放快照,否则取本地播放状态。
+ * 用于禁用"立即播放"按钮 + 改 label,避免用户重复点击播放当前歌。
+ */
+const isCurrentlyPlaying = computed(() => {
+  const s = props.detail?.song
+  if (!s) return false
+  const targetMid = String(s.songmid)
+  const targetSrc = s.source
+  if (lt.isInRoom) {
+    const cur = lt.current?.song
+    return String(cur?.songmid || '') === targetMid && cur?.source === targetSrc
+  }
+  const cur = globalPlayStatus.player.songInfo as { songmid?: any; source?: string } | null
+  return String(cur?.songmid || '') === targetMid && cur?.source === targetSrc
+})
+
 /** 当前角色下"播放" 按钮的标签和语义 */
 const playLabel = computed(() => {
+  if (isCurrentlyPlaying.value) return '正在播放'
   if (lt.isInRoom && !lt.canControl) return '申请点歌'
   return '立即播放'
 })
 const playHint = computed(() => {
+  if (isCurrentlyPlaying.value) return '这首歌正在播放中'
   if (lt.isInRoom && !lt.canControl) return '点歌需要管理员审批'
   if (lt.isInRoom) return '会直接切到这首歌,房间内所有人同步播放'
   return '加入当前播放列表并开始播放'
@@ -86,19 +107,31 @@ function close(): void {
 function buildSongPayload(): any {
   if (!props.detail) return null
   const s = props.detail.song
+  /* 规范化成 SongList 形状 + 带上 audioUrl 走"现成 URL"快通道:
+   *
+   * 分享 API 已经在服务端解析好 audioUrl,塞到 song.url 字段后 getSongRealUrl
+   * 会直接 return,跳过插件 SDK 调用。这样有几个好处:
+   *   - 接收端不必装同源插件也能播
+   *   - 省一次 plugin 往返,~1-2s 提速
+   *   - 不依赖 song.types/_types 等插件特有字段,避免分享 song 字段不全
+   *     时插件抛错被 catch 吞掉、最终静默不播
+   *
+   * 字段统一成字符串/空字符串/[]/{},避免 SongList 的下游用 strict equal 比较时
+   * 因 number/undefined 失配。 */
   return {
-    ...s,
-    songmid: s.songmid,
+    songmid: String(s.songmid),
     source: s.source,
     hash: s.hash,
-    name: s.name,
-    singer: s.singer,
-    img: s.img,
-    albumName: s.albumName,
-    albumId: s.albumId,
-    interval: s.interval,
-    types: s.types,
-    _types: s._types
+    name: s.name || '',
+    singer: s.singer || '',
+    albumName: s.albumName || '',
+    albumId: s.albumId !== undefined ? String(s.albumId) : '',
+    interval: s.interval || '',
+    img: s.img || '',
+    types: Array.isArray(s.types) ? s.types : [],
+    _types: s._types || {},
+    lrc: null,
+    url: props.detail.audioUrl || undefined
   }
 }
 
@@ -120,6 +153,12 @@ function notify(
 async function playNow(): Promise<void> {
   const song = buildSongPayload()
   if (!song) return
+  /* 已经在播放就不重复触发 —— 给一条 info 反馈用户知道点击被识别了 */
+  if (isCurrentlyPlaying.value) {
+    notify('info', '正在播放', `《${song.name || '未知歌曲'}》正在播放中`)
+    close()
+    return
+  }
   const emitter = (window as any).musicEmitter
   if (!emitter) {
     notify('error', '播放器未就绪', '请稍候重试')
@@ -200,11 +239,12 @@ async function addToList(pl: LocalPlaylist): Promise<void> {
           <div v-if="!showPicker" class="song-actions">
             <button
               class="song-action-btn song-action-primary"
-              :disabled="acting"
+              :class="{ 'is-current': isCurrentlyPlaying }"
+              :disabled="acting || isCurrentlyPlaying"
               :title="playHint"
               @click="playNow"
             >
-              <span class="song-action-icon">▶</span>
+              <span class="song-action-icon">{{ isCurrentlyPlaying ? '♫' : '▶' }}</span>
               <div class="song-action-body">
                 <div class="song-action-title">{{ playLabel }}</div>
                 <div class="song-action-sub">{{ playHint }}</div>
@@ -435,6 +475,15 @@ async function addToList(pl: LocalPlaylist): Promise<void> {
   &:hover:not(:disabled) {
     background: linear-gradient(135deg, #5090ff, #7ab5ff);
     border-color: transparent;
+  }
+
+  /* 已在播放 —— 用绿色"正在进行中"基调,且 opacity 不降低(disabled 默认会变暗,
+   * 视觉上像故障态;这里 disabled 但不暗,语义是"已完成不可重复") */
+  &.is-current,
+  &.is-current:disabled {
+    background: linear-gradient(135deg, #2ec27e, #5ad99c);
+    opacity: 1;
+    cursor: default;
   }
 }
 
