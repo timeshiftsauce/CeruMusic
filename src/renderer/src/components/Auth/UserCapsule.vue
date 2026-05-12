@@ -82,7 +82,34 @@ const userOpt = [
   {
     label: '注销登录',
     key: 'logout',
-    icon: renderIcon(PoweroffIcon)
+    icon: renderIcon(PoweroffIcon),
+    children: [
+      {
+        type: 'render',
+        key: 'logoutTip',
+        render: () =>
+          h(
+            'div',
+            {
+              style:
+                'padding: 8px 12px 6px; max-width: 240px; font-size: 11px; color: rgba(125,125,125,0.85); line-height: 1.5; white-space: normal;'
+            },
+            '"退出鉴权中心账号" 将同步退出所有使用鉴权中心登录的应用(包括澜音本身),如仅想切换澜音账号请选第一项。'
+          )
+      },
+      {
+        type: 'divider',
+        key: 'd2'
+      },
+      {
+        key: 'logoutLocal',
+        label: '仅退出当前应用'
+      },
+      {
+        key: 'logoutAll',
+        label: '退出鉴权中心账号'
+      }
+    ]
   }
 ]
 // 账号相关
@@ -91,8 +118,10 @@ const handleLogin = () => {
 }
 
 const handleMenuSelect = (key: string | number) => {
-  if (key === 'logout') {
+  if (key === 'logoutAll') {
     authStore.logout()
+  } else if (key === 'logoutLocal') {
+    authStore.outlogin()
   } else if (key === 'myInfo') {
     router.push('/home/profile')
   }
