@@ -50,7 +50,7 @@ export const useAuthStore = defineStore(
 
     const logout = async () => {
       try {
-        await logtoClient.signOut(postLogoutRedirectUri)
+        await logtoClient.signOut()
 
         user.value = null
         isAuthenticated.value = false
@@ -68,7 +68,8 @@ export const useAuthStore = defineStore(
       isAuthenticated.value = false
       if (
         router.currentRoute.value.name !== 'home' &&
-        router.currentRoute.value.name !== 'welcome'
+        router.currentRoute.value.name !== 'welcome' &&
+        router.currentRoute.value.name !== 'find'
       ) {
         router.push({
           name: 'home'
