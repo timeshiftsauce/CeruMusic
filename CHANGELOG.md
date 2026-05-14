@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD022 MD024 MD032 -->
 # 更新日志 (Changelog)
 
 > 本文件记录 Ceru Music (澜音) 每个发布版本的主要改动,主要面向 **终端用户** 视角:
