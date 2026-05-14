@@ -129,9 +129,7 @@ function buildSongPayload(): any {
     interval: s.interval || '',
     img: s.img || '',
     types: Array.isArray(s.types) ? s.types : [],
-    _types: s._types || {},
-    lrc: null,
-    url: props.detail.audioUrl || undefined
+    _types: s._types || {}
   }
 }
 
@@ -165,7 +163,7 @@ async function playNow(): Promise<void> {
     return
   }
   acting.value = true
-  emitter.emit('addToPlaylistAndPlay', song)
+  emitter.emit('addToPlaylistAndPlay', toRaw(song))
 
   /* 反馈文案按角色定制 —— playlistManager 内部对 member 会先弹自己的 success,
    * 这里 NotifyPlugin 右下角是补一份 dialog 风格的明确反馈。 */
@@ -181,11 +179,11 @@ async function playNow(): Promise<void> {
 }
 
 async function addToList(pl: LocalPlaylist): Promise<void> {
-  const song = buildSongPayload()
+  const song = toRaw(buildSongPayload())
   if (!song) return
   acting.value = true
   try {
-    const res = await window.api?.songList?.addSongs(pl.hashId, [song])
+    const res = await window.api?.songList?.addSongs(pl.hashId, [JSON.parse(JSON.stringify(song))])
     const ok =
       (res as any)?.success !== false && (res as any)?.code !== -1 && (res as any) !== false
     if (ok) {

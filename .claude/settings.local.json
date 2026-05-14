@@ -4,7 +4,16 @@
       "Bash(cmd.exe //c \"chcp 65001 >nul && echo 你好\")",
       "Bash(yarn typecheck:*)",
       "Bash(yarn typecheck:node)",
-      "Bash(yarn typecheck:web)"
+      "Bash(yarn typecheck:web)",
+      "Bash(ls /c/Users/Administrator.XJB-20230803KIH/.vscode/extensions/johnny-zhao.oai-compatible-copilot-0.4.1/out/)",
+      "Read(//c/Users/Administrator.XJB-20230803KIH/.vscode/extensions/johnny-zhao.oai-compatible-copilot-0.4.1/out//**)",
+      "Read(//e/tools/gh/**)",
+      "Bash(curl -L --proxy http://127.0.0.1:7897 -o gh.zip https://github.com/cli/cli/releases/download/v2.66.1/gh_2.66.1_windows_amd64.zip)",
+      "Read(//e/code/oai-compatible-copilot/src//**)",
+      "Read(//e/code/oai-compatible-copilot/src/anthropic//**)",
+      "Read(//e/code/oai-compatible-copilot/**)",
+      "Bash(gh pr *)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

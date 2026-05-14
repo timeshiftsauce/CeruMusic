@@ -54,6 +54,7 @@ import {
   type CreateRoomPayload
 } from '@renderer/api/listenTogether'
 import { useAuthStore } from '@renderer/store/Auth'
+import { useListenTogetherSettingsStore } from '@renderer/store/ListenTogetherSettings'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
 import { setLtInRoom } from '@renderer/utils/listenTogether/state'
@@ -295,6 +296,24 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   async function connect(): Promise<void> {
     if (socket?.connected) return
     if (connectionStatus.value === 'connecting') return
+
+    /* 旧 socket 存在但已断开(网络异常 / 服务端主动关闭后没回头清理),
+     * 这里主动断 + 解引用,避免:
+     *   1. SocketRequest 内部仍持有旧实例造成资源冲突(详见 utils/request.ts 注释)
+     *   2. 旧 socket 的 listener 残留(虽然新 socket 不会触发,但占内存)
+     *   3. bindSocketEvents 又给新 socket 注册一遍,导致 store 闭包变量
+     *      socket 与最后一次 bind 的 socket 不一致引发幽灵事件
+     *
+     * 之前的 bug:断网后再创建房间,store 这里发现 connected=false 就直接调
+     * socketRequest.connect() 新建,旧 socket 引用从未释放,持续在后台 reconnection
+     * 重试,与新 socket 抢占同一 namespace 资源,表现为 TransportError 一直到重启。 */
+    if (socket && !socket.connected) {
+      try {
+        socket.removeAllListeners()
+        socket.disconnect()
+      } catch {}
+      socket = null
+    }
 
     connectionStatus.value = 'connecting'
 
@@ -1451,10 +1470,23 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     overlayVisible.value = !overlayVisible.value
   }
 
-  /* 注入通知激活回调 —— 点击系统通知时把浮层拉开。
+  /* 注入通知激活回调 + 实时偏好读取 —— 点击系统通知时把浮层拉开;getPrefs
+   * 每次发通知前调一次,确保设置面板里改完即刻生效。
+   *
    * 用 configureNotifier 注入而不是 notifier 直接 import store,
-   * 是为了避免 store -> notifier -> store 的循环依赖。 */
-  configureNotifier({ onActivate: openOverlay })
+   * 是为了避免 store -> notifier -> store 的循环依赖。
+   * settings store 是独立 store,不参与该循环,但仍统一通过注入入口,
+   * 保证 notifier 模块本身无 store 依赖。 */
+  configureNotifier({
+    onActivate: openOverlay,
+    getPrefs: () => {
+      const s = useListenTogetherSettingsStore()
+      return {
+        enableSystemNotify: s.enableSystemNotify,
+        enableMentionStrong: s.enableMentionStrong
+      }
+    }
+  })
 
   /* ============================================================
    *  导出
