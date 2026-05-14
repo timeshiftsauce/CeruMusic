@@ -506,7 +506,7 @@ function onKeyDown(e: KeyboardEvent): void {
 
   :deep(.n-tabs-bar) {
     background-color: v-bind(mainColor) !important;
-    box-shadow: 0 0 8px v-bind(mainColor);
+    // box-shadow: 0 0 8px v-bind(mainColor);
     border-radius: 1px;
     height: 2px;
   }

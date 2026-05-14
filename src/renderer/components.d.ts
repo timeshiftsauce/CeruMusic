@@ -41,6 +41,7 @@ declare module 'vue' {
     LtChatToast: typeof import('./src/components/ListenTogether/LtChatToast.vue')['default']
     LtDanmakuLayer: typeof import('./src/components/ListenTogether/LtDanmakuLayer.vue')['default']
     LyricAdapter: typeof import('./src/components/Play/Lyric/LyricAdapter.vue')['default']
+    LyricCopyOverlay: typeof import('./src/components/Play/LyricCopyOverlay.vue')['default']
     LyricFontSettings: typeof import('./src/components/Settings/LyricFontSettings.vue')['default']
     MemberStrip: typeof import('./src/components/ListenTogether/parts/MemberStrip.vue')['default']
     MessageCard: typeof import('./src/components/ListenTogether/parts/MessageCard.vue')['default']

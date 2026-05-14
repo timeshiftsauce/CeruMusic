@@ -20,7 +20,7 @@ import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
 import { PlayMode } from '@renderer/types/audio'
-import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin, DialogPlugin, InputNumber as TInputNumber } from 'tdesign-vue-next'
 import {
   playNext,
   playPrevious,
@@ -44,7 +44,9 @@ import {
   ShareIcon,
   SoundIcon,
   TimeIcon,
-  UsergroupIcon
+  UsergroupIcon,
+  EditIcon,
+  RefreshIcon
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
@@ -54,6 +56,7 @@ import CrossfadeHint from './CrossfadeHint.vue'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 import ListenTogetherEntryDialog from '@renderer/components/ListenTogether/ListenTogetherEntryDialog.vue'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
+import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
 
@@ -61,6 +64,7 @@ const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
+const lyricExtrasStore = useLyricExtrasStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { player } = storeToRefs(globalPlayStatus)
@@ -989,6 +993,69 @@ const moreMenuOptions = computed(() => {
     }))
   })
 
+  /* 歌词偏移（per-song,持久化于 LyricExtras store）
+   *
+   * 解决某些音源歌词与音频时间轴不同步的问题。
+   * 单位 ms,正值=歌词提前(更早出现),负值=歌词延后。
+   * 仅当存在歌词时显示。
+   */
+  if (player.value.lyrics?.lines?.length) {
+    const curOffset = lyricExtrasStore.getOffset(songInfo.value.songmid)
+    const fmtOffset = (ms: number): string => {
+      if (ms === 0) return '0 ms'
+      const sign = ms > 0 ? '+' : '-'
+      const abs = Math.abs(ms)
+      if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(1)}s`
+      return `${sign}${abs}ms`
+    }
+    opts.push({
+      label: `歌词偏移 · ${fmtOffset(curOffset)}`,
+      key: 'lyric-offset',
+      icon: () => h(EditIcon, { size: '16' }),
+      disabled: !songInfo.value.songmid,
+      children: [
+        {
+          label: '提前 0.5s',
+          key: 'offset:+500'
+        },
+        {
+          label: '提前 0.1s',
+          key: 'offset:+100'
+        },
+        {
+          label: `当前 ${fmtOffset(curOffset)}`,
+          key: 'offset:noop',
+          disabled: true
+        },
+        {
+          label: '延后 0.1s',
+          key: 'offset:-100'
+        },
+        {
+          label: '延后 0.5s',
+          key: 'offset:-500'
+        },
+        {
+          label: '自定义…',
+          key: 'offset:custom',
+          icon: () => h(EditIcon, { size: '14' })
+        },
+        {
+          label: '重置',
+          key: 'offset:reset',
+          icon: () => h(RefreshIcon, { size: '14' })
+        }
+      ]
+    })
+
+    /* 复制歌词 —— 触发与右键歌词区域相同的浮层 */
+    opts.push({
+      label: '复制歌词',
+      key: 'lyric-copy',
+      icon: () => h(EditIcon, { size: '16' })
+    })
+  }
+
   return opts
 })
 
@@ -1047,6 +1114,82 @@ const handleMoreMenuSelect = (key: string) => {
   if (typeof key === 'string' && key.startsWith('rate:')) {
     const r = parseFloat(key.slice('rate:'.length))
     if (!isNaN(r)) setPlaybackRate(r)
+    return
+  }
+  /* 歌词偏移调节 —— per-song,叠加在已有 offset 上 */
+  if (typeof key === 'string' && key.startsWith('offset:')) {
+    const action = key.slice('offset:'.length)
+    const mid = songInfo.value.songmid
+    if (!mid) return
+    if (action === 'reset') {
+      lyricExtrasStore.resetOffset(mid)
+      MessagePlugin.success('歌词偏移已重置')
+      return
+    }
+    if (action === 'noop') return
+    /* 自定义偏移 —— 弹出 DialogPlugin + InputNumber,
+     * 允许用户直接输入毫秒数(范围 ±10000ms,与 store 内夹紧逻辑保持一致)。
+     * 值是"覆盖式"设置(直接 setOffset),而不是 bumpOffset,避免叠加困惑。
+     */
+    if (action === 'custom') {
+      const initial = lyricExtrasStore.getOffset(mid)
+      // 临时持有用户输入的值;由于 dialog body 是 render function,需要用闭包外部 ref
+      let inputVal: number = initial
+      const dialog = DialogPlugin({
+        header: '自定义歌词偏移',
+        body: () =>
+          h('div', { style: 'display:flex;flex-direction:column;gap:10px;' }, [
+            h(
+              'div',
+              { style: 'font-size:13px;color:var(--td-text-color-secondary);line-height:1.5;' },
+              '正值 = 歌词提前出现,负值 = 歌词延后;单位毫秒,范围 ±10000ms。'
+            ),
+            h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
+              h(TInputNumber, {
+                modelValue: inputVal,
+                'onUpdate:modelValue': (v: number | null) => {
+                  inputVal = typeof v === 'number' && !isNaN(v) ? v : 0
+                },
+                defaultValue: initial,
+                min: -10000,
+                max: 10000,
+                step: 50,
+                theme: 'column',
+                placeholder: '请输入偏移毫秒',
+                style: 'flex:1;'
+              }),
+              h('span', { style: 'font-size:13px;opacity:0.7;' }, 'ms')
+            ])
+          ]),
+        confirmBtn: '确定',
+        cancelBtn: '取消',
+        onConfirm: () => {
+          const v = typeof inputVal === 'number' && !isNaN(inputVal) ? inputVal : 0
+          lyricExtrasStore.setOffset(mid, v)
+          const cur = lyricExtrasStore.getOffset(mid)
+          MessagePlugin.success(`歌词偏移已设为 ${cur >= 0 ? '+' : ''}${cur}ms`)
+          dialog.destroy()
+        },
+        onCancel: () => dialog.destroy(),
+        onClose: () => dialog.destroy()
+      })
+      return
+    }
+    const delta = parseInt(action, 10)
+    if (!isNaN(delta)) {
+      lyricExtrasStore.bumpOffset(mid, delta)
+      const cur = lyricExtrasStore.getOffset(mid)
+      MessagePlugin.success(`歌词偏移: ${cur >= 0 ? '+' : ''}${cur}ms`)
+    }
+    return
+  }
+  /* 复制歌词浮层 —— 与右键歌词等价 */
+  if (key === 'lyric-copy') {
+    if (!player.value.lyrics?.lines?.length) {
+      MessagePlugin.warning('当前没有歌词可复制')
+      return
+    }
+    lyricExtrasStore.openCopy()
     return
   }
 }

@@ -46,7 +46,7 @@ const applyGlobalEQ = (el: HTMLAudioElement) => {
 
 // Apply Audio Effects
 const applyGlobalEffects = (el: HTMLAudioElement) => {
-  const { bassBoost, surround, balance } = storeToRefs(effectStore)
+  const { bassBoost, surround, balance, loudness } = storeToRefs(effectStore)
 
   // Bass Boost
   const targetBass = bassBoost.value.enabled ? bassBoost.value.gain : 0
@@ -59,6 +59,13 @@ const applyGlobalEffects = (el: HTMLAudioElement) => {
   // Balance
   const targetBalance = balance.value.enabled ? balance.value.value : 0
   AudioManager.setBalance(el, targetBalance)
+
+  // Loudness Normalization (响度均衡)
+  // 仅作用于本应用音频链路,不影响系统其他声音(如游戏)。
+  AudioManager.setLoudnessNormalization(el, {
+    enabled: loudness.value.enabled,
+    target: loudness.value.target
+  })
 }
 
 // 对两个元素都应用 EQ / Effects
@@ -136,7 +143,12 @@ watch(
 )
 
 watch(
-  [() => effectStore.bassBoost, () => effectStore.surround, () => effectStore.balance],
+  [
+    () => effectStore.bassBoost,
+    () => effectStore.surround,
+    () => effectStore.balance,
+    () => effectStore.loudness
+  ],
   () => {
     applyToBoth()
   },
