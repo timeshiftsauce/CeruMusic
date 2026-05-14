@@ -162,8 +162,7 @@ const SOCIAL_TARGET_LABELS: Record<string, string> = {
   dingtalk: '钉钉',
   feishu: '飞书'
 }
-const labelForSocialTarget = (t: string): string =>
-  SOCIAL_TARGET_LABELS[t.toLowerCase()] ?? t
+const labelForSocialTarget = (t: string): string => SOCIAL_TARGET_LABELS[t.toLowerCase()] ?? t
 interface SecurityGroup {
   title: string
   items: SecurityItem[]

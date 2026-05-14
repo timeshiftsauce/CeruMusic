@@ -7,11 +7,13 @@
  *  - 输入区：emoji 快捷面板 + 文本框，回车发送
  *  - 自动滚动到底（除非用户主动往上滑了）
  *  - 系统消息模板渲染：member-join / queue-request / queue-approved 等
+ *  - 虚拟滚动：使用 virtua 的 VList,仅渲染可视区 ± overscan 的消息(ResizeObserver
+ *    实测每行高度),上限 500 条历史(store 侧已有环形缓冲)时也不会出现大量 DOM 拖垮性能。
  *  - @ 提及：输入 @ 触发成员浮层,选中插入 @昵称 并记录 userId 进 meta.mentions
  *  - 回复：消息悬停 → 引用条进输入区,发送时 meta.replyTo* 透传
  *  - 复制：消息悬停 → 把 content 写入剪贴板
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useAuthStore } from '@renderer/store/Auth'
@@ -25,6 +27,13 @@ import MessageCard from './MessageCard.vue'
 import SongCardActions from './SongCardActions.vue'
 import type { ShareDetail, PlaylistShareDetail } from '@renderer/api/share'
 import type { ChatMsg, RoomMember } from '@renderer/utils/listenTogether/types'
+/* 虚拟滚动 —— 用 virtua 的 VList 处理不定高聊天行。
+ * 选 virtua 而不是 vue-virtual-scroller 的原因:
+ *   - virtua 用真实 absolute 定位(非 transform),能直接接受滚动容器 padding
+ *   - 用 ResizeObserver 实测每行高度,不依赖估算,追加新行不会漏渲染
+ *   - 原生 shift 模式 —— store 环形缓冲从头部 splice 则滚动位置不跳动
+ *   - API 极简:scrollToIndex(i, { align, smooth })、scrollOffset/scrollSize 可读 */
+import { VList, type VListHandle } from 'virtua/vue'
 
 const lt = useListenTogetherStore()
 const authStore = useAuthStore()
@@ -90,22 +99,43 @@ function formatTime(ts: number): string {
     .replace(/^[上下]午/, '')
 }
 
-/* 自动滚动 —— 只在贴底时才自动滚（避免打断用户翻历史） */
-const scrollerRef = ref<HTMLDivElement | null>(null)
+/* 自动滚动 —— 只在贴底时才自动滚（避免打断用户翻历史）
+ *
+ * virtua 改造说明:
+ *   - scrollerRef 是 VList 实例,通过 VListHandle 暴露 scrollToIndex / scrollOffset /
+ *     scrollSize / viewportSize / scrollBy / scrollTo,无需手摸 DOM。
+ *   - sticky 判定不再读 .scrollTop —— VList 内部包了真实滚动容器,我们要的几个数
+ *     直接拿 handle 上的 readonly 字段即可,避免找错节点。
+ *   - 没有现成的 scrollToBottom,统一用 scrollToIndex(最后一行, align='end')。
+ *   - VList 的 @scroll 事件参数是当前 offset(number),checkStickyState 直接吃就好。
+ */
+const scrollerRef = ref<VListHandle | null>(null)
 const stickToBottom = ref(true)
 
-function checkStickyState(): void {
-  const el = scrollerRef.value
-  if (!el) return
-  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+function checkStickyState(offset: number): void {
+  const s = scrollerRef.value
+  if (!s) return
+  const distanceFromBottom = s.scrollSize - offset - s.viewportSize
   stickToBottom.value = distanceFromBottom < 80
 }
 
 async function scrollToBottom(): Promise<void> {
+  // 双拍 nextTick:等 DOM 更新 + 等 VList 通过 ResizeObserver 重测高度后再贴底,
+  // 避免第一拍时 scrollSize 还是旧值。
   await nextTick()
-  const el = scrollerRef.value
-  if (!el) return
-  el.scrollTop = el.scrollHeight
+  await nextTick()
+  const s = scrollerRef.value
+  if (!s) return
+  const last = visibleRows.value.length - 1
+  if (last < 0) return
+  s.scrollToIndex(last, { align: 'end' })
+}
+
+/** 卡片消息异步加载完后高度会变(骨架 → 详情 → 封面图)。
+ *  普通的 watch(lt.chat.length) 不会触发,因为消息数量没变 —— 必须监听卡片的
+ *  resize 信号,在用户处于贴底状态时把视图再补一脚到底,否则就只是放一会儿 */
+function onCardResize(): void {
+  if (stickToBottom.value) void scrollToBottom()
 }
 
 watch(
@@ -275,20 +305,25 @@ function clearReply(): void {
   replyTo.value = null
 }
 
-/** 点击引用条 —— 把视图滚到被引用的原消息位置并高亮一下 */
+/** 点击引用条 —— 把视图滚到被引用的原消息位置并高亮一下
+ *
+ * 虚拟滚动下原消息可能没被渲染,无法用 querySelector 找节点。改成:
+ *   1. 在 visibleRows 里按 row.id 找目标 row 的索引
+ *   2. 调 scroller.scrollToIndex(index, { align: 'center' }) 让库自己处理滚动
+ *   3. 滚到位后高亮(等下一帧 item 渲染出来再加 class)
+ */
 const highlightedMsgId = ref<string | null>(null)
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
 function jumpToReplied(replyToId: string | undefined): void {
   if (!replyToId) return
-  const scroller = scrollerRef.value
-  if (!scroller) return
-  const target = scroller.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(replyToId)}"]`)
-  if (!target) {
+  const rows = visibleRows.value
+  const index = rows.findIndex((r) => r.kind === 'msg' && r.id === replyToId)
+  if (index < 0) {
     /* 原消息已被环形缓冲冲掉,引用条只剩 preview —— 给个友好提示 */
     MessagePlugin.warning('原消息已不可见')
     return
   }
-  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  scrollerRef.value?.scrollToIndex(index, { align: 'center', smooth: true })
   highlightedMsgId.value = replyToId
   if (highlightTimer) clearTimeout(highlightTimer)
   highlightTimer = setTimeout(() => {
@@ -546,88 +581,147 @@ function autoResize(): void {
 }
 watch(draft, () => void nextTick(autoResize))
 onMounted(() => autoResize())
+onBeforeUnmount(() => {
+  if (highlightTimer) {
+    clearTimeout(highlightTimer)
+    highlightTimer = null
+  }
+})
 
-const visibleChat = computed(() => {
+/* ============================================================
+ *  虚拟滚动行项
+ *
+ *  把"时间分割条"与"消息"打平成同质化 row 数组,VList 按下标渲染。
+ *    - row.kind = 'time' → 渲染时间分割条
+ *    - row.kind = 'msg'  → 渲染消息气泡/系统消息
+ *  time 行 id 形如 `t:${msg.id}`,避免与消息 id 撞键(仅供 jumpToReplied 查找使用)。
+ * ============================================================ */
+interface VirtualRow {
+  /** 唯一 key:消息 id 或 `t:${id}` */
+  id: string
+  kind: 'time' | 'msg'
+  /** 时间分割条用:展示时间戳 */
+  ts?: number
+  /** 消息行用:对应 ChatMsg */
+  msg?: ChatMsg
+}
+
+const visibleRows = computed<VirtualRow[]>(() => {
   const list = lt.chat
-  return list.map((m, i) => ({
-    msg: m,
-    showTime: i === 0 || m.ts - list[i - 1].ts > 3 * 60_000
-  }))
+  const rows: VirtualRow[] = []
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i]
+    const showTime = i === 0 || m.ts - list[i - 1].ts > 3 * 60_000
+    if (showTime) {
+      rows.push({ id: `t:${m.id}`, kind: 'time', ts: m.ts })
+    }
+    rows.push({ id: m.id, kind: 'msg', msg: m })
+  }
+  return rows
 })
 </script>
 
 <template>
   <div class="chat-panel">
-    <div ref="scrollerRef" class="chat-scroll" @scroll="checkStickyState">
-      <template v-for="{ msg, showTime } in visibleChat" :key="msg.id">
-        <div v-if="showTime" class="time-divider">{{ formatTime(msg.ts) }}</div>
-
-        <div v-if="msg.type === 'system'" class="msg-system">
-          {{ renderSystem(msg) }}
-        </div>
-
-        <div
-          v-else
-          class="msg-row"
-          :class="{ 'is-self': isSelf(msg), 'is-highlighted': highlightedMsgId === msg.id }"
-          :data-msg-id="msg.id"
-          @contextmenu="openMessageContextMenu($event, msg)"
-        >
-          <div class="msg-avatar">
-            <img v-if="msg.from?.avatar" :src="msg.from.avatar" />
-            <div v-else class="avatar-fallback" :class="{ 'is-self': isSelf(msg) }">
-              {{ (msg.from?.nickname || '?').slice(0, 1).toUpperCase() }}
-            </div>
+    <!-- virtua 的 VList:
+         - :data 直接吃打平后的 row 数组
+         - 不传 :item-size —— virtua 文档明确建议大多数场景由库自动从已测尺寸估算
+           (我们的行高差异极大:时间条 ~28、文字消息 ~40、卡片消息 100+、含引用条 +20,
+            固定 48 会导致首屏布局偏差,出现"挤一坨/留大白"现象)
+         - 不传 bufferSize —— 默认 200 足够吸收快速滚动
+         - 不开 shift —— 我们主要 append 到末尾(普通新消息),shift 在 append 场景
+           会"保持距底距离"反而让用户已滚动位置出现莫名空白;环形缓冲 500 条上限
+           罕见触发,代价可接受
+         - @scroll 给的是当前 scrollOffset(number),不用读 DOM -->
+    <VList
+      v-if="visibleRows.length > 0"
+      ref="scrollerRef"
+      class="chat-scroll"
+      :data="visibleRows"
+      @scroll="checkStickyState"
+    >
+      <template #default="{ item }">
+        <div class="chat-row-wrap">
+          <!-- 时间分割条 -->
+          <div v-if="item.kind === 'time'" class="time-divider-row">
+            <span class="time-divider">{{ formatTime(item.ts!) }}</span>
           </div>
 
-          <div class="msg-bubble-wrap" :class="{ 'is-self': isSelf(msg) }">
-            <div v-if="!isSelf(msg)" class="msg-name">{{ msg.from?.nickname }}</div>
-            <div
-              class="msg-bubble"
-              :class="{
-                'is-emoji-large': msg.type === 'emoji',
-                'is-self-bubble': isSelf(msg),
-                'is-card': !!msg.meta?.cardType
-              }"
-            >
-              <div
-                v-if="msg.meta?.replyToId"
-                class="msg-quote"
-                :title="`跳转到 ${msg.meta.replyToFrom || '原消息'}`"
-                @click="jumpToReplied(msg.meta.replyToId)"
-              >
-                <span class="msg-quote-from">{{ msg.meta.replyToFrom || '回复' }}</span>
-                <span class="msg-quote-text">{{ msg.meta.replyToPreview || '' }}</span>
+          <!-- 系统消息 -->
+          <div v-else-if="item.msg!.type === 'system'" class="msg-system-row">
+            <span class="msg-system">{{ renderSystem(item.msg!) }}</span>
+          </div>
+
+          <!-- 普通消息 -->
+          <div
+            v-else
+            class="msg-row"
+            :class="{
+              'is-self': isSelf(item.msg!),
+              'is-highlighted': highlightedMsgId === item.msg!.id
+            }"
+            :data-msg-id="item.msg!.id"
+            @contextmenu="openMessageContextMenu($event, item.msg!)"
+          >
+            <div class="msg-avatar">
+              <img v-if="item.msg!.from?.avatar" :src="item.msg!.from!.avatar" />
+              <div v-else class="avatar-fallback" :class="{ 'is-self': isSelf(item.msg!) }">
+                {{ (item.msg!.from?.nickname || '?').slice(0, 1).toUpperCase() }}
               </div>
+            </div>
 
-              <!-- 分享卡片 —— 单曲/歌单,有 meta.cardType 时优先渲染卡片,
-                   原始文本作为悄悄保留的 fallback(老客户端/盲文 reader 看得到) -->
-              <MessageCard
-                v-if="msg.meta?.cardType && msg.meta?.cardId"
-                :card-type="msg.meta.cardType"
-                :card-id="msg.meta.cardId"
-                @action-song="onCardSongAction"
-                @action-playlist="onCardPlaylistAction"
-              />
+            <div class="msg-bubble-wrap" :class="{ 'is-self': isSelf(item.msg!) }">
+              <div v-if="!isSelf(item.msg!)" class="msg-name">{{ item.msg!.from?.nickname }}</div>
+              <div
+                class="msg-bubble"
+                :class="{
+                  'is-emoji-large': item.msg!.type === 'emoji',
+                  'is-self-bubble': isSelf(item.msg!),
+                  'is-card': !!item.msg!.meta?.cardType
+                }"
+              >
+                <div
+                  v-if="item.msg!.meta?.replyToId"
+                  class="msg-quote"
+                  :title="`跳转到 ${item.msg!.meta.replyToFrom || '原消息'}`"
+                  @click="jumpToReplied(item.msg!.meta.replyToId)"
+                >
+                  <span class="msg-quote-from">{{ item.msg!.meta.replyToFrom || '回复' }}</span>
+                  <span class="msg-quote-text">{{ item.msg!.meta.replyToPreview || '' }}</span>
+                </div>
 
-              <div v-else class="msg-bubble-body">
-                <template v-for="(seg, segIdx) in renderMessageSegments(msg)" :key="segIdx">
+                <!-- 分享卡片 —— 单曲/歌单,有 meta.cardType 时优先渲染卡片,
+                     原始文本作为悄悄保留的 fallback(老客户端/盲文 reader 看得到) -->
+                <MessageCard
+                  v-if="item.msg!.meta?.cardType && item.msg!.meta?.cardId"
+                  :card-type="item.msg!.meta.cardType"
+                  :card-id="item.msg!.meta.cardId"
+                  @action-song="onCardSongAction"
+                  @action-playlist="onCardPlaylistAction"
+                  @resize="onCardResize"
+                />
+
+                <div v-else class="msg-bubble-body">
                   <span
-                    v-if="seg.type === 'mention'"
-                    class="msg-mention"
-                    :class="{ 'is-self-mention': seg.isSelf }"
+                    v-for="(seg, segIdx) in renderMessageSegments(item.msg!)"
+                    :key="segIdx"
+                    :class="
+                      seg.type === 'mention'
+                        ? ['msg-mention', { 'is-self-mention': seg.isSelf }]
+                        : 'msg-text-seg'
+                    "
                     >{{ seg.text }}</span
                   >
-                  <template v-else>{{ seg.text }}</template>
-                </template>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </template>
+    </VList>
 
-      <div v-if="!lt.chat.length" class="chat-empty">还没有人说话，快打个招呼吧 👋</div>
-    </div>
+    <!-- VList 没有 #empty 槽,空状态外置 -->
+    <div v-else class="chat-empty">还没有人说话，快打个招呼吧 👋</div>
 
     <div class="chat-input">
       <!-- @ 提及候选浮层 -->
@@ -734,11 +828,11 @@ const visibleChat = computed(() => {
 
 .chat-scroll {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  /* virtua 的 VList 自身就是滚动容器 —— 用真实流式 absolute 定位,
+   * 可以直接接受上下 padding 作为内边距(不像 vue-virtual-scroller 的 transform 实现) */
+  min-height: 0;
+  padding: 8px 0;
+  box-sizing: border-box;
   /* 与播放列表的全屏滚动条统一观感:8px 宽,半透明白 thumb,无 track */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
@@ -758,6 +852,22 @@ const visibleChat = computed(() => {
   }
 }
 
+/* VList 每行的 slot 外壳 ——
+ * 左右 12px padding,上下各 4px 间距(相当于原来 gap: 8px 的一半)。
+ * 内部用 flex 让自身消息靠右,他人消息靠左,系统消息/时间分割条居中。 */
+.chat-row-wrap {
+  padding: 4px 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.time-divider-row,
+.msg-system-row {
+  display: flex;
+  justify-content: center;
+}
+
 .chat-empty {
   text-align: center;
   color: rgba(255, 255, 255, 0.55);
@@ -766,17 +876,14 @@ const visibleChat = computed(() => {
 }
 
 .time-divider {
-  align-self: center;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   padding: 2px 8px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  margin: 4px 0;
 }
 
 .msg-system {
-  align-self: center;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
   font-style: italic;
@@ -789,7 +896,7 @@ const visibleChat = computed(() => {
   max-width: 80%;
 
   &.is-self {
-    align-self: flex-end;
+    margin-left: auto;
     flex-direction: row-reverse;
   }
 }
@@ -1084,19 +1191,23 @@ const visibleChat = computed(() => {
 /* ---- @ 提及高亮 ---- */
 .msg-mention {
   /* 不用方框,改用颜色 + 下划线呼应 IM 通用风格,视觉更轻 */
-  color: var(--td-brand-color-5, #4080ff);
+  // color: var(--td-brand-color-5, #4080ff);
   font-weight: 600;
   padding: 0 1px;
 }
 
-/* @你 —— 整段加底色与角标,真正突出 */
+/* @你 —— 红色文字 + 下划线,轻量提示而非整段填色块 */
 .msg-mention.is-self-mention {
-  color: #fff;
-  background: var(--td-warning-color, #e37318);
-  padding: 0 5px;
-  border-radius: 3px;
+  background: transparent;
+  padding: 0 1px;
+  border-radius: 0;
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(227, 115, 24, 0.4);
+  box-shadow: none;
+  text-decoration: underline;
+  text-decoration-color: var(--td-brand-color-5, #e34d59);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1.5px;
+  font-weight: 900;
 }
 
 /* 自己气泡(主题色底)里的 mention —— 反白显眼 */
@@ -1106,9 +1217,15 @@ const visibleChat = computed(() => {
   text-underline-offset: 2px;
   text-decoration-color: rgba(255, 255, 255, 0.55);
 }
+/* 自己气泡里 @自己(理论上少见,但保持视觉一致):
+ * 主题色底已经很亮了,这里红色会跟主题色打架,降级为白色下划线加粗 */
 .msg-bubble.is-self-bubble .msg-mention.is-self-mention {
-  background: var(--td-warning-color, #e37318);
-  text-decoration: none;
+  color: #fff;
+  background: transparent;
+  text-decoration: underline;
+  text-decoration-color: #fff;
+  text-decoration-thickness: 1.5px;
+  box-shadow: none;
 }
 
 /* 跳转高亮 —— 点击引用条时的目标消息脉冲 */

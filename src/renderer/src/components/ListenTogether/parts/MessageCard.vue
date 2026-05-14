@@ -25,6 +25,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'action-song', detail: ShareDetail): void
   (e: 'action-playlist', detail: PlaylistShareDetail): void
+  /** 卡片内部尺寸变化(详情加载完、封面图加载完) ——
+   *  聊天面板听到后若处于贴底状态可重新 scrollToBottom。 */
+  (e: 'resize'): void
 }>()
 
 const isSong = computed(() => props.cardType === 'song')
@@ -48,7 +51,14 @@ onMounted(async () => {
     failed.value = true
   }
   loaded.value = true
+  // 给父组件一个可中断点:骨架 → 真实内容,卡片高度会变
+  emit('resize')
 })
+
+/** 封面图加载完也会调整高度 —— img 的 onload 才是真正最后一拍 */
+function onCoverLoad(): void {
+  emit('resize')
+}
 
 function onClick(): void {
   if (failed.value) return
@@ -85,6 +95,7 @@ function onClick(): void {
         class="msg-card-cover"
         :src="song.song.img"
         alt=""
+        @load="onCoverLoad"
         @error="($event.target as HTMLImageElement).style.display = 'none'"
       />
       <div v-else class="msg-card-cover msg-card-cover-fallback">♪</div>
@@ -102,6 +113,7 @@ function onClick(): void {
         class="msg-card-cover"
         :src="playlist.playlist.cover"
         alt=""
+        @load="onCoverLoad"
         @error="($event.target as HTMLImageElement).style.display = 'none'"
       />
       <div v-else class="msg-card-cover msg-card-cover-fallback">♬</div>

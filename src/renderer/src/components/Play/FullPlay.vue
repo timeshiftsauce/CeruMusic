@@ -26,14 +26,17 @@ import { usePlaySettingStore } from '@renderer/store'
 import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
 import CommentsOverlay from './CommentsOverlay.vue'
+import LyricCopyOverlay from './LyricCopyOverlay.vue'
 import ListenTogetherOverlay from './ListenTogetherOverlay.vue'
 import LtDanmakuLayer from '@renderer/components/ListenTogether/LtDanmakuLayer.vue'
+import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
 const dlnaStore = useDlnaStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
+const lyricExtrasStore = useLyricExtrasStore()
 const showSettings = ref(false)
 
 const lyricFontSize = computed(() => {
@@ -438,6 +441,30 @@ const state = reactive({
 const bgRef = ref<CoreBackgroundRender<PixiRenderer> | undefined>(undefined)
 const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
 const backgroundContainer = ref<HTMLDivElement | null>(null)
+
+/**
+ * 当前曲目歌词偏移(ms)。正值=歌词向"前"挪(更早出现);负值=向"后"挪。
+ * effectiveLyricTime = state.currentTime + offset
+ * (offset 通过 PlayMusic.vue 更多菜单 -> 歌词偏移 调节)
+ *
+ * 直接读 store.offsetMap (而不是调 store.getOffset(...)) —— Pinia setup-style store
+ * 的 ref 字段被 computed 直接访问时,响应式追踪最可靠;函数调用偶尔会因 effect scope
+ * 边界丢失订阅,导致切歌或刷新后看不到更新。
+ *
+ * map 的 value 现在是 `{ value, updatedAt }` 结构(为了 LRU/TTL),
+ * 这里兼容旧的裸 number(冷启动从 localStorage 读到的历史数据)。
+ */
+const currentLyricOffset = computed(() => {
+  const mid = (player.value.songInfo as any)?.songmid
+  if (mid === null || mid === undefined || mid === '') return 0
+  const raw = (lyricExtrasStore.offsetMap as Record<string, any>)[String(mid)]
+  if (raw === undefined || raw === null) return 0
+  if (typeof raw === 'number') return raw || 0
+  return (raw.value as number) || 0
+})
+const effectiveLyricTime = computed(
+  () => (Number(state.currentTime) || 0) + currentLyricOffset.value
+)
 
 // 订阅音频事件，保持数据同步
 const unsubscribeTimeUpdate = ref<(() => void) | undefined>(undefined)
@@ -944,12 +971,16 @@ onUnmounted(() => {
           </div>
         </template>
       </div>
-      <div v-if="player.lyrics.lines.length > 0" class="right">
+      <div
+        v-if="player.lyrics.lines.length > 0"
+        class="right"
+        @contextmenu.prevent="lyricExtrasStore.openCopy()"
+      >
         <component
           :is="playSetting.getUseAmlLyricRenderer ? LyricPlayer : LyricAdapter"
           ref="lyricPlayerRef"
           :lyric-lines="toRaw(player.lyrics.lines) || []"
-          :current-time="Number(toRaw(state.currentTime)) || 0"
+          :current-time="effectiveLyricTime"
           :word-fade-width="0.5"
           :playing="isAudioPlaying"
           class="lyric-player"
@@ -1001,6 +1032,15 @@ onUnmounted(() => {
       :show="props.showComments"
       :main-color="lightMainColor"
       @close="emit('update:showComments', false)"
+    />
+    <!-- 歌词复制浮层 —— 右键歌词区域 / 更多菜单触发,样式与评论/一起听保持一致 -->
+    <LyricCopyOverlay
+      :show="lyricExtrasStore.copyOverlayVisible"
+      :lyric-lines="(player.lyrics.lines as any) || []"
+      :song-title="player.songInfo?.name || ''"
+      :artist="player.songInfo?.singer || ''"
+      :main-color="lightMainColor"
+      @close="lyricExtrasStore.closeCopy()"
     />
     <!-- 一起听浮层 —— 与 CommentsOverlay 平行的浮层，由 store.overlayVisible 控制 -->
     <ListenTogetherOverlay

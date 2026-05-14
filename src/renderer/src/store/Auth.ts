@@ -8,7 +8,7 @@ import { CERU_API_RESOURCE } from '@common/api/resources'
 import config from '../config'
 import router from '@renderer/router'
 
-const { redirectUri, postLogoutRedirectUri } = config
+const { redirectUri } = config
 const ceruRequest = new Request(CERU_API_RESOURCE)
 
 export const useAuthStore = defineStore(
