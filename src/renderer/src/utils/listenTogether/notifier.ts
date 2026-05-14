@@ -29,9 +29,26 @@ const PREVIEW_MAX = 28
 interface NotifierConfig {
   /** 点击通知后触发：把主窗口拉到前台 + 打开一起听浮层 */
   onActivate: () => void
+  /**
+   * 实时读取用户偏好(每次发通知时调一次,所以 store 改了立即生效)
+   *
+   * 不直接 import store —— 避免 notifier ↔ ListenTogether store 循环依赖。
+   * 由 store init 时把 settings store 的 getter 注入进来。
+   */
+  getPrefs?: () => {
+    /** 是否允许系统通知 —— 关闭后所有通知静默 */
+    enableSystemNotify: boolean
+    /** 是否启用 @ 强提示(绕过节流 + requireInteraction) —— 关闭后 @ 走普通通道 */
+    enableMentionStrong: boolean
+  }
 }
 
 let config: NotifierConfig | null = null
+
+function readPrefs(): { enableSystemNotify: boolean; enableMentionStrong: boolean } {
+  /* 未注入 getPrefs 时默认全开 —— 兼容 store init 之前的极早期调用 */
+  return config?.getPrefs?.() ?? { enableSystemNotify: true, enableMentionStrong: true }
+}
 
 /* ---------------- 焦点状态 ---------------- */
 
@@ -109,6 +126,8 @@ async function fireNotification(
   tag: string,
   opts: { requireInteraction?: boolean } = {}
 ): Promise<void> {
+  /* 用户在设置里关闭系统通知 → 直接静默,不申请权限也不弹窗 */
+  if (!readPrefs().enableSystemNotify) return
   const perm = await ensurePermission()
   if (perm !== 'granted') return
   try {
@@ -169,8 +188,9 @@ export function notifyChat(msg: ChatMsg, roomName: string, ctx: { mentionedSelf:
   /* 在前台 → 不打扰(无论一起听面板开没开) */
   if (isFocused) return
 
-  /* @你 的消息走"强提示"快通道：绕过节流 + 立即弹 + requireInteraction */
-  if (ctx.mentionedSelf) {
+  /* @你 的消息走"强提示"快通道:绕过节流 + 立即弹 + requireInteraction
+   * 当用户在设置里关闭"@ 强提示"时,降级为普通通道(仍然弹,但走节流且非粘性) */
+  if (ctx.mentionedSelf && readPrefs().enableMentionStrong) {
     void fireNotification(`[@你] ${roomName}`, formatChatPreview(msg), 'lt-chat-mention', {
       requireInteraction: true
     })

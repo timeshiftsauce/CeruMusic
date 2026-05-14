@@ -25,7 +25,7 @@
  *  - ESC 关闭
  */
 import { computed, ref, watch } from 'vue'
-import { CloseIcon, CopyIcon, ShareIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
+import { CloseIcon, CopyIcon, ShareIcon, UsergroupIcon, SettingIcon } from 'tdesign-icons-vue-next'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import MemberStrip from '@renderer/components/ListenTogether/parts/MemberStrip.vue'
@@ -51,7 +51,65 @@ const lt = useListenTogetherStore()
 
 /* ---------------- Tab 切换 ---------------- */
 
-const activeTab = ref<'chat' | 'queue' | 'pending'>('chat')
+type TabKey = 'chat' | 'queue' | 'pending'
+const activeTab = ref<TabKey>('chat')
+
+/**
+ * Tab 切换动画方向 —— 根据"上一次 tab 索引 vs 新 tab 索引"决定 slide 方向
+ *
+ * 设计:
+ *  - 左 → 右(索引变大):新内容从右侧滑入,旧内容向左滑出     → name='lt-tab-forward'
+ *  - 右 → 左(索引变小):新内容从左侧滑入,旧内容向右滑出     → name='lt-tab-backward'
+ * 用一个 ref 记录方向,模板里根据它选 transition name。
+ *
+ * 不直接 watch activeTab 改方向,而是封装 setTab():保证方向计算和值变化在同一帧,
+ * 避免连点两次产生方向错乱(watch 是异步,activeTab 已经更新两次但方向只更新一次)。
+ */
+const TAB_ORDER: TabKey[] = ['chat', 'queue', 'pending']
+const tabDirection = ref<'forward' | 'backward'>('forward')
+
+/**
+ * 切换 tab —— 入参签名兼容 n-tabs 的 @update:value(它给的是 string | number)。
+ * 非法 key 直接忽略,避免 activeTab 被污染。
+ */
+function setTab(next: string | number): void {
+  if (typeof next !== 'string') return
+  if (!TAB_ORDER.includes(next as TabKey)) return
+  const target = next as TabKey
+  if (target === activeTab.value) return
+  const prev = activeTab.value
+  tabDirection.value = TAB_ORDER.indexOf(target) > TAB_ORDER.indexOf(prev) ? 'forward' : 'backward'
+  activeTab.value = target
+}
+
+/**
+ * 子视图路由 —— 在主面板内做"主视图 ↔ 设置视图"切换,不接入 vue-router
+ *
+ * 为什么不用 vue-router:
+ *  - 一起听浮层叠在 FullPlay 内,主路由是 /home/play,不希望浮层的子页污染历史栈
+ *  - 浮层关闭/重开时设置面板应回到主视图,vue-router 需要额外清理状态
+ *  - 切换动画用 <Transition> 比 router-view 更轻量
+ *
+ * 切换:settings 按钮 → setView('settings');SettingsPanel emit('back') → setView('main')
+ */
+type SubView = 'main' | 'settings'
+const subView = ref<SubView>('main')
+
+function openSettings(): void {
+  subView.value = 'settings'
+}
+
+function backToMain(): void {
+  subView.value = 'main'
+}
+
+/** 浮层关闭/重开时把视图复位到主视图,避免重开就直接是设置页 */
+watch(
+  () => lt.overlayVisible,
+  (v) => {
+    if (!v) subView.value = 'main'
+  }
+)
 
 /** admin+ 在 group 模式才看待审批 tab */
 const showPendingTab = computed(() => lt.canControl && lt.meta?.mode === 'group')
@@ -156,6 +214,9 @@ function onKeyDown(e: KeyboardEvent): void {
           </div>
 
           <div class="actions">
+            <button class="action-btn" :title="'设置'" @click="openSettings">
+              <SettingIcon size="16" />
+            </button>
             <button class="action-btn" :title="'复制分享文案'" @click="shareRoom">
               <ShareIcon size="16" />
               <span>分享</span>
@@ -164,47 +225,54 @@ function onKeyDown(e: KeyboardEvent): void {
           </div>
         </header>
 
-        <!-- 成员条 -->
-        <div class="lt-members">
-          <MemberStrip />
-        </div>
+        <!-- 主视图 / 设置视图 切换 -->
+        <div class="lt-view-stack">
+          <Transition :name="subView === 'settings' ? 'lt-sub-slide' : 'lt-sub-slide-back'">
+            <div v-if="subView === 'main'" key="main" class="lt-view">
+              <!-- 成员条 -->
+              <div class="lt-members">
+                <MemberStrip />
+              </div>
 
-        <!-- Tabs -->
-        <div class="lt-tabs">
-          <div
-            class="tab-item"
-            :class="{ active: activeTab === 'chat' }"
-            @click="activeTab = 'chat'"
-          >
-            聊天
-          </div>
-          <div
-            class="tab-item"
-            :class="{ active: activeTab === 'queue' }"
-            @click="activeTab = 'queue'"
-          >
-            共享列表
-            <span v-if="lt.queue.length" class="count">{{ lt.queue.length }}</span>
-          </div>
-          <div
-            v-if="showPendingTab"
-            class="tab-item"
-            :class="{ active: activeTab === 'pending' }"
-            @click="activeTab = 'pending'"
-          >
-            待审批
-            <span v-if="pendingCount" class="count badge">{{ pendingCount }}</span>
-          </div>
-        </div>
+              <!-- Tabs ——
+                   用 naive-ui n-tabs(type=line, animated 自带横向滑动动画 + 高亮下划线滑动)
+                   - v-model:value 绑定 activeTab,内部走 setTab 以维持 tabDirection(虽然 n-tabs
+                     自己也有动画,这里保留 setTab 是为了将来手动触发场景一致)
+                   - pane 内放面板组件;pending 通过 v-if 控制是否渲染 tab -->
+              <n-tabs
+                class="lt-ntabs"
+                :value="activeTab"
+                type="line"
+                animated
+                size="small"
+                @update:value="setTab"
+              >
+                <n-tab-pane name="chat" tab="聊天" display-directive="if">
+                  <ChatPanel class="content-fill" />
+                </n-tab-pane>
 
-        <!-- 内容区 -->
-        <div class="lt-content">
-          <ChatPanel v-if="activeTab === 'chat'" class="content-fill" />
-          <QueuePanel v-else-if="activeTab === 'queue'" class="content-fill" />
-          <PendingPanel
-            v-else-if="activeTab === 'pending' && showPendingTab"
-            class="content-fill"
-          />
+                <n-tab-pane name="queue" display-directive="if">
+                  <template #tab>
+                    共享列表
+                    <span v-if="lt.queue.length" class="count">{{ lt.queue.length }}</span>
+                  </template>
+                  <QueuePanel class="content-fill" />
+                </n-tab-pane>
+
+                <n-tab-pane v-if="showPendingTab" name="pending" display-directive="if">
+                  <template #tab>
+                    待审批
+                    <span v-if="pendingCount" class="count badge">{{ pendingCount }}</span>
+                  </template>
+                  <PendingPanel class="content-fill" />
+                </n-tab-pane>
+              </n-tabs>
+            </div>
+
+            <div v-else key="settings" class="lt-view">
+              <SettingsPanel @back="backToMain" />
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -359,69 +427,120 @@ function onKeyDown(e: KeyboardEvent): void {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* ---------------- Tabs ---------------- */
+/* ---------------- Tabs (n-tabs 覆盖) ---------------- */
 
-.lt-tabs {
-  display: flex;
-  gap: 24px;
-  padding: 10px 24px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.tab-item {
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  opacity: 0.6;
-  position: relative;
-  padding-bottom: 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: opacity 0.2s;
-
-  .count {
-    font-size: 11px;
-    opacity: 0.8;
-    padding: 1px 6px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
-
-    &.badge {
-      background: rgb(255, 90, 90);
-      color: #fff;
-      opacity: 1;
-    }
-  }
-
-  &:hover {
-    opacity: 0.85;
-  }
-
-  &.active {
-    opacity: 1;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -1px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: v-bind(mainColor);
-      border-radius: 1px;
-      box-shadow: 0 0 8px v-bind(mainColor);
-    }
-  }
-}
-
-/* ---------------- Content ---------------- */
-
-.lt-content {
+/* n-tabs 默认是浅色主题,这里强制覆盖成浮层的深色风格。
+ * 关键点:
+ *  - .n-tabs-nav:整条 tab bar,加底分隔线,与原 .lt-tabs 保持一致
+ *  - .n-tabs-tab:每个 tab 标签;未选中半透明,hover/选中走主题色
+ *  - .n-tabs-bar:n-tabs 自带的下划线滑块,直接染色 + 阴影
+ *  - .n-tab-pane:面板内容区,需要 flex:1 让 ChatPanel 等填满
+ *  - animated 模式下,n-tabs 内部用 transform 平移整条 pane-wrapper,
+ *    所以无需再写自定义 Transition CSS */
+.lt-ntabs {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+
+  :deep(.n-tabs-nav) {
+    padding: 0 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+    .n-tabs-nav-scroll-content {
+      border-bottom: none;
+    }
+  }
+
+  /* 关键:tab 标签不撑满,紧凑靠左排列,gap 控制间距 */
+  :deep(.n-tabs-tab-wrapper) {
+    margin-right: 0;
+  }
+
+  /* n-tabs 默认在 tab 之间插入 .n-tabs-tab-pad(占位元素)用来撑开间距,
+   * 默认值约 36px,在浮层这种紧凑布局里太大,压到 4px */
+  :deep(.n-tabs-tab-pad) {
+    width: 4px !important;
+  }
+
+  :deep(.n-tabs-tab) {
+    /* 内部用相对定位 —— 给 .count 提供绝对定位锚点
+     * padding 让下划线宽度 > 文字宽度,视觉更舒展 */
+    position: relative;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    padding: 10px 16px !important;
+    margin: 0 !important;
+    transition: color 0.2s;
+
+    &:hover {
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    &.n-tabs-tab--active {
+      color: #fff;
+    }
+
+    /* 徽标(共享列表 / 待审批数量)用绝对定位浮在 tab 右上角,
+     * 不参与 tab 宽度计算 → 文字始终视觉居中,n-tabs-bar 下划线也居中对齐 */
+    .count {
+      position: absolute;
+      top: 2px;
+      right: -2px;
+      font-size: 10px;
+      line-height: 1;
+      opacity: 0.85;
+      padding: 2px 5px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      pointer-events: none;
+
+      &.badge {
+        background: rgb(255, 90, 90);
+        color: #fff;
+        opacity: 1;
+      }
+    }
+  }
+
+  :deep(.n-tabs-bar) {
+    background-color: v-bind(mainColor) !important;
+    box-shadow: 0 0 8px v-bind(mainColor);
+    border-radius: 1px;
+    height: 2px;
+  }
+
+  /* ---- 修复 animated 切换瞬间高度塌陷 ----
+   * n-tabs animated 模式实际 DOM:
+   *   .n-tabs-pane-wrapper(外层,固定可视区)
+   *     └ .n-tabs-panes(横向轨道,用 transform 平移)
+   *         ├ .n-tab-pane(每个 pane,inline-block)
+   *         └ .n-tab-pane
+   * 问题:切换瞬间,新旧 pane 都在轨道里并排,如果 pane 自身用 flex:1 取高,
+   *      它依赖父级 .n-tabs-panes 的高度,但 .n-tabs-panes 是 inline 排版,
+   *      不传递高度 → ChatPanel 内的 flex:1 链断裂 → 整个面板瞬间塌成 0。
+   * 解法:
+   *   1) pane-wrapper 自己 flex:1 + 固定高度链
+   *   2) panes 容器 height:100% 把高度传下去
+   *   3) 每个 pane 也 height:100%,用 block + flex 列布局 */
+  :deep(.n-tabs-pane-wrapper) {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  :deep(.n-tabs-panes) {
+    height: 100%;
+  }
+
+  :deep(.n-tab-pane) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important;
+  }
 }
 
 .content-fill {
@@ -452,5 +571,56 @@ function onKeyDown(e: KeyboardEvent): void {
     opacity: 0;
     transform: scale(0.95) translateY(20px);
   }
+}
+
+/* ---------------- 子视图(主面板 ↔ 设置面板)切换 ---------------- */
+
+/* 父容器需要 relative + overflow:hidden,让两个 lt-view 在切换瞬间能叠 + 滑出 */
+.lt-view-stack {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.lt-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 主 → 设置:新视图从右侧滑入,旧视图向左滑出 */
+.lt-sub-slide-enter-active,
+.lt-sub-slide-leave-active {
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s ease;
+}
+.lt-sub-slide-enter-from {
+  transform: translateX(40px);
+  opacity: 0;
+}
+.lt-sub-slide-leave-to {
+  transform: translateX(-40px);
+  opacity: 0;
+}
+
+/* 设置 → 主:反向(新视图从左,旧视图向右) */
+.lt-sub-slide-back-enter-active,
+.lt-sub-slide-back-leave-active {
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s ease;
+}
+.lt-sub-slide-back-enter-from {
+  transform: translateX(-40px);
+  opacity: 0;
+}
+.lt-sub-slide-back-leave-to {
+  transform: translateX(40px);
+  opacity: 0;
 }
 </style>

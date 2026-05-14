@@ -82,6 +82,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SearchSuggest: typeof import('./src/components/search/searchSuggest.vue')['default']
     SensitiveVerifyDialog: typeof import('./src/components/Profile/SensitiveVerifyDialog.vue')['default']
+    SettingsPanel: typeof import('./src/components/ListenTogether/parts/SettingsPanel.vue')['default']
     SettingsSearch: typeof import('./src/components/SettingsSearch.vue')['default']
     ShaderBackground: typeof import('./src/components/Play/ShaderBackground.vue')['default']
     ShareConsentBar: typeof import('./src/components/Share/ShareConsentBar.vue')['default']

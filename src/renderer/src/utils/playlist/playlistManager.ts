@@ -51,7 +51,8 @@ async function tryRequestSongAsMember(song: SongList): Promise<boolean> {
       albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
       hash: song.hash,
       types: song.types,
-      lrc: (song as any).lrc ?? null
+      lrc: (song as any).lrc ?? null,
+      url: (song as any).url || undefined
     })
     await MessagePlugin.success(`已提交点歌《${song.name || '?'}》,等待管理员审核`)
     return true
@@ -91,7 +92,8 @@ async function tryAddToQueueAsHost(song: SongList): Promise<boolean> {
       albumId: song.albumId !== undefined ? String(song.albumId) : undefined,
       hash: song.hash,
       types: song.types,
-      lrc: (song as any).lrc ?? null
+      lrc: (song as any).lrc ?? null,
+      url: (song as any).url || undefined
     })
     return true
   } catch {

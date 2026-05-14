@@ -8,6 +8,8 @@
 
 Ceru Music (澜音) is an Electron + Vue 3 + TypeScript desktop music player that relies on user-supplied plugins for lawful music metadata. The repo mixes Node/Electron main process code, Vue renderer, and an external website/docs bundle.
 
+> **Multi-root workspace**: the companion NestJS backend lives at [`../ceru-backend/`](../ceru-backend/AGENTS.md) (cloud song lists, avatar upload, listen-together rooms, playlist share). When work spans both, consult both AGENTS.md files.
+
 ## STRUCTURE
 
 ```
