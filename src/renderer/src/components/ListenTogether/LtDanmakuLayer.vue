@@ -11,9 +11,11 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
+import { useListenTogetherSettingsStore } from '@renderer/store/ListenTogetherSettings'
 import type { ChatMsg } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
+const ltSettings = useListenTogetherSettingsStore()
 
 interface DanmakuItem {
   id: string
@@ -89,12 +91,18 @@ function randInRange(min: number, max: number): number {
 function spawn(msg: ChatMsg): void {
   if (msg.type === 'system') return
   if (!msg.content) return
+  /* 用户在设置里关掉弹幕时,不再生成 —— 已飞的会自然飘完 */
+  if (!ltSettings.enableDanmaku) return
 
   const isSelf = Boolean(msg.from?.userId && msg.from.userId === lt.myUserId)
   const nickname = msg.from?.nickname || '匿名'
-  /* 随机化速度和字号 —— B 站风格的快慢混合 + 大小不一 */
-  const duration = Math.round(randInRange(FLY_DURATION_MIN_MS, FLY_DURATION_MAX_MS))
-  const fontSize = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)]
+  /* 随机化速度和字号 —— B 站风格的快慢混合 + 大小不一,叠加用户设置的缩放
+   * speed 越大 → duration 越小 → 飘得越快;fontScale 直接乘到 base 字号上 */
+  const speed = ltSettings.danmakuSpeed || 1
+  const fontScale = ltSettings.danmakuFontScale || 1
+  const duration = Math.round(randInRange(FLY_DURATION_MIN_MS, FLY_DURATION_MAX_MS) / speed)
+  const baseFontSize = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)]
+  const fontSize = Math.round(baseFontSize * fontScale)
 
   const item: DanmakuItem = {
     id: msg.id,
@@ -148,7 +156,20 @@ const stopRoomWatch = watch(
   { immediate: true }
 )
 
-const visible = computed(() => lt.isInRoom)
+const visible = computed(() => lt.isInRoom && ltSettings.enableDanmaku)
+
+/* 用户在房间内关闭"开启弹幕"时,清掉所有飞行中的弹幕,
+ * 否则会停留在屏幕上等动画跑完(看起来像没生效)。 */
+watch(
+  () => ltSettings.enableDanmaku,
+  (enabled) => {
+    if (!enabled) {
+      flying.value = []
+      cleanupTimers.forEach(clearTimeout)
+      cleanupTimers.clear()
+    }
+  }
+)
 
 onBeforeUnmount(() => {
   stopWatch()

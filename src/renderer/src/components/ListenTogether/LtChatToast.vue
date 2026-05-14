@@ -25,9 +25,11 @@
 import { onBeforeUnmount, watch } from 'vue'
 import { NotifyPlugin } from 'tdesign-vue-next'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
+import { useListenTogetherSettingsStore } from '@renderer/store/ListenTogetherSettings'
 import type { ChatMsg } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
+const ltSettings = useListenTogetherSettingsStore()
 
 /** 单条通知显示时长 */
 const NOTIFY_DURATION_MS = 3500
@@ -109,8 +111,11 @@ function primeSeen(): void {
 const stopChatWatch = watch(
   () => lt.chat.length,
   () => {
-    /* 仅在"未展开 FullPlay 且在房间内 且面板没开"时走通知卡片 */
-    if (lt.fullPlayVisible || !lt.isInRoom || lt.overlayVisible) {
+    /* 仅在"未展开 FullPlay 且在房间内 且面板没开 且用户启用了软件内通知"时走通知卡片
+     *
+     * enableInAppNotify 关闭时:把当前所有消息标 seen 后直接 return,
+     * 这样用户重新开启时不会一次性弹出累积的历史消息。 */
+    if (lt.fullPlayVisible || !lt.isInRoom || lt.overlayVisible || !ltSettings.enableInAppNotify) {
       for (const m of lt.chat) seenIds.add(m.id)
       return
     }

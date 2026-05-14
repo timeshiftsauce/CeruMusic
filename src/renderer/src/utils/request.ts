@@ -313,6 +313,17 @@ export class SocketRequest {
       const onConnect = () => {
         cleanup()
         this.socket = sock
+        /* 一旦本 socket 正式断开(网络异常、服务器主动断、用户主动 disconnect),
+         * 立刻把 this.socket 解引用,让下次 connect() 走干净的新建流程。
+         *
+         * 修复:之前断网后 this.socket 仍指向旧实例,后续 connect() 虽然 connected=false
+         * 会进入 doConnect 但旧 socket 仍未释放,与新 socket 共用同一 manager + 同一 transport
+         * 重试队列,出现 'TransportError: websocket error' 并持续到重启。 */
+        sock.once('disconnect', () => {
+          if (this.socket === sock) {
+            this.socket = null
+          }
+        })
         resolve(sock)
       }
       const onError = (err: Error) => {
@@ -321,6 +332,11 @@ export class SocketRequest {
           sock.removeAllListeners()
           sock.disconnect()
         } catch {}
+        /* 防御:onError 路径下 this.socket 不该指向这个 sock(它从未被设过),
+         * 但若调用方在 doConnect 过程中重入,这里多做一次清理无副作用。 */
+        if (this.socket === sock) {
+          this.socket = null
+        }
         reject(err)
       }
       sock.once('connect', onConnect)
@@ -340,6 +356,26 @@ export class SocketRequest {
   async connect(options: SocketConnectOptions = {}): Promise<Socket> {
     /* 已经连了同一个 socket 就复用 —— 调用方 idempotent */
     if (this.socket?.connected) return this.socket
+
+    /* 关键修复:旧 socket 存在但已断开(connected=false)时,必须先彻底释放,
+     * 否则它仍持有内部 manager + 在后台 reconnection 重试,与即将新建的 socket
+     * 共用底层资源,造成 'TransportError: websocket error' 持续到重启的现象。
+     *
+     * 触发场景:
+     *  1. 用户首次进入房间(网络正常)→ this.socket 设为已连接 sock
+     *  2. 用户断网 → sock.connected=false,但 this.socket 仍指向它,
+     *     内部 reconnectionAttempts=5 在后台不断失败
+     *  3. 用户网络恢复后再次创建房间 → connected=false 判断不命中,
+     *     直接 doConnect 新建 sock2,sock1 未释放 → 资源冲突
+     *
+     * 修复:发现废弃旧实例时主动断开 + 解引用,保证 doConnect 是一次干净的新建。 */
+    if (this.socket && !this.socket.connected) {
+      try {
+        this.socket.removeAllListeners()
+        this.socket.disconnect()
+      } catch {}
+      this.socket = null
+    }
 
     const isAuthFail = (err: unknown): boolean => {
       const msg = (err as Error)?.message || ''
