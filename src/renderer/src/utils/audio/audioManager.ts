@@ -15,6 +15,12 @@ class AudioManager {
   private surroundGainNodes = new WeakMap<HTMLAudioElement, GainNode>()
   private balanceNodes = new WeakMap<HTMLAudioElement, StereoPannerNode>()
 
+  // 响度均衡 (Loudness Normalization) 节点
+  // 仅在软件内部音频链路生效（splitter 之前），不会影响系统/游戏音量。
+  // 结构：... -> loudnessCompressor -> loudnessMakeup -> splitter -> ...
+  private loudnessCompressors = new WeakMap<HTMLAudioElement, DynamicsCompressorNode>()
+  private loudnessMakeupGains = new WeakMap<HTMLAudioElement, GainNode>()
+
   // Crossfade Nodes (插在 splitter 和 destination 之间，供无感过渡使用)
   private crossfadeGains = new WeakMap<HTMLAudioElement, GainNode>()
   private crossfadeLowpasses = new WeakMap<HTMLAudioElement, BiquadFilterNode>()
@@ -164,6 +170,25 @@ class AudioManager {
 
         // Update lastNode to balanceNode
         lastNode = balanceNode
+
+        // 5. Loudness Normalization (响度均衡)
+        // 用 DynamicsCompressor 把动态过大的曲目"压平",再用 makeup gain 补回平均能量。
+        // 默认 bypass(threshold 0dB, makeup 1.0),开启时由 setLoudnessNormalization 配置。
+        const loudnessCompressor = ctx.createDynamicsCompressor()
+        loudnessCompressor.threshold.value = 0 // 0dB = 等效 bypass
+        loudnessCompressor.knee.value = 30
+        loudnessCompressor.ratio.value = 1 // 1:1 = bypass
+        loudnessCompressor.attack.value = 0.003
+        loudnessCompressor.release.value = 0.25
+        this.loudnessCompressors.set(audioElement, loudnessCompressor)
+
+        const loudnessMakeup = ctx.createGain()
+        loudnessMakeup.gain.value = 1.0
+        this.loudnessMakeupGains.set(audioElement, loudnessMakeup)
+
+        lastNode.connect(loudnessCompressor)
+        loudnessCompressor.connect(loudnessMakeup)
+        lastNode = loudnessMakeup
 
         // 确保仅通过分流器连接，避免重复直连导致音量叠加
         let splitter = this.splitters.get(audioElement)
@@ -466,6 +491,67 @@ class AudioManager {
     const node = this.balanceNodes.get(audioElement)
     if (node) {
       node.pan.value = value
+    }
+  }
+
+  /**
+   * 设置响度均衡 (Loudness Normalization)。
+   *
+   * 通过 DynamicsCompressor + makeup gain 把动态范围过大、平均音量过低的曲目
+   * 拉到接近一致的感知响度。仅在软件内部音频链路生效，对系统/其他应用
+   * (例如游戏) 的音量没有任何影响 —— 这正是"软件内开关"的意义所在。
+   *
+   * @param audioElement 目标音频元素
+   * @param opts.enabled 是否开启
+   * @param opts.target 目标强度：'gentle' 轻度 | 'standard' 标准 | 'strong' 强力
+   */
+  setLoudnessNormalization(
+    audioElement: HTMLAudioElement,
+    opts: { enabled: boolean; target?: 'gentle' | 'standard' | 'strong' }
+  ): void {
+    const compressor = this.loudnessCompressors.get(audioElement)
+    const makeup = this.loudnessMakeupGains.get(audioElement)
+    const ctx = this.audioContexts.get(audioElement)
+    if (!compressor || !makeup || !ctx) return
+
+    const now = ctx.currentTime
+    if (!opts.enabled) {
+      // bypass：把压缩器还原为透明 (ratio=1, threshold=0)，makeup=1.0
+      try {
+        compressor.threshold.setTargetAtTime(0, now, 0.05)
+        compressor.ratio.setTargetAtTime(1, now, 0.05)
+        compressor.knee.setTargetAtTime(30, now, 0.05)
+        makeup.gain.setTargetAtTime(1.0, now, 0.05)
+      } catch {
+        compressor.threshold.value = 0
+        compressor.ratio.value = 1
+        compressor.knee.value = 30
+        makeup.gain.value = 1.0
+      }
+      return
+    }
+
+    // 三档预设，参考广播 / 流媒体平台常用响度归一参数。
+    // makeup gain 是补偿被压下去的能量，让最终响度更接近目标。
+    const presets = {
+      gentle: { threshold: -18, ratio: 2, knee: 24, makeup: 1.15 },
+      standard: { threshold: -22, ratio: 3, knee: 20, makeup: 1.35 },
+      strong: { threshold: -26, ratio: 4, knee: 16, makeup: 1.55 }
+    } as const
+    const p = presets[opts.target ?? 'standard']
+
+    try {
+      compressor.threshold.setTargetAtTime(p.threshold, now, 0.05)
+      compressor.ratio.setTargetAtTime(p.ratio, now, 0.05)
+      compressor.knee.setTargetAtTime(p.knee, now, 0.05)
+      compressor.attack.setTargetAtTime(0.003, now, 0.05)
+      compressor.release.setTargetAtTime(0.25, now, 0.05)
+      makeup.gain.setTargetAtTime(p.makeup, now, 0.05)
+    } catch {
+      compressor.threshold.value = p.threshold
+      compressor.ratio.value = p.ratio
+      compressor.knee.value = p.knee
+      makeup.gain.value = p.makeup
     }
   }
 

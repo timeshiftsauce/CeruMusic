@@ -128,12 +128,43 @@ jobs:
           name: ${{ matrix.os }}-build-artifacts
           path: dist
 
+      - name: Extract changelog section
+        # 从 CHANGELOG.md 中抽取当前 tag 对应的版本块作为 Release body
+        # 取从第一个 "## [vX.Y.Z]" 到下一个 "## [" 之间的内容 (不含下一个标题)
+        # 若 CHANGELOG.md 不存在 / 抽取失败,回退到 commit message
+        # 注意: 所有平台都跑这一步 —— windows/macOS runner 都内置 bash,
+        # 这样每个矩阵节点都有同一份 release-notes.md,Release 步骤无需区分平台
+        if: startsWith(github.ref, 'refs/tags/')
+        id: changelog
+        shell: bash
+        run: |
+          set -e
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          NOTES_FILE="release-notes.md"
+          if [ -f CHANGELOG.md ]; then
+            awk -v tag="$TAG_NAME" '
+              BEGIN { in_block = 0 }
+              /^## \[/ {
+                if (in_block) { exit }
+                if (index($0, "[" tag "]") > 0) { in_block = 1; next }
+              }
+              in_block { print }
+            ' CHANGELOG.md > "$NOTES_FILE"
+          fi
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "⚠️  未能从 CHANGELOG.md 提取到 $TAG_NAME 的内容,回退到 commit message"
+            git log -1 --pretty=%B > "$NOTES_FILE"
+          fi
+          echo "----- Release body preview -----"
+          head -n 40 "$NOTES_FILE"
+          echo "--------------------------------"
+
       - name: Release
         # 只有在推送 Tag (v*) 时才触发真正的 GitHub Release 发布
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: 'dist/**'
-          body: ${{ github.event.head_commit.message }}
+          body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

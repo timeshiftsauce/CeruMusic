@@ -58,6 +58,7 @@ import { useListenTogetherSettingsStore } from '@renderer/store/ListenTogetherSe
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
 import { setLtInRoom } from '@renderer/utils/listenTogether/state'
+import { isMentionedSelf } from '@renderer/utils/listenTogether/mention'
 import {
   configureNotifier,
   notifyChat,
@@ -605,15 +606,22 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       if (chat.value.length > 500) chat.value.splice(0, chat.value.length - 500)
 
       /* 系统通知 —— 跳过自己发的消息;@你 的消息会绕过节流强提示。
-       * 仅文本/表情/贴纸触发通知,系统消息走 CHAT_SYSTEM 分支不打扰。 */
+       * 仅文本/表情/贴纸触发通知,系统消息走 CHAT_SYSTEM 分支不打扰。
+       *
+       * mention 判定:
+       *   1) meta.mentions 显式包含自己 userId      → mention
+       *   2) 引用(meta.replyToId)的目标消息发送者是自己 → 也算 mention("引用自动 @")
+       *      —— 这样别人引用我的消息回复时也能触发强提示,
+       *         即使他没有显式 @ 我。 */
       if (
         meta.value &&
         msg.from?.userId &&
         msg.from.userId !== myUserId.value &&
         msg.type !== 'system'
       ) {
-        const mentions = (msg.meta?.mentions || '').split(',').filter(Boolean)
-        const mentionedSelf = !!myUserId.value && mentions.includes(myUserId.value)
+        /* 判定逻辑统一收敛在 utils/listenTogether/mention.ts —— 避免与 LtChatToast 等
+         * 调用方各写一份还对不上(显式 @ + 引用自动 @ 两种情况)。 */
+        const mentionedSelf = isMentionedSelf(msg, myUserId.value, chat.value)
         notifyChat(msg, meta.value.name || '一起听', { mentionedSelf })
       }
     })

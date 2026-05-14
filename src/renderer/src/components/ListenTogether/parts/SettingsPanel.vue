@@ -166,7 +166,7 @@ const speedOptions = computed<{ label: string; value: DanmakuSpeed }[]>(() => [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 16px 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 

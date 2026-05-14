@@ -95,6 +95,78 @@ async function ensurePermission(): Promise<NotificationPermission> {
 
 /* ---------------- 通用底层 ---------------- */
 
+/**
+ * 用 WebAudio 合成的提示音 —— 不依赖外部音频文件,也不依赖系统通知自带声音
+ *
+ * 背景:Electron/Chromium 的 Notification 在 Windows 上即使 silent=false,
+ * 没有正确注册 AppUserModelId/SetCurrentProcessExplicitAppUserModelID 时
+ * 也常常静音。直接在 renderer 用 WebAudio 合成一个轻量的"叮咚"声(两个
+ * 短促正弦音),既能跨平台稳定播放,也避免引入 mp3 资源。
+ *
+ * 音效设计:
+ *  - 第一段 880Hz(高 A) → 第二段 1175Hz(更高 D),50ms 间隔,各 120ms
+ *  - 衰减曲线用指数衰减,避免末端 "啪" 一声噪点
+ *  - 总音量 0.18,在系统中等音量下大约相当于 QQ 的"叮"
+ *
+ * 为什么不用 <audio src=base64>:
+ *  - 短音效用 base64 体积大、解码延迟明显
+ *  - WebAudio 是即时合成,首次触发 < 5ms
+ *
+ * 注意 AudioContext 必须用户交互后才能 resume(浏览器自动播放策略),
+ * 这里在 ensureAudioContext 里 best-effort 调 resume,失败就静默——
+ * 用户进了房间总会有点击/键盘交互,等首次能播了之后就稳定了。 */
+let audioCtx: AudioContext | null = null
+
+function ensureAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  if (!audioCtx) {
+    try {
+      const Ctx =
+        (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctx) return null
+      audioCtx = new Ctx()
+    } catch {
+      return null
+    }
+  }
+  if (audioCtx.state === 'suspended') {
+    /* resume 是 promise,失败就丢弃;下次再试 */
+    void audioCtx.resume().catch(() => {})
+  }
+  return audioCtx
+}
+
+function playBeep(): void {
+  const ctx = ensureAudioContext()
+  if (!ctx) return
+  /* 不再区分 @ / 普通 —— 统一一段"叮咚"双音提示,避免普通消息和 mention
+   * 用两种音色让用户分心去辨别。强弱差异交给视觉(标题前缀 [@你] + requireInteraction)。
+   * sine 波 RMS 较低,峰值 0.75 在中等系统音量下接近 QQ "叮" 的响度。 */
+  const baseVol = 0.75
+  const now = ctx.currentTime
+
+  const playTone = (freq: number, start: number, duration: number): void => {
+    try {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, start)
+      gain.gain.exponentialRampToValueAtTime(baseVol, start + 0.005)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + duration + 0.02)
+    } catch {
+      /* 个别浏览器/平台合成失败,静默忽略 */
+    }
+  }
+
+  playTone(880, now, 0.18) // "叮"
+  playTone(1175, now + 0.16, 0.22) // "咚"
+}
+
 function activate(): void {
   /* 让主进程把窗口拉前台 —— 单走 renderer 的 window.focus() 在以下场景失效:
    *   - 窗口被托盘 hide(closeToTray): focus 无效要先 show
@@ -124,22 +196,52 @@ async function fireNotification(
   title: string,
   body: string,
   tag: string,
-  opts: { requireInteraction?: boolean } = {}
+  opts: { requireInteraction?: boolean; force?: boolean } = {}
 ): Promise<void> {
-  /* 用户在设置里关闭系统通知 → 直接静默,不申请权限也不弹窗 */
-  if (!readPrefs().enableSystemNotify) return
+  /* 用户在设置里关闭系统通知 → 直接静默,不申请权限也不弹窗
+   * 例外:force=true 表示这是"强提示通道"(目前用于 @你 / 引用我),
+   *      此时无视 enableSystemNotify,这是用户最关心的消息,
+   *      只受 enableMentionStrong 控制。 */
+  if (!opts.force && !readPrefs().enableSystemNotify) return
   const perm = await ensurePermission()
   if (perm !== 'granted') return
+
+  /* 先播提示音 —— 系统通知本身在 Windows 上 silent=false 也经常无声,
+   * 用 WebAudio 自己合成一个,保证用户能听到。
+   * 普通消息和 @ 共用同一段声音(不再区分),避免用户分心辨别音色。 */
+  playBeep()
+
   try {
+    /* 关键:requireInteraction 默认开 —— 这样通知不会立刻滑进 Windows 操作中心,
+     * 而是粘在桌面右下角直到用户点击/关闭。
+     *
+     * 为什么:Chromium Notification 一旦进入"操作中心",从中心点击多数情况下
+     * 不会再触发 renderer 的 onclick(Windows 需要 toast XML + AUMID 注册才能保留),
+     * 表现为"普通消息通知点不进软件"。强制 requireInteraction 让通知在弹出阶段
+     * 保留焦点窗口,onclick 才能稳定生效。
+     *
+     * 为了避免一直占着屏幕,普通消息我们在 6s 后程序化 close(),
+     * 强提示消息(mention)不自动 close,让它一直挂着。 */
+    const sticky = opts.requireInteraction === true
     const n = new Notification(title, {
       body,
       tag, // 同 tag 的通知会覆盖前一条，避免堆叠
       silent: false,
-      requireInteraction: opts.requireInteraction === true
+      requireInteraction: true
     })
     n.onclick = () => {
       n.close()
       activate()
+    }
+    if (!sticky) {
+      /* 普通通知:6 秒后自动关闭,既保证可点击,又不会留在桌面太久 */
+      setTimeout(() => {
+        try {
+          n.close()
+        } catch {
+          /* ignore */
+        }
+      }, 6000)
     }
   } catch {
     /* 某些环境（Linux 无通知守护进程）会抛错，静默忽略 */
@@ -188,11 +290,17 @@ export function notifyChat(msg: ChatMsg, roomName: string, ctx: { mentionedSelf:
   /* 在前台 → 不打扰(无论一起听面板开没开) */
   if (isFocused) return
 
-  /* @你 的消息走"强提示"快通道:绕过节流 + 立即弹 + requireInteraction
-   * 当用户在设置里关闭"@ 强提示"时,降级为普通通道(仍然弹,但走节流且非粘性) */
-  if (ctx.mentionedSelf && readPrefs().enableMentionStrong) {
+  /* mention(被 @ 或被引用)走"强提示"快通道:
+   *  - 用户开启 enableMentionStrong: 绕过 enableSystemNotify(force=true) + 立即弹 + requireInteraction
+   *    意图:用户哪怕关掉了普通系统通知,也要收到 @ 和引用通知
+   *  - 用户关闭 enableMentionStrong: 整条静默,不再降级为普通通道
+   *    意图:用户明确表达"我不想要 @ 提示",就别再骚扰
+   * 普通消息: 受 enableSystemNotify 控制(fireNotification 内部判断) */
+  if (ctx.mentionedSelf) {
+    if (!readPrefs().enableMentionStrong) return
     void fireNotification(`[@你] ${roomName}`, formatChatPreview(msg), 'lt-chat-mention', {
-      requireInteraction: true
+      requireInteraction: true,
+      force: true
     })
     return
   }

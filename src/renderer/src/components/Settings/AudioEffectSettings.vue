@@ -104,6 +104,31 @@
             </div>
           </div>
         </div>
+
+        <!-- 4. Loudness Normalization (响度均衡) -->
+        <div class="effect-card">
+          <div class="card-header">
+            <div class="title">响度均衡 (Loudness)</div>
+            <t-switch v-model="loudness.enabled" />
+          </div>
+          <div class="card-content">
+            <div class="control-group">
+              <label>归一化强度</label>
+              <t-radio-group
+                v-model="loudness.target"
+                variant="default-filled"
+                :disabled="!loudness.enabled"
+              >
+                <t-radio-button value="gentle">轻度</t-radio-button>
+                <t-radio-button value="standard">标准</t-radio-button>
+                <t-radio-button value="strong">强力</t-radio-button>
+              </t-radio-group>
+            </div>
+            <div class="info-text">
+              拉平不同歌曲间响度差异；仅作用于本软件播放，不影响游戏等系统声音
+            </div>
+          </div>
+        </div>
       </div>
     </t-card>
   </div>
@@ -118,7 +143,7 @@ import AudioManager from '@renderer/utils/audio/audioManager'
 
 const store = useAudioEffectsStore()
 const audioStore = ControlAudioStore()
-const { bassBoost, surround, balance } = storeToRefs(store)
+const { bassBoost, surround, balance, loudness } = storeToRefs(store)
 
 const bassPreset = ref('light')
 
@@ -137,11 +162,17 @@ const applyEffects = () => {
   // Balance
   const targetBalance = balance.value.enabled ? balance.value.value : 0
   AudioManager.setBalance(audio, targetBalance)
+
+  // Loudness Normalization
+  AudioManager.setLoudnessNormalization(audio, {
+    enabled: loudness.value.enabled,
+    target: loudness.value.target
+  })
 }
 
 // Watchers
 watch(
-  [bassBoost, surround, balance],
+  [bassBoost, surround, balance, loudness],
   () => {
     applyEffects()
   },
