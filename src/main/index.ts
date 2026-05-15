@@ -762,11 +762,14 @@ app.whenReady().then(async () => {
     await cleanupDownloadedInstallers()
   } catch {}
   // Set app user model id for windows - 确保与 electron-builder.yml 中的 appId 一致
-  electronApp.setAppUserModelId('com.cerumusic.app')
+  // dev 模式用单独 AUMID，避免 electron.exe 被注册为 com.cerumusic.app 污染
+  // Windows Toast / SMTC / 任务栏分组的缓存。详见对应排障记录。
+  const AUMID = is.dev ? 'com.cerumusic.app.dev' : 'com.cerumusic.app'
+  electronApp.setAppUserModelId(AUMID)
 
   // 在 Windows 上设置应用程序名称，帮助 SMTC 识别
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.cerumusic.app')
+    app.setAppUserModelId(AUMID)
     // 设置应用程序名称
     app.setName('澜音')
   }
