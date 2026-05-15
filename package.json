@@ -32,6 +32,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "release:preview": "bash scripts/preview-release-notes.sh",
+    "cleanup:win-aumid": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-windows-aumid.ps1",
     "test": "jest"
   },
   "dependencies": {
