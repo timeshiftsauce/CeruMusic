@@ -197,7 +197,7 @@ foreach ($p in $pollutedRegs) {
         Remove-Item -Path $p -Recurse -Force -ErrorAction Stop
         Write-Ok "已删除注册表项 $p"
     } catch {
-        Write-Hit "删除注册表项失败 $p: $($_.Exception.Message)"
+        Write-Hit "删除注册表项失败 ${p}: $($_.Exception.Message)"
     }
 }
 
