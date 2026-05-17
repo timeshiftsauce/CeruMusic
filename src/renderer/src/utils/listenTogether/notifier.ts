@@ -16,6 +16,7 @@
  */
 
 import type { ChatMsg, PendingItem } from './types'
+import { describeSticker } from './stickers'
 
 /** 通知冷却窗口（节流粒度，毫秒） */
 const COOLDOWN_MS = 4000
@@ -262,7 +263,12 @@ let chatCooldownTimer: ReturnType<typeof setTimeout> | null = null
 
 function formatChatPreview(msg: ChatMsg): string {
   const name = msg.from?.nickname || '某人'
-  const raw = msg.content || ''
+  /* 贴纸消息的 content 是 sticker id(如 "sticker-5"),原样塞进通知不可读 ——
+   * 翻译成 "[贴纸] 等你哦" 这种形式,通知里更直观。 */
+  let raw = msg.content || ''
+  if (msg.type === 'sticker') {
+    raw = `[贴纸] ${describeSticker(raw)}`
+  }
   const truncated = raw.length > PREVIEW_MAX ? raw.slice(0, PREVIEW_MAX) + '…' : raw
   return `${name}: ${truncated}`
 }
