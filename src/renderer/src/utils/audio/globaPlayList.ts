@@ -815,6 +815,9 @@ return list.value.find((s) => s.songmid === nextId) || null
           playedSec += (Date.now() - heartbeatSongStartTime) / 1000
         }
         const playedRatio = totalSec > 0 ? Math.min(1, playedSec / totalSec) : 1
+        console.log(
+          `[heartbeat] 记录播放: 《${curSong.name}》 startTime=${heartbeatSongStartTime} playedMs=${heartbeatSongPlayedMs} totalSec=${totalSec} playedSec=${playedSec.toFixed(1)} ratio=${(playedRatio * 100).toFixed(0)}%`
+        )
         recentHeartbeatSongs.push({ name: curSong.name, artist: curSong.singer || '', playedRatio })
         heartbeatSongStartTime = Date.now()
         heartbeatSongPlayedMs = 0
