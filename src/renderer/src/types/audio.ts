@@ -38,6 +38,7 @@ export type AudioSubscribeMethod = (
 export enum PlayMode {
   SEQUENCE = 'sequence', // 顺序播放
   RANDOM = 'random', // 随机播放
+  HEARTBEAT = 'heartbeat', // 心动模式
   SINGLE = 'single' // 单曲循环
 }
 

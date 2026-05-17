@@ -95,6 +95,11 @@ const api = {
     ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt),
     askStream: (prompt: string, streamId: string) =>
       ipcRenderer.invoke('ai-ask-stream', prompt, streamId),
+    recommendSongs: (
+      songName: string,
+      artist: string,
+      context?: { recentSongs?: Array<{ name: string; artist: string }> }
+    ) => ipcRenderer.invoke('ai-recommend-songs', songName, artist, context),
     onStreamChunk: (callback: (data: { streamId: string; chunk: string }) => void) => {
       ipcRenderer.on('ai-stream-chunk', (_, data) => callback(data))
     },

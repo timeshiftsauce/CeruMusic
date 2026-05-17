@@ -43,6 +43,34 @@ const initAIConfig = (): AIConfig => {
 const aiConfig = ref<AIConfig>(initAIConfig())
 const isEditing = ref<boolean>(false)
 
+const heartbeatEnabled = computed({
+  get: () => userInfo.value.heartbeatEnabled !== false && isConfigured.value,
+  set: (val: boolean) => {
+    if (!isConfigured.value) return
+    userInfo.value.heartbeatEnabled = val
+  }
+})
+
+const heartbeatPrefetchInterval = computed({
+  get: () => {
+    const v = userInfo.value.heartbeatPrefetchInterval
+    return typeof v === 'number' && v > 0 ? v : 2
+  },
+  set: (val: number) => {
+    userInfo.value.heartbeatPrefetchInterval = val
+  }
+})
+
+const heartbeatInsertInterval = computed({
+  get: () => {
+    const v = userInfo.value.heartbeatInsertInterval
+    return typeof v === 'number' && v > 0 ? v : 3
+  },
+  set: (val: number) => {
+    userInfo.value.heartbeatInsertInterval = val
+  }
+})
+
 const selectedProvider = computed<AIProvider>({
   get: () => aiConfig.value.provider || 'deepseek',
   set: (val: AIProvider) => {
@@ -199,6 +227,49 @@ watch(
       <h3>AI 浮球设置</h3>
       <AIFloatBallSettings />
     </div>
+
+    <div id="ai-heartbeat" class="setting-group">
+      <h3>心动模式</h3>
+      <p>开启后，播放模式中会增加心动模式选项。AI 会根据当前播放歌曲的音乐风格推荐相似歌曲</p>
+      <div class="heartbeat-settings">
+        <div class="setting-item">
+          <span class="setting-label" :class="{ disabled: !isConfigured }">启用心动模式</span>
+          <t-switch v-model="heartbeatEnabled" :disabled="!isConfigured" />
+        </div>
+        <div class="heartbeat-thresholds">
+          <div class="threshold-item">
+            <span class="setting-suffix">每</span>
+            <t-input-number
+              v-model="heartbeatPrefetchInterval"
+              :min="1"
+              :max="10"
+              theme="normal"
+              size="small"
+              style="width: 64px"
+              :disabled="!heartbeatEnabled"
+            />
+            <span class="setting-suffix">首启动预取</span>
+          </div>
+          <div class="threshold-item">
+            <span class="setting-suffix">每</span>
+            <t-input-number
+              v-model="heartbeatInsertInterval"
+              :min="1"
+              :max="10"
+              theme="normal"
+              size="small"
+              style="width: 64px"
+              :disabled="!heartbeatEnabled"
+            />
+            <span class="setting-suffix">首插入推荐</span>
+          </div>
+        </div>
+        <div class="setting-description">
+          <p v-if="!isConfigured" class="warning-text">请先配置 AI 服务 API Key 后才能启用心动模式</p>
+          <p>心动模式下，AI 会分析当前歌曲的音乐风格（编曲、节奏、氛围、流派），从各大音乐平台搜索风格相似但未在你歌单中的歌曲。</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -224,6 +295,10 @@ watch(
 
   &:nth-child(2) {
     animation-delay: 0.2s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.3s;
   }
 
   h3 {
@@ -350,6 +425,60 @@ watch(
           margin-bottom: 0;
         }
       }
+    }
+  }
+}
+
+.heartbeat-settings {
+  .setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .setting-label {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--settings-text-primary);
+
+    &.disabled {
+      color: var(--td-text-color-disabled);
+    }
+  }
+
+  .heartbeat-thresholds {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .threshold-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .setting-suffix {
+    font-size: 0.875rem;
+    color: var(--settings-text-secondary);
+  }
+
+  .setting-description {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--td-border-level-1-color);
+
+    p {
+      margin: 0.5rem 0;
+      font-size: 0.875rem;
+      color: var(--settings-text-secondary);
+    }
+
+    .warning-text {
+      color: var(--td-warning-color);
+      font-weight: 500;
     }
   }
 }

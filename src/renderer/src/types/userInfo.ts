@@ -20,6 +20,14 @@ export interface UserInfo {
   /** @deprecated 请使用 aiConfig 替代 */
   deepseekAPIkey?: string
   aiConfig?: AIConfig
+  /** 心动模式下心动的歌曲ID集合 */
+  heartedSongs?: string[]
+  /** 心动模式是否启用（AI配置项，独立于播放模式） */
+  heartbeatEnabled?: boolean
+  /** 预取间隔：每N首触发后台AI预取（默认2） */
+  heartbeatPrefetchInterval?: number
+  /** 插入间隔：每M首插入推荐歌曲（默认3） */
+  heartbeatInsertInterval?: number
   pluginId?: string
   pluginName?: string
   supportedSources?: Sources['supportedSources']

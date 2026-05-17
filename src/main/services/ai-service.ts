@@ -164,6 +164,57 @@ class AIService {
       throw error
     }
   }
+
+  async recommendSongs(
+    songName: string,
+    artist: string,
+    context?: {
+      recentSongs?: Array<{ name: string; artist: string; playedRatio?: number }>
+      contextPrompt?: string
+    }
+  ): Promise<Array<{ name: string; artist: string; reason: string }>> {
+    try {
+      const chatModel = await this.initChatModel()
+
+      let contextPrompt = context?.contextPrompt || ''
+      if (!contextPrompt && context?.recentSongs && context.recentSongs.length > 0) {
+        const recentList = context.recentSongs
+          .map((s) => `《${s.name}》 - ${s.artist}`)
+          .join('\n')
+        contextPrompt = `\n用户最近在听的歌曲:\n${recentList}\n请基于这些歌曲的整体风格倾向来推荐，推荐的歌曲风格应与这些歌曲协调。`
+      }
+
+      const systemPrompt = `你是一位资深音乐推荐专家，精通全球各种音乐流派和风格。你的任务是根据给定的歌曲，从音乐风格、编曲特点、情感氛围、节奏类型等音乐性维度出发，推荐风格相似的歌曲。
+
+要求:
+1. 只返回纯JSON数组，不要包含任何其他文字、解释或markdown代码块
+2. 每首推荐歌曲必须包含: name(歌曲名), artist(歌手名), reason(一句话推荐理由，说明风格相似点)
+3. 推荐5首歌曲
+4. 优先推荐与输入歌曲风格相似但不是同一歌手的歌曲，其次才是同一歌手的其他优秀作品
+5. 推荐的歌曲必须是真实存在的知名歌曲
+6. 避免推荐输入歌曲本身
+7. 推荐理由需聚焦音乐风格层面(如编曲、节奏、氛围、流派)，而非简单说"同一歌手"`
+
+      const userPrompt = `请为以下歌曲推荐风格相似的歌曲:\n歌曲: 《${songName}》\n歌手: ${artist}${contextPrompt}`
+
+      const response = await chatModel.invoke([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ])
+
+      const content = response.content as string
+      const jsonMatch = content.match(/\[[\s\S]*\]/)
+      if (!jsonMatch) {
+        console.error('AI推荐解析失败，原始返回:', content)
+        return []
+      }
+      const parsed = JSON.parse(jsonMatch[0]) as Array<{ name: string; artist: string; reason: string }>
+      return Array.isArray(parsed) ? parsed.slice(0, 5) : []
+    } catch (error) {
+      console.error('AI推荐失败:', error)
+      return []
+    }
+  }
 }
 
 export { AIService }
