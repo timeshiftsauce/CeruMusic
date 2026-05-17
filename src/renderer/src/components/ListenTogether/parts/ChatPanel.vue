@@ -7,8 +7,9 @@
  *  - 输入区：emoji 快捷面板 + 文本框，回车发送
  *  - 自动滚动到底（除非用户主动往上滑了）
  *  - 系统消息模板渲染：member-join / queue-request / queue-approved 等
- *  - 虚拟滚动：使用 virtua 的 VList,仅渲染可视区 ± overscan 的消息(ResizeObserver
- *    实测每行高度),上限 500 条历史(store 侧已有环形缓冲)时也不会出现大量 DOM 拖垮性能。
+ *  - 滚动:原生 overflow:auto + v-for —— 之前用 virtua 虚拟滚动反而性能更差
+ *    (ResizeObserver 频繁重测 + 卡片消息动态高度引起的 scroll anchor 抖动),
+ *    环形缓冲 500 条上限下 DOM 体量可控,直接 v-for 体验最佳。
  *  - @ 提及：输入 @ 触发成员浮层,选中插入 @昵称 并记录 userId 进 meta.mentions
  *  - 回复：消息悬停 → 引用条进输入区,发送时 meta.replyTo* 透传
  *  - 复制：消息悬停 → 把 content 写入剪贴板
@@ -23,17 +24,11 @@ import { ContextMenu } from '@renderer/components/ContextMenu'
 import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
 import { createMenuItem, createSeparator } from '@renderer/components/ContextMenu/utils'
 import { parseShareLink } from '@renderer/utils/listenTogether/shareLink'
+import { STICKERS, STICKER_MAP, KAOMOJI } from '@renderer/utils/listenTogether/stickers'
 import MessageCard from './MessageCard.vue'
 import SongCardActions from './SongCardActions.vue'
 import type { ShareDetail, PlaylistShareDetail } from '@renderer/api/share'
 import type { ChatMsg, RoomMember } from '@renderer/utils/listenTogether/types'
-/* 虚拟滚动 —— 用 virtua 的 VList 处理不定高聊天行。
- * 选 virtua 而不是 vue-virtual-scroller 的原因:
- *   - virtua 用真实 absolute 定位(非 transform),能直接接受滚动容器 padding
- *   - 用 ResizeObserver 实测每行高度,不依赖估算,追加新行不会漏渲染
- *   - 原生 shift 模式 —— store 环形缓冲从头部 splice 则滚动位置不跳动
- *   - API 极简:scrollToIndex(i, { align, smooth })、scrollOffset/scrollSize 可读 */
-import { VList, type VListHandle } from 'virtua/vue'
 
 const lt = useListenTogetherStore()
 const authStore = useAuthStore()
@@ -101,34 +96,31 @@ function formatTime(ts: number): string {
 
 /* 自动滚动 —— 只在贴底时才自动滚（避免打断用户翻历史）
  *
- * virtua 改造说明:
- *   - scrollerRef 是 VList 实例,通过 VListHandle 暴露 scrollToIndex / scrollOffset /
- *     scrollSize / viewportSize / scrollBy / scrollTo,无需手摸 DOM。
- *   - sticky 判定不再读 .scrollTop —— VList 内部包了真实滚动容器,我们要的几个数
- *     直接拿 handle 上的 readonly 字段即可,避免找错节点。
- *   - 没有现成的 scrollToBottom,统一用 scrollToIndex(最后一行, align='end')。
- *   - VList 的 @scroll 事件参数是当前 offset(number),checkStickyState 直接吃就好。
+ * 改回原生 DOM 后的逻辑:
+ *   - scrollerRef 是 .chat-scroll 的 HTMLDivElement
+ *   - 贴底判定读 scrollTop/scrollHeight/clientHeight 三件套
+ *   - scrollToBottom = el.scrollTop = el.scrollHeight,不需要 scrollToIndex
+ *   - 跳转到被引用消息:querySelector([data-msg-id])之后 scrollIntoView
+ *     —— v-for 下所有行都在 DOM 里,没有被虚拟接掉的问题
  */
-const scrollerRef = ref<VListHandle | null>(null)
+const scrollerRef = ref<HTMLDivElement | null>(null)
 const stickToBottom = ref(true)
 
-function checkStickyState(offset: number): void {
-  const s = scrollerRef.value
-  if (!s) return
-  const distanceFromBottom = s.scrollSize - offset - s.viewportSize
+function checkStickyState(): void {
+  const el = scrollerRef.value
+  if (!el) return
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
   stickToBottom.value = distanceFromBottom < 80
 }
 
 async function scrollToBottom(): Promise<void> {
-  // 双拍 nextTick:等 DOM 更新 + 等 VList 通过 ResizeObserver 重测高度后再贴底,
-  // 避免第一拍时 scrollSize 还是旧值。
+  // 双拍 nextTick:等 DOM 更新 + 等浏览器重算布局后再贴底,
+  // 避免第一拍时 scrollHeight 还是旧值。
   await nextTick()
   await nextTick()
-  const s = scrollerRef.value
-  if (!s) return
-  const last = visibleRows.value.length - 1
-  if (last < 0) return
-  s.scrollToIndex(last, { align: 'end' })
+  const el = scrollerRef.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
 }
 
 /** 卡片消息异步加载完后高度会变(骨架 → 详情 → 封面图)。
@@ -149,44 +141,12 @@ onMounted(() => void scrollToBottom())
 /* 输入区 */
 const draft = ref('')
 const showEmoji = ref(false)
+/* 表情面板分类:'sticker' 图片贴纸(发送一条独立 sticker 消息),'kaomoji' 颜文字(插入输入框作为文本)。
+ * 用同一个面板容器,只切换内部网格内容,避免上下抖动。 */
+const emojiTab = ref<'sticker' | 'kaomoji'>('sticker')
 
-const EMOJIS = [
-  '😀',
-  '😂',
-  '🥰',
-  '😍',
-  '😎',
-  '🤔',
-  '😢',
-  '😡',
-  '🤯',
-  '🥳',
-  '👍',
-  '👎',
-  '👏',
-  '🙏',
-  '💪',
-  '🔥',
-  '✨',
-  '🎵',
-  '🎶',
-  '🎉',
-  '❤️',
-  '💔',
-  '🥺',
-  '😴',
-  '🤤',
-  '😈',
-  '👻',
-  '🙈',
-  '🙉',
-  '🙊'
-]
-
-function insertEmoji(e: string): void {
-  draft.value += e
-  showEmoji.value = false
-}
+/* 贴纸面板使用的列表与 id→资源 映射,定义在
+ * `@renderer/utils/listenTogether/stickers` —— 这里只消费,不在组件内硬编码 */
 
 /* ============================================================
  *  @ 提及 / 回复 / 复制
@@ -293,10 +253,16 @@ const replyTo = ref<{ id: string; from: string; preview: string } | null>(null)
 
 function replyToMessage(msg: ChatMsg): void {
   if (msg.type === 'system') return
+  /* 引用预览:贴纸 content 是 id,直接展示 "[贴纸] 等你哦" 这样的可读文本,
+   * 让回复条不会出现一串"sticker-5"占位。 */
+  let preview = msg.content || ''
+  if (msg.type === 'sticker') {
+    preview = `[贴纸] ${STICKER_MAP[preview]?.label || preview}`
+  }
   replyTo.value = {
     id: msg.id,
     from: msg.from?.nickname || '某人',
-    preview: (msg.content || '').slice(0, 40)
+    preview: preview.slice(0, 40)
   }
   nextTick(() => textareaRef.value?.focus())
 }
@@ -307,23 +273,25 @@ function clearReply(): void {
 
 /** 点击引用条 —— 把视图滚到被引用的原消息位置并高亮一下
  *
- * 虚拟滚动下原消息可能没被渲染,无法用 querySelector 找节点。改成:
- *   1. 在 visibleRows 里按 row.id 找目标 row 的索引
- *   2. 调 scroller.scrollToIndex(index, { align: 'center' }) 让库自己处理滚动
- *   3. 滚到位后高亮(等下一帧 item 渲染出来再加 class)
- */
+ * 原生 DOM 下逻辑更直接:querySelector([data-msg-id="..."]).scrollIntoView,
+ * v-for 下所有行都在 DOM 里,不需要担心被虚拟接掉的情况。
+ * 唯一例外:环形缓冲 500 条上限冲掉了被引用的原消息,此时 lt.chat 里找不到,
+ * 提示用户即可。 */
 const highlightedMsgId = ref<string | null>(null)
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
 function jumpToReplied(replyToId: string | undefined): void {
   if (!replyToId) return
-  const rows = visibleRows.value
-  const index = rows.findIndex((r) => r.kind === 'msg' && r.id === replyToId)
-  if (index < 0) {
+  const exists = lt.chat.some((m) => m.id === replyToId)
+  if (!exists) {
     /* 原消息已被环形缓冲冲掉,引用条只剩 preview —— 给个友好提示 */
     MessagePlugin.warning('原消息已不可见')
     return
   }
-  scrollerRef.value?.scrollToIndex(index, { align: 'center', smooth: true })
+  const el = scrollerRef.value?.querySelector<HTMLElement>(
+    `[data-msg-id="${CSS.escape(replyToId)}"]`
+  )
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   highlightedMsgId.value = replyToId
   if (highlightTimer) clearTimeout(highlightTimer)
   highlightTimer = setTimeout(() => {
@@ -336,7 +304,12 @@ function jumpToReplied(replyToId: string | undefined): void {
 
 /* 复制 */
 async function copyMessage(msg: ChatMsg): Promise<void> {
-  const text = msg.content || ''
+  /* 贴纸消息复制 content(id) 没意义 —— 改成复制描述文本(如"等你哦"),
+   * 用户粘贴到其他地方就是可读的中文,不会出现 "sticker-5" 的尴尬。 */
+  let text = msg.content || ''
+  if (msg.type === 'sticker') {
+    text = STICKER_MAP[text]?.label || text
+  }
   if (!text) return
   try {
     await navigator.clipboard.writeText(text)
@@ -519,11 +492,31 @@ function sendText(): void {
   stickToBottom.value = true
 }
 
-function sendEmojiOnly(e: string): void {
-  // 一个表情就是一条消息（类似微信表情）—— 提升互动感
-  lt.sendChat('emoji', e)
+function sendSticker(id: string): void {
+  // 一张贴纸就是一条消息(类似微信表情包)—— 协议只传 id,渲染端按 STICKER_MAP 查图
+  if (!STICKER_MAP[id]) return
+  lt.sendChat('sticker', id)
   showEmoji.value = false
   stickToBottom.value = true
+}
+
+/**
+ * 颜文字点击插入 —— 不发送独立消息,只往输入框 caret 位置塞字符串,
+ * 走原生 text 通道,所有客户端均可识别。插入后自动聚焦,继续打字或回车发送。
+ */
+function insertKaomoji(text: string): void {
+  const ta = textareaRef.value
+  const cursor = ta ? ta.selectionStart : draft.value.length
+  const before = draft.value.slice(0, cursor)
+  const after = draft.value.slice(cursor)
+  draft.value = before + text + after
+  nextTick(() => {
+    if (!textareaRef.value) return
+    const pos = before.length + text.length
+    textareaRef.value.setSelectionRange(pos, pos)
+    textareaRef.value.focus()
+    autoResize()
+  })
 }
 
 /**
@@ -589,14 +582,14 @@ onBeforeUnmount(() => {
 })
 
 /* ============================================================
- *  虚拟滚动行项
+ *  聊天行项
  *
- *  把"时间分割条"与"消息"打平成同质化 row 数组,VList 按下标渲染。
+ *  把"时间分割条"与"消息"打平成同质化 row 数组,模板用 v-for 按顺序渲染。
  *    - row.kind = 'time' → 渲染时间分割条
  *    - row.kind = 'msg'  → 渲染消息气泡/系统消息
- *  time 行 id 形如 `t:${msg.id}`,避免与消息 id 撞键(仅供 jumpToReplied 查找使用)。
+ *  time 行 id 形如 `t:${msg.id}`,避免与消息 id 撞键。
  * ============================================================ */
-interface VirtualRow {
+interface ChatRow {
   /** 唯一 key:消息 id 或 `t:${id}` */
   id: string
   kind: 'time' | 'msg'
@@ -606,9 +599,9 @@ interface VirtualRow {
   msg?: ChatMsg
 }
 
-const visibleRows = computed<VirtualRow[]>(() => {
+const visibleRows = computed<ChatRow[]>(() => {
   const list = lt.chat
-  const rows: VirtualRow[] = []
+  const rows: ChatRow[] = []
   for (let i = 0; i < list.length; i++) {
     const m = list[i]
     const showTime = i === 0 || m.ts - list[i - 1].ts > 3 * 60_000
@@ -623,24 +616,18 @@ const visibleRows = computed<VirtualRow[]>(() => {
 
 <template>
   <div class="chat-panel">
-    <!-- virtua 的 VList:
-         - :data 直接吃打平后的 row 数组
-         - 不传 :item-size —— virtua 文档明确建议大多数场景由库自动从已测尺寸估算
-           (我们的行高差异极大:时间条 ~28、文字消息 ~40、卡片消息 100+、含引用条 +20,
-            固定 48 会导致首屏布局偏差,出现"挤一坨/留大白"现象)
-         - 不传 bufferSize —— 默认 200 足够吸收快速滚动
-         - 不开 shift —— 我们主要 append 到末尾(普通新消息),shift 在 append 场景
-           会"保持距底距离"反而让用户已滚动位置出现莫名空白;环形缓冲 500 条上限
-           罕见触发,代价可接受
-         - @scroll 给的是当前 scrollOffset(number),不用读 DOM -->
-    <VList
+    <!-- 聊天消息流 —— 原生 DOM 滚动 + v-for。
+         打平的 row 数组(visibleRows)按下标渲染:
+           - row.kind = 'time' → 时间分割条
+           - row.kind = 'msg'  → 消息气泡/系统消息
+         @scroll 用原生事件,handler 直接读 el.scrollTop/scrollHeight 判定贴底 -->
+    <div
       v-if="visibleRows.length > 0"
       ref="scrollerRef"
       class="chat-scroll"
-      :data="visibleRows"
-      @scroll="checkStickyState"
+      @scroll.passive="checkStickyState"
     >
-      <template #default="{ item }">
+      <template v-for="item in visibleRows" :key="item.id">
         <div class="chat-row-wrap">
           <!-- 时间分割条 -->
           <div v-if="item.kind === 'time'" class="time-divider-row">
@@ -676,6 +663,7 @@ const visibleRows = computed<VirtualRow[]>(() => {
                 class="msg-bubble"
                 :class="{
                   'is-emoji-large': item.msg!.type === 'emoji',
+                  'is-sticker': item.msg!.type === 'sticker',
                   'is-self-bubble': isSelf(item.msg!),
                   'is-card': !!item.msg!.meta?.cardType
                 }"
@@ -701,6 +689,23 @@ const visibleRows = computed<VirtualRow[]>(() => {
                   @resize="onCardResize"
                 />
 
+                <!-- 贴纸消息 —— 只显示图片,描述仅作 title 悬浮提示。
+                     找不到 id(对端版本贴纸表更新了)就退回纯文本 fallback,不会显示空白。 -->
+                <div
+                  v-else-if="item.msg!.type === 'sticker'"
+                  class="sticker-msg"
+                  :title="STICKER_MAP[item.msg!.content]?.label || item.msg!.content"
+                >
+                  <img
+                    v-if="STICKER_MAP[item.msg!.content]"
+                    class="sticker-msg-img"
+                    :src="STICKER_MAP[item.msg!.content].src"
+                    :alt="STICKER_MAP[item.msg!.content].label"
+                    draggable="false"
+                  />
+                  <span v-else class="sticker-msg-fallback">[贴纸] {{ item.msg!.content }}</span>
+                </div>
+
                 <div v-else class="msg-bubble-body">
                   <span
                     v-for="(seg, segIdx) in renderMessageSegments(item.msg!)"
@@ -718,9 +723,9 @@ const visibleRows = computed<VirtualRow[]>(() => {
           </div>
         </div>
       </template>
-    </VList>
+    </div>
 
-    <!-- VList 没有 #empty 槽,空状态外置 -->
+    <!-- 空状态 -->
     <div v-else class="chat-empty">还没有人说话，快打个招呼吧 👋</div>
 
     <div class="chat-input">
@@ -757,18 +762,51 @@ const visibleRows = computed<VirtualRow[]>(() => {
       </transition>
 
       <transition name="emoji-fade">
-        <div v-if="showEmoji" class="emoji-panel">
-          <button
-            v-for="e in EMOJIS"
-            :key="e"
-            class="emoji-btn"
-            :title="`点击发送 ${e}（右键插入到输入框）`"
-            @click="sendEmojiOnly(e)"
-            @contextmenu.prevent="insertEmoji(e)"
-          >
-            {{ e }}
-          </button>
-          <div class="emoji-tip">单击直接发送 · 右键插入到输入框</div>
+        <div v-if="showEmoji" class="sticker-panel-wrapper">
+          <!-- 分类切换 tab —— 贴纸/颜文字。tab 放面板顶部,内容区只换 grid,
+               面板本身高度由内容决定不会跳动 -->
+          <div class="emoji-tabs">
+            <button
+              class="emoji-tab"
+              :class="{ active: emojiTab === 'sticker' }"
+              @click="emojiTab = 'sticker'"
+            >
+              贴纸
+            </button>
+            <button
+              class="emoji-tab"
+              :class="{ active: emojiTab === 'kaomoji' }"
+              @click="emojiTab = 'kaomoji'"
+            >
+              颜文字
+            </button>
+          </div>
+
+          <!-- 贴纸网格 —— 点击发送一条 sticker 消息 -->
+          <div v-if="emojiTab === 'sticker'" class="sticker-panel">
+            <button
+              v-for="s in STICKERS"
+              :key="s.id"
+              class="sticker-btn"
+              :title="s.label"
+              @click="sendSticker(s.id)"
+            >
+              <img class="sticker-btn-img" :src="s.src" :alt="s.label" draggable="false" />
+            </button>
+          </div>
+
+          <!-- 颜文字网格 —— 点击只是把字符串插入输入框 caret 位置,不发送 -->
+          <div v-else class="kaomoji-panel">
+            <button
+              v-for="(k, i) in KAOMOJI"
+              :key="i"
+              class="kaomoji-btn"
+              :title="k"
+              @click="insertKaomoji(k)"
+            >
+              {{ k }}
+            </button>
+          </div>
         </div>
       </transition>
 
@@ -828,8 +866,9 @@ const visibleRows = computed<VirtualRow[]>(() => {
 
 .chat-scroll {
   flex: 1;
-  /* virtua 的 VList 自身就是滚动容器 —— 用真实流式 absolute 定位,
-   * 可以直接接受上下 padding 作为内边距(不像 vue-virtual-scroller 的 transform 实现) */
+  /* 原生 DOM 滚动容器:之前用 virtua 时它自带滚动,现在需要显式声明 overflow */
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
   padding: 8px 0;
   box-sizing: border-box;
@@ -852,7 +891,7 @@ const visibleRows = computed<VirtualRow[]>(() => {
   }
 }
 
-/* VList 每行的 slot 外壳 ——
+/* 聊天行外壳 —— v-for 每条消息的容器 ——
  * 左右 12px padding,上下各 4px 间距(相当于原来 gap: 8px 的一半)。
  * 内部用 flex 让自身消息靠右,他人消息靠左,系统消息/时间分割条居中。 */
 .chat-row-wrap {
@@ -978,6 +1017,16 @@ const visibleRows = computed<VirtualRow[]>(() => {
     backdrop-filter: none;
   }
 
+  /* 贴纸消息气泡 —— 与表情大字共享"裸"样式,差异在内部用图+描述布局
+   * (.sticker-msg 自己控制图片尺寸/描述),气泡只负责"消失" */
+  &.is-sticker {
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+    line-height: 1;
+    backdrop-filter: none;
+  }
+
   /* 卡片消息气泡 —— 卡片自带 padding,气泡背景隐去避免重影 */
   &.is-card {
     padding: 0;
@@ -992,6 +1041,19 @@ const visibleRows = computed<VirtualRow[]>(() => {
   padding: 10px 12px;
   /* 给输入区一层比消息流稍亮的底色,跟消息气泡区拉开层次 */
   background: rgba(0, 0, 0, 0.18);
+  /* 表情面板展开后不允许撑爆聊天区:
+   *   - flex-shrink:0 避免被护出可视区(输入框必须始终可见)
+   *   - max-height:60% 为面板与 tab/input-row 总高设上限
+   *   - display:flex column 让表情面板是唯一可压缩的子项
+   *   - overflow:hidden 兵底兑现 max-height —— 防止子项内容横冲边界看起来
+   *     「盖住」上方 chat-scroll */
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  max-height: 60%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .input-row {
@@ -1092,6 +1154,244 @@ const visibleRows = computed<VirtualRow[]>(() => {
   &:hover {
     background: rgba(255, 255, 255, 0.1);
   }
+}
+
+/* ---- 表情面板外壳 ----
+ *
+ * .emoji-panel 默认是 grid(老 unicode 表情时代留下的),现在我们要在内部
+ * 垂直堆「tab 头 + 网格」两块,所以包一层 .sticker-panel-wrapper 把布局
+ * 重置成 flex column —— grid 只保留给真正放表情格子的内层。
+ *
+ * 高度策略:外壳只负责「能高多高」(由父节点 .chat-input 限制),内层的
+ * 贴纸/颜文字网格是唯一会被压缩的子项。min-height:0 是关键—— flex 子项
+ * 默认 min-height:auto 会以内容本身为下限,随便就能撑爆父。 */
+.sticker-panel-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  /* 不再写 flex:1 1 auto —— 如果面板该能多高就多高。反而用 flex-shrink:1
+   * 让它在 .chat-input 被 max-height 限制时被压缩,避免抢占 input-row 空间。
+   * 另加 max-height 240px 兑现「面板不超过 240px」的稳当上限 —— 不依赖
+   * 父层 flex 协商,太高时内部滚动。 */
+  flex: 0 1 auto;
+  max-height: 240px;
+  overflow: hidden;
+  /* 复用原 .emoji-panel 的视觉外观:深色半透明底 + 圆角 + 与下方 input-row 留间距 */
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  margin-bottom: 8px;
+}
+
+.emoji-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.emoji-tab {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+  }
+  &.active {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+  }
+}
+
+/* ---- 贴纸面板 ----
+ *
+ * 实现策略(经多轮调整后定稿):
+ *   - 不用 grid:grid 的 stretch 行高与 aspect-ratio 互相抢控制权,在窄宽
+ *     容器 + 自适应列数(auto-fill/minmax)下会出现 subpixel 误差,导致下
+ *     一行第一张贴纸跨入前一行的视觉区。
+ *   - 改用 flex-wrap:行高严格 = 该行最高子项高度。按钮不设 aspect-ratio,
+ *     高度交给内部 <img>(PNG 是 1:1 像素,浏览器默认按原始比例渲染),
+ *     按钮自然成正方形,绝不会上下行重叠。
+ *   - 按钮宽度用 flex-basis: calc((100% - gap*(N-1)) / N) 的近似:这里用
+ *     min(96px, ...)+ flex-grow 让每行自适应。简单点:flex: 0 1 96px。 */
+.sticker-panel {
+  display: flex;
+  flex-wrap: wrap;
+  /* gap 同时控制行/列间距,flex-wrap 下行高由子项决定,gap 行间距完全准确 */
+  gap: 8px;
+  /* align-content:flex-start 防止行数少时被 flex 父级 stretch 拉开间距 */
+  align-content: flex-start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
+}
+
+.sticker-btn {
+  /* flex 子项:基准宽度 96px,允许收缩到 80,允许 grow 占满剩余空间。
+   * 不写 aspect-ratio —— 高度由内部 <img> 的原始比例决定(PNG 是正方形),
+   * 与父布局零协商,根除"行高错乱→上下重叠"。 */
+  flex: 1 0 96px;
+  max-width: 140px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 8px;
+  /* hover/active 用伪元素做遮罩层,不再缩放,避免周围贴纸跟着抖动 */
+  transition: background 0.12s;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0);
+    transition: background 0.12s;
+    pointer-events: none;
+  }
+
+  &:hover::after {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  &:active::after {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.sticker-btn-img {
+  /* 宽度填满按钮内边距,高度按图片原始比例(PNG 是 1:1)自适应 —— 这是
+   * 整个面板"不重叠"方案的核心:按钮没有显式高度,完全由这张图撑起,
+   * 浏览器没有任何尺寸协商空间,subpixel 误差无处发生。 */
+  width: 100%;
+  height: auto;
+  display: block;
+  /* 贴纸是带白色描边的卡通形象,object-fit:contain 比 cover 更保守地保留四边留白,
+   * 不会把"等你哦"小人裁掉头 */
+  object-fit: contain;
+  /* 图片自身也加圆角,与按钮容器圆角一致 —— hover mask 也用 inherit 跟着圆 */
+  border-radius: 8px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ---- 颜文字面板 ----
+ *
+ * 与贴纸面板共用外壳 .sticker-panel-wrapper,实现策略也保持一致:
+ *   - 用 flex-wrap 而非 grid:颜文字字符高度参差不齐(含组合字符/上下角标),
+ *     grid 的行 stretch 会把矮的项拉成最高那条的高度,视觉上像被"压扁"。
+ *   - flex-wrap 行高严格 = 该行最高子项,每行子项 align-items:center,
+ *     行间不互相干扰。 */
+.kaomoji-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-content: flex-start;
+  /* 同 .sticker-panel:高度由 flex 外壳压缩,不写死 max-height */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
+}
+
+.kaomoji-btn {
+  /* flex 子项:基准 96px、可 grow 占满剩余,与贴纸格子节奏一致 */
+  flex: 1 0 96px;
+  max-width: 160px;
+  /* 固定高度,而非 stretch —— 这是关键:颜文字字符高度不一,
+   * 不固定高度时该行最高项会决定整行高,矮的项视觉被拉伸 */
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  /* 颜文字大量使用全角和组合字符 —— 用等宽近似的 sans 字体栈,
+   * 行高拉紧,避免上下空一大截 */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  line-height: 1.2;
+  padding: 0 6px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition:
+    background 0.12s,
+    transform 0.08s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+  &:active {
+    background: rgba(255, 255, 255, 0.24);
+    transform: scale(0.97);
+  }
+}
+
+/* ---- 聊天气泡里的贴纸消息 ----
+ *
+ * 协议层只传 sticker id —— 渲染端按 id 查 STICKER_MAP 拿到 src + label。
+ * 气泡本身在 .is-sticker 下置空背景(同 .is-emoji-large),让贴纸像微信表情
+ * 一样"裸"地飘在聊天流里,避免外面套一层方块边框破坏卡通造型。 */
+.sticker-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.sticker-msg-img {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  /* 与面板里的格子保持同样的圆角风格,聊天里发出去的贴纸也是软角 */
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.sticker-msg-fallback {
+  /* 对端版本没有该贴纸 id 时的兜底,样式上偏向普通文本但保持斜体提示 */
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
 }
 
 .emoji-tip {
