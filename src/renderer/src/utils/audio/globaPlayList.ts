@@ -141,6 +141,9 @@ const handlePlay = async () => {
       await startResult
     }
     mediaSessionController.updatePlaybackState('playing')
+    if (playMode.value === PlayMode.HEARTBEAT) {
+      heartbeatSongStartTime = Date.now()
+    }
   } catch (error) {
     MessagePlugin.error('播放失败，请重试')
   }
@@ -148,6 +151,10 @@ const handlePlay = async () => {
 
 const handlePause = async () => {
   cancelPendingAutoNext()
+  if (playMode.value === PlayMode.HEARTBEAT && heartbeatSongStartTime > 0) {
+    heartbeatSongPlayedMs += Date.now() - heartbeatSongStartTime
+    heartbeatSongStartTime = 0
+  }
   /* 一起听:在房间且有控制权 → 发命令,不直接 stop 本地 */
   const lt = await getListenTogetherStore()
   if (lt.isInRoom) {
@@ -675,6 +682,7 @@ let heartbeatPrefetchPromise: Promise<void> | null = null
 const MAX_HEARTBEAT_RECENT = 10
 const recentHeartbeatSongs: Array<{ name: string; artist: string; playedRatio: number }> = []
 let heartbeatSongStartTime = 0
+let heartbeatSongPlayedMs = 0
 
 const getHeartbeatPrefetchInterval = () => {
   const val = userInfo.value.heartbeatPrefetchInterval
@@ -735,6 +743,7 @@ watch(
       heartbeatPrefetchPromise = null
       recentHeartbeatSongs.length = 0
       heartbeatSongStartTime = 0
+      heartbeatSongPlayedMs = 0
       clearHeartbeatCache()
       return
     }
@@ -801,10 +810,14 @@ return list.value.find((s) => s.songmid === nextId) || null
       const curSong = list.value.find((s) => s.songmid === curId)
       if (curSong && curSong.name) {
         const totalSec = parseIntervalSeconds(curSong.interval || '')
-        const playedSec = heartbeatSongStartTime > 0 ? (Date.now() - heartbeatSongStartTime) / 1000 : 0
+        let playedSec = heartbeatSongPlayedMs / 1000
+        if (heartbeatSongStartTime > 0) {
+          playedSec += (Date.now() - heartbeatSongStartTime) / 1000
+        }
         const playedRatio = totalSec > 0 ? Math.min(1, playedSec / totalSec) : 1
         recentHeartbeatSongs.push({ name: curSong.name, artist: curSong.singer || '', playedRatio })
         heartbeatSongStartTime = Date.now()
+        heartbeatSongPlayedMs = 0
         if (recentHeartbeatSongs.length > MAX_HEARTBEAT_RECENT) {
           recentHeartbeatSongs.splice(0, recentHeartbeatSongs.length - MAX_HEARTBEAT_RECENT)
         }
@@ -1232,6 +1245,7 @@ const initPlayback = async () => {
 
   if (playMode.value === PlayMode.HEARTBEAT) {
     heartbeatSongStartTime = Date.now()
+    heartbeatSongPlayedMs = 0
   }
 }
 window.addEventListener('global-music-control', onGlobalCtrl)
