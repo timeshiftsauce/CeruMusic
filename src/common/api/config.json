@@ -6,5 +6,5 @@
       "developmentUrl": "http://localhost:8000/api"
     }
   ],
-  "enableDev": true
+  "enableDev": false
 }

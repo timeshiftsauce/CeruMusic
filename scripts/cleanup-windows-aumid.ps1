@@ -231,23 +231,46 @@ Write-Info "已重启 explorer"
 # -----------------------------------------------------------------------------
 # 阶段 5: 验证
 # -----------------------------------------------------------------------------
-Write-Section "验证 (等待 5 秒让 Start Menu 重建索引)"
-Start-Sleep -Seconds 5
+Write-Section "验证"
+
+# 5.1 先检查是否有 electron / ceru-music 进程还活着 —— 它们可能立即重建 Electron.lnk
+$liveProcs = Get-Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessName -match '^(electron|ceru-music)$' }
+if ($liveProcs) {
+    Write-Hit "检测到 electron/ceru-music 进程仍在运行,它们可能会立即重建 Electron.lnk:"
+    $liveProcs | Format-Table ProcessName, Id, Path -AutoSize | Out-Host
+    Write-Hit "请关闭所有相关进程后再次运行本脚本"
+    exit 1
+}
+
+# 5.2 等 Start Menu DB 重建（实测 5-20 秒不等）
+Write-Info "等待 Start Menu 数据库重建 (最多 30 秒)..."
+$ok = $false
+for ($i = 0; $i -lt 6; $i++) {
+    Start-Sleep -Seconds 5
+    $cur = Get-StartApps | Where-Object { $_.AppID -eq $AumidProd }
+    if (-not $cur) {
+        # 暂无任何条目 —— 也算干净（首次启动澜音后会重新注册为正确 Name）
+        $ok = $true
+        break
+    }
+    if (($cur | Where-Object { $_.Name -ne 'Electron' })) {
+        $ok = $true
+        break
+    }
+}
 
 $after = Get-StartApps | Where-Object {
     $_.AppID -like '*cerumusic*' -or $_.Name -like '*澜音*' -or $_.Name -like '*Electron*'
 }
+if ($after) { $after | Format-Table -AutoSize | Out-Host }
 
-if ($after) {
-    $after | Format-Table -AutoSize | Out-Host
-    $hasElectronName = $after | Where-Object { $_.Name -eq 'Electron' -and $_.AppID -eq $AumidProd }
-    if ($hasElectronName) {
-        Write-Host ""
-        Write-Hit "仍有 'Electron' 关联到生产 AUMID。请注销当前 Windows 用户后重新登录,Start Menu 数据库会强制重建。"
-        exit 1
-    }
-} else {
-    Write-Info "Get-StartApps 暂无相关条目 (正常,首次启动澜音后会重新注册)"
+if (-not $ok) {
+    Write-Host ""
+    Write-Hit "等待 30 秒后 Start Menu 数据库仍未更新。"
+    Write-Hit "请尝试: 注销当前 Windows 用户后重新登录,Start Menu DB 会强制重建。"
+    Write-Hit "或者: 重启系统。"
+    exit 1
 }
 
 Write-Host ""
