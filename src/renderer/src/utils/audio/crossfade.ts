@@ -12,7 +12,7 @@ import mediaSessionController from './useSmtc'
 import defaultCoverImg from '/default-cover.png'
 import type { SongList } from '@renderer/types/audio'
 
-type GetNextSong = () => SongList | null
+type GetNextSong = () => SongList | null | Promise<SongList | null>
 
 // ---- 常量 ----
 const OBSERVATION_WINDOW = 15 // 进入尾段观察窗口 (秒)
@@ -189,7 +189,7 @@ const startRmsWatch = () => {
 
 // ------- 事件回调 -------
 
-const onTimeUpdate = () => {
+const onTimeUpdate = async () => {
   try {
     const audioStore = ControlAudioStore()
     const playSetting = usePlaySettingStore()
@@ -214,7 +214,7 @@ const onTimeUpdate = () => {
 
     // 进入观察窗口
     if (!_getNextSong) return
-    const next = _getNextSong()
+    const next = await _getNextSong()
     if (!next) return // 单曲循环或列表末尾：不触发
     _currentNextSong = next
 
@@ -306,7 +306,7 @@ const beginCrossfade = async () => {
     return
   }
 
-  const nextSong = _currentNextSong || (_getNextSong ? _getNextSong() : null)
+  const nextSong = _currentNextSong || (_getNextSong ? await _getNextSong() : null)
   if (!nextSong) {
     _beginningInProgress = false
     resetState()

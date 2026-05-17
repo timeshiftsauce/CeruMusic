@@ -68,4 +68,16 @@ export default function aiEvents(mainWindow) {
       return null
     }
   })
+
+  ipcMain.handle(
+    'ai-recommend-songs',
+    async (_, songName: string, artist: string, context?: { recentSongs?: Array<{ name: string; artist: string }> }) => {
+      try {
+        return await aiService.recommendSongs(songName, artist, context)
+      } catch (error: any) {
+        console.error('AI推荐歌曲失败:', error)
+        return []
+      }
+    }
+  )
 }

@@ -30,7 +30,9 @@ import {
   setVolume,
   seekTo,
   playSong,
-  playMode
+  playMode,
+  toggleHeartSong,
+  isHeartSong
 } from '@renderer/utils/audio/globaPlayList'
 import songCover from '@renderer/assets/images/song.jpg'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
@@ -318,12 +320,21 @@ const playModeIconClass = computed(() => {
     case PlayMode.RANDOM:
       playModeTip.value = '随机播放'
       return 'iconfont icon-suijibofang'
+    case PlayMode.HEARTBEAT:
+      playModeTip.value = '心动模式'
+      return 'iconfont icon-aixin'
     case PlayMode.SINGLE:
       playModeTip.value = '单曲循环'
       return 'iconfont icon-bofang-xunhuanbofang'
     default:
       return 'iconfont icon-shunxubofangtubiao'
   }
+})
+
+const currentSongHearted = computed(() => {
+  const mid = songInfo.value?.songmid
+  if (mid == null) return false
+  return isHeartSong(mid)
 })
 
 // 音量控制相关
@@ -1550,6 +1561,22 @@ watch(showFullPlay, (val) => {
               @click.stop="onDownload"
             >
               <DownloadIcon size="18" />
+            </t-button>
+          </t-tooltip>
+          <t-tooltip :content="currentSongHearted ? '取消心动' : '心动'">
+            <t-button
+              class="control-btn heartbeat-btn"
+              variant="text"
+              shape="circle"
+              :disabled="!songInfo.songmid"
+              @click.stop="toggleHeartSong"
+            >
+              <HeartIcon
+                :fill-color="currentSongHearted ? ['#ff4d6a', '#ff4d6a'] : ''"
+                :stroke-color="currentSongHearted ? [] : [contrastTextColor, contrastTextColor]"
+                :stroke-width="currentSongHearted ? 0 : 2"
+                size="18"
+              />
             </t-button>
           </t-tooltip>
           <Transition name="comment-fade" mode="out-in" appear>

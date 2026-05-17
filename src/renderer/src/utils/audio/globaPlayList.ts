@@ -13,6 +13,7 @@ import {
 } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
+import { getHeartbeatRecommendation, clearHeartbeatCache } from './heartbeat'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -668,6 +669,31 @@ const isLoadingSong = ref(false)
 const autoNextCount = ref(0)
 const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
 
+const heartbeatCounter = ref(0)
+let pendingHeartbeatRecommendation: SongList | null = null
+let heartbeatPrefetchPromise: Promise<void> | null = null
+const MAX_HEARTBEAT_RECENT = 10
+const recentHeartbeatSongs: Array<{ name: string; artist: string; playedRatio: number }> = []
+let heartbeatSongStartTime = 0
+
+const getHeartbeatPrefetchInterval = () => {
+  const val = userInfo.value.heartbeatPrefetchInterval
+  return typeof val === 'number' && val > 0 ? val : 2
+}
+const getHeartbeatInsertInterval = () => {
+  const val = userInfo.value.heartbeatInsertInterval
+  return typeof val === 'number' && val > 0 ? val : 3
+}
+
+const parseIntervalSeconds = (interval: string): number => {
+  if (!interval) return 0
+  const parts = interval.split(':')
+  if (parts.length === 2) {
+    return parseInt(parts[0]) * 60 + parseInt(parts[1])
+  }
+  return parseInt(interval) || 0
+}
+
 const shuffleOrder = ref<Array<number | string>>([])
 const buildShuffleOrder = () => {
   const ids = list.value.map((s) => s.songmid)
@@ -703,6 +729,15 @@ watch(
       ensureShuffleOrder()
       return
     }
+    if (mode === PlayMode.HEARTBEAT) {
+      heartbeatCounter.value = 0
+      pendingHeartbeatRecommendation = null
+      heartbeatPrefetchPromise = null
+      recentHeartbeatSongs.length = 0
+      heartbeatSongStartTime = 0
+      clearHeartbeatCache()
+      return
+    }
     shuffleOrder.value = []
   }
 )
@@ -718,20 +753,25 @@ watch(
 )
 
 const updatePlayMode = () => {
-  const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
+  const aiReady =
+    !!userInfo.value.aiConfig?.apiKey && userInfo.value.heartbeatEnabled !== false
+  const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.HEARTBEAT, PlayMode.SINGLE]
   const currentIndex = modes.indexOf(playMode.value)
-  const nextIndex = (currentIndex + 1) % modes.length
+  let nextIndex = (currentIndex + 1) % modes.length
+  if (!aiReady && modes[nextIndex] === PlayMode.HEARTBEAT) {
+    nextIndex = (nextIndex + 1) % modes.length
+  }
   playMode.value = modes[nextIndex]
   userInfo.value.playMode = playMode.value
 }
 
-const resolveNextSong = ({
+const resolveNextSong = async ({
   respectSingleMode,
   rebuildShuffleOnWrap
 }: {
   respectSingleMode: boolean
   rebuildShuffleOnWrap: boolean
-}): SongList | null => {
+}): Promise<SongList | null> => {
   if (list.value.length === 0) return null
   if (respectSingleMode && playMode.value === PlayMode.SINGLE) return null
 
@@ -748,7 +788,91 @@ const resolveNextSong = ({
       nextIdx = 0
     }
     const nextId = shuffleOrder.value[nextIdx]
-    return list.value.find((s) => s.songmid === nextId) || null
+return list.value.find((s) => s.songmid === nextId) || null
+  }
+
+  if (playMode.value === PlayMode.HEARTBEAT) {
+    const heartbeatEnabled = userInfo.value.heartbeatEnabled !== false
+    const prefetchInterval = getHeartbeatPrefetchInterval()
+    const insertInterval = getHeartbeatInsertInterval()
+    if (heartbeatEnabled) {
+      heartbeatCounter.value++
+      const curId = userInfo.value.lastPlaySongId
+      const curSong = list.value.find((s) => s.songmid === curId)
+      if (curSong && curSong.name) {
+        const totalSec = parseIntervalSeconds(curSong.interval || '')
+        const playedSec = heartbeatSongStartTime > 0 ? (Date.now() - heartbeatSongStartTime) / 1000 : 0
+        const playedRatio = totalSec > 0 ? Math.min(1, playedSec / totalSec) : 1
+        recentHeartbeatSongs.push({ name: curSong.name, artist: curSong.singer || '', playedRatio })
+        heartbeatSongStartTime = Date.now()
+        if (recentHeartbeatSongs.length > MAX_HEARTBEAT_RECENT) {
+          recentHeartbeatSongs.splice(0, recentHeartbeatSongs.length - MAX_HEARTBEAT_RECENT)
+        }
+      }
+      const c = heartbeatCounter.value
+      const doPrefetch = c % prefetchInterval === 0
+      const doInsert = c % insertInterval === 0
+      const recentCopy = [...recentHeartbeatSongs]
+
+      if (doInsert && doPrefetch) {
+        console.log(`[heartbeat] 计数器=${c} 同时触发插入+预取（预取=${prefetchInterval}，插入=${insertInterval}）`)
+        if (curSong) {
+          const rec = pendingHeartbeatRecommendation
+          pendingHeartbeatRecommendation = null
+          heartbeatPrefetchPromise = null
+          let target = rec
+          if (!target) {
+            console.log('[heartbeat] 无已完成预取，同步获取...')
+            isLoadingSong.value = true
+            const playlistIds = new Set(list.value.map((s) => s.songmid))
+            target = await getHeartbeatRecommendation(curSong, playlistIds, recentCopy)
+            isLoadingSong.value = false
+          }
+          if (target) {
+            list.value.splice(list.value.findIndex((s) => s.songmid === curId) + 1, 0, target)
+            console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
+          }
+          const playlistIds = new Set(list.value.map((s) => s.songmid))
+          heartbeatPrefetchPromise = getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
+            pendingHeartbeatRecommendation = r
+            if (r) console.log(`[heartbeat] 新一轮预取完成: 《${r.name}》 - ${r.singer}`)
+          })
+        }
+      } else if (doInsert) {
+        console.log(`[heartbeat] 计数器=${c}，触发插入（间隔=${insertInterval}）`)
+        if (curSong) {
+          const rec = pendingHeartbeatRecommendation
+          pendingHeartbeatRecommendation = null
+          heartbeatPrefetchPromise = null
+          let target = rec
+          if (!target) {
+            console.log('[heartbeat] 无已完成预取，同步获取...')
+            isLoadingSong.value = true
+            const playlistIds = new Set(list.value.map((s) => s.songmid))
+            target = await getHeartbeatRecommendation(curSong, playlistIds, recentCopy)
+            isLoadingSong.value = false
+          }
+          if (target) {
+            list.value.splice(list.value.findIndex((s) => s.songmid === curId) + 1, 0, target)
+            console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
+            return target
+          }
+          console.log('[heartbeat] 未找到可插入的推荐')
+        }
+      } else if (doPrefetch) {
+        console.log(`[heartbeat] 计数器=${c}，触发预取（间隔=${prefetchInterval}）`)
+        if (curSong) {
+          const playlistIds = new Set(list.value.map((s) => s.songmid))
+          heartbeatPrefetchPromise = getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
+            pendingHeartbeatRecommendation = r
+            if (r) console.log(`[heartbeat] 预取完成: 《${r.name}》 - ${r.singer}`)
+            else console.log('[heartbeat] 预取未找到推荐')
+          })
+        }
+      } else {
+        console.log(`[heartbeat] 计数器=${c}，无事发生（预取=${prefetchInterval}，插入=${insertInterval}）`)
+      }
+    }
   }
 
   const currentIndex = list.value.findIndex(
@@ -765,7 +889,7 @@ const resolveNextSong = ({
  * - SEQUENCE 模式按列表顺序循环
  * - 列表为空返回 null
  */
-const getNextSong = (): SongList | null => {
+const getNextSong = async (): Promise<SongList | null> => {
   return resolveNextSong({
     respectSingleMode: true,
     rebuildShuffleOnWrap: false
@@ -814,7 +938,7 @@ const playNext = async () => {
   }
   if (list.value.length === 0) return
   try {
-    const nextSong = resolveNextSong({
+    const nextSong = await resolveNextSong({
       respectSingleMode: false,
       rebuildShuffleOnWrap: true
     })
@@ -854,7 +978,7 @@ const playNextAutoNow = async () => {
         return
       }
     }
-    const nextSong = resolveNextSong({
+    const nextSong = await resolveNextSong({
       respectSingleMode: true,
       rebuildShuffleOnWrap: true
     })
@@ -951,9 +1075,32 @@ const onGlobalCtrl = (e: any) => {
         } else if (v === 'random') {
           playMode.value = PlayMode.RANDOM
           userInfo.value.playMode = playMode.value
+        } else if (v === 'heartbeat') {
+          const aiReady =
+            !!userInfo.value.aiConfig?.apiKey && userInfo.value.heartbeatEnabled !== false
+          if (aiReady) {
+            playMode.value = PlayMode.HEARTBEAT
+            userInfo.value.playMode = playMode.value
+          }
         } else if (v === 'toggleSingle') {
           playMode.value = playMode.value === PlayMode.SINGLE ? PlayMode.SEQUENCE : PlayMode.SINGLE
           userInfo.value.playMode = playMode.value
+        }
+      }
+      break
+    case 'toggleHeart':
+      {
+        const songId = userInfo.value.lastPlaySongId
+        if (songId != null) {
+          if (!userInfo.value.heartedSongs) userInfo.value.heartedSongs = []
+          const idx = userInfo.value.heartedSongs.indexOf(String(songId))
+          if (idx >= 0) {
+            userInfo.value.heartedSongs.splice(idx, 1)
+            MessagePlugin.info('已取消心动')
+          } else {
+            userInfo.value.heartedSongs.push(String(songId))
+            MessagePlugin.success('已标记心动')
+          }
         }
       }
       break
@@ -1082,6 +1229,10 @@ const initPlayback = async () => {
       userInfo.value.currentTime = Audio.value.currentTime
     }
   }, 1000)
+
+  if (playMode.value === PlayMode.HEARTBEAT) {
+    heartbeatSongStartTime = Date.now()
+  }
 }
 window.addEventListener('global-music-control', onGlobalCtrl)
 
@@ -1107,6 +1258,25 @@ const uninstallPlayback = () => {
   _disabledPlugins.clear()
 }
 
+const toggleHeartSong = () => {
+  const songId = userInfo.value.lastPlaySongId
+  if (songId == null) return
+  if (!userInfo.value.heartedSongs) userInfo.value.heartedSongs = []
+  const idx = userInfo.value.heartedSongs.indexOf(String(songId))
+  if (idx >= 0) {
+    userInfo.value.heartedSongs.splice(idx, 1)
+    MessagePlugin.info('已取消心动')
+  } else {
+    userInfo.value.heartedSongs.push(String(songId))
+    MessagePlugin.success('已标记心动')
+  }
+}
+
+const isHeartSong = (songId: string | number): boolean => {
+  if (!userInfo.value.heartedSongs) return false
+  return userInfo.value.heartedSongs.includes(String(songId))
+}
+
 export {
   songInfo,
   playMode,
@@ -1124,5 +1294,7 @@ export {
   setVolume,
   seekTo,
   onGlobalCtrl,
-  getNextSong
+  getNextSong,
+  toggleHeartSong,
+  isHeartSong
 }
