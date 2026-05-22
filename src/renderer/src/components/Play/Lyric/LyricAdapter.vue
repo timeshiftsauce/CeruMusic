@@ -89,6 +89,21 @@ const props = defineProps({
 
 const emit = defineEmits(['line-click'])
 
+/** 二分查找第一个 startTime > target 的歌词行索引 */
+const binarySearchFirstAfter = (lyrics: LyricLine[], target: number): number => {
+  let lo = 0
+  let hi = lyrics.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if ((lyrics[mid].startTime ?? 0) <= target) {
+      lo = mid + 1
+    } else {
+      hi = mid
+    }
+  }
+  return lo
+}
+
 const lyricScrollContainer = ref<HTMLElement | null>(null)
 
 const isYrcLine = (line: LyricLine) => {
@@ -100,26 +115,29 @@ const activeLineIndices = computed<number[]>(() => {
   const currentSeek = props.currentTime
   const hasYrc = lyrics.some((l) => Array.isArray(l.words) && l.words.length > 1)
   if (hasYrc) {
+    const firstAfter = binarySearchFirstAfter(lyrics, currentSeek)
+    const start = Math.max(0, firstAfter - 10)
     const indices: number[] = []
-    for (let i = 0; i < lyrics.length; i++) {
-      const start = lyrics[i].startTime || 0
-      const end = lyrics[i].endTime ?? Infinity
-      if (currentSeek >= start && currentSeek < end) {
+    for (let i = start; i < firstAfter; i++) {
+      const startT = lyrics[i].startTime || 0
+      const endT = lyrics[i].endTime ?? Infinity
+      if (currentSeek >= startT && currentSeek < endT) {
         indices.push(i)
       }
     }
     if (indices.length === 0 && currentSeek > 0) {
-      const next = lyrics.findIndex((v) => (v.startTime || 0) > currentSeek)
+      if (firstAfter > 0) return [firstAfter - 1]
+      const next = binarySearchFirstAfter(lyrics, currentSeek)
       if (next === -1) return [lyrics.length - 1]
       if (next > 0) return [next - 1]
     }
     return indices.length > 3 ? indices.slice(-3) : indices
   } else {
     const playSeek = currentSeek + 300
-    const idx = lyrics.findIndex((v) => (v.startTime || 0) > playSeek)
-    if (idx === -1) return [lyrics.length - 1]
-    if (idx > 0) return [idx - 1]
-    return []
+    const firstAfter = binarySearchFirstAfter(lyrics, playSeek)
+    if (firstAfter === 0) return []
+    if (firstAfter === lyrics.length) return [lyrics.length - 1]
+    return [firstAfter - 1]
   }
 })
 
@@ -128,25 +146,23 @@ const scrollTargetIndex = computed<number>(() => {
   const currentSeek = props.currentTime
   const hasYrc = lyrics.some((l) => Array.isArray(l.words) && l.words.length > 1)
   if (hasYrc) {
-    for (let i = 0; i < lyrics.length; i++) {
-      const start = lyrics[i].startTime || 0
-      const end = lyrics[i].endTime ?? Infinity
-      if (currentSeek >= start && currentSeek < end) {
+    const firstAfter = binarySearchFirstAfter(lyrics, currentSeek)
+    const start = Math.max(0, firstAfter - 10)
+    for (let i = start; i < firstAfter; i++) {
+      const startT = lyrics[i].startTime || 0
+      const endT = lyrics[i].endTime ?? Infinity
+      if (currentSeek >= startT && currentSeek < endT) {
         return i
       }
     }
-    if (currentSeek > 0) {
-      const next = lyrics.findIndex((v) => (v.startTime || 0) > currentSeek)
-      if (next === -1) return lyrics.length - 1
-      if (next > 0) return next - 1
-    }
+    if (currentSeek > 0 && firstAfter > 0) return firstAfter - 1
     return -1
   } else {
     const playSeek = currentSeek + 300
-    const idx = lyrics.findIndex((v) => (v.startTime || 0) > playSeek)
-    if (idx === -1) return lyrics.length - 1
-    if (idx > 0) return idx - 1
-    return -1
+    const firstAfter = binarySearchFirstAfter(lyrics, playSeek)
+    if (firstAfter === 0) return -1
+    if (firstAfter === lyrics.length) return lyrics.length - 1
+    return firstAfter - 1
   }
 })
 

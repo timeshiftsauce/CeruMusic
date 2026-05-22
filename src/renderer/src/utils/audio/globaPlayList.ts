@@ -14,6 +14,7 @@ import {
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
 import { getHeartbeatRecommendation, clearHeartbeatCache } from './heartbeat'
+import { logger } from '@renderer/utils/logger'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -815,7 +816,7 @@ return list.value.find((s) => s.songmid === nextId) || null
           playedSec += (Date.now() - heartbeatSongStartTime) / 1000
         }
         const playedRatio = totalSec > 0 ? Math.min(1, playedSec / totalSec) : 1
-        console.log(
+        logger.log(
           `[heartbeat] 记录播放: 《${curSong.name}》 startTime=${heartbeatSongStartTime} playedMs=${heartbeatSongPlayedMs} totalSec=${totalSec} playedSec=${playedSec.toFixed(1)} ratio=${(playedRatio * 100).toFixed(0)}%`
         )
         recentHeartbeatSongs.push({ name: curSong.name, artist: curSong.singer || '', playedRatio })
@@ -831,14 +832,14 @@ return list.value.find((s) => s.songmid === nextId) || null
       const recentCopy = [...recentHeartbeatSongs]
 
       if (doInsert && doPrefetch) {
-        console.log(`[heartbeat] 计数器=${c} 同时触发插入+预取（预取=${prefetchInterval}，插入=${insertInterval}）`)
+        logger.log(`[heartbeat] 计数器=${c} 同时触发插入+预取（预取=${prefetchInterval}，插入=${insertInterval}）`)
         if (curSong) {
           const rec = pendingHeartbeatRecommendation
           pendingHeartbeatRecommendation = null
           heartbeatPrefetchPromise = null
           let target = rec
           if (!target) {
-            console.log('[heartbeat] 无已完成预取，同步获取...')
+            logger.log('[heartbeat] 无已完成预取，同步获取...')
             isLoadingSong.value = true
             const playlistIds = new Set(list.value.map((s) => s.songmid))
             target = await getHeartbeatRecommendation(curSong, playlistIds, recentCopy)
@@ -846,23 +847,23 @@ return list.value.find((s) => s.songmid === nextId) || null
           }
           if (target) {
             list.value.splice(list.value.findIndex((s) => s.songmid === curId) + 1, 0, target)
-            console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
+            logger.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
           }
           const playlistIds = new Set(list.value.map((s) => s.songmid))
           heartbeatPrefetchPromise = getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
             pendingHeartbeatRecommendation = r
-            if (r) console.log(`[heartbeat] 新一轮预取完成: 《${r.name}》 - ${r.singer}`)
+            if (r) logger.log(`[heartbeat] 新一轮预取完成: 《${r.name}》 - ${r.singer}`)
           })
         }
       } else if (doInsert) {
-        console.log(`[heartbeat] 计数器=${c}，触发插入（间隔=${insertInterval}）`)
+        logger.log(`[heartbeat] 计数器=${c}，触发插入（间隔=${insertInterval}）`)
         if (curSong) {
           const rec = pendingHeartbeatRecommendation
           pendingHeartbeatRecommendation = null
           heartbeatPrefetchPromise = null
           let target = rec
           if (!target) {
-            console.log('[heartbeat] 无已完成预取，同步获取...')
+            logger.log('[heartbeat] 无已完成预取，同步获取...')
             isLoadingSong.value = true
             const playlistIds = new Set(list.value.map((s) => s.songmid))
             target = await getHeartbeatRecommendation(curSong, playlistIds, recentCopy)
@@ -870,23 +871,23 @@ return list.value.find((s) => s.songmid === nextId) || null
           }
           if (target) {
             list.value.splice(list.value.findIndex((s) => s.songmid === curId) + 1, 0, target)
-            console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
+            logger.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
             return target
           }
-          console.log('[heartbeat] 未找到可插入的推荐')
+          logger.log('[heartbeat] 未找到可插入的推荐')
         }
       } else if (doPrefetch) {
-        console.log(`[heartbeat] 计数器=${c}，触发预取（间隔=${prefetchInterval}）`)
+        logger.log(`[heartbeat] 计数器=${c}，触发预取（间隔=${prefetchInterval}）`)
         if (curSong) {
           const playlistIds = new Set(list.value.map((s) => s.songmid))
           heartbeatPrefetchPromise = getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
             pendingHeartbeatRecommendation = r
-            if (r) console.log(`[heartbeat] 预取完成: 《${r.name}》 - ${r.singer}`)
-            else console.log('[heartbeat] 预取未找到推荐')
+            if (r) logger.log(`[heartbeat] 预取完成: 《${r.name}》 - ${r.singer}`)
+            else logger.log('[heartbeat] 预取未找到推荐')
           })
         }
       } else {
-        console.log(`[heartbeat] 计数器=${c}，无事发生（预取=${prefetchInterval}，插入=${insertInterval}）`)
+        logger.log(`[heartbeat] 计数器=${c}，无事发生（预取=${prefetchInterval}，插入=${insertInterval}）`)
       }
     }
   }
@@ -1061,7 +1062,7 @@ const onGlobalCtrl = (e: any) => {
       break
     case 'playNext':
       void playNext()
-      console.log('next')
+      logger.log('next')
       break
     case 'autoNext':
       void playNextAuto()
@@ -1173,6 +1174,9 @@ const initPlayback = async () => {
 
   // 初始化无感过渡管理器：注入 getNextSong 回调，订阅 slotSwap 重置自动下一首计数
   crossfadeManager.init(getNextSong)
+  // 启用自然结束延迟模式：当歌曲自然结束由 playNextAuto 走 1500ms 延迟触发时，
+  // 禁止 crossfade 管理器在歌曲结束前提前过渡（避免"前一首没播完下一首就开始"）
+  crossfadeManager.setNaturalNextDelayEnabled(true)
   controlAudio.subscribe('slotSwap', () => {
     autoNextCount.value = 0
     // 关键：翻转槽位后，playSong 挂在旧 primary 上的 DOM error/playing 监听器仍然存在。
@@ -1203,7 +1207,7 @@ const initPlayback = async () => {
       songInfo.value = { ...lastPlayedSong }
       if (!Audio.value.isPlay) {
         try {
-          console.log('initPlayback', lastPlayedSong)
+          logger.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
           setUrl(url)
           // SMTC 元数据在音频准备好后再更新，避免切换时空隙
@@ -1218,7 +1222,7 @@ const initPlayback = async () => {
           pendingRestorePosition = userInfo.value.currentTime
           pendingRestoreSongId = lastPlayedSong.songmid
           if (Audio.value.audio) {
-            console.log('上次进度', userInfo.value.currentTime)
+            logger.log('上次进度', userInfo.value.currentTime)
             await waitForAudioReady(Audio.value.audio)
             Audio.value.currentTime = userInfo.value.currentTime
             Audio.value.audio.currentTime = userInfo.value.currentTime

@@ -311,6 +311,9 @@ class CeruMusicPluginHost {
       pluginId: this.pluginId || ''
     })
 
+    // 插件代码已发送给 worker，释放主进程中的副本以减少常驻内存
+    this.pluginCode = null
+
     try {
       this.meta = await initPromise
       this.lastHeartbeat = Date.now()

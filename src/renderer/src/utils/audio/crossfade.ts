@@ -11,6 +11,7 @@ import AudioManager from './audioManager'
 import mediaSessionController from './useSmtc'
 import defaultCoverImg from '/default-cover.png'
 import type { SongList } from '@renderer/types/audio'
+import { logger } from '@renderer/utils/logger'
 
 type GetNextSong = () => SongList | null | Promise<SongList | null>
 
@@ -265,7 +266,7 @@ const cancelCrossfade = () => {
   }
 
   resetState()
-  console.log('[crossfade] cancelled')
+  logger.log('[crossfade] cancelled')
 }
 
 const onSeeked = () => {
@@ -526,7 +527,7 @@ const beginCrossfade = async () => {
   )
 
   // 日志
-  console.log('[crossfade] begin', {
+  logger.log('[crossfade] begin', {
     fadeTime,
     nextSong: nextSong.name,
     remaining
@@ -565,7 +566,7 @@ const completeCrossfade = (nextSong: SongList) => {
     audioStore.clearSecondarySrc()
   } catch {}
 
-  console.log('[crossfade] complete ->', nextSong.name)
+  logger.log('[crossfade] complete ->', nextSong.name)
   resetState()
 }
 

@@ -16,6 +16,7 @@ import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
 import { crossfadeState } from '@renderer/utils/audio/crossfade'
+import { logger } from '@renderer/utils/logger'
 
 type AudioSlot = 'A' | 'B'
 
@@ -247,7 +248,7 @@ onDeactivated(() => {
 // ---- 事件处理（带 slot 过滤） ----
 
 const forward = (name: string, val?: any) => {
-  console.log('forward', name, val)
+  logger.log('forward', name, val)
   window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
 }
 
@@ -256,6 +257,13 @@ const handleEnded = (slot: AudioSlot): void => {
   if (!isPrimarySlot(slot)) return
   // 若正在完成交叉淡化，ended 事件会由 crossfade 的 completeCrossfade 处理
   if (crossfadeState.active) return
+  // 歌曲播放完毕，取消 RAF 避免空转
+  if (rafId !== null) {
+    try {
+      cancelAnimationFrame(rafId)
+    } catch {}
+    rafId = null
+  }
   audioStore.Audio.isPlay = false
   audioStore.publish('ended')
   forward('autoNext')

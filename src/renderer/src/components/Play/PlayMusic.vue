@@ -543,6 +543,12 @@ onUnmounted(() => {
   })
   thumbarApi?.setCover?.(null)
 
+  // 清理 DLNA 轮询定时器
+  if (dlnaSyncInterval) {
+    clearInterval(dlnaSyncInterval)
+    dlnaSyncInterval = null
+  }
+
   // 清理可能存在的拖动监听器
   window.removeEventListener('mousemove', handleVolumeDragMove)
   window.removeEventListener('mouseup', handleVolumeDragEnd)

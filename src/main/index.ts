@@ -794,7 +794,9 @@ app.whenReady().then(async () => {
     })
   })
 
-  // Initialize plugins before starting download manager
+  createWindow()
+
+  // Initialize plugins after window creation so the UI appears faster
   try {
     console.log('Initializing plugins...')
     await pluginService.initializePlugins()
@@ -802,8 +804,6 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('Failed to initialize plugins:', error)
   }
-
-  createWindow()
 
   // 系统音频采集 - 媒体权限授权流程
   // 渲染端必须先调用 system-audio:prepare-capture 拿一次性令牌，否则 PermissionRequest 会被拒
@@ -831,7 +831,7 @@ app.whenReady().then(async () => {
 
   // GitCode 防盗链：去掉对 gitcode.com 请求的 Referer
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ['*://*/*'] },
+    { urls: ['https://*/*', 'http://*/*'] },
     (details, callback) => {
       const referer = details.requestHeaders['Referer'] || details.requestHeaders['referer']
       const baseUrl = new URL(details.url).origin
