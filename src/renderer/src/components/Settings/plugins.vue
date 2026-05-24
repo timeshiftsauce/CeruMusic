@@ -194,6 +194,16 @@
               >
                 刷新
               </t-button>
+              <t-button
+                size="small"
+                variant="outline"
+                theme="primary"
+                ghost
+                :disabled="logsLoading || logs.length === 0"
+                @click.stop="exportLogs"
+              >
+                导出
+              </t-button>
             </div>
             <div class="mac-controls">
               <div class="mac-button close" @click="logDialogVisible = false"></div>
@@ -226,13 +236,24 @@
               </div>
               <div v-else class="log-entries">
                 <div
-                  v-for="(log, index) in logs"
-                  :key="index"
+                  v-for="entry in visibleLogs"
+                  :key="entry.key"
                   class="log-entry"
-                  :class="getLogLevel(log)"
+                  :class="[
+                    logLevelClass(entry.level),
+                    {
+                      'log-entry-group': entry.isGroup,
+                      'log-entry-collapsed': entry.isGroup && collapsedGroups.has(entry.key)
+                    }
+                  ]"
+                  :style="{ paddingLeft: entry.depth * 16 + 'px' }"
+                  @click="entry.isGroup && toggleGroup(entry.key)"
                 >
-                  <span class="log-timestamp">{{ formatLogTime(index) }}</span>
-                  <span class="log-content">{{ log }}</span>
+                  <span class="log-timestamp">{{ formatLogTime(entry.t) }}</span>
+                  <span v-if="entry.isGroup" class="log-group-caret">
+                    {{ collapsedGroups.has(entry.key) ? '▶' : '▼' }}
+                  </span>
+                  <span class="log-content">{{ entry.message }}</span>
                 </div>
               </div>
             </div>
@@ -325,7 +346,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, toRaw } from 'vue'
+import { ref, onMounted, nextTick, toRaw, computed } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import ImportPlaylist from '@renderer/components/ServicePlugin/ImportPlaylist.vue'
@@ -382,10 +403,35 @@ const onlineUrl = ref('')
 const logDialogVisible = ref(false)
 const currentLogPluginId = ref('')
 const currentLogPluginName = ref('')
+/** 原始日志行（NDJSON 字符串或旧版纯文本）。 */
 const logs = ref<string[]>([])
 const logsLoading = ref(false)
 const logsError = ref<string | null>(null)
 const logContentRef = ref<HTMLElement | null>(null)
+
+/** 后端写入的日志级别。 */
+type PluginLogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug' | 'group' | 'groupEnd'
+
+/** 解析后的日志条目（前端渲染单元）。 */
+interface ParsedLogEntry {
+  /** epoch ms；旧格式行没有真实时间时为 null。 */
+  t: number | null
+  /** 真实级别。 */
+  level: PluginLogLevel
+  /** 消息文本。 */
+  message: string
+  /** group 嵌套深度（>=0）。groupEnd 自身不显示。 */
+  depth: number
+  /** 标记当前条目是否为分组头（可点击折叠）。 */
+  isGroup: boolean
+  /** 仅 group 项使用：对应 groupEnd 在原数组中的索引（用于跳过被折叠的条目）。 */
+  groupEndIndex?: number
+  /** 渲染稳定 key — 索引足以保证局部刷新。 */
+  key: number
+}
+
+/** 已折叠的 group 头索引集合。 */
+const collapsedGroups = ref<Set<number>>(new Set())
 
 // 服务插件配置相关
 const configDialogVisible = ref(false)
@@ -661,9 +707,10 @@ async function loadPluginLogs() {
 
   try {
     const result = await window.api.plugins.getPluginLog(currentLogPluginId.value)
-    console.log(result)
     if (result && Array.isArray(result)) {
       logs.value = result
+      // 换插件/刷新时清掉旧的折叠状态，避免索引串扰
+      collapsedGroups.value = new Set()
       // 滚动到底部显示最新日志
       await nextTick()
       setTimeout(() => {
@@ -673,6 +720,7 @@ async function loadPluginLogs() {
       }, 100)
     } else {
       logs.value = []
+      collapsedGroups.value = new Set()
     }
   } catch (err: any) {
     console.error('加载插件日志失败:', err)
@@ -690,6 +738,62 @@ async function refreshLogs() {
   } catch (err: any) {
     console.error('刷新日志失败:', err)
     MessagePlugin.error(`刷新日志失败: ${err.message || '未知错误'}`)
+  }
+}
+
+// 导出日志为可读 .log 文本
+function exportLogs() {
+  try {
+    if (logs.value.length === 0) {
+      MessagePlugin.warning('没有可导出的日志')
+      return
+    }
+
+    // 以解析后的结构化条目为准，生成人可读的纯文本
+    // 格式：[YYYY-MM-DD HH:mm:ss.SSS] [LEVEL] <缩进>message
+    const lines = parsedLogs.value.map((entry) => {
+      const ts = entry.t
+        ? new Date(entry.t).toISOString().replace('T', ' ').replace('Z', '')
+        : '----------  --:--:--.---'
+      const lvl = entry.level.toUpperCase().padEnd(8, ' ')
+      const indent = '  '.repeat(entry.depth)
+      const prefix = entry.isGroup ? '▼ ' : ''
+      return `[${ts}] [${lvl}] ${indent}${prefix}${entry.message}`
+    })
+
+    const header =
+      `# Ceru Music Plugin Log\n` +
+      `# Plugin: ${currentLogPluginName.value} (${currentLogPluginId.value})\n` +
+      `# Exported: ${new Date().toISOString()}\n` +
+      `# Entries: ${parsedLogs.value.length}\n` +
+      `# ----------------------------------------\n`
+    const content = header + lines.join('\n') + '\n'
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+
+    const safeName = (currentLogPluginName.value || currentLogPluginId.value || 'plugin')
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .slice(0, 60)
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .replace('T', '_')
+      .slice(0, 19)
+    const filename = `${safeName}_${stamp}.log`
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    MessagePlugin.success(`已导出 ${parsedLogs.value.length} 条日志`)
+  } catch (err: any) {
+    console.error('导出日志失败:', err)
+    MessagePlugin.error(`导出日志失败: ${err.message || '未知错误'}`)
   }
 }
 
@@ -795,11 +899,12 @@ function formatTime(date: Date): string {
   })
 }
 
-// 格式化日志时间
-function formatLogTime(index: number): string {
-  const now = new Date()
-  const logTime = new Date(now.getTime() - (logs.value.length - index - 1) * 1000)
-  return logTime.toLocaleTimeString('zh-CN', {
+// 格式化日志时间（基于真实时间戳；旧格式行没时间戳时返回 '--:--:--'）
+function formatLogTime(ts: number | null): string {
+  if (ts == null) return '--:--:--'
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return '--:--:--'
+  return d.toLocaleTimeString('zh-CN', {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
@@ -807,19 +912,148 @@ function formatLogTime(index: number): string {
   })
 }
 
-// 获取日志级别样式
-function getLogLevel(log: string): string {
-  const logLower = log.toLowerCase()
-  if (logLower.includes('error') || logLower.includes('错误')) {
-    return 'log-error'
-  } else if (logLower.includes('warn') || logLower.includes('警告')) {
-    return 'log-warn'
-  } else if (logLower.includes('info') || logLower.includes('信息')) {
-    return 'log-info'
-  } else if (logLower.includes('debug') || logLower.includes('调试')) {
-    return 'log-debug'
+/**
+ * 解析单行日志。
+ *   - 优先按 NDJSON 解析（{t,l,m}）
+ *   - 兼容旧格式 "level message"（level ∈ log/info/warn/error/start/end）
+ *   - 都不匹配时整行作为 log 级别消息
+ */
+function parseLogLine(raw: string): { t: number | null; level: PluginLogLevel; message: string } {
+  const trimmed = raw.trimStart()
+  if (trimmed.startsWith('{')) {
+    try {
+      const obj = JSON.parse(trimmed)
+      if (obj && typeof obj === 'object' && typeof obj.l === 'string') {
+        const lvl = obj.l as PluginLogLevel
+        const validLevels: PluginLogLevel[] = [
+          'log',
+          'info',
+          'warn',
+          'error',
+          'debug',
+          'group',
+          'groupEnd'
+        ]
+        if (validLevels.includes(lvl)) {
+          return {
+            t: typeof obj.t === 'number' ? obj.t : null,
+            level: lvl,
+            message: typeof obj.m === 'string' ? obj.m : ''
+          }
+        }
+      }
+    } catch {
+      /* 不是合法 JSON，继续走 fallback */
+    }
   }
-  return 'log-default'
+  // 旧格式 fallback：以第一个空格切分
+  const spaceIdx = raw.indexOf(' ')
+  if (spaceIdx > 0) {
+    const head = raw.slice(0, spaceIdx)
+    const rest = raw.slice(spaceIdx + 1)
+    switch (head) {
+      case 'log':
+      case 'info':
+      case 'warn':
+      case 'error':
+      case 'debug':
+        return { t: null, level: head, message: rest }
+      case 'start':
+        return { t: null, level: 'group', message: rest }
+      case 'end':
+        return { t: null, level: 'groupEnd', message: rest }
+    }
+  }
+  return { t: null, level: 'log', message: raw }
+}
+
+/** 把原始行数组解析成带 depth / 折叠索引的渲染条目数组。 */
+const parsedLogs = computed<ParsedLogEntry[]>(() => {
+  const out: ParsedLogEntry[] = []
+  // 用栈记录当前所处的 group 头索引，用于配对 groupEnd → 标记 groupEndIndex
+  const groupStack: number[] = []
+  let depth = 0
+  for (let i = 0; i < logs.value.length; i++) {
+    const parsed = parseLogLine(logs.value[i])
+    if (parsed.level === 'group') {
+      const entry: ParsedLogEntry = {
+        t: parsed.t,
+        level: 'group',
+        message: parsed.message,
+        depth,
+        isGroup: true,
+        key: i
+      }
+      out.push(entry)
+      groupStack.push(out.length - 1)
+      depth++
+    } else if (parsed.level === 'groupEnd') {
+      // 关闭最近一个 group；如果栈空说明是孤儿 groupEnd，直接忽略
+      const headIdx = groupStack.pop()
+      if (headIdx !== undefined) {
+        out[headIdx].groupEndIndex = i
+        depth = Math.max(0, depth - 1)
+      }
+      // groupEnd 本身不输出可见行（行为对齐 console.group 语义）
+    } else {
+      out.push({
+        t: parsed.t,
+        level: parsed.level,
+        message: parsed.message,
+        depth,
+        isGroup: false,
+        key: i
+      })
+    }
+  }
+  return out
+})
+
+/** 真实日志级别 → CSS class */
+function logLevelClass(level: PluginLogLevel): string {
+  switch (level) {
+    case 'error':
+      return 'log-error'
+    case 'warn':
+      return 'log-warn'
+    case 'info':
+      return 'log-info'
+    case 'debug':
+      return 'log-debug'
+    case 'group':
+      return 'log-group'
+    default:
+      return 'log-default'
+  }
+}
+
+/** 计算折叠后实际展示的条目（被折叠 group 内部的行不渲染）。 */
+const visibleLogs = computed<ParsedLogEntry[]>(() => {
+  if (collapsedGroups.value.size === 0) return parsedLogs.value
+  const result: ParsedLogEntry[] = []
+  // skipUntilDepth：在折叠时，跳过深度 > 该值的所有后续条目，直到深度回到 <= 该值
+  let skipUntilDepth = -1
+  for (const entry of parsedLogs.value) {
+    if (skipUntilDepth >= 0) {
+      if (entry.depth <= skipUntilDepth) {
+        skipUntilDepth = -1
+      } else {
+        continue
+      }
+    }
+    result.push(entry)
+    if (entry.isGroup && collapsedGroups.value.has(entry.key)) {
+      skipUntilDepth = entry.depth
+    }
+  }
+  return result
+})
+
+function toggleGroup(key: number) {
+  const next = new Set(collapsedGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  collapsedGroups.value = next
 }
 
 onMounted(async () => {
@@ -1466,6 +1700,36 @@ onMounted(async () => {
     }
 
     &.log-default {
+      .log-content {
+        color: var(--plugins-console-text);
+      }
+    }
+
+    /* group 头：可点击折叠 */
+    &.log-entry-group {
+      cursor: pointer;
+      font-weight: 600;
+
+      .log-group-caret {
+        display: inline-block;
+        width: 14px;
+        margin-right: 4px;
+        text-align: center;
+        font-size: 10px;
+        color: var(--plugins-console-text);
+        flex-shrink: 0;
+      }
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+    }
+
+    &.log-entry-collapsed {
+      opacity: 0.85;
+    }
+
+    &.log-group {
       .log-content {
         color: var(--plugins-console-text);
       }
