@@ -161,8 +161,6 @@ class CeruMusicPluginHost {
   /** 上次 watchdog tick 的时间戳，用于检测系统休眠/进程冻结导致的时钟跳变。 */
   private lastWatchdogTick = 0
   private watchdogTimer: ReturnType<typeof setInterval> | null = null
-  /** 上次 crashCount 衰减时间戳。 */
-  private lastCrashDecayAt = 0
   private crashDecayTimer: ReturnType<typeof setInterval> | null = null
 
   public pluginId?: string
@@ -401,7 +399,6 @@ class CeruMusicPluginHost {
    */
   private _startCrashDecay(): void {
     this._stopCrashDecay()
-    this.lastCrashDecayAt = Date.now()
     this.crashDecayTimer = setInterval(() => {
       if (this.destroyed) return
       if (this.crashCount <= 0) return
