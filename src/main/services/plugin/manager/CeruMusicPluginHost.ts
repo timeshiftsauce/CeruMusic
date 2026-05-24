@@ -287,11 +287,14 @@ class CeruMusicPluginHost {
     }
     this._stopWatchdog()
     this._rejectAllPending(new PluginError('Plugin host destroyed'))
-    if (this.worker) {
+    // 同 _terminateAndRespawn：先置空再 terminate。
+    // 这里 destroyed=true 已经能让 _onWorkerExit 提前返回，置空只是统一防御模式。
+    const dyingWorker = this.worker
+    this.worker = null
+    if (dyingWorker) {
       try {
-        await this.worker.terminate()
+        await dyingWorker.terminate()
       } catch {}
-      this.worker = null
     }
   }
 
@@ -337,11 +340,14 @@ class CeruMusicPluginHost {
         `${CONSTANTS.LOG_PREFIX} Plugin "${this.meta.pluginInfo?.name}" loaded successfully.`
       )
     } catch (err: any) {
-      // init 失败，清掉这个 worker
+      // init 失败，清掉这个 worker。
+      // 必须先把 this.worker 置空再 terminate，否则 terminate() 触发的 exit
+      // 事件会落入 _onWorkerExit 的"非预期退出"分支，被错误地累加 crashCount
+      // 并触发自动 respawn，导致 init 失败连锁雪崩式禁用。
+      this.worker = null
       try {
         await worker.terminate()
       } catch {}
-      this.worker = null
       throw new PluginError('无法初始化澜音插件,可能是插件格式不正确. ' + err.message)
     }
   }
@@ -419,11 +425,15 @@ class CeruMusicPluginHost {
     pluginLog.warn(`${CONSTANTS.LOG_PREFIX} 插件 worker 被强杀: ${reason}`)
     this._stopWatchdog()
     this._rejectAllPending(new PluginError(`Plugin worker terminated: ${reason}`))
-    if (this.worker) {
+    // 先把字段置空，让 terminate() 触发的 exit 事件落入 "受控终止" 分支
+    // （_onWorkerExit 看到 this.worker === null 就 early return），
+    // 避免与 crashCount++ 重复计数。
+    const dyingWorker = this.worker
+    this.worker = null
+    if (dyingWorker) {
       try {
-        await this.worker.terminate()
+        await dyingWorker.terminate()
       } catch {}
-      this.worker = null
     }
 
     this.crashCount++
@@ -571,10 +581,34 @@ class CeruMusicPluginHost {
 
   private _onWorkerExit(code: number): void {
     if (this.destroyed) return
+    // worker 字段已被 _terminateAndRespawn 主动清空 → 说明是受控终止，
+    // respawn 流程会自己重启，这里不要重复处理。
     if (this.worker === null) return
-    pluginLog.warn(`${CONSTANTS.LOG_PREFIX} worker 退出 code=${code}`)
+    pluginLog.warn(`${CONSTANTS.LOG_PREFIX} worker 非预期退出 code=${code}`)
     this._rejectAllPending(new PluginError(`Worker exited with code ${code}`))
     this.worker = null
+    this._stopWatchdog()
+
+    // 非预期退出 = 一次崩溃。走与 watchdog 同样的累计/衰减/respawn 路径，
+    // 避免出现 "worker 死了但 disabled=false、调用永远抛 not running" 的僵尸状态。
+    this.crashCount++
+    if (this.crashCount >= CONSTANTS.CRASH_LIMIT) {
+      const reason = `worker exited ${this.crashCount} times (last code=${code})`
+      pluginLog.error(
+        `${CONSTANTS.LOG_PREFIX} 插件 ${this.pluginId} 退出次数过多，已禁用直到下次手动加载`
+      )
+      this._markDisabled(reason)
+      return
+    }
+
+    pluginLog.warn(
+      `${CONSTANTS.LOG_PREFIX} 尝试自动重启插件 ${this.pluginId}（第 ${this.crashCount}/${CONSTANTS.CRASH_LIMIT} 次）`
+    )
+    // 异步重启，不阻塞当前事件循环。
+    this._spawn().catch((err: any) => {
+      pluginLog.error(`${CONSTANTS.LOG_PREFIX} 自动重启 worker 失败: ${err?.message}`)
+      this._markDisabled(`auto-respawn failed: ${err?.message}`)
+    })
   }
 
   // ==================== 私有：调用 ====================
