@@ -199,6 +199,40 @@ onMounted(() => refreshLikeState())
 const thumbarApi = (window as any).api?.thumbar
 let removeThumbarToggleLikeListener: (() => void) | null = null
 
+// === 窗口标题 + 任务栏/Dock 进度条同步 ===
+// 启动默认标题在 App.vue 推一次,这里只在有歌时切换"歌名 - 歌手",无歌回退默认名。
+const appApi = (window as any).api?.app
+const DEFAULT_WINDOW_TITLE = '澜音 Ceru Music'
+const pushWindowTitle = () => {
+  if (!appApi?.setTitle) return
+  const info: any = songInfo.value || {}
+  if (info.songmid && info.name) {
+    const singer = info.singer ? ` - ${info.singer}` : ''
+    appApi.setTitle(`${info.name}${singer}`)
+  } else {
+    appApi.setTitle(DEFAULT_WINDOW_TITLE)
+  }
+}
+// 进度条:节流到 ~1s 一次,避免 IPC 风暴(Audio.currentTime 每 ~200ms 触发一次)
+let lastProgressPushAt = 0
+const PROGRESS_MIN_INTERVAL_MS = 1000
+const pushWindowProgress = (force = false) => {
+  if (!appApi?.setProgress) return
+  const info: any = songInfo.value || {}
+  const dur = Audio.value.duration || 0
+  const cur = Audio.value.currentTime || 0
+  if (!info.songmid || !dur || !isFinite(dur)) {
+    appApi.setProgress(-1)
+    lastProgressPushAt = 0
+    return
+  }
+  const now = Date.now()
+  if (!force && now - lastProgressPushAt < PROGRESS_MIN_INTERVAL_MS) return
+  lastProgressPushAt = now
+  const ratio = Math.max(0, Math.min(1, cur / dur))
+  appApi.setProgress(ratio, Audio.value.isPlay ? undefined : { paused: true })
+}
+
 const blobOrUrlToDataUrl = async (src: string): Promise<string | null> => {
   if (!src) return null
   if (src.startsWith('data:')) return src
@@ -230,7 +264,11 @@ const pushThumbarState = () => {
 
 watch(
   () => Audio.value.isPlay,
-  () => pushThumbarState()
+  () => {
+    pushThumbarState()
+    // 播放/暂停切换:进度条颜色随之变化(暂停色),强制推一次
+    pushWindowProgress(true)
+  }
 )
 watch(
   () => likeState.value,
@@ -238,8 +276,23 @@ watch(
 )
 watch(
   () => [songInfo.value?.songmid, songInfo.value?.name, songInfo.value?.singer],
-  () => pushThumbarState(),
+  () => {
+    pushThumbarState()
+    // 歌曲信息变化:窗口标题立刻同步,进度条强制刷新一次(新歌起点)
+    pushWindowTitle()
+    pushWindowProgress(true)
+  },
   { immediate: true }
+)
+// 播放进度变化:节流推到任务栏/Dock 进度条
+watch(
+  () => Audio.value.currentTime,
+  () => pushWindowProgress()
+)
+// 总时长变化:第一次拿到 duration 时强制推一次,避免初始 0/0 一直显示 -1
+watch(
+  () => Audio.value.duration,
+  () => pushWindowProgress(true)
 )
 watch(
   () => player.value.cover,
@@ -531,6 +584,9 @@ onUnmounted(() => {
     singer: ''
   })
   thumbarApi?.setCover?.(null)
+  // 清空窗口标题与进度条 —— 退出/重载 PlayMusic 时回归"软件名"形态
+  appApi?.setTitle?.(DEFAULT_WINDOW_TITLE)
+  appApi?.setProgress?.(-1)
 
   // 清理可能存在的拖动监听器
   window.removeEventListener('mousemove', handleVolumeDragMove)
@@ -1427,6 +1483,32 @@ const contrastTextColor = computed(
 const hoverColor = computed(
   () => player.value.coverDetail.hoverColor || 'var(--player-text-hover-idle)'
 )
+// 音量条未填充段背景:
+// 这里的对比关系是"已填充段(maincolor)"紧贴"未填充段",
+// 必须根据 maincolor 自身的亮度来选择反向雾色,而不是封面整体亮度 (useBlackText)。
+// 反例:中亮度封面 + 浅色主色 (e.g. 蓝粉) 时 useBlackText=false 会给白雾,与浅色主色糊在一起。
+//
+//   - maincolor 偏亮 (相对亮度 > 0.55) -> 用半透黑作背景轨道,形成深/浅对比
+//   - maincolor 偏暗 -> 用半透白作背景轨道,形成浅/深对比
+//   - 无封面 -> 中性白雾兜底
+// 透明度刻意比原来的 0x71 (~44%) 略低,避免抢戏 maincolor 已填充段
+// 音量轨道未填充段背景:用主色的半透明版本
+// 这样和已填充段(实心主色)形成虚/实对比,同时和容器背景(反向雾色)也有对比
+const volumeTrackBg = computed(() => {
+  const c = player.value.coverDetail.ColorObject
+  if (c == null) return 'rgba(128,128,128,0.4)'
+  // 直接用主色的半透明版本,比已填充段淡很多
+  return `rgba(${c.r},${c.g},${c.b},0.35)`
+})
+// 音量弹窗容器背景:用主色亮度判定,选择反向雾色
+// 容器要"托住"整个弹窗,和主色形成对比
+const volumePopupBg = computed(() => {
+  const c = player.value.coverDetail.ColorObject
+  if (c == null) return 'rgba(255,255,255,0.65)'
+  const luminance = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255
+  // 亮主色 -> 深雾容器; 暗主色 -> 浅雾容器
+  return luminance > 0.5 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.65)'
+})
 const playbg = computed(() => player.value.coverDetail.playBg || 'var(--player-btn-bg-idle)')
 const playbghover = computed(
   () => player.value.coverDetail.playBgHover || 'var(--player-btn-bg-hover-idle)'
@@ -2373,7 +2455,7 @@ watch(showFullPlay, (val) => {
   /* 向上偏移，留出间距 */
   right: -10px;
   /* 位置微调 */
-  background: v-bind(contrastTextColor);
+  background: v-bind(volumePopupBg);
   /* 毛玻璃背景 */
   backdrop-filter: blur(60px);
   border-radius: 8px;
@@ -2400,9 +2482,13 @@ watch(showFullPlay, (val) => {
 }
 
 .volume-value {
-  font-size: 12px;
+  font-size: 12.5px;
   color: v-bind(maincolor);
   margin-top: 8px;
+  font-weight: 900;
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.6),
+    0 0 2px rgba(255, 255, 255, 0.4);
 }
 
 .volume-bar {
@@ -2418,7 +2504,7 @@ watch(showFullPlay, (val) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #ffffff71;
+  background: v-bind(volumeTrackBg);
   border-radius: 2px;
 }
 

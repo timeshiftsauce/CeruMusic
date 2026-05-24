@@ -473,6 +473,39 @@ const api = {
   clipboard: {
     /** 通过主进程读取系统剪贴板,绕过 renderer 焦点 / 权限限制 */
     readText: (): Promise<string> => ipcRenderer.invoke('clipboard:read-text')
+  },
+  /**
+   * Windows 任务栏缩略图工具栏(Thumbnail Toolbar)桥
+   * 主进程 thumbarService 实现按钮渲染 + cover overlay + tooltip,
+   * 渲染端只需推送语义状态,所有平台分支在主进程处理。
+   * 非 Windows 平台 setThumbarButtons 自动 no-op,渲染端无需判断。
+   */
+  thumbar: {
+    setState: (state: {
+      hasSong: boolean
+      isPlaying: boolean
+      isLiked: boolean
+      songName: string
+      singer: string
+    }) => ipcRenderer.send('thumbar:set-state', state),
+    setCover: (dataUrl: string | null) => ipcRenderer.send('thumbar:set-cover', dataUrl),
+    /** 喜欢按钮点击回调 —— 主进程发 'thumbar:toggle-like' */
+    onToggleLike: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('thumbar:toggle-like', handler)
+      return () => ipcRenderer.removeListener('thumbar:toggle-like', handler)
+    }
+  },
+  /**
+   * 应用级窗口控件:窗口标题 + 任务栏/Dock 进度条
+   * - setTitle: 启动时为软件名,有歌时为"歌名 - 歌手"(参考网易云/QQ音乐)
+   * - setProgress: Windows 任务栏图标进度 + macOS Dock 进度;
+   *   传入 [0,1] 显示;< 0 清除;{paused:true} 显示暂停态(黄色,Windows)
+   */
+  app: {
+    setTitle: (title: string) => ipcRenderer.send('app:set-title', title),
+    setProgress: (progress: number, options?: { paused?: boolean }) =>
+      ipcRenderer.send('app:set-progress', progress, options || null)
   }
 }
 

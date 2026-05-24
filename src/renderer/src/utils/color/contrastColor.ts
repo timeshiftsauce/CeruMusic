@@ -108,7 +108,9 @@ export async function shouldUseBlackText(imageSrc: string): Promise<boolean> {
     // 大幅提高阈值，让白色文字在更多情况下被选择
     // 只有非常明亮的图片才使用黑色文字
 
-    const shouldUseBlack = averageLuminance >= 0.6
+    // 阈值 0.78:页面整体叠了 rgba(0,0,0,0.256) 黑色半透明,有效亮度会进一步衰减,
+    // 只有非常亮的封面才安全使用黑字(与 colorExtractor.ts 保持一致)。
+    const shouldUseBlack = averageLuminance >= 0.78
 
     console.log(`决定使用${shouldUseBlack ? '黑色' : '白色'}文字`)
 
@@ -144,8 +146,8 @@ export async function getBestContrastTextColorWithOpacity(
     // 使用相同的亮度分析逻辑
     const averageLuminance = await getImageAverageLuminance(imageSrc)
 
-    // 使用与shouldUseBlackText相同的逻辑
-    if (averageLuminance >= 0.6) {
+    // 使用与 shouldUseBlackText 相同的逻辑 (阈值 0.78)
+    if (averageLuminance >= 0.78) {
       // 背景较亮，使用黑色文本
       return `rgba(0, 0, 0, ${opacity})`
     } else {

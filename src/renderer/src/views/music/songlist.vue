@@ -1,14 +1,17 @@
 <script lang="ts" setup>
-import { ref, onMounted, computed, toRaw } from 'vue'
+import { ref, onMounted, computed, toRaw, h, nextTick, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { NIcon, NDropdown } from 'naive-ui'
 import {
   Edit2Icon,
   PlayCircleIcon,
   DeleteIcon,
   ViewListIcon,
   DownloadIcon,
-  ShareIcon
+  ShareIcon,
+  RefreshIcon,
+  FileExportIcon
 } from 'tdesign-icons-vue-next'
 import { createQualityDialog } from '@renderer/utils/audio/download'
 import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
@@ -17,13 +20,6 @@ import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-import ContextMenu from '@renderer/components/ContextMenu/ContextMenu.vue'
-import {
-  createMenuItem,
-  createSeparator,
-  calculateMenuPosition
-} from '@renderer/components/ContextMenu/utils'
-import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
 import {
   importPlaylistFromFile,
   validateImportedPlaylist,
@@ -99,13 +95,20 @@ const formatLocalTime = (input: string | number | Date): string => {
 
 // 右键菜单状态
 const contextMenuVisible = ref(false)
-const contextMenuPosition = ref<ContextMenuPosition>({ x: 0, y: 0 })
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
 const contextMenuPlaylist = ref<SongList | null>(null)
 const sharePlaylistDialogVisible = ref(false)
 const shareTargetPlaylist = ref<SongList | null>(null)
 const shareTargetPlaylistSongCount = ref(0)
 const songlistFileInputRef = ref<HTMLInputElement | null>(null)
 const songlistUploadedFile = ref<File | null>(null)
+
+// 渲染图标辅助函数
+const renderIcon = (icon: Component) => {
+  return () => h(NIcon, null, { default: () => h(icon) })
+}
+
 const triggerSonglistFileInput = () => {
   if (songlistFileInputRef.value) songlistFileInputRef.value.click()
 }
@@ -440,6 +443,39 @@ const deletePlaylist = async (playlist: SongList) => {
 
 // 初始化路由
 const router = useRouter()
+
+// 获取来源名称
+const getSourceName = (source: string | undefined): string => {
+  const sourceMap: Record<string, string> = {
+    qq: 'QQ音乐',
+    wy: '网易云',
+    kg: '酷狗',
+    kw: '酷我',
+    mg: '咪咕',
+    local: '本地'
+  }
+  return sourceMap[source || ''] || source || '未知'
+}
+
+// 同步平台歌单 - 跳转到详情页并自动触发同步
+const syncPlatformPlaylist = (playlist: SongList) => {
+  router.push({
+    name: 'list',
+    params: { id: playlist.id },
+    query: {
+      title: playlist.name,
+      author: 'local',
+      cover: playlist.coverImgUrl || '',
+      total: '0',
+      source: playlist.source,
+      type: 'local',
+      meta: JSON.stringify(playlist.meta),
+      description: playlist.description || '',
+      cloudId: playlist.meta?.cloudId,
+      autoSync: '1' // 标记自动触发同步
+    }
+  })
+}
 
 // 查看歌单详情
 const viewPlaylist = (playlist: SongList) => {
@@ -1377,185 +1413,204 @@ const handleDeleteBoth = async (pl: SongList) => {
   })
 }
 
-// 右键菜单项配置
-const contextMenuItems = computed((): ContextMenuItem[] => {
+// 右键菜单项配置 (Naive UI Dropdown 格式)
+const contextMenuOptions = computed(() => {
   if (!contextMenuPlaylist.value) return []
   const pl = contextMenuPlaylist.value
   const isCloudOnly = pl.meta?.isCloudOnly
   const isSynced = pl.meta?.isSynced
 
-  const items: ContextMenuItem[] = []
-
-  // Cloud Actions
+  // ========== 云端歌单菜单 ==========
   if (isCloudOnly) {
-    items.push(
-      createMenuItem('download-cloud', '下载到本地', {
-        icon: CloudDownloadIcon,
-        onClick: () => handleDownloadCloudPlaylist(pl)
-      })
-    )
-    items.push(
-      createMenuItem('delete-cloud', '删除云端歌单', {
-        icon: DeleteIcon,
-        onClick: () => handleDeleteCloudPlaylist(pl)
-      })
-    )
-    return items // Cloud only lists have limited options
+    return [
+      { label: '播放歌单', key: 'play', icon: renderIcon(PlayCircleIcon) },
+      { label: '查看详情', key: 'view', icon: renderIcon(ViewListIcon) },
+      { type: 'divider', key: 'd1' },
+      { label: '分享歌单', key: 'share-playlist', icon: renderIcon(ShareIcon) },
+      { label: '下载到本地', key: 'download-cloud', icon: renderIcon(CloudDownloadIcon) },
+      { type: 'divider', key: 'd2' },
+      { label: '删除云端歌单', key: 'delete-cloud', icon: renderIcon(DeleteIcon) }
+    ]
   }
 
-  // Standard items for local/synced
-  items.push(
-    createMenuItem('play', '播放歌单', {
-      icon: PlayCircleIcon,
-      onClick: () => {
-        if (contextMenuPlaylist.value) {
-          playPlaylist(contextMenuPlaylist.value)
-        }
-      }
+  // ========== 本地/已同步歌单菜单 ==========
+  const items: any[] = [
+    { label: '播放歌单', key: 'play', icon: renderIcon(PlayCircleIcon) },
+    { label: '查看详情', key: 'view', icon: renderIcon(ViewListIcon) }
+  ]
+
+  // 同步平台歌单 - 仅对有 playlistId 的歌单显示
+  const hasPlatformPlaylistId = pl.meta && 'playlistId' in pl.meta
+  if (hasPlatformPlaylistId) {
+    const sourceName = getSourceName(pl.meta?.source || pl.source)
+    items.push({
+      label: `同步平台歌单(${sourceName})`,
+      key: 'sync-platform',
+      icon: renderIcon(RefreshIcon)
     })
-  )
+  }
 
-  items.push(
-    createMenuItem('view', '查看详情', {
-      icon: ViewListIcon,
-      onClick: () => {
-        if (contextMenuPlaylist.value) {
-          viewPlaylist(contextMenuPlaylist.value)
-        }
-      }
-    })
-  )
+  items.push({ type: 'divider', key: 'd1' })
 
-  items.push(
-    createMenuItem('download-all', '全部下载', {
-      icon: DownloadIcon,
-      onClick: () => {
-        if (contextMenuPlaylist.value) {
-          downloadPlaylist(contextMenuPlaylist.value)
-        }
-      }
-    })
-  )
-
-  items.push(createSeparator())
-
-  // Sync Actions
+  // 云端操作
   if (isSynced) {
-    items.push(
-      createMenuItem('sync-cloud', '同步到云端', {
-        icon: CloudUploadIcon,
-        onClick: () => handleSyncToCloud(pl)
-      })
-    )
-    items.push(
-      createMenuItem('share-playlist', '分享歌单', {
-        icon: ShareIcon,
-        onClick: () => handleSharePlaylist(pl)
-      })
-    )
-    items.push(
-      createMenuItem('delete-both', '删除(双端)', {
-        icon: DeleteIcon,
-        onClick: () => handleDeleteBoth(pl)
-      })
-    )
+    items.push({ label: '同步到云端', key: 'sync-cloud', icon: renderIcon(CloudUploadIcon) })
   } else {
-    items.push(
-      createMenuItem('upload-cloud', '上传到云端', {
-        icon: CloudUploadIcon,
-        onClick: () => handleUploadToCloud(pl)
-      })
-    )
-    items.push(
-      createMenuItem('share-playlist', '分享歌单', {
-        icon: ShareIcon,
-        onClick: () => handleSharePlaylist(pl)
-      })
-    )
+    items.push({ label: '上传到云端', key: 'upload-cloud', icon: renderIcon(CloudUploadIcon) })
   }
 
   items.push(
-    createMenuItem('export', '导出歌单', {
-      onClick: async () => {
-        // ... export logic ...
-        if (!contextMenuPlaylist.value) return
-        const pl = contextMenuPlaylist.value
-        try {
-          const res = await songListAPI.getSongs(pl.id)
-          if (!res.success) {
-            MessagePlugin.error(res.error || '获取歌单歌曲失败')
-            return
-          }
-          const songs = res.data || []
-          if (songs.length === 0) {
-            MessagePlugin.warning('歌单中没有可导出的歌曲')
-            return
-          }
-          const filtered = songs.filter((s) => s.source !== 'local')
-          const removed = songs.length - filtered.length
-          const safeName = pl.name.replace(/[\\/:*?"<>|]+/g, '_')
-          const fileName = `CeruMusic-${safeName}.cmpl`
-          const saved = await exportPlaylistToFile(filtered, fileName)
-          if (removed > 0) MessagePlugin.info(`已筛除 ${removed} 首本地歌曲`)
-          MessagePlugin.success(`歌单已导出为 ${saved}`)
-        } catch (e) {
-          MessagePlugin.error(`导出失败: ${(e as Error).message}`)
-        }
-      }
-    })
+    { label: '分享歌单', key: 'share-playlist', icon: renderIcon(ShareIcon) },
+    { label: '全部下载', key: 'download-all', icon: renderIcon(DownloadIcon) },
+    { type: 'divider', key: 'd2' },
+    { label: '编辑歌单', key: 'edit', icon: renderIcon(Edit2Icon) },
+    { label: '导出歌单', key: 'export', icon: renderIcon(FileExportIcon) },
+    { type: 'divider', key: 'd3' }
   )
 
-  items.push(
-    createMenuItem('edit', '编辑歌单', {
-      icon: Edit2Icon,
-      onClick: () => {
-        if (contextMenuPlaylist.value) {
-          editPlaylist(contextMenuPlaylist.value)
-        }
-      }
+  // 删除操作 - 已同步歌单显示二级菜单，普通本地歌单直接删除
+  if (isSynced) {
+    items.push({
+      label: '删除',
+      key: 'delete-menu',
+      icon: renderIcon(DeleteIcon),
+      children: [
+        { label: '删除本地歌单', key: 'delete-local' },
+        { label: '删除云端歌单', key: 'delete-cloud-only' },
+        { label: '删除(双端)', key: 'delete-both' }
+      ]
     })
-  )
-
-  items.push(
-    createMenuItem('delete', '删除歌单(本地)', {
-      icon: DeleteIcon,
-      onClick: () => handleDeletePlaylist(pl)
-    })
-  )
+  } else {
+    items.push({ label: '删除歌单', key: 'delete', icon: renderIcon(DeleteIcon) })
+  }
 
   return items
 })
+
+// 处理右键菜单选择
+const handleContextMenuSelect = async (key: string) => {
+  const pl = contextMenuPlaylist.value
+  if (!pl) return
+
+  contextMenuVisible.value = false
+
+  switch (key) {
+    case 'play':
+      playPlaylist(pl)
+      break
+    case 'view':
+      viewPlaylist(pl)
+      break
+    case 'sync-platform':
+      syncPlatformPlaylist(pl)
+      break
+    case 'sync-cloud':
+      handleSyncToCloud(pl)
+      break
+    case 'upload-cloud':
+      handleUploadToCloud(pl)
+      break
+    case 'share-playlist':
+      handleSharePlaylist(pl)
+      break
+    case 'download-all':
+      downloadPlaylist(pl)
+      break
+    case 'download-cloud':
+      handleDownloadCloudPlaylist(pl)
+      break
+    case 'edit':
+      editPlaylist(pl)
+      break
+    case 'export':
+      await handleExportPlaylist(pl)
+      break
+    case 'delete':
+    case 'delete-local':
+      handleDeletePlaylist(pl)
+      break
+    case 'delete-cloud':
+    case 'delete-cloud-only':
+      handleDeleteCloudPlaylist(pl)
+      break
+    case 'delete-both':
+      handleDeleteBoth(pl)
+      break
+  }
+}
+
+// 导出歌单处理函数
+const handleExportPlaylist = async (pl: SongList) => {
+  try {
+    const res = await songListAPI.getSongs(pl.id)
+    if (!res.success) {
+      MessagePlugin.error(res.error || '获取歌单歌曲失败')
+      return
+    }
+    const songs = res.data || []
+    if (songs.length === 0) {
+      MessagePlugin.warning('歌单中没有可导出的歌曲')
+      return
+    }
+    const filtered = songs.filter((s) => s.source !== 'local')
+    const removed = songs.length - filtered.length
+    const safeName = pl.name.replace(/[\\/:*?"<>|]+/g, '_')
+    const fileName = `CeruMusic-${safeName}.cmpl`
+    const saved = await exportPlaylistToFile(filtered, fileName)
+    if (removed > 0) MessagePlugin.info(`已筛除 ${removed} 首本地歌曲`)
+    MessagePlugin.success(`歌单已导出为 ${saved}`)
+  } catch (e) {
+    MessagePlugin.error(`导出失败: ${(e as Error).message}`)
+  }
+}
 
 // 处理歌单右键菜单
 const handlePlaylistContextMenu = (event: MouseEvent, playlist: SongList) => {
   event.preventDefault()
   event.stopPropagation()
 
-  contextMenuPlaylist.value = playlist
-  contextMenuPosition.value = calculateMenuPosition(event)
-  contextMenuVisible.value = true
-}
-
-// 处理右键菜单项点击
-const handleContextMenuItemClick = (_item: ContextMenuItem, _event: MouseEvent) => {
-  // 菜单项的 onClick 回调已经在 ContextMenuItem 组件中调用
-  // 这里不需要额外处理
+  // 先关闭再打开，确保位置更新
+  contextMenuVisible.value = false
+  nextTick(() => {
+    contextMenuPlaylist.value = playlist
+    contextMenuX.value = event.clientX
+    contextMenuY.value = event.clientY
+    contextMenuVisible.value = true
+  })
 }
 
 // 关闭右键菜单
 const closeContextMenu = () => {
   contextMenuVisible.value = false
-  contextMenuPlaylist.value = null
 }
-
-// 组件挂载时加载数据
-onMounted(() => {
-  loadPlaylists()
-})
 
 // 滚动位置保持
 const scrollRef = ref<HTMLElement>()
 const scrollTop = ref(0)
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadPlaylists()
+  // 监听页面滚动，关闭右键菜单
+  nextTick(() => {
+    if (scrollRef.value) {
+      scrollRef.value.addEventListener('scroll', handleScrollCloseMenu, { passive: true })
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  if (scrollRef.value) {
+    scrollRef.value.removeEventListener('scroll', handleScrollCloseMenu)
+  }
+})
+
+// 滚动时关闭右键菜单
+const handleScrollCloseMenu = () => {
+  if (contextMenuVisible.value) {
+    closeContextMenu()
+  }
+}
 
 onActivated(() => {
   if (scrollRef.value) {
@@ -2023,12 +2078,15 @@ onDeactivated(() => {
     </t-dialog>
 
     <!-- 歌单右键菜单 -->
-    <ContextMenu
-      v-model:visible="contextMenuVisible"
-      :items="contextMenuItems"
-      :position="contextMenuPosition"
-      @close="closeContextMenu"
-      @item-click="handleContextMenuItemClick"
+    <n-dropdown
+      placement="bottom-start"
+      trigger="manual"
+      :x="contextMenuX"
+      :y="contextMenuY"
+      :options="contextMenuOptions"
+      :show="contextMenuVisible"
+      @select="handleContextMenuSelect"
+      @clickoutside="closeContextMenu"
     />
 
     <SharePlaylistDialog
@@ -2393,8 +2451,6 @@ onDeactivated(() => {
       transform: scale(1.06);
     }
     .playlist-info::before {
-      filter: blur(40px) brightness(0.55) saturate(1.6);
-      transform: scale(1.6);
       opacity: 1;
     }
     .playlist-info {
@@ -2457,7 +2513,9 @@ onDeactivated(() => {
     transition: color 0.3s ease;
 
     // GPU-only hover backdrop:用封面本身做模糊背板,无需 JS 算色
-    // 默认不挂 filter/transform,避免每张卡都建立合成层;只在 hover 时启用
+    // filter/transform 基线挂在 ::before 上(不在 hover 时切换),
+    // 避免 hover-out 时 blur(40px) → none 离散复位导致原图露出闪一帧。
+    // 仅切换 opacity,过渡平滑统一。
     &::before {
       content: '';
       position: absolute;
@@ -2466,6 +2524,8 @@ onDeactivated(() => {
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
+      filter: blur(40px) brightness(0.55) saturate(1.6);
+      transform: scale(1.6);
       opacity: 0;
       transition: opacity 0.35s ease;
       z-index: -1;

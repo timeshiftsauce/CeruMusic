@@ -108,8 +108,10 @@ export async function analyzeImageColors(imageSrc: string): Promise<ImageAnalysi
 
         // 3. 计算文本颜色决策
         const averageLuminance = pixelCount > 0 ? totalLuminance / pixelCount : 0.5
-        // 阈值 >= 0.6 使用黑色文本 (与 contrastColor.ts 保持一致)
-        const useBlackText = averageLuminance >= 0.6
+        // 阈值 >= 0.78 使用黑色文本 (与 contrastColor.ts 保持一致)
+        // 原阈值 0.6 在中亮度封面上会强切黑色,但页面整体叠了 rgba(0,0,0,0.256) 黑色半透明,
+        // 实际显示更暗 -> 黑字反而糊。提升到 0.78 让只有真正接近白底的海报才用黑字。
+        const useBlackText = averageLuminance >= 0.78
 
         resolve({
           dominantColor,

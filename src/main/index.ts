@@ -35,6 +35,7 @@ import './events/localMusic'
 import fs from 'node:fs'
 import { initHotkeyService } from './services/hotkeys'
 import { deepLinkRouter } from './router'
+import { thumbarService } from './services/thumbarService'
 import {
   setupDeepLinks,
   consumePendingShareIds,
@@ -700,6 +701,14 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    // Windows 任务栏缩略图工具栏 —— 必须在窗口可见后调用 setThumbarButtons 才生效
+    // (Electron 文档: thumbar buttons only visible while the window is showing)
+    // 非 win32 内部 no-op
+    try {
+      thumbarService.init(mainWindow!)
+    } catch (e) {
+      console.warn('[thumbar] init failed:', e)
+    }
   })
 
   // IPC：window-toggle-fullscreen 通过 events/index.ts 转发到这里
@@ -737,6 +746,42 @@ function createWindow(): void {
   initPluginNotice(mainWindow)
   // 设置背景节流
   mainWindow.webContents.setBackgroundThrottling(false)
+
+  // === 窗口标题 / 任务栏-Dock 进度条 IPC ===
+  // 启动时 BrowserWindow 默认 title 来自 index.html 的 <title> 或 productName,
+  // 渲染端会在启动后立即推送一次"软件名"作为兜底,有歌时切换为"歌名 - 歌手"。
+  // 注意:setProgress 接受 -1 清除 / [0,1] 显示 / paused 显示暂停色(Windows 黄)。
+  ipcMain.removeAllListeners('app:set-title')
+  ipcMain.on('app:set-title', (_event, title: string) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    try {
+      mainWindow.setTitle(typeof title === 'string' && title ? title : '澜音 Ceru Music')
+    } catch (e) {
+      console.warn('[app:set-title] failed:', e)
+    }
+  })
+  ipcMain.removeAllListeners('app:set-progress')
+  ipcMain.on(
+    'app:set-progress',
+    (_event, progress: number, options: { paused?: boolean } | null) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      try {
+        // Electron: progress < 0 清除;[0,1] 显示;options.mode='paused' 暂停色
+        if (typeof progress !== 'number' || progress < 0) {
+          mainWindow.setProgressBar(-1)
+          return
+        }
+        const clamped = Math.max(0, Math.min(1, progress))
+        if (options && options.paused) {
+          mainWindow.setProgressBar(clamped, { mode: 'paused' })
+        } else {
+          mainWindow.setProgressBar(clamped)
+        }
+      } catch (e) {
+        console.warn('[app:set-progress] failed:', e)
+      }
+    }
+  )
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.

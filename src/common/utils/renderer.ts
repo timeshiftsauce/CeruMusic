@@ -373,6 +373,6 @@ export const scrollXRTo = (
  */
 const dom_title = document.getElementsByTagName('title')[0]
 export const setTitle = (title: string | null) => {
-  title ||= 'LX Music'
+  title ||= '澜音 Ceru Music'
   dom_title.innerText = title
 }

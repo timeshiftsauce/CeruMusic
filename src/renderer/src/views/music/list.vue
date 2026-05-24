@@ -217,6 +217,16 @@ onMounted(() => {
 
   fetchPlaylistSongs()
   triggerLocateBtnVisible()
+
+  // 检查是否需要自动同步平台歌单 (从歌单列表页右键菜单触发)
+  if (route.query.autoSync === '1') {
+    // 延迟执行，等待 playlistInfo 初始化完成
+    setTimeout(() => {
+      if ('playlistId' in playlistInfo.value.meta) {
+        handleSyncPlaylist()
+      }
+    }, 500)
+  }
 })
 onBeforeUnmount(() => {
   clearLocateScrollTimers()

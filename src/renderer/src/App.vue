@@ -176,6 +176,14 @@ const handleWindowCloseRequest = () => {
 }
 
 onMounted(async () => {
+  // 启动时把窗口标题置为软件名(若 PlayMusic 后续挂载且有歌,会立刻覆盖为"歌名 - 歌手")
+  try {
+    ;(window as any).api?.app?.setTitle?.('澜音 Ceru Music')
+    ;(window as any).api?.app?.setProgress?.(-1)
+  } catch (e) {
+    console.warn('[app] init title/progress failed', e)
+  }
+
   if (window?.api?.share?.onShareOpen) {
     unsubShareOpen = window.api.share.onShareOpen(({ id }) => songShareQueue.enqueueOrHandle(id))
   }
