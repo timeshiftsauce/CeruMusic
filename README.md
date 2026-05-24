@@ -316,10 +316,6 @@ CeruMuisc/
 
   <img src="assets/image-20250827181604432.png" alt="image-20250827181604432" style="zoom:25%;" />
 
-- **Star**：**插件管理**相关功能&部分接口封装
-
-  <img src="assets/image-20250827181535681.png" alt="image-20250827181535681" style="zoom:25%;" />
-
 - **lemon**：修复部分bug&新增部分功能（简称：打杂）
 
   <img src="assets/image-20260102767362357.jpg" alt="image-20260102767362357" style="zoom:25%;" />
