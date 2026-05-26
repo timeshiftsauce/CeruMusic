@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { storeToRefs } from 'pinia'
 import audioManager from '@renderer/utils/audio/audioManager'
@@ -33,6 +33,9 @@ const lastFrameTime = ref(0)
 const dataArray = ref<Uint8Array>()
 const resizeObserver = ref<ResizeObserver>()
 const componentId = ref<string>(`visualizer-${Date.now()}-${Math.random()}`)
+
+// 缓存容器宽度，避免每帧读取 getBoundingClientRect 触发布局重排
+const cachedCanvasWidth = ref(0)
 
 const controlAudio = ControlAudioStore()
 const { Audio } = storeToRefs(controlAudio)
@@ -80,6 +83,12 @@ const initAudioAnalyser = () => {
 const draw = (ts?: number) => {
   if (!canvasRef.value || !analyser.value || !dataArray.value) return
 
+  // 窗口隐藏时跳过绘制，仅保持 rAF 存活
+  if (document.hidden) {
+    animationId.value = requestAnimationFrame(draw)
+    return
+  }
+
   // 帧率节流 ~30fps
   const now = ts ?? performance.now()
   if (now - lastFrameTime.value < 33) {
@@ -123,14 +132,12 @@ const draw = (ts?: number) => {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
   }
 
-  // 计算尺寸
-  const container = canvas.parentElement
-  if (!container) {
+  // 使用缓存的容器宽度（由 ResizeObserver + resizeCanvas 更新）
+  const canvasWidth = cachedCanvasWidth.value
+  if (!canvasWidth) {
     animationId.value = requestAnimationFrame(draw)
     return
   }
-  const containerRect = container.getBoundingClientRect()
-  const canvasWidth = containerRect.width
   const canvasHeight = props.height
 
   // 柱状参数
@@ -245,6 +252,9 @@ const resizeCanvas = () => {
   const containerRect = container.getBoundingClientRect()
   const dpr = window.devicePixelRatio || 1
 
+  // 缓存宽度，供 draw 循环使用（避免每帧 getBoundingClientRect）
+  cachedCanvasWidth.value = containerRect.width
+
   // 设置 canvas 的实际尺寸
   canvas.width = containerRect.width * dpr
   canvas.height = props.height * dpr
@@ -259,8 +269,16 @@ const resizeCanvas = () => {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.scale(dpr, dpr)
   }
+}
 
-  console.log('Canvas resized:', containerRect.width, 'x', props.height)
+// rAF 合并的 resize 处理器（仅对最近一次有效，避免密集触发）
+let pendingResizeRaf = 0
+const onWindowResize = () => {
+  if (pendingResizeRaf) return
+  pendingResizeRaf = requestAnimationFrame(() => {
+    pendingResizeRaf = 0
+    resizeCanvas()
+  })
 }
 
 // 组件挂载
@@ -268,14 +286,12 @@ onMounted(() => {
   if (canvasRef.value) {
     resizeCanvas()
 
-    // 使用 ResizeObserver 监听容器尺寸变化
-    resizeObserver.value = new ResizeObserver((entries) => {
-      for (const _entry of entries) {
-        // 使用 nextTick 确保 DOM 更新完成
-        nextTick(() => {
-          resizeCanvas()
-        })
-      }
+    // 窗口 resize 用 rAF 合并防抖
+    window.addEventListener('resize', onWindowResize)
+
+    // ResizeObserver 仅用于兜底（例如容器尺寸因非 resize 事件变化）
+    resizeObserver.value = new ResizeObserver(() => {
+      resizeCanvas()
     })
 
     // 观察 canvas 元素的父容器
@@ -323,6 +339,13 @@ onBeforeUnmount(() => {
     console.warn('断开 ResizeObserver 时出错:', error)
   }
 
+  // 移除 resize 监听
+  window.removeEventListener('resize', onWindowResize)
+  if (pendingResizeRaf) {
+    cancelAnimationFrame(pendingResizeRaf)
+    pendingResizeRaf = 0
+  }
+
   // 清理数据数组
   dataArray.value = undefined
 
@@ -341,6 +364,7 @@ onBeforeUnmount(() => {
   width: 100%;
   position: relative;
   overflow: hidden;
+  contain: layout style paint;
 
   .visualizer-canvas {
     width: 100%;

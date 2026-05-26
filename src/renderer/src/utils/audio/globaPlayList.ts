@@ -42,7 +42,7 @@ let currentPlaybackErrorHandler: ((e: Event) => void) | null = null
 let currentPlaybackPlayingHandler: ((e: Event) => void) | null = null
 let currentPlayRequestId: number = 0
 
-const AUTO_NEXT_DELAY_MS = 1500
+const AUTO_NEXT_DELAY_MS = 1000
 let pendingAutoNextTimer: ReturnType<typeof setTimeout> | null = null
 let pendingAutoNextToken = 0
 
@@ -678,7 +678,6 @@ const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
 
 const heartbeatCounter = ref(0)
 let pendingHeartbeatRecommendation: SongList | null = null
-let heartbeatPrefetchPromise: Promise<void> | null = null
 const MAX_HEARTBEAT_RECENT = 10
 const recentHeartbeatSongs: Array<{ name: string; artist: string; playedRatio: number }> = []
 let heartbeatSongStartTime = 0
@@ -740,7 +739,6 @@ watch(
     if (mode === PlayMode.HEARTBEAT) {
       heartbeatCounter.value = 0
       pendingHeartbeatRecommendation = null
-      heartbeatPrefetchPromise = null
       recentHeartbeatSongs.length = 0
       heartbeatSongStartTime = 0
       heartbeatSongPlayedMs = 0
@@ -835,7 +833,6 @@ return list.value.find((s) => s.songmid === nextId) || null
         if (curSong) {
           const rec = pendingHeartbeatRecommendation
           pendingHeartbeatRecommendation = null
-          heartbeatPrefetchPromise = null
           let target = rec
           if (!target) {
             console.log('[heartbeat] 无已完成预取，同步获取...')
@@ -849,7 +846,7 @@ return list.value.find((s) => s.songmid === nextId) || null
             console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
           }
           const playlistIds = new Set(list.value.map((s) => s.songmid))
-          heartbeatPrefetchPromise = getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
+          getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
             pendingHeartbeatRecommendation = r
             if (r) console.log(`[heartbeat] 新一轮预取完成: 《${r.name}》 - ${r.singer}`)
           })
@@ -859,7 +856,6 @@ return list.value.find((s) => s.songmid === nextId) || null
         if (curSong) {
           const rec = pendingHeartbeatRecommendation
           pendingHeartbeatRecommendation = null
-          heartbeatPrefetchPromise = null
           let target = rec
           if (!target) {
             console.log('[heartbeat] 无已完成预取，同步获取...')
@@ -879,7 +875,7 @@ return list.value.find((s) => s.songmid === nextId) || null
         console.log(`[heartbeat] 计数器=${c}，触发预取（间隔=${prefetchInterval}）`)
         if (curSong) {
           const playlistIds = new Set(list.value.map((s) => s.songmid))
-          heartbeatPrefetchPromise = getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
+          getHeartbeatRecommendation(curSong, playlistIds, recentCopy).then((r) => {
             pendingHeartbeatRecommendation = r
             if (r) console.log(`[heartbeat] 预取完成: 《${r.name}》 - ${r.singer}`)
             else console.log('[heartbeat] 预取未找到推荐')

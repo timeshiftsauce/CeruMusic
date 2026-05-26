@@ -583,6 +583,10 @@ export const crossfadeManager = {
     }
     _inited = true
     _getNextSong = getNextSong
+    // 默认启用自然切歌延迟：防止 crossfade 在歌曲结束前提前切换 UI 和槽位，
+    // 确保 ended → 1.5s → playNext 的完整流程不被劫持。
+    // 若用户希望体验无缝过渡，可调用 setNaturalNextDelayEnabled(false)。
+    crossfadeManager.setNaturalNextDelayEnabled(true)
 
     const audioStore = ControlAudioStore()
     _unsubs.push(audioStore.subscribe('timeupdate', onTimeUpdate))

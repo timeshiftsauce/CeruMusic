@@ -359,6 +359,20 @@ function stopRenderLoop() {
   }
 }
 
+// 暂停渲染（窗口隐藏时调用）
+function pause() {
+  stopRenderLoop()
+}
+
+// 恢复渲染（窗口可见时调用）
+function resume() {
+  if (animationFrameId !== null) return
+  startRenderLoop()
+}
+
+// 暴露给父组件调用
+defineExpose({ pause, resume })
+
 // 提取图片颜色
 async function updateColors() {
   try {

@@ -33,10 +33,19 @@ export const createWindow = (
         backgroundThrottling: false
       }
     }
-    // 合并参数
-    options = Object.assign(defaultOptions, options)
+    // 深度合并 webPreferences：允许调用方覆盖单个字段而不丢失默认值
+    const webPrefsOverride = options.webPreferences
+    if (webPrefsOverride) {
+      defaultOptions.webPreferences = {
+        ...defaultOptions.webPreferences,
+        ...webPrefsOverride
+      }
+    }
+    // 合并其余顶层参数（排除 webPreferences 避免覆盖已合并的结果）
+    const { webPreferences: _, ...restOptions } = options
+    Object.assign(defaultOptions, restOptions)
     // 创建窗口
-    const win = new BrowserWindow(options)
+    const win = new BrowserWindow(defaultOptions)
     return win
   } catch (error) {
     windowsLog.error(error)

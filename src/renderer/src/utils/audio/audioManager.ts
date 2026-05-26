@@ -1,5 +1,26 @@
 // 全局音频管理器，用于管理音频源和分析器
 
+/** 每个 audioElement 的关键节点引用，供动态旁路重建链路使用 */
+interface AudioChainPoints {
+  source: MediaElementAudioSourceNode
+  context: AudioContext
+  eqFilters: BiquadFilterNode[]
+  bassBoost: BiquadFilterNode
+  balance: StereoPannerNode
+  convolver: ConvolverNode
+  surroundGain: GainNode
+  loudnessComp: DynamicsCompressorNode
+  loudnessMakeup: GainNode
+  splitter: GainNode
+}
+
+/** 三组 bypass 状态：true = 该效果被关闭，节点不在音频链中 */
+interface BypassFlags {
+  eqDisabled: boolean
+  bassDisabled: boolean
+  loudnessDisabled: boolean
+}
+
 class AudioManager {
   private static instance: AudioManager
   private audioSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>()
@@ -26,6 +47,11 @@ class AudioManager {
   private crossfadeLowpasses = new WeakMap<HTMLAudioElement, BiquadFilterNode>()
   // 过渡时机检测专用的 analyser，按需惰性创建，tap 在 splitter 上，与可视化分析器独立
   private envelopeAnalysers = new WeakMap<HTMLAudioElement, AnalyserNode>()
+
+  // 动态旁路：节点引用快照，供 rebuildChain 断开/重连
+  private connectionPoints = new WeakMap<HTMLAudioElement, AudioChainPoints>()
+  // 动态旁路：三组 bypass 状态
+  private bypassFlags = new WeakMap<HTMLAudioElement, BypassFlags>()
 
   // 10 bands frequencies
   public readonly EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -57,11 +83,25 @@ class AudioManager {
         const buffer = context.createBuffer(1, 1, 22050)
         const source = context.createBufferSource()
         source.buffer = buffer
-        source.connect(context.destination)
+        // 通过 splitter（经 crossfadeGain）发送唤醒帧，避免直接连 destination 产生瞬态
+        const splitter = this.splitters.get(audioElement)
+        source.connect(splitter || context.destination)
         source.start(0)
         console.log('AudioManager: 发送静音帧唤醒音频驱动')
       } catch (e) {
         console.warn('AudioManager: 静音唤醒失败', e)
+      }
+    }
+  }
+
+  // 挂起音频上下文（窗口最小化时暂停 Web Audio 处理，CPU 趋近 0）
+  async suspendContext(audioElement: HTMLAudioElement): Promise<void> {
+    const context = this.audioContexts.get(audioElement)
+    if (context && context.state === 'running') {
+      try {
+        await context.suspend()
+      } catch (error) {
+        console.warn('AudioManager: 挂起 Context 失败:', error)
       }
     }
   }
@@ -121,63 +161,29 @@ class AudioManager {
           filter.gain.value = 0
           return filter
         })
-
-        // 连接滤波器链: source -> filter1 -> ... -> filterN
-        let lastNode: AudioNode = source
-        filters.forEach((filter) => {
-          lastNode.connect(filter)
-          lastNode = filter
-        })
-
         this.equalizers.set(audioElement, filters)
 
-        // 1. Bass Boost
+        // ---- 创建效果器节点（保存引用，由 rebuildChain 按 bypass 状态动态连接） ----
+
         const bassBoost = ctx.createBiquadFilter()
         bassBoost.type = 'lowshelf'
         bassBoost.frequency.value = 200
         bassBoost.gain.value = 0
         this.bassBoostFilters.set(audioElement, bassBoost)
 
-        lastNode.connect(bassBoost)
-        lastNode = bassBoost
-
-        // 2. Surround (Reverb/Convolver)
-        // We need a parallel path for Wet signal
         const convolver = ctx.createConvolver()
         const surroundGain = ctx.createGain()
-        surroundGain.gain.value = 0 // Dry by default
-
+        surroundGain.gain.value = 0
         this.convolverNodes.set(audioElement, convolver)
         this.surroundGainNodes.set(audioElement, surroundGain)
-
-        // Path A: Dry (Main Signal) -> Balance
-        // Path B: Convolver -> Gain -> Balance
-        // But we need to mix them before Balance.
-
-        // Let's use a mixer gain node if needed, but we can just connect both to Balance?
-        // Wait, StereoPannerNode (Balance) takes inputs and pans them.
 
         const balanceNode = ctx.createStereoPanner()
         this.balanceNodes.set(audioElement, balanceNode)
 
-        // Connect Dry Path
-        lastNode.connect(balanceNode)
-
-        // Connect Wet Path
-        lastNode.connect(convolver)
-        convolver.connect(surroundGain)
-        surroundGain.connect(balanceNode)
-
-        // Update lastNode to balanceNode
-        lastNode = balanceNode
-
-        // 5. Loudness Normalization (响度均衡)
-        // 用 DynamicsCompressor 把动态过大的曲目"压平",再用 makeup gain 补回平均能量。
-        // 默认 bypass(threshold 0dB, makeup 1.0),开启时由 setLoudnessNormalization 配置。
         const loudnessCompressor = ctx.createDynamicsCompressor()
-        loudnessCompressor.threshold.value = 0 // 0dB = 等效 bypass
+        loudnessCompressor.threshold.value = 0
         loudnessCompressor.knee.value = 30
-        loudnessCompressor.ratio.value = 1 // 1:1 = bypass
+        loudnessCompressor.ratio.value = 1
         loudnessCompressor.attack.value = 0.003
         loudnessCompressor.release.value = 0.25
         this.loudnessCompressors.set(audioElement, loudnessCompressor)
@@ -186,27 +192,35 @@ class AudioManager {
         loudnessMakeup.gain.value = 1.0
         this.loudnessMakeupGains.set(audioElement, loudnessMakeup)
 
-        lastNode.connect(loudnessCompressor)
-        loudnessCompressor.connect(loudnessMakeup)
-        lastNode = loudnessMakeup
+        // 保存节点快照，供 rebuildChain 断开/重连
+        this.connectionPoints.set(audioElement, {
+          source,
+          context,
+          eqFilters: filters,
+          bassBoost,
+          balance: balanceNode,
+          convolver,
+          surroundGain,
+          loudnessComp: loudnessCompressor,
+          loudnessMakeup,
+          splitter: null as unknown as GainNode
+        })
 
-        // 确保仅通过分流器连接，避免重复直连导致音量叠加
+        // 确保分流器 + crossfade 链路已创建（固定结构，不受 bypass 影响）
         let splitter = this.splitters.get(audioElement)
         if (!splitter) {
           splitter = context.createGain()
           splitter.gain.value = 1.0
-          // 连接最后一个滤波器到分流器
-          lastNode.connect(splitter)
 
-          // 无感过渡节点: splitter -> crossfadeLowpass -> crossfadeGain -> destination
-          // 默认 bypass 状态：lowpass 截止频率最高 (22050Hz)，gain 为 1.0
           const crossfadeLowpass = context.createBiquadFilter()
           crossfadeLowpass.type = 'lowpass'
           crossfadeLowpass.frequency.value = 22050
           crossfadeLowpass.Q.value = 0.707
 
           const crossfadeGain = context.createGain()
-          crossfadeGain.gain.value = 1.0
+          // 启动时从 0 渐变到 1，避免 AudioContext 初次激活时的爆破音
+          crossfadeGain.gain.setValueAtTime(0, context.currentTime)
+          crossfadeGain.gain.linearRampToValueAtTime(1, context.currentTime + 0.05)
 
           splitter.connect(crossfadeLowpass)
           crossfadeLowpass.connect(crossfadeGain)
@@ -216,6 +230,20 @@ class AudioManager {
           this.crossfadeGains.set(audioElement, crossfadeGain)
           this.splitters.set(audioElement, splitter)
         }
+
+        // 回填 splitter 引用
+        const pts = this.connectionPoints.get(audioElement)
+        if (pts) pts.splitter = splitter
+
+        // 初始化 bypass 状态（默认全通），再由 rebuildChain 建立连接
+        if (!this.bypassFlags.has(audioElement)) {
+          this.bypassFlags.set(audioElement, {
+            eqDisabled: false,
+            bassDisabled: false,
+            loudnessDisabled: false
+          })
+        }
+        this.rebuildChain(audioElement)
 
         // 存储引用
         this.audioSources.set(audioElement, source)
@@ -449,6 +477,10 @@ class AudioManager {
         this.envelopeAnalysers.delete(audioElement)
       }
 
+      // 清理动态旁路状态
+      this.connectionPoints.delete(audioElement)
+      this.bypassFlags.delete(audioElement)
+
       this.audioSources.delete(audioElement)
       this.audioContexts.delete(audioElement)
 
@@ -456,6 +488,26 @@ class AudioManager {
     } catch (error) {
       console.warn('AudioManager: 清理资源时出错:', error)
     }
+  }
+
+  // 重新连接音频处理管线（窗口最小化恢复时使用）
+  // cleanupAudioElement 已关闭旧 AudioContext + 断开所有节点，
+  // 此方法重试创建新链，处理 GC 时序问题（旧 MediaElementAudioSourceNode 未立即释放）
+  async reconnectAudioElement(audioElement: HTMLAudioElement): Promise<boolean> {
+    const maxRetries = 5
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        this.getOrCreateAudioSource(audioElement)
+        return true
+      } catch (e) {
+        if (i < maxRetries - 1) {
+          // 等待 GC 释放旧 MediaElementAudioSourceNode
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+      }
+    }
+    console.error('AudioManager: 重连音频管线最终失败')
+    return false
   }
 
   // 获取分析器
@@ -683,6 +735,109 @@ class AudioManager {
         lowpass.frequency.setValueAtTime(22050, now)
       } catch {}
     }
+  }
+
+  // ==================== 动态旁路：根据用户开关断开/重连节点 ====================
+
+  /**
+   * 根据当前 bypassFlags 重建从 source 到 splitter 的音频处理链路。
+   * 关闭的效果器节点被物理断开，不参与 AudioContext 渲染，零 CPU 消耗。
+   */
+  private rebuildChain(audioElement: HTMLAudioElement): void {
+    const pts = this.connectionPoints.get(audioElement)
+    const flags = this.bypassFlags.get(audioElement)
+    if (!pts || !flags) return
+
+    const {
+      source, eqFilters, bassBoost, convolver, surroundGain,
+      balance, loudnessComp, loudnessMakeup, splitter
+    } = pts
+
+    // 断开所有可变连接（从 source 到 loudnessMakeup）
+    source.disconnect()
+    for (const f of eqFilters) f.disconnect()
+    bassBoost.disconnect()
+    balance.disconnect()
+    loudnessComp.disconnect()
+    loudnessMakeup.disconnect()
+    surroundGain.disconnect()
+    convolver.disconnect()
+
+    // ---- Stage 1: EQ ----
+    const stage1Out: AudioNode = flags.eqDisabled
+      ? source
+      : (source.connect(eqFilters[0]), eqFilters[eqFilters.length - 1])
+
+    // ---- Stage 2: Bass Boost ----
+    if (flags.bassDisabled) {
+      stage1Out.connect(balance)
+    } else {
+      stage1Out.connect(bassBoost)
+    }
+    const stage2Out: AudioNode = flags.bassDisabled ? stage1Out : bassBoost
+
+    // ---- Stage 3: Balance + Surround (并发路，始终从 stage2Out 分接) ----
+    stage2Out.connect(balance)
+    stage2Out.connect(convolver)
+    convolver.connect(surroundGain)
+    surroundGain.connect(balance)
+
+    // ---- Stage 4: Loudness ----
+    if (flags.loudnessDisabled) {
+      balance.connect(splitter)
+    } else {
+      balance.connect(loudnessComp)
+      loudnessComp.connect(loudnessMakeup)
+      loudnessMakeup.connect(splitter)
+    }
+  }
+
+  /**
+   * 开关 EQ 旁路。关闭时 10 个 Biquad 滤波器被物理移除出音频链。
+   * 已处于目标状态时 no-op。
+   */
+  setEQEnabled(audioElement: HTMLAudioElement, enabled: boolean): void {
+    const flags = this.bypassFlags.get(audioElement)
+    const currentDisabled = flags?.eqDisabled ?? false
+    if (currentDisabled === !enabled) return
+    if (!flags) {
+      this.bypassFlags.set(audioElement, { eqDisabled: !enabled, bassDisabled: false, loudnessDisabled: false })
+    } else {
+      flags.eqDisabled = !enabled
+    }
+    this.rebuildChain(audioElement)
+  }
+
+  /**
+   * 开关 Bass Boost 旁路。关闭时 lowshelf 滤波器被移除出音频链。
+   * 已处于目标状态时 no-op。
+   */
+  setBassBoostEnabled(audioElement: HTMLAudioElement, enabled: boolean): void {
+    const flags = this.bypassFlags.get(audioElement)
+    const currentDisabled = flags?.bassDisabled ?? false
+    if (currentDisabled === !enabled) return
+    if (!flags) {
+      this.bypassFlags.set(audioElement, { eqDisabled: false, bassDisabled: !enabled, loudnessDisabled: false })
+    } else {
+      flags.bassDisabled = !enabled
+    }
+    this.rebuildChain(audioElement)
+  }
+
+  /**
+   * 开关 Loudness 旁路。关闭时 DynamicsCompressor + MakeupGain 被移除出音频链。
+   * 已处于目标状态时 no-op。
+   */
+  setLoudnessEnabled(audioElement: HTMLAudioElement, enabled: boolean): void {
+    const flags = this.bypassFlags.get(audioElement)
+    const currentDisabled = flags?.loudnessDisabled ?? false
+    if (currentDisabled === !enabled) return
+    if (!flags) {
+      this.bypassFlags.set(audioElement, { eqDisabled: false, bassDisabled: false, loudnessDisabled: !enabled })
+    } else {
+      flags.loudnessDisabled = !enabled
+    }
+    this.rebuildChain(audioElement)
   }
 }
 

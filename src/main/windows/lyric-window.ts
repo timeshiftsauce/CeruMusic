@@ -100,11 +100,13 @@ class LyricWindow {
       // 窗口不能最大化
       maximizable: false,
       // 窗口不能进入全屏状态
-      fullscreenable: false
+      fullscreenable: false,
+      // 歌词窗口隐藏时允许 Chromium 自动节流 rAF/定时器，避免空转 CPU
+      webPreferences: {
+        backgroundThrottling: true
+      }
     })
     if (!this.win) return null
-    // 禁用背景节流，防止后台时歌词更新延迟
-    this.win.webContents.setBackgroundThrottling(false)
     // 加载地址（开发环境用项目根目录，生产用打包后的相对路径）
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/#/desktop-lyric`)
