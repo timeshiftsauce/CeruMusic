@@ -136,48 +136,17 @@ export function installDesktopLyricBridge() {
   ;(window as any)?.electron?.ipcRenderer?.on?.('lyric-window-ready', () => {
     pushSnapshot()
   })
-  // 控制 rAF 循环启动/停止
-  const startLoop = () => {
-    if (playStateInterval !== null) return
-    playStateInterval = requestAnimationFrame(loop)
-  }
-  const stopLoop = () => {
-    if (playStateInterval !== null) {
-      cancelAnimationFrame(playStateInterval)
-      playStateInterval = null
-    }
-  }
-
-  // 当桌面歌词打开时补快照并启动循环，关闭时停止循环释放 GPU
+  // 当切换显示为开启时，补一次快照
   ;(window as any)?.electron?.ipcRenderer?.on?.(
     'desktop-lyric-open-change',
     (_: any, open: boolean) => {
-      if (open) {
-        pushSnapshot()
-        startLoop()
-      } else {
-        stopLoop()
-      }
+      if (open) pushSnapshot()
     }
   )
-
-  // 查询初始状态，仅在桌面歌词已打开时才启动 rAF 循环
-  ;(window as any)?.electron?.ipcRenderer
-    ?.invoke?.('get-lyric-open-state')
-    .then((open: boolean) => {
-      if (open) startLoop()
-    })
-    .catch(() => {})
 
   // 使用 RAF 替代 setInterval
   const loop = () => {
     if (!installed) return
-
-    // 窗口隐藏时跳过 IPC 推送，仅保持 rAF 存活以便恢复时立即追上
-    if (document.hidden) {
-      playStateInterval = requestAnimationFrame(loop)
-      return
-    }
 
     const a = controlAudio.Audio
     let ms = Math.round((a?.currentTime || 0) * 1000)
@@ -216,6 +185,8 @@ export function installDesktopLyricBridge() {
     }
     playStateInterval = requestAnimationFrame(loop)
   }
+
+  playStateInterval = requestAnimationFrame(loop)
 }
 
 // 导出清理函数，用于清除所有定时器

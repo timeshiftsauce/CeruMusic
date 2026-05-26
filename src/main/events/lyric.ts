@@ -68,10 +68,10 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
     if (val) {
       lyricWin.show()
       lyricWin.setAlwaysOnTop(true, 'screen-saver')
-      lyricWin.webContents.send('desktop-lyric-open-change', !!val)
     } else {
-      lyricWin.destroy()
+      lyricWin.hide()
     }
+    lyricWin.webContents.send('desktop-lyric-open-change', !!val)
   })
   ipcMain.on('win-show', () => {
     mainWin?.show()
@@ -210,10 +210,10 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
     mainWin?.webContents.send(name, val)
   })
 
-  // 关闭桌面歌词（销毁窗口释放渲染进程，打开时由 ensureLyricWin 重建）
+  // 关闭桌面歌词
   ipcMain.on('closeDesktopLyric', () => {
     const lyricWin = getLyricWin()
-    lyricWin?.destroy()
+    lyricWin?.hide()
     lyricOpenState = false
     lyricStore.set({ isOpen: lyricOpenState })
     mainWin?.webContents.send('closeDesktopLyric')
@@ -222,10 +222,6 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 锁定/解锁桌面歌词
   let lyricLockState = !!lyricStore.get().isLock
   let lyricOpenState = !!lyricStore.get().isOpen
-  // 延迟创建：用户之前打开过桌面歌词才提前创建窗口，否则等首次切换时再创建
-  if (lyricOpenState) {
-    ensureLyricWin()
-  }
   ipcMain.on('toogleDesktopLyricLock', (_, isLock: boolean) => {
     const lyricWin = getLyricWin()
     if (!lyricWin) return

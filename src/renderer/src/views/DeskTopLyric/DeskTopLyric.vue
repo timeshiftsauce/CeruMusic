@@ -694,20 +694,6 @@ const onDocPointerUp = () => {
   })
 }
 
-// 页面隐藏时暂停 rAF，窗口重新可见时恢复
-const handleVisibilityChange = (): void => {
-  if (document.hidden) {
-    pauseSeek()
-  } else {
-    // 窗口可见时立即清除 isInitializing，避免 backgroundThrottling 导致
-    // FALLBACK_INITIALIZATION_TIMEOUT 被节流到数秒后才触发
-    if (isInitializing.value) {
-      isInitializing.value = false
-    }
-    resumeSeek()
-  }
-}
-
 const computeHoverCursor = (clientX: number, clientY: number) => {
   const w = window.innerWidth
   const h = window.innerHeight
@@ -910,8 +896,6 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerDown)
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseleave', handleMouseLeave)
-  // 页面隐藏时暂停 rAF，避免隐藏的歌词窗口空转 CPU
-  document.addEventListener('visibilitychange', handleVisibilityChange)
   // 通知主进程：桌面歌词窗口已准备就绪，便于主窗口侧补发快照
   window.electron?.ipcRenderer?.send?.('lyric-window-ready')
 })
@@ -921,7 +905,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown)
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseleave', handleMouseLeave)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (dragState.isDragging) onDocPointerUp()
 })
 </script>

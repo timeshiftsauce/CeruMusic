@@ -72,16 +72,6 @@ const rnd = (min: number, max: number) => Math.random() * (max - min) + min
 const pick = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)]
 const colors = ['#ff3b3b', '#ffd65a', '#ff7a00', '#ff2d55', '#ffe08a', '#fa383e', '#ff9f0a']
 
-// rAF 合并 fireworks resize 处理器
-let pendingFwRaf = 0
-const onFireworksResize = () => {
-  if (pendingFwRaf) return
-  pendingFwRaf = requestAnimationFrame(() => {
-    pendingFwRaf = 0
-    resizeCanvas()
-  })
-}
-
 const resizeCanvas = () => {
   if (!fwCanvas || !festivalOverlay.value) return
   const rect = festivalOverlay.value.getBoundingClientRect()
@@ -121,11 +111,6 @@ const scheduleBursts = (w: number, h: number) => {
 
 const step = (ts: number) => {
   if (!fwCtx || !fwCanvas) return
-  // 窗口隐藏时跳过粒子渲染，仅保持 rAF 存活
-  if (document.hidden) {
-    if (running) rafId = requestAnimationFrame(step)
-    return
-  }
   const dt = ts - lastTime
   lastTime = ts
   fwCtx.globalCompositeOperation = 'source-over'
@@ -212,15 +197,11 @@ const stopFireworks = () => {
 }
 
 onMounted(() => {
-  window.addEventListener('resize', onFireworksResize)
+  window.addEventListener('resize', resizeCanvas)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', onFireworksResize)
-  if (pendingFwRaf) {
-    cancelAnimationFrame(pendingFwRaf)
-    pendingFwRaf = 0
-  }
+  window.removeEventListener('resize', resizeCanvas)
   stopFireworks()
 })
 interface Props {
@@ -636,28 +617,12 @@ watch(
           await bgRef.value.setAlbum(img, false)
         } catch {}
       }
-      // 只有正在播放时才 resume PIXI 背景（暂停时由下方 isPlay watch 控制）
-      if (Audio.value.isPlay) {
-        bgRef.value?.resume()
-      }
+      bgRef.value?.resume()
     } else {
       bgRef.value?.pause()
     }
   },
   { immediate: true }
-)
-
-// PIXI 背景跟随播放状态：暂停时停止渲染，播放时恢复（仅在 FullPlay 打开时生效）
-watch(
-  () => Audio.value.isPlay,
-  (playing) => {
-    if (!bgRef.value || !props.show) return
-    if (playing) {
-      bgRef.value.resume()
-    } else {
-      bgRef.value.pause()
-    }
-  }
 )
 
 // 组件卸载前清理订阅

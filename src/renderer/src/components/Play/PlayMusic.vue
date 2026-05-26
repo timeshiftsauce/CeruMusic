@@ -549,10 +549,6 @@ onMounted(async () => {
   }
   // 首次推送状态
   pushThumbarState()
-
-  // 低功耗：监听窗口失焦/聚焦
-  window.addEventListener('blur', handleWindowBlur)
-  window.addEventListener('focus', handleWindowFocus)
 })
 
 // 组件卸载时清理
@@ -608,14 +604,6 @@ onUnmounted(() => {
   window.removeEventListener('mouseup', handleVolumeDragEnd)
   window.removeEventListener('mousemove', handleProgressDragMove)
   window.removeEventListener('mouseup', handleProgressDragEnd)
-
-  // 低功耗：清理窗口焦点监听和定时器
-  window.removeEventListener('blur', handleWindowBlur)
-  window.removeEventListener('focus', handleWindowFocus)
-  if (lowPowerTimer) {
-    clearTimeout(lowPowerTimer)
-    lowPowerTimer = null
-  }
 })
 
 // 组件被激活时（从缓存中恢复）
@@ -1558,68 +1546,15 @@ watch(showFullPlay, (val) => {
     bg.value = 'var(--player-bg-default)'
   }
 })
-
-// ===== 低功耗模糊背景优化 =====
-// 条件：暂停 或 窗口失焦时启用，800ms延迟避免切歌闪烁
-const isWindowFocused = ref(true)
-const isLowPower = ref(false)
-let lowPowerTimer: ReturnType<typeof setTimeout> | null = null
-
-// 纯色补偿层颜色 —— 取封面主色调半透明版本
-const bgSolidColor = computed(() => {
-  const c = player.value.coverDetail.ColorObject
-  if (c) return `rgba(${c.r},${c.g},${c.b},0.4)`
-  return 'rgba(0,0,0,0.35)'
-})
-
-const updateLowPower = () => {
-  const shouldLowPower = !Audio.value.isPlay || !isWindowFocused.value
-
-  if (lowPowerTimer) {
-    clearTimeout(lowPowerTimer)
-    lowPowerTimer = null
-  }
-
-  // 满足活跃条件 → 立即退出低功耗（无延迟，保证响应手感）
-  if (!shouldLowPower) {
-    isLowPower.value = false
-    return
-  }
-
-  // 进入低功耗 → 800ms 延迟，避免切歌/短暂暂停时频繁样式切换
-  lowPowerTimer = setTimeout(() => {
-    isLowPower.value = true
-  }, 800)
-}
-
-watch(() => Audio.value.isPlay, () => updateLowPower())
-
-const handleWindowBlur = () => {
-  isWindowFocused.value = false
-  updateLowPower()
-}
-const handleWindowFocus = () => {
-  isWindowFocused.value = true
-  updateLowPower()
-}
 </script>
 
 <template>
   <div
     class="player-container"
     :style="!showFullPlay && 'box-shadow: none'"
-    :class="{
-      'full-play-idle': isFullPlayIdle && showFullPlay && !isMoreMenuOpen,
-      'low-power': isLowPower
-    }"
+    :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay && !isMoreMenuOpen }"
     @click.stop="toggleFullPlay"
   >
-    <!-- 低功耗模式纯色补偿层：暂停/后台时淡入，维持视觉连续性 -->
-    <div
-      class="player-bg-solid"
-      :class="{ 'is-visible': isLowPower }"
-      :style="{ background: bgSolidColor }"
-    ></div>
     <!-- 进度条 -->
     <div class="progress-bar-container">
       <div
@@ -2088,9 +2023,7 @@ const handleWindowFocus = () => {
   right: 0;
   transition:
     transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
-    background 0.3s,
-    backdrop-filter 0.15s ease,
-    -webkit-backdrop-filter 0.15s ease;
+    background 0.3s;
   background: v-bind(bg);
   // border-top: 1px solid #e5e7eb;
   backdrop-filter: blur(30px) saturate(1.5);
@@ -2103,37 +2036,16 @@ const handleWindowFocus = () => {
   &.full-play-idle {
     transform: translateY(100%);
   }
-
-  // 低功耗模式：减小模糊半径以降低 GPU 开销
-  &.low-power {
-    backdrop-filter: blur(6px) saturate(1.0);
-    -webkit-backdrop-filter: blur(6px) saturate(1.0);
-  }
-}
-
-/* 低功耗纯色补偿层 */
-.player-bg-solid {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  border-radius: inherit;
-
-  &.is-visible {
-    opacity: 1;
-  }
 }
 
 /* 进度条样式 */
 .progress-bar-container {
   width: 100%;
-  --touch-range-height: 30px;
+  --touch-range-height: 20px;
   --play-line-height: 4px;
   height: calc(var(--touch-range-height) + var(--play-line-height)); // 放大可点击区域，但保持视觉细
   position: absolute;
-  top: calc((var(--touch-range-height) + var(--play-line-height)) / 2 * -1);
+  top: calc(var(--touch-range-height) / 2 * -1);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
 
@@ -2141,16 +2053,6 @@ const handleWindowFocus = () => {
     width: 100%;
     height: 100%;
     position: relative;
-
-    // 向下扩展 15px 热区（上方 15px，下方共 30px）
-    &::after {
-      content: '';
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      height: 15px;
-    }
 
     // 视觉上的细轨道，垂直居中
     .progress-background,
@@ -2256,8 +2158,8 @@ const handleWindowFocus = () => {
     /* 进度条悬停 / 拖动时的位置 tooltip */
     .progress-tooltip {
       position: absolute;
-      top: calc(50% + 6px); /* 2px half line + 4px gap: tooltip 顶部紧贴线条底部 */
-      transform: translateX(-50%); /* 仅水平居中，垂直方向不移位 */
+      bottom: calc(50% + 12px);
+      transform: translateX(-50%);
       pointer-events: none;
       background: rgba(0, 0, 0, 0.78);
       color: #fff;
@@ -2277,12 +2179,12 @@ const handleWindowFocus = () => {
         content: '';
         position: absolute;
         left: 50%;
-        bottom: -4px;
+        bottom: -5px;
         width: 0;
         height: 0;
         border-left: 5px solid transparent;
         border-right: 5px solid transparent;
-        border-top: 4px solid rgba(0, 0, 0, 0.78);
+        border-top: 5px solid rgba(0, 0, 0, 0.78);
         transform: translateX(-50%);
       }
 
@@ -2337,8 +2239,6 @@ const handleWindowFocus = () => {
   justify-content: space-between;
   padding: 0 40px;
   height: calc(100% - 4px);
-  position: relative;
-  z-index: 1;
 }
 
 /* 左侧：封面和歌曲信息 */

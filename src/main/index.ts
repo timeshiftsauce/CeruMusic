@@ -651,14 +651,6 @@ function createWindow(): void {
     isSPressed = false
   })
 
-  // 最小化时开 Chromium 节流，恢复时关掉，让隐藏的渲染进程降低 CPU 消耗
-  mainWindow.on('minimize', () => {
-    mainWindow?.webContents.setBackgroundThrottling(true)
-  })
-  mainWindow.on('restore', () => {
-    mainWindow?.webContents.setBackgroundThrottling(false)
-  })
-
   // ⚠️ 关键修改 2: 监听 'moved' 事件，动态更新最大尺寸
   mainWindow.on('moved', () => {
     if (isWindowedFullScreenActive()) return
@@ -752,6 +744,8 @@ function createWindow(): void {
 
   InitEventServices(mainWindow)
   initPluginNotice(mainWindow)
+  // 设置背景节流
+  mainWindow.webContents.setBackgroundThrottling(false)
 
   // === 窗口标题 / 任务栏-Dock 进度条 IPC ===
   // 启动时 BrowserWindow 默认 title 来自 index.html 的 <title> 或 productName,
@@ -931,6 +925,7 @@ app.whenReady().then(async () => {
   // 初始化自动更新器 桌面歌词
   if (mainWindow) {
     initAutoUpdateForWindow(mainWindow)
+    lyricWindow.create()
     initLyricIpc(mainWindow)
     const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
     if (startArg) queueOpenPlaylist(startArg)

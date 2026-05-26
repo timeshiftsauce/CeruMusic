@@ -174,7 +174,18 @@ onBeforeUnmount(() => {
         <i class="iconfont icon-shezhi"></i>
       </t-button>
 
-
+      <!-- Mini 模式按钮 -->
+      <t-button
+        v-if="!settings.closeToTray"
+        shape="circle"
+        theme="default"
+        variant="text"
+        class="control-btn mini-btn"
+        title="最小化到系统托盘"
+        @click="handleMiniMode"
+      >
+        <i class="iconfont icon-dibu"></i>
+      </t-button>
       <div
         v-if="userInfo.topBarStyle === false"
         style="
@@ -350,6 +361,16 @@ onBeforeUnmount(() => {
   .account-module {
     -webkit-app-region: no-drag;
     margin-right: 0.25rem;
+  }
+
+  .mini-btn {
+    &.active .iconfont {
+      color: #f97316;
+    }
+
+    &:hover {
+      background-color: var(--titlebar-btn-hover-bg);
+    }
   }
 
   .minimize-btn:hover {

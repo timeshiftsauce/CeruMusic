@@ -15,6 +15,7 @@ import { useAudioEffectsStore } from '@renderer/store/AudioEffects'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
+import { crossfadeState } from '@renderer/utils/audio/crossfade'
 
 type AudioSlot = 'A' | 'B'
 
@@ -36,21 +37,18 @@ const isPrimarySlot = (slot: AudioSlot) => audioStore.Audio.primarySlot === slot
 // 应用均衡器设置
 const applyGlobalEQ = (el: HTMLAudioElement) => {
   AudioManager.getOrCreateAudioSource(el)
-  AudioManager.setEQEnabled(el, eqStore.enabled)
-  if (eqStore.enabled) {
-    const { gains } = storeToRefs(eqStore)
-    gains.value.forEach((gain, index) => {
-      AudioManager.setEqualizerBand(el, index, gain)
-    })
-  }
+  const { enabled, gains } = storeToRefs(eqStore)
+  const targetGains = enabled.value ? gains.value : new Array(10).fill(0)
+  targetGains.forEach((gain, index) => {
+    AudioManager.setEqualizerBand(el, index, gain)
+  })
 }
 
 // Apply Audio Effects
 const applyGlobalEffects = (el: HTMLAudioElement) => {
   const { bassBoost, surround, balance, loudness } = storeToRefs(effectStore)
 
-  // Bass Boost — sync bypass then set gain
-  AudioManager.setBassBoostEnabled(el, bassBoost.value.enabled)
+  // Bass Boost
   const targetBass = bassBoost.value.enabled ? bassBoost.value.gain : 0
   AudioManager.setBassBoost(el, targetBass)
 
@@ -62,8 +60,8 @@ const applyGlobalEffects = (el: HTMLAudioElement) => {
   const targetBalance = balance.value.enabled ? balance.value.value : 0
   AudioManager.setBalance(el, targetBalance)
 
-  // Loudness — sync bypass then set params
-  AudioManager.setLoudnessEnabled(el, loudness.value.enabled)
+  // Loudness Normalization (响度均衡)
+  // 仅作用于本应用音频链路,不影响系统其他声音(如游戏)。
   AudioManager.setLoudnessNormalization(el, {
     enabled: loudness.value.enabled,
     target: loudness.value.target
@@ -110,7 +108,6 @@ onMounted(() => {
     }
   }
   console.log('音频组件初始化完成（双槽）')
-  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 watch(
@@ -257,9 +254,8 @@ const forward = (name: string, val?: any) => {
 const handleEnded = (slot: AudioSlot): void => {
   // 非活跃槽的 ended 事件忽略（过渡完成会由 crossfade 管理器推进）
   if (!isPrimarySlot(slot)) return
-  // 歌曲已自然结束，发布 ended 事件并触发自动下一首流程。
-  // 不再检查 crossfadeState.active 守卫 —— 当 _naturalNextDelayEnabled 启用时，
-  // crossfade 不会提前劫持切歌，ended 事件一定能到达 playNextAuto。
+  // 若正在完成交叉淡化，ended 事件会由 crossfade 的 completeCrossfade 处理
+  if (crossfadeState.active) return
   audioStore.Audio.isPlay = false
   audioStore.publish('ended')
   forward('autoNext')
@@ -283,62 +279,24 @@ const handlePlay = (slot: AudioSlot): void => {
   }
 
   audioStore.Audio.isPlay = true
+  startSetupInterval()
   const activeEl = audioStore.Audio.audio
   audioStore.Audio.duration = activeEl?.duration || 0
   audioStore.publish('play')
 }
 
-/**
- * 原生 timeupdate 事件处理（~4Hz，浏览器自动触发）
- * 普通界面进度条无须 30fps 精度，4Hz 足够平滑且大幅降低 CPU
- */
-const handleTimeupdate = (slot: AudioSlot): void => {
-  if (!isPrimarySlot(slot)) return
-  // 窗口最小化/切后台时跳过，Chromium 节流已生效，这里再保险一层
-  if (document.hidden) return
-  const activeEl = audioStore.Audio.audio
-  if (activeEl && !activeEl.paused) {
-    audioStore.publish('timeupdate')
-    audioStore.setCurrentTime(activeEl.currentTime || 0)
+let rafId: number | null = null
+const startSetupInterval = (): void => {
+  if (rafId !== null) return
+  const onFrame = () => {
+    const activeEl = audioStore.Audio.audio
+    if (activeEl && !activeEl.paused) {
+      audioStore.publish('timeupdate')
+      audioStore.setCurrentTime(activeEl.currentTime || 0)
+    }
+    rafId = requestAnimationFrame(onFrame)
   }
-}
-
-// ---- 窗口可见性+焦点变化：挂起/恢复 AudioContext ----
-
-/** 收集两个 audio 元素引用 */
-const collectAudioEls = (): HTMLAudioElement[] => {
-  const els: HTMLAudioElement[] = []
-  if (audioARef.value) els.push(audioARef.value)
-  if (audioBRef.value) els.push(audioBRef.value)
-  return els
-}
-
-/** 挂起所有 AudioContext（Web Audio 处理暂停，CPU 趋近 0，EQ/效果参数保留） */
-const suspendAllContexts = async (): Promise<void> => {
-  const els = collectAudioEls()
-  for (const el of els) {
-    await AudioManager.suspendContext(el)
-  }
-}
-
-/** 恢复所有 AudioContext（恢复正常处理，EQ/效果链保持完整） */
-const resumeAllContexts = async (): Promise<void> => {
-  const els = collectAudioEls()
-  for (const el of els) {
-    await AudioManager.resumeContext(el)
-  }
-}
-
-/**
- * 窗口可见性变化：最小化/切标签时挂起或恢复
- */
-const handleVisibilityChange = async (): Promise<void> => {
-  if (!collectAudioEls().length) return
-  if (document.hidden) {
-    await suspendAllContexts()
-  } else {
-    await resumeAllContexts()
-  }
+  rafId = requestAnimationFrame(onFrame)
 }
 
 const handlePause = (slot: AudioSlot): void => {
@@ -347,6 +305,12 @@ const handlePause = (slot: AudioSlot): void => {
   // 只可能是用户主动暂停新歌，应正常更新 UI
   audioStore.Audio.isPlay = false
   audioStore.publish('pause')
+  if (rafId !== null) {
+    try {
+      cancelAnimationFrame(rafId)
+    } catch {}
+    rafId = null
+  }
 }
 
 const handleError = (slot: AudioSlot, event: Event): void => {
@@ -374,10 +338,15 @@ const handleCanPlay = (slot: AudioSlot): void => {
 }
 
 onUnmounted(() => {
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
   try {
     window.api.pingService.stop()
   } catch {}
+  if (rafId !== null) {
+    try {
+      cancelAnimationFrame(rafId)
+    } catch {}
+    rafId = null
+  }
   for (const el of [audioARef.value, audioBRef.value]) {
     if (!el) continue
     try {
@@ -401,7 +370,6 @@ onUnmounted(() => {
       preload="auto"
       :src="audioStore.Audio.srcA"
       @seeked="handleSeeked('A')"
-      @timeupdate="handleTimeupdate('A')"
       @play="handlePlay('A')"
       @pause="handlePause('A')"
       @error="handleError('A', $event)"
@@ -416,7 +384,6 @@ onUnmounted(() => {
       preload="auto"
       :src="audioStore.Audio.srcB"
       @seeked="handleSeeked('B')"
-      @timeupdate="handleTimeupdate('B')"
       @play="handlePlay('B')"
       @pause="handlePause('B')"
       @error="handleError('B', $event)"
