@@ -51,7 +51,7 @@ type OutboundMsg =
       type: 'error'
       error: { name: string; message: string; stack?: string; method?: string }
     }
-  | { type: 'log'; level: 'log' | 'info' | 'warn' | 'error'; args: any[] }
+  | { type: 'log'; level: 'log' | 'info' | 'warn' | 'error' | 'debug' | 'group' | 'groupEnd'; args: any[] }
   | { type: 'notice'; noticeType: string; data: any }
   | { type: 'throttle'; reason: string; duration?: number }
   | { type: 'heartbeat'; ts: number }
@@ -256,7 +256,7 @@ async function parseBody(response: any): Promise<any> {
 // ==================== console proxy ====================
 function buildConsoleProxy(): any {
   const make =
-    (level: 'log' | 'info' | 'warn' | 'error') =>
+    (level: 'log' | 'info' | 'warn' | 'error' | 'debug' | 'group' | 'groupEnd') =>
     (...args: any[]) => {
       // 限流：插件 while(true) console.log(...) 时丢弃多余日志，避免主进程 IPC 队列爆炸
       if (!logLimiter.allow(Date.now())) return
@@ -270,10 +270,11 @@ function buildConsoleProxy(): any {
     info: make('info'),
     warn: make('warn'),
     error: make('error'),
-    debug: make('log'),
-    trace: make('log'),
-    group: make('log'),
-    groupEnd: make('log')
+    debug: make('debug'),
+    trace: make('debug'),
+    group: make('group'),
+    groupCollapsed: make('group'),
+    groupEnd: make('groupEnd')
   }
 }
 

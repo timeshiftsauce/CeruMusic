@@ -20,12 +20,25 @@ import { sendPluginNotice } from '../../../events/pluginNotice'
 import { pluginLog } from '../../../logger'
 
 // ==================== 常量定义 ====================
+// 调整说明（修复「插件被无故禁用」bug）：
+//  - INVOKE_TIMEOUT: 单次插件方法的最长等待。网络慢的歌单/歌词接口经常>15s，
+//    放宽到 30s。这只影响该次调用 reject，不再直接强杀 worker。
+//  - HEARTBEAT_TIMEOUT: 心跳每 1s 一次，原 5s 太激进；系统繁忙/休眠唤醒/
+//    主进程 GC 都会瞬间触发误判。放宽到 15s，足够覆盖大多数抖动。
+//  - HEARTBEAT_GRACE_AFTER_WAKE: 进程时间 vs 墙钟时间出现大跳变（典型表现：
+//    系统休眠唤醒），watchdog 给一次宽限，刷新 lastHeartbeat 而不是直接强杀。
+//  - CRASH_LIMIT: 上调到 5，并配合 CRASH_DECAY_MS 让 crashCount 随时间衰减，
+//    避免长会话里偶发抖动累积导致永久禁用。
 const CONSTANTS = {
-  INVOKE_TIMEOUT: 15_000,
+  INVOKE_TIMEOUT: 30_000,
   INIT_TIMEOUT: 8_000,
-  CRASH_LIMIT: 3,
-  HEARTBEAT_TIMEOUT: 5_000,
+  CRASH_LIMIT: 5,
+  /** crashCount 衰减窗口：worker 稳定运行 5 分钟后衰减一次。 */
+  CRASH_DECAY_MS: 5 * 60_000,
+  HEARTBEAT_TIMEOUT: 15_000,
   HEARTBEAT_CHECK_INTERVAL: 2_000,
+  /** 检测到 setInterval 实际间隔远大于预期（休眠唤醒）时的最小跳变阈值。 */
+  WAKE_JUMP_THRESHOLD: 10_000,
   LOG_PREFIX: '[CeruMusic]'
 } as const
 
@@ -145,7 +158,10 @@ class CeruMusicPluginHost {
 
   /** 上次收到 worker heartbeat 的时间戳。0 表示尚未收到。 */
   private lastHeartbeat = 0
+  /** 上次 watchdog tick 的时间戳，用于检测系统休眠/进程冻结导致的时钟跳变。 */
+  private lastWatchdogTick = 0
   private watchdogTimer: ReturnType<typeof setInterval> | null = null
+  private crashDecayTimer: ReturnType<typeof setInterval> | null = null
 
   public pluginId?: string
 
@@ -269,11 +285,14 @@ class CeruMusicPluginHost {
     }
     this._stopWatchdog()
     this._rejectAllPending(new PluginError('Plugin host destroyed'))
-    if (this.worker) {
+    // 同 _terminateAndRespawn：先置空再 terminate。
+    // 这里 destroyed=true 已经能让 _onWorkerExit 提前返回，置空只是统一防御模式。
+    const dyingWorker = this.worker
+    this.worker = null
+    if (dyingWorker) {
       try {
-        await this.worker.terminate()
+        await dyingWorker.terminate()
       } catch {}
-      this.worker = null
     }
   }
 
@@ -319,20 +338,39 @@ class CeruMusicPluginHost {
         `${CONSTANTS.LOG_PREFIX} Plugin "${this.meta.pluginInfo?.name}" loaded successfully.`
       )
     } catch (err: any) {
-      // init 失败，清掉这个 worker
+      // init 失败，清掉这个 worker。
+      // 必须先把 this.worker 置空再 terminate，否则 terminate() 触发的 exit
+      // 事件会落入 _onWorkerExit 的"非预期退出"分支，被错误地累加 crashCount
+      // 并触发自动 respawn，导致 init 失败连锁雪崩式禁用。
+      this.worker = null
       try {
         await worker.terminate()
       } catch {}
-      this.worker = null
       throw new PluginError('无法初始化澜音插件,可能是插件格式不正确. ' + err.message)
     }
   }
 
   private _startWatchdog(): void {
     this._stopWatchdog()
+    this.lastWatchdogTick = Date.now()
     this.watchdogTimer = setInterval(() => {
       if (this.destroyed || !this.worker) return
-      const elapsed = Date.now() - this.lastHeartbeat
+      const now = Date.now()
+      // 检测主线程时钟跳变（系统休眠唤醒、长 GC 暂停、调试器断点等）。
+      // 此时 worker 心跳定时器也被冻结，elapsed 会假性超时，必须跳过本轮判断。
+      const tickGap = now - this.lastWatchdogTick
+      this.lastWatchdogTick = now
+      const expectedGap = CONSTANTS.HEARTBEAT_CHECK_INTERVAL
+      if (tickGap > expectedGap + CONSTANTS.WAKE_JUMP_THRESHOLD) {
+        pluginLog.warn(
+          `${CONSTANTS.LOG_PREFIX} 检测到主线程时钟跳变 ${tickGap}ms（疑似系统休眠/冻结），跳过本轮心跳检查`
+        )
+        // 重置心跳基线，等待 worker 自然恢复发送。
+        this.lastHeartbeat = now
+        return
+      }
+
+      const elapsed = now - this.lastHeartbeat
       if (elapsed > CONSTANTS.HEARTBEAT_TIMEOUT) {
         pluginLog.error(
           `${CONSTANTS.LOG_PREFIX} 插件 ${this.pluginId} worker 心跳丢失 ${elapsed}ms，判定为卡死`
@@ -342,6 +380,9 @@ class CeruMusicPluginHost {
       }
     }, CONSTANTS.HEARTBEAT_CHECK_INTERVAL)
     this.watchdogTimer.unref?.()
+
+    // 启动 crashCount 衰减：worker 持续稳定运行就缓慢恢复信用。
+    this._startCrashDecay()
   }
 
   private _stopWatchdog(): void {
@@ -349,17 +390,47 @@ class CeruMusicPluginHost {
       clearInterval(this.watchdogTimer)
       this.watchdogTimer = null
     }
+    this._stopCrashDecay()
+  }
+
+  /**
+   * crashCount 不能单调累加，否则长会话里偶发抖动会累积到禁用阈值。
+   * 这里让它每 CRASH_DECAY_MS 衰减 1。
+   */
+  private _startCrashDecay(): void {
+    this._stopCrashDecay()
+    this.crashDecayTimer = setInterval(() => {
+      if (this.destroyed) return
+      if (this.crashCount <= 0) return
+      const before = this.crashCount
+      this.crashCount = Math.max(0, this.crashCount - 1)
+      pluginLog.log(
+        `${CONSTANTS.LOG_PREFIX} 插件 ${this.pluginId} 运行稳定，crashCount 衰减 ${before} -> ${this.crashCount}`
+      )
+    }, CONSTANTS.CRASH_DECAY_MS)
+    this.crashDecayTimer.unref?.()
+  }
+
+  private _stopCrashDecay(): void {
+    if (this.crashDecayTimer) {
+      clearInterval(this.crashDecayTimer)
+      this.crashDecayTimer = null
+    }
   }
 
   private async _terminateAndRespawn(reason: string): Promise<void> {
     pluginLog.warn(`${CONSTANTS.LOG_PREFIX} 插件 worker 被强杀: ${reason}`)
     this._stopWatchdog()
     this._rejectAllPending(new PluginError(`Plugin worker terminated: ${reason}`))
-    if (this.worker) {
+    // 先把字段置空，让 terminate() 触发的 exit 事件落入 "受控终止" 分支
+    // （_onWorkerExit 看到 this.worker === null 就 early return），
+    // 避免与 crashCount++ 重复计数。
+    const dyingWorker = this.worker
+    this.worker = null
+    if (dyingWorker) {
       try {
-        await this.worker.terminate()
+        await dyingWorker.terminate()
       } catch {}
-      this.worker = null
     }
 
     this.crashCount++
@@ -433,10 +504,24 @@ class CeruMusicPluginHost {
 
     // 广播事件
     if (msg.type === 'log') {
-      const level = msg.level as 'log' | 'info' | 'warn' | 'error'
+      // 包含 group / groupEnd / debug 等扩展级别，全部转发给 Logger
+      const level = msg.level as
+        | 'log'
+        | 'info'
+        | 'warn'
+        | 'error'
+        | 'debug'
+        | 'group'
+        | 'groupEnd'
       const args = Array.isArray(msg.args) ? msg.args : []
       try {
-        ;(this.logger as any)[level]?.(...args)
+        const fn = (this.logger as any)[level]
+        if (typeof fn === 'function') {
+          fn.apply(this.logger, args)
+        } else {
+          // logger 没实现该级别时 fallback 到 log
+          ;(this.logger as any).log?.apply(this.logger, args)
+        }
       } catch {}
       return
     }
@@ -493,10 +578,34 @@ class CeruMusicPluginHost {
 
   private _onWorkerExit(code: number): void {
     if (this.destroyed) return
+    // worker 字段已被 _terminateAndRespawn 主动清空 → 说明是受控终止，
+    // respawn 流程会自己重启，这里不要重复处理。
     if (this.worker === null) return
-    pluginLog.warn(`${CONSTANTS.LOG_PREFIX} worker 退出 code=${code}`)
+    pluginLog.warn(`${CONSTANTS.LOG_PREFIX} worker 非预期退出 code=${code}`)
     this._rejectAllPending(new PluginError(`Worker exited with code ${code}`))
     this.worker = null
+    this._stopWatchdog()
+
+    // 非预期退出 = 一次崩溃。走与 watchdog 同样的累计/衰减/respawn 路径，
+    // 避免出现 "worker 死了但 disabled=false、调用永远抛 not running" 的僵尸状态。
+    this.crashCount++
+    if (this.crashCount >= CONSTANTS.CRASH_LIMIT) {
+      const reason = `worker exited ${this.crashCount} times (last code=${code})`
+      pluginLog.error(
+        `${CONSTANTS.LOG_PREFIX} 插件 ${this.pluginId} 退出次数过多，已禁用直到下次手动加载`
+      )
+      this._markDisabled(reason)
+      return
+    }
+
+    pluginLog.warn(
+      `${CONSTANTS.LOG_PREFIX} 尝试自动重启插件 ${this.pluginId}（第 ${this.crashCount}/${CONSTANTS.CRASH_LIMIT} 次）`
+    )
+    // 异步重启，不阻塞当前事件循环。
+    this._spawn().catch((err: any) => {
+      pluginLog.error(`${CONSTANTS.LOG_PREFIX} 自动重启 worker 失败: ${err?.message}`)
+      this._markDisabled(`auto-respawn failed: ${err?.message}`)
+    })
   }
 
   // ==================== 私有：调用 ====================
@@ -537,8 +646,19 @@ class CeruMusicPluginHost {
         this.pending.delete(id)
         const errMsg = `Plugin ${method} timed out after ${CONSTANTS.INVOKE_TIMEOUT}ms`
         pluginLog.error(`${CONSTANTS.LOG_PREFIX} ${errMsg}`)
-        // 强杀 + 重启
-        this._terminateAndRespawn(`${method} timeout`).catch(() => {})
+        // 仅当 worker 同时心跳丢失（真卡死）才强杀重启；
+        // 单次 HTTP 慢不应等同 worker 崩溃，否则插件极易被无故禁用。
+        const heartbeatElapsed = Date.now() - this.lastHeartbeat
+        if (heartbeatElapsed > CONSTANTS.HEARTBEAT_TIMEOUT) {
+          pluginLog.error(
+            `${CONSTANTS.LOG_PREFIX} ${method} 超时且心跳丢失 ${heartbeatElapsed}ms，强杀 worker`
+          )
+          this._terminateAndRespawn(`${method} timeout + heartbeat lost`).catch(() => {})
+        } else {
+          pluginLog.warn(
+            `${CONSTANTS.LOG_PREFIX} ${method} 超时但 worker 仍存活，仅 reject 本次调用`
+          )
+        }
         reject(new PluginError(errMsg, method))
       }, CONSTANTS.INVOKE_TIMEOUT)
 

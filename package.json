@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "1.14.0",
+  "version": "1.14.1",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -82,6 +82,7 @@
     "pinia": "^3.0.3",
     "pinia-plugin-persistedstate": "4.5.0",
     "qrcode": "^1.5.4",
+    "registry-js": "^1.16.1",
     "socket.io-client": "^4.8.3",
     "tdesign-icons-vue-next": "^0.4.1",
     "tdesign-vue-next": "^1.15.2",
