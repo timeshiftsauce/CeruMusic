@@ -150,16 +150,24 @@ export function installDesktopLyricBridge() {
     }
   )
 
-  // 使用 RAF 替代 setInterval
-  const loop = () => {
-    if (!installed) return
-
-    // 页面隐藏/最小化/闲置/桌面歌词未开启时终止循环
-    if (document.hidden || isPageIdle() || !isLyricWindowOpen) {
+  // ---- 低功耗调度器 ----
+  // 根据上下文决定间隔与推送量
+  function scheduleNext() {
+    if (!installed) {
       playStateInterval = null
       return
     }
 
+    // 停止条件：页面同时处于隐藏 且 闲置（用户走开了）
+    if (document.hidden && isPageIdle()) {
+      playStateInterval = null
+      return
+    }
+
+    const hidden = document.hidden
+    const idle = isPageIdle()
+
+    // 取音频时间
     const a = controlAudio.Audio
     let ms = Math.round((a?.currentTime || 0) * 1000)
     if (ms <= 0) {
@@ -174,42 +182,49 @@ export function installDesktopLyricBridge() {
     const currentLines = player.value.lyrics.lines || []
     const idx = computeLyricIndex(ms, currentLines)
 
-    // 计算当前行进度（0~1）
-    let progress = 0
-    if (idx >= 0 && currentLines[idx]) {
-      const line = currentLines[idx]
-      const dur = Math.max(1, (line.endTime ?? line.startTime + 1) - line.startTime)
-      progress = Math.min(1, Math.max(0, (ms - line.startTime) / dur))
+    if (!hidden) {
+      // ---- 窗口可见 ----
+      // 计算进度（桌面歌词 30% 判定需要）
+      let progress = 0
+      if (idx >= 0 && currentLines[idx]) {
+        const line = currentLines[idx]
+        const dur = Math.max(1, (line.endTime ?? line.startTime + 1) - line.startTime)
+        progress = Math.min(1, Math.max(0, (ms - line.startTime) / dur))
+      }
+      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
+        index: idx,
+        progress,
+        currentMs: ms,
+        timestamp: performance.now()
+      })
     }
 
-    // 首先推送进度，便于前端做 30% 判定（避免 setTimeout 带来的抖动）
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
-      index: idx,
-      progress,
-      currentMs: ms,
-      timestamp: performance.now()
-    })
-
-    // 当行变化时，推送 index（立即切换高亮）
+    // 行变化时始终推送 index（无论是否隐藏，菜单栏需要）
     if (idx !== lastIndex) {
       lastIndex = idx
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
     }
-    playStateInterval = window.setTimeout(() => {
-      playStateInterval = requestAnimationFrame(loop)
-    }, 50) as unknown as number
+
+    // ---- 三档自适应 ----
+    let interval: number
+    if (hidden || idle) {
+      interval = 1200          // 隐藏/闲置：极低频，仅保活菜单栏
+    } else if (isLyricWindowOpen) {
+      interval = 50            // 桌面歌词开：高频
+    } else {
+      interval = 200           // 仅菜单栏：中频
+    }
+
+    playStateInterval = window.setTimeout(scheduleNext, interval) as unknown as number
   }
 
-  playStateInterval = window.setTimeout(() => {
-    playStateInterval = requestAnimationFrame(loop)
-  }, 50) as unknown as number
+  // 首次启动（用中频，防空窗）
+  playStateInterval = window.setTimeout(scheduleNext, 200) as unknown as number
 
-  // 页面可见性变化或闲置结束时重启循环（仅当桌面歌词开启时）
+  // 页面可见性变化 / 闲置唤醒时重新调度
   visibilityHandler = () => {
-    if (!document.hidden && !isPageIdle() && isLyricWindowOpen && playStateInterval === null) {
-      playStateInterval = window.setTimeout(() => {
-        playStateInterval = requestAnimationFrame(loop)
-      }, 50) as unknown as number
+    if (playStateInterval === null && !(document.hidden && isPageIdle())) {
+      playStateInterval = window.setTimeout(scheduleNext, 200) as unknown as number
     }
   }
   document.addEventListener('visibilitychange', visibilityHandler)
@@ -219,7 +234,6 @@ export function installDesktopLyricBridge() {
 // 导出清理函数，用于清除所有定时器
 export function uninstallDesktopLyricBridge() {
   if (playStateInterval !== null) {
-    cancelAnimationFrame(playStateInterval)
     clearTimeout(playStateInterval)
     playStateInterval = null
   }
