@@ -3,6 +3,7 @@ import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { storeToRefs } from 'pinia'
 import { watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { isPageIdle } from '@renderer/utils/idleSleep'
 
 interface LyricWord {
   word: string
@@ -17,6 +18,10 @@ interface LyricLine {
 let installed = false
 // 保存定时器ID以便清理
 let playStateInterval: number | null = null
+// 桌面歌词窗口是否开启
+let isLyricWindowOpen = false
+// visibilitychange 处理器引用，用于卸载时清理
+let visibilityHandler: (() => void) | null = null
 
 function buildLyricPayload(lines: LyricLine[]) {
   return JSON.parse(JSON.stringify(lines || []))
@@ -140,6 +145,7 @@ export function installDesktopLyricBridge() {
   ;(window as any)?.electron?.ipcRenderer?.on?.(
     'desktop-lyric-open-change',
     (_: any, open: boolean) => {
+      isLyricWindowOpen = open
       if (open) pushSnapshot()
     }
   )
@@ -147,6 +153,12 @@ export function installDesktopLyricBridge() {
   // 使用 RAF 替代 setInterval
   const loop = () => {
     if (!installed) return
+
+    // 页面隐藏/最小化/闲置/桌面歌词未开启时终止循环
+    if (document.hidden || isPageIdle() || !isLyricWindowOpen) {
+      playStateInterval = null
+      return
+    }
 
     const a = controlAudio.Audio
     let ms = Math.round((a?.currentTime || 0) * 1000)
@@ -183,17 +195,39 @@ export function installDesktopLyricBridge() {
       lastIndex = idx
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
     }
-    playStateInterval = requestAnimationFrame(loop)
+    playStateInterval = window.setTimeout(() => {
+      playStateInterval = requestAnimationFrame(loop)
+    }, 50) as unknown as number
   }
 
-  playStateInterval = requestAnimationFrame(loop)
+  playStateInterval = window.setTimeout(() => {
+    playStateInterval = requestAnimationFrame(loop)
+  }, 50) as unknown as number
+
+  // 页面可见性变化或闲置结束时重启循环（仅当桌面歌词开启时）
+  visibilityHandler = () => {
+    if (!document.hidden && !isPageIdle() && isLyricWindowOpen && playStateInterval === null) {
+      playStateInterval = window.setTimeout(() => {
+        playStateInterval = requestAnimationFrame(loop)
+      }, 50) as unknown as number
+    }
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
+  window.addEventListener('ceru-wake', visibilityHandler)
 }
 
 // 导出清理函数，用于清除所有定时器
 export function uninstallDesktopLyricBridge() {
   if (playStateInterval !== null) {
     cancelAnimationFrame(playStateInterval)
+    clearTimeout(playStateInterval)
     playStateInterval = null
+  }
+
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler)
+    window.removeEventListener('ceru-wake', visibilityHandler)
+    visibilityHandler = null
   }
 
   installed = false

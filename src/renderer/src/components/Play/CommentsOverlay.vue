@@ -398,8 +398,8 @@ const onLeave = (el: Element) => {
   width: 80vw;
   height: 80vh;
   background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);

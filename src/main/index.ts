@@ -23,12 +23,12 @@ import icon from '../../resources/logo.png?asset'
 import path from 'node:path'
 import InitEventServices from './events'
 
-import lyricWindow from './windows/lyric-window'
-
 import './events/musicCache'
+import './events/musicUrlCache'
 import './events/songList'
 import './events/directorySettings'
 import './events/pluginNotice'
+import lyricWindow from './windows/lyric-window'
 import initLyricIpc from './events/lyric'
 import { initPluginNotice } from './events/pluginNotice'
 import './events/localMusic'
@@ -172,8 +172,10 @@ let tray: Tray | null = null
 let trayLyricLocked = false
 const MAC_TRAY_GUID = 'f4f8a5d8-9eb2-4f98-8fd7-3a3d5ec9b2cf'
 
-const sendPlaybackControl = (channel: 'music-control' | 'playPrev' | 'playNext'): void => {
+const sendPlaybackControl = (channel: 'toggle' | 'playPrev' | 'playNext'): void => {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+  // backgroundThrottling: false 已在 webPreferences 中设置，页面始终不被节流，
+  // 直接发送 IPC 即可。GPU 降级由渲染层 blur/focus 驱动。
   mainWindow.webContents.send(channel)
 }
 
@@ -204,7 +206,7 @@ function updateTrayMenu(): void {
     {
       label: '播放/暂停',
       click: () => {
-        sendPlaybackControl('music-control')
+        sendPlaybackControl('toggle')
       }
     },
     {
@@ -280,6 +282,12 @@ function setupTray(): void {
       return
     }
     if (!mainWindow) return
+    // 最小化时直接 restore，而不是 hide
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+      mainWindow.focus()
+      return
+    }
     if (mainWindow.isVisible()) {
       mainWindow.hide()
     } else {
@@ -744,8 +752,8 @@ function createWindow(): void {
 
   InitEventServices(mainWindow)
   initPluginNotice(mainWindow)
-  // 设置背景节流
-  mainWindow.webContents.setBackgroundThrottling(false)
+  // 背景节流交由各组件通过 document.hidden 自行门控
+  // 注意：不再全局禁用 backgroundThrottling，让 Electron 在隐藏时自动降帧
 
   // === 窗口标题 / 任务栏-Dock 进度条 IPC ===
   // 启动时 BrowserWindow 默认 title 来自 index.html 的 <title> 或 productName,
@@ -925,7 +933,8 @@ app.whenReady().then(async () => {
   // 初始化自动更新器 桌面歌词
   if (mainWindow) {
     initAutoUpdateForWindow(mainWindow)
-    lyricWindow.create()
+    // 不再预先创建桌面歌词窗口——改为懒加载:
+    // ensureLyricWin() 会在用户首次打开桌面歌词时自动创建
     initLyricIpc(mainWindow)
     const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
     if (startArg) queueOpenPlaylist(startArg)

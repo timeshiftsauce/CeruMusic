@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { storeToRefs } from 'pinia'
 import audioManager from '@renderer/utils/audio/audioManager'
+import { isPageIdle } from '@renderer/utils/idleSleep'
 
 interface Props {
   show?: boolean
@@ -80,10 +81,21 @@ const initAudioAnalyser = () => {
 const draw = (ts?: number) => {
   if (!canvasRef.value || !analyser.value || !dataArray.value) return
 
+  // 页面隐藏或闲置时立即终止循环
+  if (!document.hasFocus() || document.hidden || isPageIdle()) {
+    animationId.value = undefined
+    return
+  }
+
   // 帧率节流 ~30fps
   const now = ts ?? performance.now()
   if (now - lastFrameTime.value < 33) {
-    animationId.value = requestAnimationFrame(draw)
+    // 组件不可见时不维持循环
+    if (props.show && Audio.value.isPlay) {
+      animationId.value = requestAnimationFrame(draw)
+    } else {
+      animationId.value = undefined
+    }
     return
   }
   lastFrameTime.value = now
@@ -160,6 +172,14 @@ const draw = (ts?: number) => {
 
   if (props.show && Audio.value.isPlay) {
     animationId.value = requestAnimationFrame(draw)
+  }
+}
+
+// 页面可见性变化或闲置结束时处理
+const onVisibilityChange = () => {
+  if (!document.hidden && !isPageIdle() && props.show && Audio.value.isPlay) {
+    stopVisualization()
+    startVisualization()
   }
 }
 
@@ -265,6 +285,9 @@ const resizeCanvas = () => {
 
 // 组件挂载
 onMounted(() => {
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('focus', onVisibilityChange)
+  window.addEventListener('ceru-wake', onVisibilityChange)
   if (canvasRef.value) {
     resizeCanvas()
 
@@ -325,6 +348,10 @@ onBeforeUnmount(() => {
 
   // 清理数据数组
   dataArray.value = undefined
+
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  window.removeEventListener('focus', onVisibilityChange)
+  window.removeEventListener('ceru-wake', onVisibilityChange)
 
   console.log('AudioVisualizer 组件卸载完成')
 })

@@ -136,6 +136,11 @@ const api = {
     clear: () => ipcRenderer.invoke('music-cache:clear'),
     getSize: () => ipcRenderer.invoke('music-cache:get-size')
   },
+  // URL 缓存管理（持久化 CDN URL，避免重复 SDK 请求）
+  musicUrlCache: {
+    invalidate: (songId: string) => ipcRenderer.invoke('music-url-cache:invalidate', songId),
+    clear: () => ipcRenderer.invoke('music-url-cache:clear')
+  },
   // 文件读取
   file: {
     readFile: (path: string) => ipcRenderer.invoke('fs:read-file', path)

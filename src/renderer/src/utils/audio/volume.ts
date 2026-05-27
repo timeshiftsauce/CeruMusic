@@ -1,3 +1,5 @@
+import { isPageIdle } from '@renderer/utils/idleSleep'
+
 let timer: any
 
 export function transitionVolume(
@@ -12,6 +14,7 @@ export function transitionVolume(
   return new Promise((resolve) => {
     if (target) {
       timer = setInterval(() => {
+        if (document.hidden || isPageIdle()) return
         audio.volume = Math.min(audio.volume + volume / playVolume, volume)
         if (audio.volume >= volume) {
           resolve(undefined)
@@ -21,6 +24,7 @@ export function transitionVolume(
       return
     }
     timer = setInterval(() => {
+      if (document.hidden || isPageIdle()) return
       audio.volume = Math.max(audio.volume - volume / pauseVolume, 0)
       if (audio.volume <= 0) {
         clearInterval(timer)

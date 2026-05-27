@@ -35,6 +35,11 @@ interface CustomAPI {
     getSize: () => Promise<string>
   }
 
+  musicUrlCache: {
+    invalidate: (songId: string) => Promise<{ success: boolean }>
+    clear: () => Promise<{ success: boolean }>
+  }
+
   // 下载管理
   download: {
     getTasks: () => Promise<any[]>

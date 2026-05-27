@@ -15,6 +15,7 @@ import {
 import pluginService from '../plugin/index'
 import musicSdk from '../../utils/musicSdk/index'
 import { musicCacheService } from '../musicCache'
+import { musicUrlCache } from '../musicUrlCache'
 import download from '../../utils/downloadSongs'
 
 function main(source: string = 'wy') {
@@ -42,7 +43,16 @@ function main(source: string = 'wy') {
         // 生成歌曲唯一标识
         const songId = `${songInfo.name}-${songInfo.singer}-${currentSource}-${quality}`
 
-        // 先检查缓存（isCache !== false 时）
+        // 先检查 URL 字符串缓存（SQLite 持久化，避免重复 SDK 请求）
+        if (isCache !== false) {
+          const cachedUrlStr = musicUrlCache.getUrl(songId)
+          if (cachedUrlStr) {
+            console.log('URL 缓存命中:', songId)
+            return cachedUrlStr
+          }
+        }
+
+        // 再检查文件级缓存（完整音频文件已下载）
         if (isCache !== false) {
           const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
           if (cachedUrl) {
@@ -57,6 +67,7 @@ function main(source: string = 'wy') {
             : await usePlugin.getMusicUrl(currentSource, songInfo, quality)
         // 按需异步缓存，不阻塞返回
         if (isCache !== false) {
+          musicUrlCache.saveUrl(songId, originalUrl)
           musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
             console.warn('缓存歌曲失败:', error)
           })

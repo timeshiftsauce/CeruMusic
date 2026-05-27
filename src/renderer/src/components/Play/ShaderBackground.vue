@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { extractColors, Color } from '@renderer/utils/color/colorExtractor'
 import DefaultCover from '@renderer/assets/images/Default.jpg'
 import CoverImage from '@renderer/assets/images/cover.png'
+import { isPageIdle } from '@renderer/utils/idleSleep'
 
 const props = defineProps<{
   coverImage: string
@@ -317,9 +318,17 @@ function resizeCanvas() {
   }
 }
 
-// 渲染循环
-function render() {
+// 渲染循环 - 20fps 节流
+let _lastRenderTime = 0
+function render(now: number) {
   if (!gl || !program) return
+
+  // 20fps 节流：每 50ms 才执行一次绘制
+  if (now - _lastRenderTime < 50) {
+    animationFrameId = requestAnimationFrame(render)
+    return
+  }
+  _lastRenderTime = now
 
   // 计算时间
   const currentTime = (Date.now() - startTime) / 1000
@@ -339,8 +348,21 @@ function render() {
   // 绘制
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
+  // 页面隐藏或闲置时暂停渲染
+  if (document.hidden || isPageIdle()) {
+    animationFrameId = null
+    return
+  }
+
   // 请求下一帧
   animationFrameId = requestAnimationFrame(render)
+}
+
+// 页面可见性变化或闲置结束时重启渲染
+const onShaderVisibilityChange = () => {
+  if (!document.hidden && !isPageIdle() && animationFrameId === null) {
+    startRenderLoop()
+  }
 }
 
 // 开始渲染循环
@@ -394,12 +416,16 @@ watch(
 onMounted(async () => {
   await updateColors()
   window.addEventListener('resize', resizeCanvas)
+  document.addEventListener('visibilitychange', onShaderVisibilityChange)
+  window.addEventListener('ceru-wake', onShaderVisibilityChange)
   initWebGL()
 })
 
 // 组件卸载时清理
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeCanvas)
+  document.removeEventListener('visibilitychange', onShaderVisibilityChange)
+  window.removeEventListener('ceru-wake', onShaderVisibilityChange)
   stopRenderLoop()
 })
 </script>

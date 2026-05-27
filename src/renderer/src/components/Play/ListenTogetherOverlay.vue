@@ -299,8 +299,8 @@ function onKeyDown(e: KeyboardEvent): void {
   width: min(80vw, 880px);
   height: min(80vh, 720px);
   background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;

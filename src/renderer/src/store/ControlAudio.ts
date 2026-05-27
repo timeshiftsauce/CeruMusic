@@ -279,32 +279,32 @@ export const ControlAudioStore = defineStore(
          * 过渡的渐变 ~150ms 会让真实播放比 SYNC 应用慢,跨设备就不同步了。
          * 不修改用户设置,只在房间状态下 bypass。 */
         if (!playSetting.getIsPauseTransition || isLtInRoom()) {
-          try {
-            audioEl.volume = volume / 100
-            await audioEl.play()
-            /* 关键:用 audio 元素当前真实状态决定 isPlay,不要无脑设 true ——
-             * 否则用户在 play() pending 期间立即点暂停,audio.pause() 已生效,
-             * 但 await 后这里把 isPlay 又设回 true,UI 出现"自己没暂停"现象。 */
+          audioEl.volume = volume / 100
+          const playPromise = audioEl.play()
+          // 乐观设为 true，不等 play() promise（窗口隐藏时 Chromium 可能挂起该 Promise）
+          Audio.isPlay = true
+          playPromise?.then(() => {
             Audio.isPlay = !audioEl.paused
-            return Promise.resolve()
-          } catch (error) {
+          }).catch((error) => {
             console.error('音频播放失败:', error)
             Audio.isPlay = false
-            throw new Error('音频播放失败，请检查音频URL是否有效')
-          }
+          })
+          return Promise.resolve()
         }
 
         audioEl.volume = 0
-        try {
-          await audioEl.play()
+        const playPromise = audioEl.play()
+        // 乐观设为 true，不等 play() promise（窗口隐藏时 Chromium 可能挂起该 Promise）
+        Audio.isPlay = true
+        playPromise.then(() => {
           Audio.isPlay = !audioEl.paused
           return transitionVolume(audioEl, volume / 100, true, true)
-        } catch (error) {
+        }).catch((error) => {
           audioEl.volume = volume / 100
           console.error('音频播放失败:', error)
           Audio.isPlay = false
-          throw new Error('音频播放失败，请检查音频URL是否有效')
-        }
+        })
+        return Promise.resolve()
       }
       return false
     }

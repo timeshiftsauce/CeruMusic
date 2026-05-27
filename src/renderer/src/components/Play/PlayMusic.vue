@@ -2026,8 +2026,8 @@ watch(showFullPlay, (val) => {
     background 0.3s;
   background: v-bind(bg);
   // border-top: 1px solid #e5e7eb;
-  backdrop-filter: blur(30px) saturate(1.5);
-  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  backdrop-filter: blur(var(--player-blur, 15px));
+  -webkit-backdrop-filter: blur(var(--player-blur, 15px));
   z-index: 1000;
   height: var(--play-bottom-height);
   display: flex;
@@ -2048,6 +2048,7 @@ watch(showFullPlay, (val) => {
   top: calc(var(--touch-range-height) / 2 * -1);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
+  transform: translateZ(0);
 
   .progress-bar {
     width: 100%;
@@ -2307,6 +2308,7 @@ watch(showFullPlay, (val) => {
     display: flex;
     align-items: center;
     justify-content: center;
+    transform: translateZ(0);
 
     .iconfont {
       font-size: 18px;
@@ -2349,6 +2351,7 @@ watch(showFullPlay, (val) => {
     display: flex;
     align-items: center;
     justify-content: center;
+    transform: translateZ(0);
 
     span {
       font-size: 26px;
@@ -2436,6 +2439,7 @@ watch(showFullPlay, (val) => {
       align-items: center;
       justify-content: center;
       position: relative;
+      transform: translateZ(0);
 
       .iconfont {
         font-size: 18px;
@@ -2484,7 +2488,7 @@ watch(showFullPlay, (val) => {
   /* 位置微调 */
   background: v-bind(volumePopupBg);
   /* 毛玻璃背景 */
-  backdrop-filter: blur(60px);
+  backdrop-filter: blur(15px);
   border-radius: 8px;
   padding: 15px 10px;
   width: 40px;

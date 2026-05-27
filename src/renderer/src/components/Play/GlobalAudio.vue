@@ -15,6 +15,7 @@ import { useAudioEffectsStore } from '@renderer/store/AudioEffects'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
+import { isPageIdle } from '@renderer/utils/idleSleep'
 import { crossfadeState } from '@renderer/utils/audio/crossfade'
 
 type AudioSlot = 'A' | 'B'
@@ -89,6 +90,9 @@ onMounted(() => {
   audioOutputStore.init()
 
   applyToBoth()
+
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('ceru-wake', onVisibilityChange)
 
   const activeEl = audioStore.Audio.audio
   if (activeEl) {
@@ -177,6 +181,11 @@ watch(
       }
       return
     }
+    // 如果元素刚被清空（readyState === HAVE_NOTHING）且已有有效 src，
+    // 说明 playSong/setUrl 已启动加载，跳过避免干扰
+    if (a.readyState === HTMLMediaElement.HAVE_NOTHING && a.src) {
+      return
+    }
     try {
       a.pause()
     } catch {}
@@ -203,6 +212,11 @@ watch(
           b.load()
         } catch {}
       }
+      return
+    }
+    // 如果元素刚被清空（readyState === HAVE_NOTHING）且已有有效 src，
+    // 说明加载已在进行中，跳过避免干扰
+    if (b.readyState === HTMLMediaElement.HAVE_NOTHING && b.src) {
       return
     }
     try {
@@ -286,15 +300,67 @@ const handlePlay = (slot: AudioSlot): void => {
 }
 
 let rafId: number | null = null
+
+/** 页面可见性变化或闲置结束时重启 rAF */
+const onVisibilityChange = () => {
+  if (!document.hidden && !isPageIdle() && audioStore.Audio.isPlay && rafId === null) {
+    startSetupInterval()
+  }
+}
+
+/** 检测是否有活跃的动态内容（频谱Canvas、WebGL着色器），决定是否使用高帧率 */
+const hasDynamicContent = (): boolean => {
+  return !!(
+    document.querySelector('.visualizer-canvas') ||
+    document.querySelector('.shader-background')
+  )
+}
+
+/** 安全取消 rAF / setTimeout */
+const safeCancelRaf = (id: number | null) => {
+  if (id === null) return
+  try { cancelAnimationFrame(id) } catch {}
+  try { clearTimeout(id) } catch {}
+}
+
+/** 进展更新节流：rAF 路径下也最多 100ms 刷新一次进度条 */
+let _lastProgressUpdate = 0
+const updateProgress = (el: HTMLAudioElement) => {
+  const now = performance.now()
+  if (now - _lastProgressUpdate < 100) return
+  _lastProgressUpdate = now
+  audioStore.publish('timeupdate')
+  audioStore.setCurrentTime(el.currentTime || 0)
+}
+
 const startSetupInterval = (): void => {
   if (rafId !== null) return
   const onFrame = () => {
+    // 页面隐藏时彻底停止（Chromium 会降级 rAF anyway）
+    if (document.hidden) {
+      rafId = null
+      return
+    }
     const activeEl = audioStore.Audio.audio
     if (activeEl && !activeEl.paused) {
-      audioStore.publish('timeupdate')
-      audioStore.setCurrentTime(activeEl.currentTime || 0)
+      updateProgress(activeEl)
     }
-    rafId = requestAnimationFrame(onFrame)
+    // 帧率策略：
+    // - 有动态内容（频谱/WebGL）→ requestAnimationFrame（~60fps），
+    //   但 progress 已由 updateProgress 节流到 ~10fps，不影响进度条
+    // - 无动态内容 → 10fps (100ms)
+    // - 闲置状态 → 4fps (250ms) 但不彻底停止，保证进度条持续更新
+    if (hasDynamicContent()) {
+      rafId = requestAnimationFrame(onFrame)
+    } else if (isPageIdle()) {
+      rafId = window.setTimeout(() => {
+        rafId = requestAnimationFrame(onFrame)
+      }, 250) as unknown as number
+    } else {
+      rafId = window.setTimeout(() => {
+        rafId = requestAnimationFrame(onFrame)
+      }, 100) as unknown as number
+    }
   }
   rafId = requestAnimationFrame(onFrame)
 }
@@ -305,12 +371,8 @@ const handlePause = (slot: AudioSlot): void => {
   // 只可能是用户主动暂停新歌，应正常更新 UI
   audioStore.Audio.isPlay = false
   audioStore.publish('pause')
-  if (rafId !== null) {
-    try {
-      cancelAnimationFrame(rafId)
-    } catch {}
-    rafId = null
-  }
+  safeCancelRaf(rafId)
+  rafId = null
 }
 
 const handleError = (slot: AudioSlot, event: Event): void => {
@@ -341,12 +403,10 @@ onUnmounted(() => {
   try {
     window.api.pingService.stop()
   } catch {}
-  if (rafId !== null) {
-    try {
-      cancelAnimationFrame(rafId)
-    } catch {}
-    rafId = null
-  }
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  window.removeEventListener('ceru-wake', onVisibilityChange)
+  safeCancelRaf(rafId)
+  rafId = null
   for (const el of [audioARef.value, audioBRef.value]) {
     if (!el) continue
     try {

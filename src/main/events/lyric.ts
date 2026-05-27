@@ -61,6 +61,9 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
     lyricStore.set({ isOpen: !!val })
     lyricOpenState = !!val
     mainWin?.webContents.send('desktop-lyric-open-change', !!val)
+    // 注意：不在这里控制 menuBarLyric（状态栏歌词），
+    // 两者独立——用户可能只想隐藏桌面窗口但保留状态栏显示歌词。
+    // 状态栏歌词仅通过 set-mac-status-bar-lyric-enabled IPC 控制。
 
     const lyricWin = val ? ensureLyricWin() : getLyricWin()
     if (!lyricWin || lyricWin.isDestroyed() || lyricWin.webContents.isDestroyed()) return
@@ -69,7 +72,8 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
       lyricWin.show()
       lyricWin.setAlwaysOnTop(true, 'screen-saver')
     } else {
-      lyricWin.hide()
+      lyricWin.destroy()
+      return // 窗口已销毁，不再发 IPC
     }
     lyricWin.webContents.send('desktop-lyric-open-change', !!val)
   })
@@ -213,7 +217,7 @@ const initLyricIpc = (mainWin?: BrowserWindow | null): void => {
   // 关闭桌面歌词
   ipcMain.on('closeDesktopLyric', () => {
     const lyricWin = getLyricWin()
-    lyricWin?.hide()
+    lyricWin?.destroy()
     lyricOpenState = false
     lyricStore.set({ isOpen: lyricOpenState })
     mainWin?.webContents.send('closeDesktopLyric')

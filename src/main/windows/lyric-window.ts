@@ -66,6 +66,16 @@ class LyricWindow {
     })
     this.win?.on('closed', () => {
       this.win = null
+      // 通知主窗口状态变更（用户通过 OS 关闭按钮关闭时，closeDesktopLyric IPC 不会触发）
+      try {
+        const { BrowserWindow } = require('electron')
+        const wins = BrowserWindow.getAllWindows()
+        const mainWin = wins.find(w => !w.isDestroyed() && w.webContents && !w.webContents.isDestroyed())
+        if (mainWin) {
+          mainWin.webContents.send('desktop-lyric-open-change', false)
+          mainWin.webContents.send('closeDesktopLyric')
+        }
+      } catch {}
     })
   }
   /**
@@ -103,8 +113,6 @@ class LyricWindow {
       fullscreenable: false
     })
     if (!this.win) return null
-    // 禁用背景节流，防止后台时歌词更新延迟
-    this.win.webContents.setBackgroundThrottling(false)
     // 加载地址（开发环境用项目根目录，生产用打包后的相对路径）
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/#/desktop-lyric`)

@@ -29,8 +29,7 @@ export const createWindow = (
         nodeIntegration: true,
         nodeIntegrationInWorker: true,
         // 关闭上下文隔离，确保在窗口中注入 window.electron
-        contextIsolation: false,
-        backgroundThrottling: false
+        contextIsolation: false
       }
     }
     // 合并参数

@@ -11,6 +11,7 @@ import AudioManager from './audioManager'
 import mediaSessionController from './useSmtc'
 import defaultCoverImg from '/default-cover.png'
 import type { SongList } from '@renderer/types/audio'
+import { isPageIdle } from '@renderer/utils/idleSleep'
 
 type GetNextSong = () => SongList | null | Promise<SongList | null>
 
@@ -150,6 +151,9 @@ const startRmsWatch = () => {
 
   _rmsInterval = setInterval(() => {
     try {
+      // 页面隐藏或闲置时暂停采样
+      if (document.hidden || isPageIdle()) return
+
       analyser.getByteTimeDomainData(buf)
       let sum = 0
       for (let i = 0; i < buf.length; i++) {
@@ -434,33 +438,40 @@ const beginCrossfade = async () => {
     return
   }
 
-  // 3. 计算过渡时长
-  const remaining = audioStore.Audio.duration - audioStore.Audio.currentTime
-  const fadeTime = Math.min(MAX_FADE_TIME, Math.max(MIN_FADE_TIME, remaining - FADE_SAFETY_MARGIN))
+  // 3. 三段式过渡：淡出 → 停顿 → 淡入
+  // 固定时长 — 淡出 1.5s，停顿 700ms，淡入 1.5s
+  const FADE_OUT_DUR = 1.5
+  const GAP_DUR = 0.7
+  const FADE_IN_DUR = 1.5
+  const TOTAL_DUR = FADE_OUT_DUR + GAP_DUR + FADE_IN_DUR
 
   // 4. 启动 gain 包络 + 低通扫频
+  // Phase 1: 老歌淡出 1→0
   try {
-    gP.gain.setValueCurveAtTime(cosCurve, ctxP.currentTime, fadeTime)
+    gP.gain.setValueCurveAtTime(cosCurve, ctxP.currentTime, FADE_OUT_DUR)
   } catch (e) {
-    // 某些浏览器对 setValueCurveAtTime 的参数有严格要求；退回线性 ramp
     try {
       gP.gain.cancelScheduledValues(0)
       gP.gain.setValueAtTime(1, ctxP.currentTime)
-      gP.gain.linearRampToValueAtTime(0, ctxP.currentTime + fadeTime)
+      gP.gain.linearRampToValueAtTime(0, ctxP.currentTime + FADE_OUT_DUR)
     } catch {}
   }
+  // Phase 2 & 3: 停顿 GAP_DUR 秒后新歌淡入 0→1
+  const fadeInStart = ctxS.currentTime + FADE_OUT_DUR + GAP_DUR
   try {
-    gS.gain.setValueCurveAtTime(sinCurve, ctxS.currentTime, fadeTime)
+    gS.gain.setValueAtTime(0, ctxS.currentTime)
+    gS.gain.setValueCurveAtTime(sinCurve, fadeInStart, FADE_IN_DUR)
   } catch (e) {
     try {
       gS.gain.cancelScheduledValues(0)
       gS.gain.setValueAtTime(0, ctxS.currentTime)
-      gS.gain.linearRampToValueAtTime(1, ctxS.currentTime + fadeTime)
+      gS.gain.linearRampToValueAtTime(1, fadeInStart + FADE_IN_DUR)
     } catch {}
   }
+  // 老歌低通扫频（在淡出期间完成）
   try {
     lpP.frequency.setValueAtTime(22050, ctxP.currentTime)
-    lpP.frequency.linearRampToValueAtTime(900, ctxP.currentTime + fadeTime)
+    lpP.frequency.linearRampToValueAtTime(900, ctxP.currentTime + FADE_OUT_DUR)
   } catch {}
 
   crossfadeState.active = true
@@ -504,9 +515,9 @@ const beginCrossfade = async () => {
     })
   } catch {}
 
-  // 在新歌开头打上淡入标记：0 ~ fadeTime 秒
-  // 淡入完成后再保留 8 秒，让用户看到"这里是淡入段"
-  crossfadeState.fadeInMarkEnd = fadeTime
+  // 在新歌开头打上淡入标记（实际淡入区间在 FADE_OUT_DUR+GAP_DUR 之后，
+  // 但标记从 0 开始以便 UI 显示"开头为淡入段"）
+  crossfadeState.fadeInMarkEnd = FADE_IN_DUR
   if (_fadeInClearTimer !== null) {
     clearTimeout(_fadeInClearTimer)
   }
@@ -515,21 +526,23 @@ const beginCrossfade = async () => {
       crossfadeState.fadeInMarkEnd = 0
       _fadeInClearTimer = null
     },
-    (fadeTime + 8) * 1000
+    (FADE_IN_DUR + 8) * 1000
   )
 
   _completeTimer = setTimeout(
     () => {
       completeCrossfade(nextSong)
     },
-    fadeTime * 1000 + 50
+    TOTAL_DUR * 1000 + 50
   )
 
   // 日志
   console.log('[crossfade] begin', {
-    fadeTime,
-    nextSong: nextSong.name,
-    remaining
+    fadeOut: FADE_OUT_DUR,
+    gap: GAP_DUR,
+    fadeIn: FADE_IN_DUR,
+    total: TOTAL_DUR,
+    nextSong: nextSong.name
   })
 
   // 避免 unused 警告

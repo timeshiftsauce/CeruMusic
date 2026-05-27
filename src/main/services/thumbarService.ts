@@ -359,7 +359,7 @@ class ThumbarService {
           tooltip: isPlaying ? '暂停' : '播放',
           icon: isPlaying ? this.icons.pause : this.icons.play,
           flags: enabled,
-          click: () => this.send('music-control')
+          click: () => this.send('toggle')
         },
         {
           tooltip: '下一首',

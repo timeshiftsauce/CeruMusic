@@ -75,13 +75,14 @@ const colors = ['#ff3b3b', '#ffd65a', '#ff7a00', '#ff2d55', '#ffe08a', '#fa383e'
 const resizeCanvas = () => {
   if (!fwCanvas || !festivalOverlay.value) return
   const rect = festivalOverlay.value.getBoundingClientRect()
-  fwCanvas.width = Math.floor(rect.width * window.devicePixelRatio)
-  fwCanvas.height = Math.floor(rect.height * window.devicePixelRatio)
+  const dpr = Math.min(window.devicePixelRatio, 2)
+  fwCanvas.width = Math.floor(rect.width * dpr)
+  fwCanvas.height = Math.floor(rect.height * dpr)
 }
 
 const addBurst = (x: number, y: number) => {
   const c = pick(colors)
-  const count = Math.floor(rnd(40, 80))
+  const count = Math.floor(rnd(20, 40))
   for (let i = 0; i < count; i++) {
     const angle = rnd(0, Math.PI * 2)
     const speed = rnd(2, 6)
@@ -96,8 +97,8 @@ const addBurst = (x: number, y: number) => {
       size: rnd(1, 2.8)
     })
   }
-  if (particles.length > 2000) {
-    particles.splice(0, particles.length - 2000)
+  if (particles.length > 1000) {
+    particles.splice(0, particles.length - 1000)
   }
 }
 
@@ -173,8 +174,8 @@ const startFireworks = () => {
     const cw = fwCanvas.width
     const ch = fwCanvas.height
     scheduleBursts(cw, ch)
-  }, 2200)
-  window.setTimeout(() => stopFireworks(), 14000)
+  }, 3500)
+  window.setTimeout(() => stopFireworks(), 10000)
 }
 
 const stopFireworks = () => {
@@ -795,21 +796,25 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 // --- 后台暂停动画逻辑 Start ---
-const isAppActive = ref(!document.hidden)
+// 注意：window 最小化/隐藏时 document.hidden 始终为 false（因为启用了
+// backgroundThrottling: false 以保证托盘播放正常工作），所以改用
+// blur/focus 事件检测窗口是否被最小化/遮盖来暂停/恢复动画。
+const isAppActive = ref(document.hasFocus())
 
-const handleVisibilityChange = () => {
-  isAppActive.value = !document.hidden
-  if (document.hidden) {
-    bgRef.value?.pause()
-  } else {
-    bgRef.value?.resume()
-  }
+const handleBlur = () => {
+  isAppActive.value = false
+  // 页面不可见，暂停所有动画渲染
+  bgRef.value?.pause()
+  stopFireworks()
 }
 
-const handleWindowFocus = () => {
-  isAppActive.value = !document.hidden
+const handleFocus = () => {
+  isAppActive.value = true
   if (!document.hidden) {
     bgRef.value?.resume()
+    if (props.show && showFestivalEffects.value && !running) {
+      startFireworks()
+    }
   }
 }
 // --- 后台暂停动画逻辑 End ---
@@ -821,9 +826,8 @@ onMounted(() => {
   window.addEventListener('resize', debouncedCheckOverflow)
   document.addEventListener('click', handleClickOutside)
   window.addEventListener('keydown', handleKeyDown)
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  // window.addEventListener('blur', handleWindowBlur)
-  window.addEventListener('focus', handleWindowFocus)
+  window.addEventListener('blur', handleBlur)
+  window.addEventListener('focus', handleFocus)
   // 初始检查
   setTimeout(checkOverflow, 500)
 })
@@ -832,25 +836,25 @@ onUnmounted(() => {
   window.removeEventListener('resize', debouncedCheckOverflow)
   document.removeEventListener('click', handleClickOutside)
   window.removeEventListener('keydown', handleKeyDown)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  // window.removeEventListener('blur', handleWindowBlur)
-  window.removeEventListener('focus', handleWindowFocus)
+  window.removeEventListener('blur', handleBlur)
+  window.removeEventListener('focus', handleFocus)
 })
 // removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---
 </script>
 
 <template>
-  <div
-    class="full-play"
-    :class="{
-      active: props.show,
-      'use-black-text': useBlackText,
-      idle: isIdle,
-      animating: isAnimating
-    }"
-  >
-    <!-- 兜底渐变背景：双层交替淡入，由封面取色生成；切歌时颜色平滑过渡 -->
+  <Transition name="fullplay-slide">
+    <div
+      v-if="props.show"
+      class="full-play"
+      :class="{
+        'use-black-text': useBlackText,
+        idle: isIdle,
+        'page-hidden': !isAppActive
+      }"
+    >
+      <!-- 兜底渐变背景：双层交替淡入，由封面取色生成；切歌时颜色平滑过渡 -->
     <div
       class="bg-fallback bg-fallback-a"
       :class="{ active: activeLayer === 'A' }"
@@ -1051,6 +1055,7 @@ onUnmounted(() => {
     <!-- 一起听弹幕层 —— 房间内自动激活,房外什么都不渲染 -->
     <LtDanmakuLayer />
   </div>
+</Transition>
 </template>
 
 <style lang="scss" scoped>
@@ -1158,40 +1163,6 @@ onUnmounted(() => {
   mix-blend-mode: overlay;
 }
 
-/* FullPlay 显示时才让兜底背景进入 GPU 合成层并跑动画
- * 否则 will-change + 永动 animation 会让独显在背景持续上传/合成,
- * 阻塞同时间发生的封面图 GPU 上传与列表滚动重绘。 */
-.full-play.active .bg-fallback {
-  will-change: opacity, transform;
-}
-.full-play.active .bg-fallback.active {
-  animation: bg-breath 22s ease-in-out infinite alternate;
-}
-.full-play.active .bg-fallback.active::after {
-  animation: bg-spin 36s linear infinite;
-  will-change: transform;
-}
-
-@keyframes bg-breath {
-  0% {
-    transform: scale(1.06) translate3d(-1%, -1%, 0);
-  }
-  50% {
-    transform: scale(1.12) translate3d(2%, 1%, 0);
-  }
-  100% {
-    transform: scale(1.08) translate3d(-1%, 2%, 0);
-  }
-}
-@keyframes bg-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* PIXI 背景层：仅全屏激活后淡入显示 */
 .bg-render {
   position: absolute;
@@ -1212,26 +1183,33 @@ onUnmounted(() => {
   --text-color: rgba(255, 255, 255, 0.9);
   z-index: 120;
   position: fixed;
-  // transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
-  top: var(--height);
+  top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
   color: var(--text-color);
-  overflow: hidden; /* 裁掉未全屏时 bg-fallback 的 blur 光晕外溢到主内容区 */
-
-  &.animating {
-    transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
-  }
+  overflow: hidden; /* 裁掉 bg-fallback 的 blur 光晕外溢到主内容区 */
 
   &.use-black-text {
     --text-color: rgba(255, 255, 255, 0.9);
   }
+}
 
-  &.active {
-    top: 0;
-  }
+/* Vue Transition: 滑入/滑出全屏播放器 */
+.fullplay-slide-enter-active {
+  transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
+}
+.fullplay-slide-enter-from {
+  top: var(--height);
+}
+.fullplay-slide-leave-active {
+  transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
+}
+.fullplay-slide-leave-to {
+  top: var(--height);
+}
 
+.full-play {
   &.idle {
     .playbox {
       cursor: none;
@@ -1269,7 +1247,6 @@ onUnmounted(() => {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.256);
-    -webkit-drop-filter: blur(80px);
     padding: 0 10vw;
     -webkit-drop-filter: blur(80px);
     overflow: hidden;
@@ -1725,7 +1702,7 @@ onUnmounted(() => {
   right: 20px;
   bottom: calc(var(--bottom-height) + var(--play-bottom-height));
   .skin-btn {
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(15px);
     background: rgba(255, 255, 255, 0.15);
     // box-shadow:
     //   0 8px 32px 0 rgba(0, 0, 0, 0.1),
@@ -1851,6 +1828,33 @@ onUnmounted(() => {
   100% {
     opacity: 0.05;
     transform: rotate(360deg);
+  }
+}
+
+/* 页面隐藏时激进的 GPU 降级：窗口最小化/后台时无人可见，停止一切昂贵的渲染操作 */
+.full-play.page-hidden {
+  /* 暂停所有 CSS 动画 */
+  .cd-container,
+  .vinyl-record::after,
+  .label-shine,
+  .text-scroll-wrapper.animate-scroll {
+    animation-play-state: paused !important;
+  }
+  /* 移除最昂贵的全屏 drop-filter (blur 80px)，这是 #1 GPU 消耗 */
+  .playbox {
+    -webkit-drop-filter: none;
+  }
+  /* 移除黑胶唱片阴影滤镜 */
+  .cd-container {
+    filter: none !important;
+  }
+  /* 移除可视化模糊 */
+  .audio-visualizer-container {
+    filter: none;
+  }
+  /* 背面渐变切换瞬间完成 */
+  .bg-fallback {
+    transition-duration: 0s !important;
   }
 }
 </style>

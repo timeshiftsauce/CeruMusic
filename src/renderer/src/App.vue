@@ -24,6 +24,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
 import shareAPI from '@renderer/api/share'
+import { initIdleSleep, destroyIdleSleep } from './utils/idleSleep'
 
 const route = useRoute()
 const router = useRouter()
@@ -205,6 +206,17 @@ onMounted(async () => {
   if (window.api?.windowClose?.onRequest) {
     unsubCloseRequest = window.api.windowClose.onRequest(() => handleWindowCloseRequest())
   }
+
+  // 启动页面闲置休眠监听
+  initIdleSleep()
+
+  // 窗口隐藏时冻结 CSS 动画/过渡，降低 GPU 开销
+  const onVisibility = () => {
+    document.body.classList.toggle('window-hidden', document.hidden)
+  }
+  document.addEventListener('visibilitychange', onVisibility)
+  // 保存引用以便卸载时清理
+  ;(window as any).__ceruVisibilityHandler = onVisibility
 })
 
 onBeforeUnmount(() => {
@@ -214,5 +226,34 @@ onBeforeUnmount(() => {
   unsubPlaylistShareOpen = null
   unsubCloseRequest?.()
   unsubCloseRequest = null
+
+  // 销毁闲置休眠监听
+  destroyIdleSleep()
+
+  // 清理可见性监听
+  const h = (window as any).__ceruVisibilityHandler
+  if (h) {
+    document.removeEventListener('visibilitychange', h)
+    ;(window as any).__ceruVisibilityHandler = null
+  }
 })
 </script>
+
+<style scoped>
+/* 窗口隐藏/最小化时，冻结所有 CSS 动画和过渡，降低 GPU 开销 */
+:global(body.window-hidden),
+:global(body.window-hidden) * {
+  animation-play-state: paused !important;
+  transition-duration: 0s !important;
+}
+</style>
+
+<!-- 非 scoped 全局样式：窗口隐藏时降低 backdrop-filter 开销 -->
+<style>
+body.window-hidden {
+  --player-blur: 0px;
+}
+body {
+  --player-blur: 15px;
+}
+</style>

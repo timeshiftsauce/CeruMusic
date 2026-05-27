@@ -787,6 +787,20 @@ const toggleLyricLock = async () => {
 //   window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', isLock)
 // }
 
+/** 窗口不可见时暂停 rAF，恢复时校正时间戳同步 */
+const handleVisibilityChange = (): void => {
+  if (document.hidden) {
+    baseMs = playSeekMs.value
+    pauseSeek()
+  } else {
+    baseMs = playSeekMs.value
+    anchorTick = performance.now()
+    if (lyricData.playStatus) {
+      resumeSeek()
+    }
+  }
+}
+
 onMounted(() => {
   window.electron?.ipcRenderer?.on?.(
     'play-song-change',
@@ -896,6 +910,7 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerDown)
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseleave', handleMouseLeave)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   // 通知主进程：桌面歌词窗口已准备就绪，便于主窗口侧补发快照
   window.electron?.ipcRenderer?.send?.('lyric-window-ready')
 })
@@ -905,6 +920,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocPointerDown)
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseleave', handleMouseLeave)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (dragState.isDragging) onDocPointerUp()
 })
 </script>

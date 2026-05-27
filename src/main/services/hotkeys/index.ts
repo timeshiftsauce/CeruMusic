@@ -48,6 +48,7 @@ let lastStatus: HotkeyStatus = { failedActions: [], actionErrors: {} }
 const actionCallbacks = (mainWindow: BrowserWindow) => {
   const sendCtrl = (name: string, val?: unknown) => {
     if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+    // backgroundThrottling: false 已在 webPreferences 中设置，直接发送即可
     mainWindow.webContents.send(name, val)
   }
 
@@ -202,5 +203,27 @@ export function initHotkeyService(mainWindow: BrowserWindow) {
       }
     }
     setTimeout(run, delay)
+  }
+
+  // 注册系统媒体键（始终启用，不由用户热键配置控制）
+  // 当窗口隐藏时 Media Session API 可能不转发事件，全局快捷键确保始终可用
+  const sendMediaCtrl = (name: string, val?: unknown) => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+    mainWindow.webContents.send(name, val)
+  }
+  const mediaKeys: Array<[string, () => void]> = [
+    ['MediaPlayPause', () => sendMediaCtrl('toggle')],
+    ['MediaNextTrack', () => sendMediaCtrl('playNext')],
+    ['MediaPreviousTrack', () => sendMediaCtrl('playPrev')],
+    ['MediaStop', () => sendMediaCtrl('pause')]
+  ]
+  for (const [key, cb] of mediaKeys) {
+    if (!globalShortcut.isRegistered(key)) {
+      try {
+        globalShortcut.register(key, cb)
+      } catch (e) {
+        console.warn(`[hotkeys] failed to register global shortcut ${key}:`, e)
+      }
+    }
   }
 }

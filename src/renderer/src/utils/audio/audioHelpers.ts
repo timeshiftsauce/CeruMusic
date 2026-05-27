@@ -41,6 +41,12 @@ export const waitForAudioReady = (audio: HTMLAudioElement): Promise<void> => {
       reject(new Error('音频元素未初始化'))
       return
     }
+    // 窗口隐藏时不等待 canplay（Chromium 可能挂起事件），立即放行让 play()
+    // 乐观执行；真正音频数据会在窗口可见后继续加载。
+    if (document.hidden) {
+      resolve()
+      return
+    }
     if (audio.readyState >= 3) {
       resolve()
       return

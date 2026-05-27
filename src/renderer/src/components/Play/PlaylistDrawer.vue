@@ -756,7 +756,7 @@ defineExpose({
     color 0.3s ease;
   background: rgba(255, 255, 255, 0.6);
   /* 默认白色毛玻璃 */
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(15px);
   box-shadow: -5px 0 25px rgba(0, 0, 0, 0.15);
   z-index: 9001;
   display: flex;

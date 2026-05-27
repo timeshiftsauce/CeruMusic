@@ -235,6 +235,19 @@ const getYrcFadeFactor = (index: number): number => {
 type CssVars = Record<`--${string}`, string>
 
 const getYrcVars = (wordData: LyricWord, lyricIndex: number): CssVars => {
+  // 窗口未聚焦（最小化/后台）时跳过所有 YRC 计算，返回静态值节省 CPU
+  if (!document.hasFocus()) {
+    return {
+      '--yrc-mask-x': '100%',
+      '--yrc-opacity': '1',
+      '--yrc-bright-alpha': '0.3',
+      '--yrc-dark-alpha': '0.3',
+      '--yrc-translate-y': '0.16em',
+      '--yrc-scale': '1',
+      '--yrc-anim-duration': '0.4s',
+      '--yrc-anim-ease': 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+    }
+  }
   const currentSeek = props.currentTime
   const fadeFactor = getYrcFadeFactor(lyricIndex)
   const duration = wordData.endTime - wordData.startTime

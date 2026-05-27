@@ -14,6 +14,7 @@ import {
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
 import { getHeartbeatRecommendation, clearHeartbeatCache } from './heartbeat'
+import AudioManager from './audioManager'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -42,7 +43,7 @@ let currentPlaybackErrorHandler: ((e: Event) => void) | null = null
 let currentPlaybackPlayingHandler: ((e: Event) => void) | null = null
 let currentPlayRequestId: number = 0
 
-const AUTO_NEXT_DELAY_MS = 1500
+const AUTO_NEXT_DELAY_MS = 0
 let pendingAutoNextTimer: ReturnType<typeof setTimeout> | null = null
 let pendingAutoNextToken = 0
 
@@ -55,6 +56,9 @@ const _throttleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const _disabledPlugins = new Set<string>()
 let _unsubscribeThrottle: (() => void) | null = null
 let _unsubscribeDisabled: (() => void) | null = null
+
+// 预加载 URL 缓存：key = `${source}:${songmid}`，playSong 消费后立即删除
+const _prefetchedUrlCache = new Map<string, string>()
 
 function _isThrottled(): boolean {
   const pluginId = localUserStore.userSource.pluginId
@@ -164,7 +168,7 @@ const handlePause = async () => {
     return
   }
   const a = Audio.value.audio
-  if (Audio.value.url && a && !a.paused) {
+  if (Audio.value.url && a && Audio.value.isPlay) {
     const stopResult = stop()
     if (stopResult && typeof (stopResult as any).then === 'function') {
       await stopResult
@@ -199,8 +203,7 @@ const togglePlayPause = async () => {
     }
     return
   }
-  const a = Audio.value.audio
-  const isActuallyPlaying = a ? !a.paused : Audio.value.isPlay
+  const isActuallyPlaying = Audio.value.isPlay
   if (isActuallyPlaying) {
     await handlePause()
   } else {
@@ -354,17 +357,25 @@ const playSong = async (
     // 注意：SMTC 的 updateMetadata 会在音频准备好后再调用，避免切换时空隙
 
     let urlToPlay = ''
-    // let usedAutoSwitch = false
-    try {
-      urlToPlay = await getSongRealUrl(toRaw(song))
-    } catch (error: any) {
-      // 检查是否已过期
-      if (currentPlayRequestId !== requestId) return
-
-      console.warn('Original source failed, trying auto switch...', error)
+    // 检查预加载缓存
+    const _cacheKey = `${song.source}:${song.songmid}`
+    const _cachedUrl = _prefetchedUrlCache.get(_cacheKey)
+    if (_cachedUrl) {
+      _prefetchedUrlCache.delete(_cacheKey)
+      urlToPlay = _cachedUrl
+    }
+    if (!urlToPlay) {
       try {
-        throw new Error('Force switch')
-      } catch (switchError) {}
+        urlToPlay = await getSongRealUrl(toRaw(song))
+      } catch (error: any) {
+        // 检查是否已过期
+        if (currentPlayRequestId !== requestId) return
+
+        console.warn('Original source failed, trying auto switch...', error)
+        try {
+          throw new Error('Force switch')
+        } catch (switchError) {}
+      }
     }
 
     // 再次检查请求ID
@@ -401,9 +412,8 @@ const playSong = async (
               try {
                 a.pause()
               } catch {}
-              a.removeAttribute('src')
+              a.src = url
               a.load()
-
               try {
                 await waitForAudioReady(Audio.value.audio)
                 if (currentPlayRequestId !== requestId) return // 等待期间可能切歌
@@ -452,7 +462,7 @@ const playSong = async (
         try {
           a.pause()
         } catch {}
-        a.removeAttribute('src')
+        a.src = urlToPlay
         a.load()
       }
       setUrl(urlToPlay)
@@ -486,7 +496,12 @@ const playSong = async (
 
               setUrl(url)
               if (Audio.value.audio) {
-                Audio.value.audio.load()
+                const a = Audio.value.audio
+                try {
+                  a.pause()
+                } catch {}
+                a.src = url
+                a.load()
                 try {
                   await waitForAudioReady(Audio.value.audio)
                   if (currentPlayRequestId !== requestId) return
@@ -539,6 +554,8 @@ const playSong = async (
       mediaSessionController.updatePlaybackState('paused')
       return
     }
+    // 音频即将播放前尝试恢复 AudioContext，避免后台挂起导致无声
+    Audio.value.audio && AudioManager.resumeContext(Audio.value.audio)
     start()
       .catch(async () => {
         if (currentPlayRequestId !== requestId) return
@@ -548,6 +565,8 @@ const playSong = async (
         if (currentPlayRequestId !== requestId) return
         autoNextCount.value = 0
       })
+    // 启动后预加载下一首到副槽（无感过渡准备），失败静默忽略
+    void prefetchNextTrack()
 
     // 只有在确定是当前请求时，才挂载错误监听
     if (Audio.value.audio) {
@@ -912,6 +931,42 @@ const getNextSong = async (): Promise<SongList | null> => {
   })
 }
 
+/**
+ * 当前歌曲启动后，预加载下一首到副槽（双槽音频架构的无缝切换）。
+ * - 单曲模式（SINGLE）不预加载
+ * - 随机模式（RANDOM）取随机下一首
+ * - URL 获取失败或异常时静默忽略，切歌时按正常流程重新加载
+ */
+const prefetchNextTrack = async (): Promise<void> => {
+  if (playMode.value === PlayMode.SINGLE) return
+  if (list.value.length === 0) return
+  try {
+    const nextSong = await resolveNextSong({
+      respectSingleMode: true,
+      rebuildShuffleOnWrap: false
+    })
+    if (!nextSong) return
+    const url = await getSongRealUrl(toRaw(nextSong))
+    if (url && typeof url === 'string' && !url.includes('error')) {
+      controlAudio.setSecondaryUrl(url)
+      // 实际触发副槽 audio 元素开始缓冲音频流（不只是存 URL 字符串）
+      const secEl = controlAudio.getSecondaryEl()
+      if (secEl) {
+        secEl.preload = 'auto'
+        secEl.volume = 0 // 防止预加载时音频泄漏
+        // setSecondaryUrl 已通过 Vue :src 设置 audio.src，
+        // 再调用 .load() 确保浏览器立即开始获取资源
+        secEl.load()
+      }
+      // 写入缓存供 playSong 复用，避免切歌时重复走网络请求
+      const key = `${nextSong.source}:${nextSong.songmid}`
+      _prefetchedUrlCache.set(key, url)
+    }
+  } catch {
+    // 预加载失败静默忽略，切歌时重新正常加载
+  }
+}
+
 const playPrevious = async () => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
@@ -1123,6 +1178,9 @@ const onGlobalCtrl = (e: any) => {
   }
 }
 
+// 模块顶层注册，确保在 Provider.vue 挂载前就能响应状态栏/托盘控制事件
+window.addEventListener('global-music-control', onGlobalCtrl)
+
 const initPlayback = async () => {
   if (playbackInstalled) return
   playbackInstalled = true
@@ -1251,7 +1309,6 @@ const initPlayback = async () => {
     heartbeatSongPlayedMs = 0
   }
 }
-window.addEventListener('global-music-control', onGlobalCtrl)
 
 const uninstallPlayback = () => {
   if (!playbackInstalled) return
