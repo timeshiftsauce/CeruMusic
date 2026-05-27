@@ -35,4 +35,8 @@ export interface UserInfo {
   selectQuality?: string
   sourceQualityMap?: Record<string, string>
   hasGuide?: boolean
+  /** 上次播放的实际音频 URL，用于零等待启动 */
+  cachedAudioUrl?: string
+  /** 上次关闭时是否在播放 */
+  wasPlaying?: boolean
 }

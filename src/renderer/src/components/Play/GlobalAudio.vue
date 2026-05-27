@@ -228,6 +228,16 @@ watch(
     } catch {}
   }
 )
+
+// 新歌开始加载时重置初始缓冲标记，防止 handleWaiting 在初始缓冲阶段乱跳
+watch(
+  () => audioStore.Audio.url,
+  () => {
+    _initialBuffering = true
+    _waitingSkipCount = 0
+  }
+)
+
 // 组件被激活时（从缓存中恢复）
 onActivated(() => {
   console.log('音频组件被激活')
@@ -258,7 +268,44 @@ onDeactivated(() => {
   playbackPosition = audioStore.Audio.currentTime
 })
 
-// ---- 事件处理（带 slot 过滤） ----
+// --- 缓冲卡顿跳跃恢复（落雪风格） ---
+// 当音频卡在 waiting 状态（buffer underrun）时，尝试向前跳 3-6 秒绕过卡顿区
+let _waitingSkipCount = 0
+let _initialBuffering = true // 初始缓冲阶段不做跳跃，避免切歌后从 0 跳到 6-8 秒
+const MAX_WAITING_SKIPS = 3
+const handleWaiting = (slot: AudioSlot): void => {
+  if (!isPrimarySlot(slot)) return
+  // 初始缓冲阶段（新歌刚加载还没真正开始播）不做跳跃，让浏览器自然缓冲
+  if (_initialBuffering) {
+    console.log('Buffer underrun during initial buffering, waiting for playback to start naturally')
+    return
+  }
+  const el = slot === 'A' ? audioARef.value : audioBRef.value
+  if (!el || el.paused) return
+  if (_waitingSkipCount >= MAX_WAITING_SKIPS) {
+    _waitingSkipCount = 0
+    // 跳了多次还卡着，触发 ended 走自动切歌
+    console.warn(`Buffer underrun recovery failed after ${MAX_WAITING_SKIPS} skips, auto advance`)
+    handleEnded(slot)
+    return
+  }
+  _waitingSkipCount++
+  // 随机向前跳 3-6 秒，跳过卡顿区域
+  const skipAmount = 3 + Math.floor(Math.random() * 4) // 3-6 秒
+  const targetTime = Math.min(el.currentTime + skipAmount, (el.duration || Infinity) - 1)
+  console.log(`Buffer underrun: skipping forward ${skipAmount}s to ${targetTime.toFixed(1)}s`)
+  el.currentTime = targetTime
+  audioStore.setCurrentTime(targetTime)
+}
+// 播放正常恢复时重置 waiting 计数器
+const resetWaitingSkip = (slot: AudioSlot): void => {
+  if (!isPrimarySlot(slot)) return
+  _waitingSkipCount = 0
+  // 收到 playing 事件说明初始缓冲已完成，允许后续 buffer underrun 跳跃
+  if (_initialBuffering) {
+    _initialBuffering = false
+  }
+}
 
 const forward = (name: string, val?: any) => {
   console.log('forward', name, val)
@@ -430,6 +477,8 @@ onUnmounted(() => {
       preload="auto"
       :src="audioStore.Audio.srcA"
       @seeked="handleSeeked('A')"
+      @waiting="handleWaiting('A')"
+      @playing="resetWaitingSkip('A')"
       @play="handlePlay('A')"
       @pause="handlePause('A')"
       @error="handleError('A', $event)"
@@ -444,6 +493,8 @@ onUnmounted(() => {
       preload="auto"
       :src="audioStore.Audio.srcB"
       @seeked="handleSeeked('B')"
+      @waiting="handleWaiting('B')"
+      @playing="resetWaitingSkip('B')"
       @play="handlePlay('B')"
       @pause="handlePause('B')"
       @error="handleError('B', $event)"

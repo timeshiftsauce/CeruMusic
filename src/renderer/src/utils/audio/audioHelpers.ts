@@ -41,35 +41,9 @@ export const waitForAudioReady = (audio: HTMLAudioElement): Promise<void> => {
       reject(new Error('音频元素未初始化'))
       return
     }
-    // 窗口隐藏时不等待 canplay（Chromium 可能挂起事件），立即放行让 play()
-    // 乐观执行；真正音频数据会在窗口可见后继续加载。
-    if (document.hidden) {
-      resolve()
-      return
-    }
-    if (audio.readyState >= 3) {
-      resolve()
-      return
-    }
-    const timeout = setTimeout(() => {
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      reject(new Error('音频加载超时'))
-    }, 10000)
-    const onCanPlay = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      resolve()
-    }
-    const onError = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
-      reject(new Error('音频加载失败'))
-    }
-    audio.addEventListener('canplay', onCanPlay, { once: true })
-    audio.addEventListener('error', onError, { once: true })
+    // 落雪风格：不等待缓冲，设了 src 就立即放行。
+    // 如果播放卡顿由 waiting 事件处理（跳跃恢复策略）。
+    resolve()
   })
 }
 

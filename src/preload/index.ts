@@ -138,6 +138,8 @@ const api = {
   },
   // URL 缓存管理（持久化 CDN URL，避免重复 SDK 请求）
   musicUrlCache: {
+    get: (key: string) => ipcRenderer.invoke('music-url-cache:get', key),
+    set: (key: string, url: string) => ipcRenderer.invoke('music-url-cache:save', key, url),
     invalidate: (songId: string) => ipcRenderer.invoke('music-url-cache:invalidate', songId),
     clear: () => ipcRenderer.invoke('music-url-cache:clear')
   },

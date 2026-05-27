@@ -36,6 +36,8 @@ interface CustomAPI {
   }
 
   musicUrlCache: {
+    get: (key: string) => Promise<string | null>
+    set: (key: string, url: string) => Promise<{ success: boolean }>
     invalidate: (songId: string) => Promise<{ success: boolean }>
     clear: () => Promise<{ success: boolean }>
   }

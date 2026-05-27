@@ -40,8 +40,10 @@ function main(source: string = 'wy') {
         if (!pluginId || !usePlugin) return { error: '请配置音源来播放歌曲' }
 
         const currentSource = songInfo.source || source
-        // 生成歌曲唯一标识
-        const songId = `${songInfo.name}-${songInfo.singer}-${currentSource}-${quality}`
+        // 生成歌曲唯一标识：source_songmid(or hash)_quality
+        // songmid 是歌曲在对应源的稳定 ID，比 name+singer 更可靠
+        const songMid = songInfo.songmid || songInfo.hash || `${songInfo.name}_${songInfo.singer}`
+        const songId = `${currentSource}_${songMid}_${quality}`
 
         // 先检查 URL 字符串缓存（SQLite 持久化，避免重复 SDK 请求）
         if (isCache !== false) {

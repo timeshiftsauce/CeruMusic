@@ -238,6 +238,9 @@ export const ControlAudioStore = defineStore(
         Audio.srcB = trimmed
       }
       Audio.url = trimmed
+      // 切歌时立即清零进度，等新 audio 的 timeupdate 事件重新赋值
+      Audio.currentTime = 0
+      Audio.duration = 0
       console.log('音频URL已设置(slot', Audio.primarySlot, '):', Audio.url)
     }
 

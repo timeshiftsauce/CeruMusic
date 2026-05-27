@@ -3,6 +3,7 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { toRaw, h } from 'vue'
 import {
+  QUALITY_ORDER,
   getQualityDisplayName,
   buildQualityFormats,
   compareQuality,
@@ -39,8 +40,11 @@ export function createQualityDialog(
     }
 
     // 获取歌曲支持的音质列表
+    // 如果 types 为空（播放界面歌曲对象可能缺少 types 字段），回退到全部已知音质
     const availableQualities = buildQualityFormats(types)
-    const qualityOptions = [...availableQualities]
+    const qualityOptions = availableQualities.length > 0
+      ? [...availableQualities]
+      : QUALITY_ORDER.map(t => ({ type: t, size: '' }))
 
     // 按音质优先级排序（高→低）
     qualityOptions.sort((a, b) => compareQuality(a.type, b.type))
@@ -175,7 +179,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     const LocalUserDetail = LocalUserDetailStore()
     const userQuality =
       (LocalUserDetail.userInfo.sourceQualityMap || {})[toRaw(songInfo.source) as any] ||
-      (LocalUserDetail.userSource.quality as string)
+      (LocalUserDetail.userSource.quality as string) || '320k'
     const settingsStore = useSettingsStore()
 
     // 显示音质选择弹窗
