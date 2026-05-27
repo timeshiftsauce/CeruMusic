@@ -456,7 +456,7 @@ const draw = (ts?: number) => {
   }
   animationId = requestAnimationFrame(draw)
 
-  analyser.getByteFrequencyData(drawDataArray!)
+  analyser.getByteFrequencyData(drawDataArray! as Uint8Array<ArrayBuffer>)
 
   const width = canvasRef.value.width
   const height = canvasRef.value.height
