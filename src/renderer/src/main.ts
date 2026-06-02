@@ -1,6 +1,8 @@
 // 基础样式
 import './assets/base.css'
 import 'animate.css'
+import 'uno.css'
+import '@unocss/reset/tailwind-compat.css'
 // 引入iconfont图标样式
 import './assets/icon_font/iconfont.css'
 import './assets/icon_font/iconfont.js'

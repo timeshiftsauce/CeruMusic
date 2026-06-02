@@ -8,6 +8,7 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
+import UnoCSS from 'unocss/vite'
 export default defineConfig({
   main: {
     resolve: {
@@ -123,6 +124,7 @@ export default defineConfig({
       }
     },
     plugins: [
+      UnoCSS(),
       vue(),
       vueDevTools(),
       wasm(),
