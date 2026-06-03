@@ -84,18 +84,16 @@ const applyToBoth = () => {
 let wasPlaying = false
 let playbackPosition = 0
 
-onMounted(() => {
+onMounted(async () => {
   audioStore.init(audioARef.value || null, audioBRef.value || null)
-  audioOutputStore.init()
+  await audioOutputStore.init()
 
   applyToBoth()
 
   const activeEl = audioStore.Audio.audio
   if (activeEl) {
     // Apply saved audio output device
-    if (audioOutputStore.currentDeviceId !== 'default') {
-      AudioManager.setAudioOutputDevice(activeEl, audioOutputStore.currentDeviceId)
-    }
+    await audioOutputStore.applyDeviceToElement(activeEl)
 
     // Initial stats update
     const stats = AudioManager.getAudioContextStats(activeEl)

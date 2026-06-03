@@ -858,7 +858,9 @@ app.whenReady().then(async () => {
       if (!webContents || !isMainWindowWebContents(webContents)) {
         return false
       }
-      return hasMediaPermissionGrant(webContents.id)
+      // 允许设备枚举（enumerateDevices/getUserMedia）
+      // 对于系统音频采集，需要 prepareCapture 授权
+      return true
     }
     return true
   })
@@ -868,7 +870,7 @@ app.whenReady().then(async () => {
         callback(false)
         return
       }
-      callback(consumeMediaPermissionGrant(webContents.id))
+      callback(true)
       return
     }
     callback(true)

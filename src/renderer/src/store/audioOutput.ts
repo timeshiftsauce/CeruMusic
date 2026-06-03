@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import AudioManager from '@renderer/utils/audio/audioManager'
 
 export interface AudioOutputDevice {
   deviceId: string
@@ -32,6 +34,9 @@ export const useAudioOutputStore = defineStore(
     const primaryDeviceId = ref<string>('default')
     const secondaryDeviceId = ref<string>('')
     const activeABChannel = ref<'A' | 'B'>('A') // 'A' or 'B'
+
+    // 设备变化时暂停音乐（默认开启）
+    const pauseOnDeviceChange = ref<boolean>(false)
 
     const sortedDevices = computed(() => {
       return [...devices.value].sort((a, b) => {
@@ -141,17 +146,109 @@ export const useAudioOutputStore = defineStore(
       }
     }
 
-    const handleDeviceChange = () => {
-      console.log('Audio devices changed, rescanning...')
-      scanDevices()
+    // 参考 lx-music 的实现
+    let mediaStream: MediaStream | null = null
+    let prevDeviceLabel = ''
+
+    const getDevices = async () => {
+      const allDevices = await navigator.mediaDevices.enumerateDevices()
+      return allDevices.filter(({ kind }) => kind === 'audiooutput')
+    }
+
+    const getMediaDevice = async (deviceId: string) => {
+      const devs = await getDevices()
+      let device = devs.find((d) => d.deviceId === deviceId)
+      if (!device) {
+        deviceId = 'default'
+        device = devs.find((d) => d.deviceId === deviceId)
+      }
+      return device
+        ? { label: device.label, deviceId: device.deviceId }
+        : { label: '', deviceId: '' }
+    }
+
+    const handleDeviceChange = (label: string) => {
+      console.log('[AudioOutput] handleDeviceChange:', label, 'prev:', prevDeviceLabel)
+      if (label !== prevDeviceLabel) {
+        console.log('[AudioOutput] Device label changed!')
+
+        if (pauseOnDeviceChange.value) {
+          try {
+            const controlAudio = ControlAudioStore()
+            if (controlAudio.Audio.isPlay) {
+              controlAudio.stop()
+              // MessagePlugin.info('检测到音频设备变化，已暂停播放')
+            }
+          } catch (err) {
+            console.error('[AudioOutput] Failed to pause:', err)
+          }
+        }
+      }
+    }
+
+    const handleMediaListChange = async () => {
+      console.log('[AudioOutput] devicechange event fired')
+
+      // 重新获取权限（Electron 可能需要）
+      try {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach((track) => track.stop())
+        }
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (err) {
+        console.warn('[AudioOutput] Failed to refresh media permission:', err)
+      }
+
+      const device = await getMediaDevice(currentDeviceId.value)
+      handleDeviceChange(device.label)
+
+      if (device.deviceId === currentDeviceId.value) {
+        prevDeviceLabel = device.label
+      } else {
+        // 设备被移除，切换到默认
+        currentDeviceId.value = device.deviceId
+        prevDeviceLabel = device.label
+      }
+
+      // 重新扫描设备列表
+      await scanDevices()
     }
 
     // Initialize listener for device changes (hot-plugging)
-    const init = () => {
-      scanDevices()
-      // Ensure we don't duplicate listeners
-      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange)
-      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange)
+    const init = async () => {
+      console.log('[AudioOutput] Initializing...')
+
+      // 获取媒体权限
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        console.log('[AudioOutput] Media permission granted')
+      } catch (err) {
+        console.warn('[AudioOutput] Failed to get media permission:', err)
+      }
+
+      await scanDevices()
+
+      // 获取当前设备的 label
+      const device = await getMediaDevice(currentDeviceId.value)
+      prevDeviceLabel = device.label
+      console.log('[AudioOutput] Initial device label:', prevDeviceLabel)
+
+      // 注册 devicechange 事件
+      navigator.mediaDevices.removeEventListener('devicechange', handleMediaListChange)
+      navigator.mediaDevices.addEventListener('devicechange', handleMediaListChange)
+      console.log('[AudioOutput] devicechange listener registered')
+    }
+
+    // 设置音频输出设备（由 GlobalAudio 调用）
+    const applyDeviceToElement = async (audioElement: HTMLAudioElement) => {
+      if (currentDeviceId.value !== 'default' && audioElement) {
+        try {
+          await AudioManager.setAudioOutputDevice(audioElement, currentDeviceId.value)
+          console.log('[AudioOutput] Applied device to element:', currentDeviceId.value)
+        } catch (err) {
+          console.warn('[AudioOutput] Failed to apply device:', err)
+        }
+      }
     }
 
     const playTestSound = (deviceId: string) => {
@@ -204,17 +301,19 @@ export const useAudioOutputStore = defineStore(
       primaryDeviceId,
       secondaryDeviceId,
       activeABChannel,
+      pauseOnDeviceChange,
       scanDevices,
       setDevice,
       toggleAB,
       init,
       playTestSound,
-      simulateDevices
+      simulateDevices,
+      applyDeviceToElement
     }
   },
   {
     persist: {
-      paths: ['currentDeviceId', 'primaryDeviceId', 'secondaryDeviceId']
+      pick: ['currentDeviceId', 'primaryDeviceId', 'secondaryDeviceId', 'pauseOnDeviceChange']
     } as any
   }
 )
