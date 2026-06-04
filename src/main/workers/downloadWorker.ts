@@ -145,9 +145,15 @@ async function download(task: DownloadTask): Promise<any> {
   }
 
   if (fs.existsSync(filePath)) {
-    return {
-      message: '歌曲已存在'
+    const existingStats = await fsPromise.stat(filePath)
+    if (existingStats.size > 0) {
+      return {
+        message: '歌曲已存在',
+        path: filePath,
+        size: existingStats.size
+      }
     }
+    await fsPromise.unlink(filePath).catch(() => {})
   }
 
   fileLock[filePath] = true

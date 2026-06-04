@@ -3,10 +3,12 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { toRaw, h, ref } from 'vue'
 import { sourceLabel } from '@renderer/utils/sourceName'
-import { createSourceSwitchDialog } from '@renderer/utils/audio/audioHelpers'
+import { createSourceSwitchDialog, getCandidateSongs } from '@renderer/utils/audio/audioHelpers'
 import {
   getQualityDisplayName,
-  compareQuality
+  compareQuality,
+  calculateBestQuality,
+  QUALITY_ORDER
 } from '@common/utils/quality'
 import { getDownloadableQualityFormats } from '@renderer/utils/audio/qualityAvailability'
 
@@ -18,6 +20,7 @@ interface MusicItem {
   source: string
   interval: string
   songmid: number
+  hash?: string
   img: string
   lrc: null | string
   types: Array<string | { type: string; size?: string }>
@@ -348,6 +351,159 @@ export function createQualityDialog(
   })
 }
 
+const createBatchDownloadQualityDialog = (userQuality: string): Promise<string | null> =>
+  createQualityDialog(
+    QUALITY_ORDER.map((type) => ({ type, size: '' })),
+    userQuality,
+    '选择批量下载目标音质（逐首自动换源/降级）'
+  )
+
+const qualityTypes = (qualities: Array<string | { type: string; size?: string }>): string[] =>
+  qualities.map((item: any) => (typeof item === 'string' ? item : item?.type)).filter(Boolean)
+
+const buildDownloadTask = (
+  songInfo: MusicItem,
+  quality: string,
+  settingsStore: ReturnType<typeof useSettingsStore>,
+  LocalUserDetail: ReturnType<typeof LocalUserDetailStore>
+) => {
+  const d = new Date()
+  const songInfoWithTemplate = {
+    ...toRaw(songInfo),
+    template: settingsStore.settings.filenameTemplate || '%t - %s',
+    date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const hasDirectUrl = !!(songInfo as any).url && typeof (songInfo as any).url === 'string'
+  return {
+    pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
+    source: songInfo.source,
+    quality,
+    songInfo: hasDirectUrl
+      ? { ...songInfoWithTemplate, typeUrl: { [quality]: (songInfo as any).url } }
+      : (songInfoWithTemplate as any),
+    tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
+    isCache: true,
+    lazy: true
+  }
+}
+
+const resolveBatchDownloadSong = async (
+  songInfo: MusicItem,
+  targetQuality: string,
+  userInfo: any
+): Promise<
+  | {
+      song: MusicItem
+      quality: string
+      downgraded: boolean
+      matchedTarget: boolean
+    }
+  | { failed: true; reason: string }
+> => {
+  const candidates: MusicItem[] = [toRaw(songInfo) as MusicItem]
+  try {
+    const otherSongs = await getCandidateSongs(toRaw(songInfo) as any, userInfo, { silent: true })
+    candidates.push(...(otherSongs as any[]))
+  } catch {}
+
+  const fallbackPool: Array<{ song: MusicItem; qualities: Array<string | { type: string; size?: string }> }> = []
+  const seen = new Set<string>()
+
+  for (const candidate of candidates) {
+    const key = `${candidate.source}:${candidate.songmid || candidate.hash || `${candidate.name}_${candidate.singer}`}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const qualities = await getDownloadableQualityFormats(candidate as any)
+    if (qualities.length === 0) continue
+    const types = qualityTypes(qualities)
+    if (types.includes(targetQuality)) {
+      return {
+        song: candidate,
+        quality: targetQuality,
+        downgraded: false,
+        matchedTarget: true
+      }
+    }
+    fallbackPool.push({ song: candidate, qualities })
+  }
+
+  let best: { song: MusicItem; quality: string } | null = null
+  for (const item of fallbackPool) {
+    const quality = calculateBestQuality(item.qualities, targetQuality)
+    if (!quality) continue
+    if (!best || compareQuality(quality, best.quality) < 0) {
+      best = { song: item.song, quality }
+    }
+  }
+
+  if (best) {
+    return {
+      song: best.song,
+      quality: best.quality,
+      downgraded: best.quality !== targetQuality,
+      matchedTarget: false
+    }
+  }
+
+  return { failed: true, reason: '无真实可下载音质' }
+}
+
+async function downloadBatchSongs(songs: MusicItem[]): Promise<void> {
+  if (!songs || songs.length === 0) {
+    MessagePlugin.warning('未选择歌曲')
+    return
+  }
+
+  const LocalUserDetail = LocalUserDetailStore()
+  const settingsStore = useSettingsStore()
+  const userQuality = await createBatchDownloadQualityDialog(
+    (LocalUserDetail.userSource.quality as string) || '128k'
+  )
+  if (!userQuality) return
+
+  const tip = MessagePlugin.loading(`正在解析批量下载 0/${songs.length}`)
+  const tasks: any[] = []
+  let targetCount = 0
+  let downgradedCount = 0
+  let failedCount = 0
+
+  try {
+    for (let i = 0; i < songs.length; i++) {
+      const song = songs[i]
+      ;(await tip).close()
+      const nextTip = MessagePlugin.loading(`正在解析批量下载 ${i + 1}/${songs.length}：${song.name || '未知歌曲'}`)
+      const resolved = await resolveBatchDownloadSong(song, userQuality, LocalUserDetail.userInfo)
+      ;(await nextTip).close()
+      if ('failed' in resolved) {
+        failedCount++
+        continue
+      }
+      if (resolved.matchedTarget) targetCount++
+      if (resolved.downgraded) downgradedCount++
+      tasks.push(buildDownloadTask(resolved.song, resolved.quality, settingsStore, LocalUserDetail))
+    }
+  } finally {
+    try {
+      ;(await tip).close()
+    } catch {}
+  }
+
+  if (tasks.length === 0) {
+    MessagePlugin.warning('没有找到真实可下载的歌曲')
+    return
+  }
+
+  await window.api.music.requestSdk('downloadBatchSongs', {
+    source: tasks[0]?.source || 'wy',
+    tasks
+  })
+
+  MessagePlugin.success(
+    `已添加 ${tasks.length} 首到下载队列：${targetCount} 首使用${getQualityDisplayName(userQuality)}，${downgradedCount} 首自动降级${failedCount > 0 ? `，${failedCount} 首跳过` : ''}`
+  )
+}
+
 async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
   try {
     console.log('开始下载', toRaw(songInfo))
@@ -444,4 +600,4 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
   }
 }
 
-export { downloadSingleSong }
+export { downloadSingleSong, downloadBatchSongs }

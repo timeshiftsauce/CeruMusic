@@ -583,7 +583,8 @@ function setupDownloadManager() {
   downloadManager.on('tasks-reset', (tasks) => forwardEvent('tasks-reset', tasks))
 
   // Setup IPC Handlers
-  ipcMain.handle('download:get-tasks', () => {
+  ipcMain.handle('download:get-tasks', async () => {
+    await downloadManager.validateFiles()
     return downloadManager.getTasks()
   })
   ipcMain.handle('download:pause-task', (_, taskId) => {

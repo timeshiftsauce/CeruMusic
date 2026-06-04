@@ -13,8 +13,7 @@ import {
   RefreshIcon,
   FileExportIcon
 } from 'tdesign-icons-vue-next'
-import { createQualityDialog } from '@renderer/utils/audio/download'
-import { buildQualityFormats } from '@common/utils/quality'
+import { downloadBatchSongs } from '@renderer/utils/audio/download'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
@@ -1090,70 +1089,13 @@ const downloadPlaylist = async (playlist: SongList) => {
       return
     }
     const songs = res.data || []
-    if (songs.length === 0) {
+    const downloadableSongs = songs.filter((song) => song.source !== 'local')
+    if (downloadableSongs.length === 0) {
       MessagePlugin.warning('歌单中没有可下载的歌曲')
       return
     }
 
-    const settingsStore = useSettingsStore()
-    const LocalUserDetail = LocalUserDetailStore()
-
-    const downloadableSongs = songs.filter((song) => song.source !== 'local' && song.types && song.types.length > 0)
-    if (downloadableSongs.length === 0) {
-      MessagePlugin.warning('没有可下载的真实音质信息')
-      return
-    }
-
-    const sharedTypes = buildQualityFormats(downloadableSongs[0].types)
-      .filter((quality) =>
-        downloadableSongs.every((song) => buildQualityFormats(song.types).some((item) => item.type === quality.type))
-      )
-      .map((quality) => ({ type: quality.type, size: '' }))
-
-    if (sharedTypes.length === 0) {
-      MessagePlugin.warning('这些歌曲没有共同可下载的音质')
-      return
-    }
-
-    const userQuality = await createQualityDialog(
-      sharedTypes,
-      LocalUserDetail.userSource.quality || '128k',
-      '选择批量下载音质'
-    )
-
-    if (!userQuality) return
-
-    const tasks: any[] = []
-    const d = new Date()
-    for (const song of downloadableSongs) {
-      const qualityToUse = userQuality
-
-      const songInfoWithTemplate = {
-        ...toRaw(song),
-        template: settingsStore.settings.filenameTemplate || '%t - %s',
-        date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      }
-
-      tasks.push({
-        pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
-        source: song.source,
-        quality: qualityToUse,
-        songInfo: songInfoWithTemplate as any,
-        tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
-        lazy: true
-      })
-    }
-
-    if (tasks.length === 0) {
-      MessagePlugin.warning('没有可下载的在线歌曲')
-      return
-    }
-
-    await window.api.music.requestSdk('downloadBatchSongs', {
-      source: songs[0]?.source || 'wy',
-      tasks
-    })
-    MessagePlugin.success(`已添加 ${tasks.length} 首歌曲到下载队列`)
+    await downloadBatchSongs(downloadableSongs as any)
   } catch (error) {
     console.error('Download playlist failed:', error)
     MessagePlugin.error('下载失败')

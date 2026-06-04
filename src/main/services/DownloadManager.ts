@@ -85,7 +85,7 @@ export default class DownloadManager extends EventEmitter {
       this.queue.sort(
         (a, b) => (this.tasks.get(a)?.priority ?? 0) - (this.tasks.get(b)?.priority ?? 0)
       )
-      this.validateFiles() // Validate files on startup
+      await this.validateFiles() // Validate files on startup
       if (this.isStarted) {
         this.processQueue()
       }
@@ -94,25 +94,51 @@ export default class DownloadManager extends EventEmitter {
     }
   }
 
-  // Validate that files for completed tasks actually exist
+  // Validate that files for completed tasks actually exist and are not empty
   public async validateFiles() {
     let changed = false
-    const fsCheck = require('fs')
 
     for (const task of this.tasks.values()) {
-      if (task.status === DownloadStatus.Completed) {
-        if (!task.filePath || !fsCheck.existsSync(task.filePath)) {
-          log.info(`File missing for completed task ${task.id}, marking as error.`)
-          task.status = DownloadStatus.Error
-          task.error = '文件已删除或移动'
-          this.emit('task-status-changed', task)
+      if (task.status !== DownloadStatus.Completed) continue
+
+      const fileSize = await this.getValidDownloadedFileSize(task.filePath)
+      if (fileSize > 0) {
+        if (task.totalSize !== fileSize || task.downloadedSize !== fileSize) {
+          task.totalSize = fileSize
+          task.downloadedSize = fileSize
           changed = true
         }
+        continue
       }
+
+      log.info(`Invalid completed file for task ${task.id}, marking as error.`)
+      task.status = DownloadStatus.Error
+      task.error = task.filePath ? '下载文件为空或已删除' : '下载文件路径缺失'
+      task.progress = 0
+      task.speed = 0
+      task.totalSize = 0
+      task.downloadedSize = 0
+      task.remainingTime = null
+      if (task.filePath) {
+        await fs.unlink(task.filePath).catch(() => {})
+      }
+      this.emit('task-error', task)
+      changed = true
     }
 
     if (changed) {
-      this.saveTasks()
+      await this.saveTasks()
+      this.emit('tasks-reset', this.getTasks())
+    }
+  }
+
+  private async getValidDownloadedFileSize(filePath?: string | null): Promise<number> {
+    if (!filePath) return 0
+    try {
+      const stats = await fs.stat(filePath)
+      return stats.isFile() ? stats.size : 0
+    } catch {
+      return 0
     }
   }
 
@@ -279,7 +305,7 @@ export default class DownloadManager extends EventEmitter {
     }
   }
 
-  private onWorkerMessage(taskId: string, message: any) {
+  private async onWorkerMessage(taskId: string, message: any) {
     const task = this.tasks.get(taskId)
     if (!task) return
 
@@ -291,13 +317,23 @@ export default class DownloadManager extends EventEmitter {
       task.remainingTime = message.remainingTime
       this.emit('task-progress', task)
     } else if (message.type === 'completed') {
-      log.info('Task completed:', taskId)
-      if (message.result?.size && message.result.size > 0) {
-        task.totalSize = message.result.size
-        task.downloadedSize = message.result.size
+      const completedPath = message.result?.path || task.filePath
+      const fileSize = await this.getValidDownloadedFileSize(completedPath)
+      if (fileSize <= 0) {
+        if (completedPath) {
+          await fs.unlink(completedPath).catch(() => {})
+        }
+        this.handleTaskError(taskId, new Error('下载结果为空文件'))
+        return
       }
+
+      log.info('Task completed:', taskId)
+      task.filePath = completedPath
+      task.totalSize = fileSize
+      task.downloadedSize = fileSize
       task.status = DownloadStatus.Completed
       task.progress = 100
+      task.error = null
       this.emit('task-completed', task)
       this.saveTasks()
       this.cleanupTask(taskId)

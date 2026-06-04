@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
 import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
-import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import { createQualityDialog, downloadSingleSong } from '@renderer/utils/audio/download'
+import { downloadSingleSong, downloadBatchSongs } from '@renderer/utils/audio/download'
 import { mapCloudSongToLocal, mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import type { SongList } from '@common/types/songList'
 import {
@@ -65,7 +63,6 @@ const songListRef = ref<any>(null)
 
 // 路由实例
 const route = useRoute()
-const LocalUserDetail = LocalUserDetailStore()
 
 // 响应式状态
 const songs = ref<MusicItem[]>([])
@@ -777,57 +774,7 @@ const handleDownload = (song: any) => {
 }
 
 const handleDownloadBatch = async (batchSongs: any[]) => {
-  if (!batchSongs || batchSongs.length === 0) {
-    MessagePlugin.warning('未选择歌曲')
-    return
-  }
-
-  // 1. 收集所有可能的音质选项
-  const allPossibleTypes = QUALITY_ORDER.map((t) => ({ type: t, size: '' }))
-
-  // 2. 弹出音质选择框
-  const userQuality = await createQualityDialog(
-    allPossibleTypes,
-    LocalUserDetail.userSource.quality || '128k',
-    '选择批量下载音质(自动降级)'
-  )
-
-  if (!userQuality) return
-
-  const tasks: any[] = []
-
-  for (const s of batchSongs) {
-    // 3. 计算每首歌的最佳匹配音质
-    let qualityToUse = userQuality
-    if (s.types && s.types.length > 0) {
-      const best = calculateBestQuality(s.types, userQuality)
-      if (best) qualityToUse = best
-    }
-
-    const d = new Date()
-    s.template = filenameTemplate.value
-    s.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-    tasks.push({
-      pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
-      source: s.source,
-      quality: qualityToUse,
-      songInfo: toRaw(s),
-      tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
-      lazy: true
-    })
-  }
-
-  try {
-    await window.api.music.requestSdk('downloadBatchSongs', {
-      source: batchSongs[0]?.source || 'wy',
-      tasks
-    })
-    MessagePlugin.success(`已添加 ${tasks.length} 首歌曲到下载队列`)
-  } catch (err) {
-    console.error('Batch download failed:', err)
-    MessagePlugin.error('批量添加下载任务失败')
-  }
+  await downloadBatchSongs(batchSongs)
 }
 const handlePlayBatchSelected = (batchSongs: any[]) => {
   if (!batchSongs || batchSongs.length === 0) {
