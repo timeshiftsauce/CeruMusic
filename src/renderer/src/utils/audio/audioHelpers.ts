@@ -12,6 +12,22 @@ const SWITCH_DIALOG_SOURCE_LABELS: Record<string, string> = {
   kw: 'kw',
   mg: 'mg'
 }
+const SOURCE_SEARCH_TIMEOUT_MS = 8000
+const PLAYABLE_VERIFY_TIMEOUT_MS = 1200
+
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('source search timeout')), ms)
+    promise
+      .then((value) => {
+        clearTimeout(timer)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
 
 const switchDialogSourceLabel = (source?: string | null): string => {
   if (!source) return ''
@@ -64,6 +80,41 @@ export const waitForAudioReady = (audio: HTMLAudioElement): Promise<void> => {
   })
 }
 
+export const verifyPlayableUrl = (url: string, timeout = PLAYABLE_VERIFY_TIMEOUT_MS): Promise<boolean> => {
+  if (!url || typeof url !== 'string' || url.includes('error')) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const audio = new window.Audio()
+    let done = false
+    const cleanup = () => {
+      audio.onloadedmetadata = null
+      audio.oncanplay = null
+      audio.onerror = null
+      audio.removeAttribute('src')
+      try {
+        audio.load()
+      } catch {}
+    }
+    const finish = (ok: boolean) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      cleanup()
+      resolve(ok)
+    }
+    const timer = setTimeout(() => finish(false), timeout)
+    audio.preload = 'metadata'
+    audio.onloadedmetadata = () => finish(true)
+    audio.oncanplay = () => finish(true)
+    audio.onerror = () => finish(false)
+    audio.src = url
+    try {
+      audio.load()
+    } catch {
+      finish(false)
+    }
+  })
+}
+
 export const getCandidateSongs = async (
   originalSong: SongList,
   userInfo: any,
@@ -97,12 +148,15 @@ export const getCandidateSongs = async (
   const searchPromises = sources.flatMap((source) =>
     searchKeywords.map(async (keyword) => {
       try {
-        const res = await (window as any).api.music.requestSdk('search', {
-          source,
-          keyword,
-          page: 1,
-          limit: searchLimit
-        })
+        const res = await withTimeout<any>(
+          (window as any).api.music.requestSdk('search', {
+            source,
+            keyword,
+            page: 1,
+            limit: searchLimit
+          }),
+          SOURCE_SEARCH_TIMEOUT_MS
+        )
         return (res.list || []).map((item: any) => ({ ...item, source }))
       } catch {
         return []

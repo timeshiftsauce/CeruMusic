@@ -11,7 +11,7 @@ import {
   initPlaylistEventListeners,
   destroyPlaylistEventListeners
 } from '@renderer/utils/playlist/playlistManager'
-import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
+import { waitForAudioReady, getCandidateSongs, verifyPlayableUrl } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
 import { getHeartbeatRecommendation, clearHeartbeatCache } from './heartbeat'
 import AudioManager from './audioManager'
@@ -123,22 +123,35 @@ function _getQuality(song: SongList): string {
  * 4. 全部失败返回 null
  */
 const tryUrlSequential = async (
-  song: SongList
+  song: SongList,
+  options: { failedUrls?: Set<string>; skipCurrent?: boolean } = {}
 ): Promise<{ url: string; song: SongList } | null> => {
+  const isAllowedUrl = (url: unknown): url is string =>
+    typeof url === 'string' && !!url && !url.includes('error') && !options.failedUrls?.has(url)
+
   // 限流期间只试主源
   if (_isThrottled()) {
+    if (options.skipCurrent) return null
     try {
       const url = await getSongRealUrl(toRaw(song))
-      if (url && typeof url === 'string' && !url.includes('error')) return { url, song }
+      if (isAllowedUrl(url) && (await verifyPlayableUrl(url))) {
+        return { url, song }
+      }
+      if (url && typeof url === 'string') options.failedUrls?.add(url)
     } catch {}
     return null
   }
 
   // 1. 当前源
-  try {
-    const url = await getSongRealUrl(toRaw(song))
-    if (url && typeof url === 'string' && !url.includes('error')) return { url, song }
-  } catch {}
+  if (!options.skipCurrent) {
+    try {
+      const url = await getSongRealUrl(toRaw(song))
+      if (isAllowedUrl(url) && (await verifyPlayableUrl(url))) {
+        return { url, song }
+      }
+      if (url && typeof url === 'string') options.failedUrls?.add(url)
+    } catch {}
+  }
 
   if (_isThrottled()) return null
 
@@ -147,7 +160,7 @@ const tryUrlSequential = async (
   let candidates = _otherSourceCache.get(cacheKey)
   if (!candidates) {
     try {
-      candidates = await getCandidateSongs(song, userInfo.value, { lightweight: true, silent: true })
+      candidates = await getCandidateSongs(song, userInfo.value, { silent: true })
       if (candidates && candidates.length > 0) {
         _otherSourceCache.set(cacheKey, candidates)
         if (_otherSourceCache.size > _OTHER_CACHE_MAX) {
@@ -167,11 +180,12 @@ const tryUrlSequential = async (
     if (_isThrottled()) return null
     try {
       const url = await getSongRealUrl(toRaw(item))
-      if (url && typeof url === 'string' && !url.includes('error')) {
+      if (isAllowedUrl(url) && (await verifyPlayableUrl(url))) {
         // 成功后将 URL 同时缓存在主进程
         _setCachedUrl(item, quality, url)
         return { url, song: item }
       }
+      if (url && typeof url === 'string') options.failedUrls?.add(url)
     } catch {}
   }
 
@@ -273,7 +287,7 @@ const handlePlay = async () => {
       const target =
         (lastId != null &&
           list.value.find(
-            (s) => _getSongIdentity(s) === String(lastId) && (!lastSource || s.source === lastSource)
+            (s) => String(_getSongIdentity(s)) === String(lastId) && (!lastSource || s.source === lastSource)
           )) ||
         list.value[0]
       await playSong(target)
@@ -283,7 +297,10 @@ const handlePlay = async () => {
     return
   }
   try {
-    if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
+    if (
+      pendingRestorePosition > 0 &&
+      String(pendingRestoreSongId) === String(userInfo.value.lastPlaySongId)
+    ) {
       if (Audio.value.audio) {
         await waitForAudioReady(Audio.value.audio)
       }
@@ -513,26 +530,39 @@ const playSong = async (
     // 注意：SMTC 的 updateMetadata 会在音频准备好后再调用，避免切换时空隙
 
     let urlToPlay = ''
+    const failedUrls = new Set<string>()
     // 检查预加载缓存（内存，来自 prefetchNextTrack）
     const _cacheKey = `${song.source}:${song.songmid}`
     const _cachedUrl = _prefetchedUrlCache.get(_cacheKey)
     if (_cachedUrl) {
       _prefetchedUrlCache.delete(_cacheKey)
-      urlToPlay = _cachedUrl
+      if (await verifyPlayableUrl(_cachedUrl)) {
+        urlToPlay = _cachedUrl
+      } else {
+        failedUrls.add(_cachedUrl)
+      }
     }
 
     // 检查持久化缓存（SQLite），命中即零网络
     if (!urlToPlay) {
       const quality = _getQuality(song)
       const sqliteCachedUrl = await _getCachedUrl(song, quality)
-      if (sqliteCachedUrl && typeof sqliteCachedUrl === 'string' && !sqliteCachedUrl.includes('error')) {
+      if (
+        sqliteCachedUrl &&
+        typeof sqliteCachedUrl === 'string' &&
+        !sqliteCachedUrl.includes('error') &&
+        !failedUrls.has(sqliteCachedUrl) &&
+        (await verifyPlayableUrl(sqliteCachedUrl))
+      ) {
         urlToPlay = sqliteCachedUrl
+      } else if (sqliteCachedUrl && typeof sqliteCachedUrl === 'string') {
+        failedUrls.add(sqliteCachedUrl)
       }
     }
 
     if (!urlToPlay) {
       // 顺序回退：当前源 → 搜候选 → 逐个试 URL
-      const result = await tryUrlSequential(song)
+      const result = await tryUrlSequential(song, { failedUrls })
       if (currentPlayRequestId !== requestId) return
       if (result) {
         urlToPlay = result.url
@@ -566,11 +596,12 @@ const playSong = async (
         if (currentPlayRequestId !== requestId) return
         // 原源 URL 获取成功但播放/加载失败
         console.warn('Audio ready failed, trying auto switch...', e)
+        failedUrls.add(urlToPlay)
         // 分步自愈：刷新当前源 URL 一次，不行再试候选
         let refreshed = false
         try {
           const newUrl = await getSongRealUrl(toRaw(song))
-          if (newUrl && typeof newUrl === 'string' && !newUrl.includes('error') && newUrl !== urlToPlay) {
+          if (newUrl && typeof newUrl === 'string' && !newUrl.includes('error') && newUrl !== urlToPlay && !failedUrls.has(newUrl) && (await verifyPlayableUrl(newUrl))) {
             refreshed = true
             setUrl(newUrl)
             userInfo.value.cachedAudioUrl = newUrl
@@ -595,7 +626,7 @@ const playSong = async (
               if (currentPlayRequestId !== requestId) return
               try {
                 const url = await getSongRealUrl(toRaw(item))
-                if (url && typeof url === 'string' && !url.includes('error') && url !== urlToPlay) {
+                if (url && typeof url === 'string' && !url.includes('error') && url !== urlToPlay && !failedUrls.has(url) && (await verifyPlayableUrl(url))) {
                   switched = true
                   setUrl(url)
                   userInfo.value.cachedAudioUrl = url
@@ -653,7 +684,53 @@ const playSong = async (
     start()
       .catch(async () => {
         if (currentPlayRequestId !== requestId) return
-        tryAutoNext('启动播放失败')
+        failedUrls.add(urlToPlay)
+        const fallback = await tryUrlSequential(song, { failedUrls, skipCurrent: true })
+        if (currentPlayRequestId !== requestId) return
+        if (fallback && fallback.url !== urlToPlay) {
+          if (fallback.song.source !== song.source) {
+            replaceCurrentSongInList(song, fallback.song)
+            applyCurrentSongInfo(fallback.song)
+            MessagePlugin.success(`已自动切换到 ${fallback.song.source} 源播放`)
+          }
+          setUrl(fallback.url)
+          userInfo.value.cachedAudioUrl = fallback.url
+          if (Audio.value.audio) {
+            const a = Audio.value.audio
+            try { a.pause() } catch {}
+            a.src = fallback.url
+            a.load()
+          }
+          start().catch(async () => {
+            if (currentPlayRequestId !== requestId) return
+            failedUrls.add(fallback.url)
+            const nextFallback = await tryUrlSequential(song, { failedUrls, skipCurrent: true })
+            if (currentPlayRequestId !== requestId) return
+            if (nextFallback && nextFallback.url !== fallback.url) {
+              if (nextFallback.song.source !== song.source) {
+                replaceCurrentSongInList(song, nextFallback.song)
+                applyCurrentSongInfo(nextFallback.song)
+                MessagePlugin.success(`已自动切换到 ${nextFallback.song.source} 源播放`)
+              }
+              setUrl(nextFallback.url)
+              userInfo.value.cachedAudioUrl = nextFallback.url
+              if (Audio.value.audio) {
+                const a = Audio.value.audio
+                try { a.pause() } catch {}
+                a.src = nextFallback.url
+                a.load()
+              }
+              start().catch(() => {
+                if (currentPlayRequestId !== requestId) return
+                tryAutoNext('所有源均无法播放')
+              })
+              return
+            }
+            tryAutoNext('所有源均无法播放')
+          })
+          return
+        }
+        tryAutoNext('所有源均无法播放')
       })
       .then(() => {
         if (currentPlayRequestId !== requestId) return
@@ -686,6 +763,8 @@ const playSong = async (
 
         console.warn('Playback error, trying staged recovery...')
         currentPlaybackErrorHandler = null
+        if (Audio.value.audio?.src) failedUrls.add(Audio.value.audio.src)
+        if (urlToPlay) failedUrls.add(urlToPlay)
 
         if (_isThrottled()) return
 
@@ -693,7 +772,7 @@ const playSong = async (
         try {
           const refreshedUrl = await getSongRealUrl(toRaw(song))
           if (currentPlayRequestId !== requestId) return
-          if (refreshedUrl && typeof refreshedUrl === 'string' && !refreshedUrl.includes('error')) {
+          if (refreshedUrl && typeof refreshedUrl === 'string' && !refreshedUrl.includes('error') && !failedUrls.has(refreshedUrl) && (await verifyPlayableUrl(refreshedUrl))) {
             if (Audio.value.audio && Audio.value.audio.src !== refreshedUrl) {
               setUrl(refreshedUrl)
               Audio.value.audio.load()
@@ -703,9 +782,32 @@ const playSong = async (
                 mediaSessionController.updatePlaybackState('paused')
                 return
               }
-              start().catch(() => {
+              start().catch(async () => {
                 if (currentPlayRequestId !== requestId) return
-                tryAutoNext('刷新 URL 后启动播放失败')
+                failedUrls.add(refreshedUrl)
+                const fallback = await tryUrlSequential(song, { failedUrls, skipCurrent: true })
+                if (currentPlayRequestId !== requestId) return
+                if (fallback && fallback.url !== refreshedUrl) {
+                  if (fallback.song.source !== song.source) {
+                    replaceCurrentSongInList(song, fallback.song)
+                    applyCurrentSongInfo(fallback.song)
+                    MessagePlugin.success(`已自动切换到 ${fallback.song.source} 源播放`)
+                  }
+                  setUrl(fallback.url)
+                  userInfo.value.cachedAudioUrl = fallback.url
+                  if (Audio.value.audio) {
+                    const a = Audio.value.audio
+                    try { a.pause() } catch {}
+                    a.src = fallback.url
+                    a.load()
+                  }
+                  start().catch(() => {
+                    if (currentPlayRequestId !== requestId) return
+                    tryAutoNext('所有自动换源尝试均失败')
+                  })
+                  return
+                }
+                tryAutoNext('所有自动换源尝试均失败')
               })
               return
             }
@@ -724,7 +826,7 @@ const playSong = async (
             if (currentPlayRequestId !== requestId) return
             try {
               const url = await getSongRealUrl(toRaw(item))
-              if (url && typeof url === 'string' && !url.includes('error')) {
+              if (url && typeof url === 'string' && !url.includes('error') && !failedUrls.has(url) && (await verifyPlayableUrl(url))) {
                 if (Audio.value.audio && Audio.value.audio.src === url) {
                   isLoadingSong.value = false
                   tryAutoNext('所有自动换源尝试均失败')
@@ -743,9 +845,32 @@ const playSong = async (
                     mediaSessionController.updatePlaybackState('paused')
                     return
                   }
-                  start().catch(() => {
+                  start().catch(async () => {
                     if (currentPlayRequestId !== requestId) return
-                    tryAutoNext('换源后启动播放失败')
+                    failedUrls.add(url)
+                    const fallback = await tryUrlSequential(song, { failedUrls, skipCurrent: true })
+                    if (currentPlayRequestId !== requestId) return
+                    if (fallback && fallback.url !== url) {
+                      if (fallback.song.source !== song.source) {
+                        replaceCurrentSongInList(song, fallback.song)
+                        applyCurrentSongInfo(fallback.song)
+                        MessagePlugin.success(`已自动切换到 ${fallback.song.source} 源播放`)
+                      }
+                      setUrl(fallback.url)
+                      userInfo.value.cachedAudioUrl = fallback.url
+                      if (Audio.value.audio) {
+                        const a = Audio.value.audio
+                        try { a.pause() } catch {}
+                        a.src = fallback.url
+                        a.load()
+                      }
+                      start().catch(() => {
+                        if (currentPlayRequestId !== requestId) return
+                        tryAutoNext('所有自动换源尝试均失败')
+                      })
+                      return
+                    }
+                    tryAutoNext('所有自动换源尝试均失败')
                   })
                 }
                 return // 成功
@@ -789,6 +914,11 @@ const tryAutoNext = (reason: string) => {
     reason.includes('频率') ||
     reason.includes('限制')
   ) {
+    MessagePlugin.error(`当前歌曲无法播放：${reason}`)
+    return
+  }
+  if (list.value.length <= 1 || playMode.value === PlayMode.SINGLE) {
+    MessagePlugin.error(`当前歌曲无法播放：${reason}`)
     return
   }
   const limit = getAutoNextLimit()
@@ -834,8 +964,25 @@ const parseIntervalSeconds = (interval: string): number => {
 }
 
 const shuffleOrder = ref<Array<number | string>>([])
+const getPlaybackQueueKey = (song: Partial<SongList> | any): string =>
+  `${_getSongIdentity(song)}::${song?.source || ''}`
+
+const getCurrentPlaybackQueueKey = (): string =>
+  `${String(userInfo.value.lastPlaySongId || '')}::${userInfo.value.lastPlaySongSource || ''}`
+
+const getCurrentSongIndex = (): number => {
+  const currentKey = getCurrentPlaybackQueueKey()
+  if (currentKey !== '::') {
+    const index = list.value.findIndex((song) => getPlaybackQueueKey(song) === currentKey)
+    if (index !== -1) return index
+  }
+  const currentId = String(userInfo.value.lastPlaySongId || '')
+  if (!currentId) return -1
+  return list.value.findIndex((song) => _getSongIdentity(song) === currentId)
+}
+
 const buildShuffleOrder = () => {
-  const ids = list.value.map((s) => s.songmid)
+  const ids = list.value.map((s) => getPlaybackQueueKey(s))
   // Fisher-Yates
   for (let i = ids.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -846,7 +993,7 @@ const buildShuffleOrder = () => {
 
 const isShuffleOrderValid = () => {
   if (shuffleOrder.value.length !== list.value.length) return false
-  const listIds = list.value.map((song) => song.songmid)
+  const listIds = list.value.map((song) => getPlaybackQueueKey(song))
   const shuffleIds = new Set(shuffleOrder.value)
   return listIds.every((id) => shuffleIds.has(id))
 }
@@ -916,8 +1063,8 @@ const resolveNextSong = async ({
 
   if (playMode.value === PlayMode.RANDOM) {
     ensureShuffleOrder()
-    const curId = userInfo.value.lastPlaySongId
-    let idx = shuffleOrder.value.findIndex((id) => id === curId)
+    const curKey = getCurrentPlaybackQueueKey()
+    let idx = shuffleOrder.value.findIndex((id) => id === curKey)
     if (idx < 0) idx = -1
     let nextIdx = idx + 1
     if (nextIdx >= shuffleOrder.value.length) {
@@ -926,8 +1073,8 @@ const resolveNextSong = async ({
       }
       nextIdx = 0
     }
-    const nextId = shuffleOrder.value[nextIdx]
-return list.value.find((s) => s.songmid === nextId) || null
+    const nextKey = shuffleOrder.value[nextIdx]
+    return list.value.find((s) => getPlaybackQueueKey(s) === nextKey) || null
   }
 
   if (playMode.value === PlayMode.HEARTBEAT) {
@@ -936,8 +1083,8 @@ return list.value.find((s) => s.songmid === nextId) || null
     const insertInterval = getHeartbeatInsertInterval()
     if (heartbeatEnabled) {
       heartbeatCounter.value++
-      const curId = userInfo.value.lastPlaySongId
-      const curSong = list.value.find((s) => s.songmid === curId)
+      const curKey = getCurrentPlaybackQueueKey()
+      const curSong = list.value.find((s) => getPlaybackQueueKey(s) === curKey)
       if (curSong && curSong.name) {
         const totalSec = parseIntervalSeconds(curSong.interval || '')
         let playedSec = heartbeatSongPlayedMs / 1000
@@ -974,7 +1121,8 @@ return list.value.find((s) => s.songmid === nextId) || null
             isLoadingSong.value = false
           }
           if (target) {
-            list.value.splice(list.value.findIndex((s) => s.songmid === curId) + 1, 0, target)
+            const insertIndex = list.value.findIndex((s) => getPlaybackQueueKey(s) === curKey)
+            list.value.splice((insertIndex === -1 ? 0 : insertIndex) + 1, 0, target)
             console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
           }
           const playlistIds = new Set(list.value.map((s) => s.songmid))
@@ -997,7 +1145,8 @@ return list.value.find((s) => s.songmid === nextId) || null
             isLoadingSong.value = false
           }
           if (target) {
-            list.value.splice(list.value.findIndex((s) => s.songmid === curId) + 1, 0, target)
+            const insertIndex = list.value.findIndex((s) => getPlaybackQueueKey(s) === curKey)
+            list.value.splice((insertIndex === -1 ? 0 : insertIndex) + 1, 0, target)
             console.log(`[heartbeat] 已插入推荐: 《${target.name}》 - ${target.singer}`)
             return target
           }
@@ -1019,10 +1168,8 @@ return list.value.find((s) => s.songmid === nextId) || null
     }
   }
 
-  const currentIndex = list.value.findIndex(
-    (song) => song.songmid === userInfo.value.lastPlaySongId
-  )
-  const nextIndex = (currentIndex + 1) % list.value.length
+  const currentIndex = getCurrentSongIndex()
+  const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % list.value.length
   return list.value[nextIndex] || null
 }
 
@@ -1067,67 +1214,19 @@ const prefetchNextTrack = async (): Promise<void> => {
     // 1. 检查持久化缓存
     const quality = _getQuality(nextSong)
     const cachedUrl = await _getCachedUrl(nextSong, quality)
-    if (cachedUrl && typeof cachedUrl === 'string' && !cachedUrl.includes('error')) {
+    if (
+      cachedUrl &&
+      typeof cachedUrl === 'string' &&
+      !cachedUrl.includes('error') &&
+      (await verifyPlayableUrl(cachedUrl))
+    ) {
       _setPrefetchSlot(nextSong, cachedUrl)
       return
     }
 
-    // 2. 原源取 URL
-    let url = await getSongRealUrl(toRaw(nextSong))
-    // 3. 原源失败 → 候选源顺序回退
-    if (!url || typeof url !== 'string' || url.includes('error')) {
-      try {
-        const candidates = await getCandidateSongs(toRaw(nextSong), userInfo.value)
-        if (candidates && candidates.length > 0) {
-          for (const item of candidates) {
-            try {
-              const u = await getSongRealUrl(toRaw(item))
-              if (u && typeof u === 'string' && !u.includes('error')) {
-                url = u
-                break
-              }
-            } catch {}
-          }
-        }
-      } catch { }
-    }
-    if (url && typeof url === 'string' && !url.includes('error')) {
-      // 4. 校验 URL 可用性（静默 Audio 请求）
-      try {
-        const verifier = new window.Audio()
-        verifier.preload = 'metadata'
-        verifier.src = url
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            verifier.removeAttribute('src')
-            verifier.load()
-            resolve() // 超时也放行，URL 可能部分可用
-          }, 3000)
-          verifier.onloadedmetadata = () => {
-            clearTimeout(timer)
-            verifier.removeAttribute('src')
-            verifier.load()
-            resolve()
-          }
-          verifier.onerror = () => {
-            clearTimeout(timer)
-            verifier.removeAttribute('src')
-            verifier.load()
-            reject(new Error('URL verification failed'))
-          }
-        })
-      } catch {
-        // 校验失败，尝试刷新（重新取 URL）
-        const refreshedUrl = await getSongRealUrl(toRaw(nextSong))
-        if (refreshedUrl && typeof refreshedUrl === 'string' && !refreshedUrl.includes('error')) {
-          url = refreshedUrl
-        } else {
-          url = ''
-        }
-      }
-    }
-    if (url && typeof url === 'string' && !url.includes('error')) {
-      _setPrefetchSlot(nextSong, url)
+    const result = await tryUrlSequential(nextSong)
+    if (result) {
+      _setPrefetchSlot(result.song, result.url)
     }
   } catch {
     // 预加载失败静默忽略，切歌时重新正常加载
@@ -1165,9 +1264,7 @@ const playPrevious = async () => {
   }
   if (list.value.length === 0) return
   try {
-    const currentIndex = list.value.findIndex(
-      (song) => song.songmid === userInfo.value.lastPlaySongId
-    )
+    const currentIndex = getCurrentSongIndex()
     const prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
     if (prevIndex >= 0 && prevIndex < list.value.length) {
       await playSong(list.value[prevIndex], { immediate: true })
@@ -1446,6 +1543,16 @@ const initPlayback = async () => {
     if (lastPlayedSong) {
       // UI 立即更新
       songInfo.value = { ...lastPlayedSong }
+      Audio.value.isPlay = false
+      userInfo.value.wasPlaying = false
+      mediaSessionController.updatePlaybackState('paused')
+
+      const restoreTime = Number(userInfo.value.currentTime || 0)
+      if (restoreTime > 0) {
+        pendingRestorePosition = restoreTime
+        pendingRestoreSongId = userInfo.value.lastPlaySongId
+        Audio.value.currentTime = restoreTime
+      }
 
       // === 零等待启动：只依赖 SQLite 持久化 URL 缓存 ===
       // 计算缓存 key 并查询，命中即零网络播放
@@ -1457,32 +1564,49 @@ const initPlayback = async () => {
           ? userInfo.value.cachedAudioUrl
           : null) || (await _getCachedUrl(lastPlayedSong, quality))
 
-      if (cachedUrlForStartup && typeof cachedUrlForStartup === 'string' && !cachedUrlForStartup.includes('error')) {
+      if (
+        cachedUrlForStartup &&
+        typeof cachedUrlForStartup === 'string' &&
+        !cachedUrlForStartup.includes('error') &&
+        (await verifyPlayableUrl(cachedUrlForStartup))
+      ) {
         setUrl(cachedUrlForStartup)
+        if (restoreTime > 0) {
+          setCurrentTime(restoreTime)
+        }
+        userInfo.value.cachedAudioUrl = cachedUrlForStartup
         if (Audio.value.audio) {
           Audio.value.audio.src = cachedUrlForStartup
           Audio.value.audio.load()
-        }
-        // 上次关闭时正在播放 → 立即恢复播放
-        if (userInfo.value.wasPlaying) {
-          Audio.value.isPlay = true
-          Audio.value.audio?.play().catch(() => {})
-          mediaSessionController.updatePlaybackState('playing')
+          if (restoreTime > 0) {
+            try {
+              Audio.value.audio.currentTime = restoreTime
+            } catch {}
+          }
         }
       } else {
         // 缓存未命中 → 后台异步刷新，不阻塞 UI
         const refreshUrl = async () => {
           try {
             const url = await getSongRealUrl(toRaw(lastPlayedSong))
-            if (url && typeof url === 'string' && !url.includes('error')) {
+            if (url && typeof url === 'string' && !url.includes('error') && (await verifyPlayableUrl(url))) {
               setUrl(url)
+              if (restoreTime > 0) {
+                setCurrentTime(restoreTime)
+              }
               userInfo.value.cachedAudioUrl = url
               _setCachedUrl(lastPlayedSong, quality, url)
-              if (userInfo.value.wasPlaying && Audio.value.audio) {
+              if (Audio.value.audio) {
                 Audio.value.audio.src = url
                 Audio.value.audio.load()
-                Audio.value.audio.play().catch(() => {})
+                if (restoreTime > 0) {
+                  try {
+                    Audio.value.audio.currentTime = restoreTime
+                  } catch {}
+                }
               }
+              Audio.value.isPlay = false
+              mediaSessionController.updatePlaybackState('paused')
             }
           } catch {}
         }
@@ -1496,18 +1620,6 @@ const initPlayback = async () => {
         album: lastPlayedSong.albumName || '未知专辑',
         artworkUrl: lastPlayedSong.img || defaultCoverImg
       })
-
-      // 上次播放进度恢复（非自动播放状态下才恢复）
-      if (!Audio.value.isPlay && userInfo.value.currentTime) {
-        pendingRestorePosition = userInfo.value.currentTime
-        pendingRestoreSongId = lastPlayedSong.songmid
-        if (Audio.value.audio) {
-          console.log('上次进度', userInfo.value.currentTime)
-          await waitForAudioReady(Audio.value.audio)
-          Audio.value.currentTime = userInfo.value.currentTime
-          Audio.value.audio.currentTime = userInfo.value.currentTime
-        }
-      }
 
     }
   }

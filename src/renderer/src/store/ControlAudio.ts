@@ -284,15 +284,14 @@ export const ControlAudioStore = defineStore(
         if (!playSetting.getIsPauseTransition || isLtInRoom() || !isAppWindowVisible()) {
           audioEl.volume = volume / 100
           const playPromise = audioEl.play()
-          // 乐观设为 true，不等 play() promise（窗口隐藏时 Chromium 可能挂起该 Promise）
           Audio.isPlay = true
-          playPromise?.then(() => {
+          return playPromise.then(() => {
             Audio.isPlay = !audioEl.paused
           }).catch((error) => {
             console.error('音频播放失败:', error)
             Audio.isPlay = false
+            throw error
           })
-          return Promise.resolve()
         }
 
         audioEl.volume = 0
@@ -306,8 +305,9 @@ export const ControlAudioStore = defineStore(
           audioEl.volume = volume / 100
           console.error('音频播放失败:', error)
           Audio.isPlay = false
+          throw error
         })
-        return Promise.resolve()
+        return playPromise
       }
       return false
     }

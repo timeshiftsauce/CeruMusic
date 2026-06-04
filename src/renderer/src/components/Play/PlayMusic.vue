@@ -803,7 +803,10 @@ function onPlayNext(): void {
   void playNext()
 }
 function onTogglePlayPause(): void {
-  if (isLoadingSong.value) return
+  if (isLoadingSong.value) {
+    MessagePlugin.info('正在查找可播放音源，请稍候')
+    return
+  }
   if (!guardLT()) return
   void togglePlayPause()
 }
