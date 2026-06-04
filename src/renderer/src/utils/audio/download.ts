@@ -1,14 +1,14 @@
 import { NotifyPlugin, MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-import { toRaw, h } from 'vue'
+import { toRaw, h, ref } from 'vue'
+import { sourceLabel } from '@renderer/utils/sourceName'
+import { createSourceSwitchDialog } from '@renderer/utils/audio/audioHelpers'
 import {
-  QUALITY_ORDER,
   getQualityDisplayName,
-  buildQualityFormats,
-  compareQuality,
-  calculateBestQuality
+  compareQuality
 } from '@common/utils/quality'
+import { getDownloadableQualityFormats } from '@renderer/utils/audio/qualityAvailability'
 
 interface MusicItem {
   singer: string
@@ -20,34 +20,209 @@ interface MusicItem {
   songmid: number
   img: string
   lrc: null | string
-  types: Array<{ type: string; size: string }>
+  types: Array<string | { type: string; size?: string }>
   _types: Record<string, any>
   typeUrl: Record<string, any>
 }
 
+const DOWNLOAD_SOURCE_LABELS: Record<string, string> = {
+  wy: 'wyy',
+  wyy: 'wyy',
+  kg: 'kg',
+  tx: '秋秋',
+  qq: '秋秋',
+  kw: 'kw',
+  mg: 'mg'
+}
+
+const downloadSourceLabel = (source?: string | null): string => {
+  if (!source) return ''
+  return DOWNLOAD_SOURCE_LABELS[source] || sourceLabel(source)
+}
+
+const createDownloadSourceDialog = (
+  initialSongInfo: MusicItem,
+  userInfo: any,
+  getQualities?: (song: MusicItem) => Promise<Array<string | { type: string; size?: string }>>
+): Promise<{ song: MusicItem; qualities: Array<string | { type: string; size?: string }> } | null> =>
+  new Promise((resolve) => {
+    const selectedSongInfo = ref<MusicItem>(initialSongInfo)
+    const checking = ref(false)
+    const checked = ref(false)
+    const availableQualities = ref<Array<string | { type: string; size?: string }>>([])
+    let resolved = false
+
+    const finish = (result: { song: MusicItem; qualities: Array<string | { type: string; size?: string }> } | null) => {
+      if (resolved) return
+      resolved = true
+      dialog.destroy()
+      resolve(result)
+    }
+
+    const selectOtherSource = async () => {
+      const switchedSong = await createSourceSwitchDialog(
+        toRaw(selectedSongInfo.value) as any,
+        userInfo,
+        '切换下载音源'
+      )
+      if (resolved) return
+      if (switchedSong) {
+        selectedSongInfo.value = switchedSong as any
+        checked.value = false
+        availableQualities.value = []
+      }
+    }
+
+    const useCurrentSource = async () => {
+      if (!getQualities) {
+        finish({ song: selectedSongInfo.value, qualities: [] })
+        return
+      }
+      checking.value = true
+      checked.value = true
+      try {
+        const qualities = await getQualities(selectedSongInfo.value)
+        if (resolved) return
+        availableQualities.value = qualities
+        if (qualities.length > 0) {
+          finish({ song: selectedSongInfo.value, qualities })
+        }
+      } finally {
+        if (!resolved) checking.value = false
+      }
+    }
+
+    const dialog = DialogPlugin({
+      header: '选择下载音源',
+      width: 520,
+      placement: 'center',
+      body: () =>
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } }, [
+          h(
+            'div',
+            {
+              style: {
+                fontSize: '13px',
+                lineHeight: '1.5',
+                color: 'var(--td-text-color-secondary)'
+              }
+            },
+            '先确认下载音源，再只显示该音源当前歌曲真实提供的音质。'
+          ),
+          h(
+            'div',
+            {
+              style: {
+                padding: '12px 14px',
+                borderRadius: '8px',
+                border: '1px solid var(--td-border-level-1-color)',
+                background: 'var(--td-bg-color-container)'
+              }
+            },
+            [
+              h('div', { style: { fontSize: '12px', color: 'var(--td-text-color-secondary)' } }, '当前选择源'),
+              h(
+                'div',
+                { style: { marginTop: '4px', fontWeight: '600' } },
+                downloadSourceLabel(selectedSongInfo.value.source)
+              ),
+              h(
+                'div',
+                {
+                  style: {
+                    marginTop: '6px',
+                    fontSize: '12px',
+                    color: 'var(--td-text-color-placeholder)'
+                  }
+                },
+                `${selectedSongInfo.value.name || '未知歌曲'} · ${selectedSongInfo.value.singer || '未知歌手'}`
+              ),
+              checked.value
+                ? h(
+                    'div',
+                    {
+                      style: {
+                        marginTop: '10px',
+                        fontSize: '13px',
+                        color:
+                          availableQualities.value.length > 0
+                            ? 'var(--td-success-color)'
+                            : 'var(--td-warning-color)'
+                      }
+                    },
+                    checking.value
+                      ? '正在检测当前源真实可下载音质...'
+                      : availableQualities.value.length > 0
+                        ? `已找到 ${availableQualities.value.length} 个真实可下载音质`
+                        : '当前源没有真实可下载音质，可以选择其他源或关闭。'
+                  )
+                : null
+            ]
+          )
+        ]),
+      footer: () =>
+        h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px'
+            }
+          },
+          [
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 't-button t-button--variant-base t-button--theme-default',
+                onClick: () => finish(null)
+              },
+              '取消'
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 't-button t-button--variant-base t-button--theme-default',
+                onClick: async () => selectOtherSource()
+              },
+              '选择其他源'
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 't-button t-button--variant-base t-button--theme-primary',
+                onClick: async () => useCurrentSource()
+              },
+              '使用当前源'
+            )
+          ]
+        ),
+      onClose: () => finish(null)
+    })
+  })
+
 // 创建音质选择弹窗
 export function createQualityDialog(
-  songInfoOrTypes: MusicItem | Array<{ type: string; size?: string }>,
+  songInfoOrTypes: MusicItem | Array<string | { type: string; size?: string }>,
   userQuality: string,
   title: string = '选择下载音质(可滚动)'
 ): Promise<string | null> {
   return new Promise((resolve) => {
-    let types: Array<{ type: string; size?: string }> = []
+    let types: Array<string | { type: string; size?: string }> = []
     if (Array.isArray(songInfoOrTypes)) {
       types = songInfoOrTypes
     } else {
       types = songInfoOrTypes.types || []
     }
 
-    // 获取歌曲支持的音质列表
-    // 如果 types 为空（播放界面歌曲对象可能缺少 types 字段），回退到全部已知音质
-    const availableQualities = buildQualityFormats(types)
-    const qualityOptions = availableQualities.length > 0
-      ? [...availableQualities]
-      : QUALITY_ORDER.map(t => ({ type: t, size: '' }))
-
-    // 按音质优先级排序（高→低）
-    qualityOptions.sort((a, b) => compareQuality(a.type, b.type))
+    // 只展示调用方传入的真实可用音质；没有真实音质信息时不展示假选项
+    const qualityOptions = types
+      .map((item: any) => (typeof item === 'string' ? { type: item } : item))
+      .filter((item) => item?.type)
+      .sort((a, b) => compareQuality(a.type, b.type))
 
     const dialog = DialogPlugin.confirm({
       header: title,
@@ -177,45 +352,56 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
   try {
     console.log('开始下载', toRaw(songInfo))
     const LocalUserDetail = LocalUserDetailStore()
-    const userQuality =
-      (LocalUserDetail.userInfo.sourceQualityMap || {})[toRaw(songInfo.source) as any] ||
-      (LocalUserDetail.userSource.quality as string) || '320k'
     const settingsStore = useSettingsStore()
 
-    // 显示音质选择弹窗
-    const selectedQuality = await createQualityDialog(songInfo, userQuality)
+    const downloadSourceResult = await createDownloadSourceDialog(
+      songInfo,
+      LocalUserDetail.userInfo,
+      (song) => getDownloadableQualityFormats(song as any)
+    )
 
-    // 如果用户取消选择，直接返回
+    if (!downloadSourceResult) {
+      return
+    }
+
+    const targetSongInfo = downloadSourceResult.song
+
+    const userQuality =
+      (LocalUserDetail.userInfo.sourceQualityMap || {})[toRaw(targetSongInfo.source) as any] ||
+      (LocalUserDetail.userSource.quality as string) || '320k'
+
+    const verifiedQualities = downloadSourceResult.qualities
+
+    const selectedQuality = await createQualityDialog(
+      verifiedQualities,
+      userQuality,
+      `选择下载音质 · ${downloadSourceLabel(targetSongInfo.source)}`
+    )
+
     if (!selectedQuality) {
       return
     }
 
-    let quality = selectedQuality as string
-
-    // 检查选择的音质是否超出歌曲支持的最高音质
-    const calculatedQuality = calculateBestQuality(songInfo.types, quality)
-    if (calculatedQuality && calculatedQuality !== quality) {
-      quality = calculatedQuality
-      MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)
-    }
+    const quality = selectedQuality as string
 
     console.log(`使用音质下载: ${quality} - ${getQualityDisplayName(quality)}`)
-    const tip = MessagePlugin.success('开始下载歌曲：' + songInfo.name)
+    const tip = MessagePlugin.success('开始下载歌曲：' + targetSongInfo.name)
 
     const songInfoWithTemplate = {
-      ...toRaw(songInfo),
+      ...toRaw(targetSongInfo),
       template: settingsStore.settings.filenameTemplate || '%t - %s'
     }
 
     // 服务插件歌曲（如 navidrome）：自带 url，无需插件解析，使用 lazy 模式直接传 url
-    const hasDirectUrl = !!(songInfo as any).url && typeof (songInfo as any).url === 'string'
+    const hasDirectUrl =
+      !!(targetSongInfo as any).url && typeof (targetSongInfo as any).url === 'string'
 
     const result = await window.api.music.requestSdk('downloadSingleSong', {
       pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
-      source: songInfo.source,
+      source: targetSongInfo.source,
       quality,
       songInfo: hasDirectUrl
-        ? { ...songInfoWithTemplate, typeUrl: { [quality]: (songInfo as any).url } }
+        ? { ...songInfoWithTemplate, typeUrl: { [quality]: (targetSongInfo as any).url } }
         : (songInfoWithTemplate as any),
       tagWriteOptions: toRaw(settingsStore.settings.tagWriteOptions),
       isCache: true,

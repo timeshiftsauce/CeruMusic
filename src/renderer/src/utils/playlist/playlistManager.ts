@@ -3,7 +3,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-import { calculateBestQuality } from '@common/utils/quality'
+import { calculateBestQuality, compareQuality, normalizeTypes } from '@common/utils/quality'
 
 /**
  * 一起听场景下的"member 点歌"分流 —— addToPlaylistAndPlay/End/replacePlaylist
@@ -149,24 +149,37 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
 
-    quality = calculateBestQuality(song.types, quality) || '128k'
+    const qualityCandidates = normalizeTypes(song.types)
+    const firstQuality = calculateBestQuality(qualityCandidates, quality) || '128k'
+    const fallbackQualities = qualityCandidates
+      .filter((item) => item !== firstQuality)
+      .sort(compareQuality)
+    const qualitiesToTry = [firstQuality, ...fallbackQualities]
 
-    console.log(`使用音质: ${quality} - ${qualityMap[quality]}`)
+    console.log(`使用音质: ${firstQuality} - ${qualityMap[firstQuality]}`)
     if (!LocalUserDetail.userSource.pluginId) throw new Error('插件都不配就想播放，想的倒挺美呢')
-    const urlData = await window.api.music.requestSdk('getMusicUrl', {
-      pluginId: LocalUserDetail.userSource.pluginId,
-      source: song.source,
-      songInfo: song as any,
-      quality,
-      isCache
-    })
 
-    // message.success(`使用音质: ${quality} - ${qualityMap[quality]}`)
-    if (typeof urlData === 'object' && urlData.error) {
-      throw new Error(urlData.error)
-    } else {
-      return urlData as string
+    let lastError: any = null
+    for (const qualityToTry of qualitiesToTry) {
+      const urlData = await window.api.music.requestSdk('getMusicUrl', {
+        pluginId: LocalUserDetail.userSource.pluginId,
+        source: song.source,
+        songInfo: song as any,
+        quality: qualityToTry,
+        isCache
+      })
+
+      if (typeof urlData === 'object' && urlData.error) {
+        lastError = urlData.error
+        continue
+      }
+      if (typeof urlData === 'string' && urlData && !urlData.includes('error')) {
+        return urlData
+      }
+      lastError = '获取歌曲播放链接失败'
     }
+
+    throw new Error(lastError || '获取歌曲播放链接失败')
   } catch (error: any) {
     console.error('获取歌曲URL失败,换个插件看看吧:', error)
     throw new Error('获取歌曲播放链接失败' + error.message)
@@ -202,16 +215,20 @@ export async function addToPlaylistAndPlay(
     return
   }
   try {
-    // 获取当前正在播放的歌曲索引
+    const getSongIdentity = (item: SongList) => item.songmid || item.hash || `${item.name}_${item.singer}`
     const currentId = localUserStore.userInfo?.lastPlaySongId
+    const currentSource = localUserStore.userInfo?.lastPlaySongSource
     const currentIndex =
       currentId !== undefined && currentId !== null
-        ? localUserStore.list.findIndex((item: SongList) => item.songmid === currentId)
+        ? localUserStore.list.findIndex(
+            (item: SongList) => getSongIdentity(item) === currentId && item.source === currentSource
+          )
         : -1
 
     // 如果目标歌曲已在列表中，先移除以避免重复
+    const targetId = getSongIdentity(song)
     const existingIndex = localUserStore.list.findIndex(
-      (item: SongList) => item.songmid === song.songmid
+      (item: SongList) => getSongIdentity(item) === targetId && item.source === song.source
     )
     if (existingIndex !== -1) {
       localUserStore.list.splice(existingIndex, 1)

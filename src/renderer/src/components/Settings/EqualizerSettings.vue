@@ -105,7 +105,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  onActivated,
+  onDeactivated,
+  watch,
+  computed,
+  nextTick
+} from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEqualizerStore } from '@renderer/store/Equalizer'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
@@ -113,6 +122,7 @@ import AudioManager from '@renderer/utils/audio/audioManager'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { DeleteIcon, SaveIcon } from 'tdesign-icons-vue-next'
 import { isPageIdle } from '@renderer/utils/idleSleep'
+import { isAppWindowActive, isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 // 内置预设列表 - 这些预设不能被删除
 const BUILTIN_PRESETS = [
@@ -137,11 +147,39 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const savePresetDialogVisible = ref(false)
 const newPresetName = ref('')
 
-let animationId: number
+let animationId = 0
 let _lastEqTs = 0
 let analyser: AnalyserNode | null = null
 let drawCtx: CanvasRenderingContext2D | null = null
 let drawDataArray: Uint8Array | null = null
+let isComponentActive = false
+
+const canRunVisualizer = () => {
+  const currentAudio = audio.value
+  return Boolean(
+    isComponentActive &&
+      enabled.value &&
+      currentAudio &&
+      audioStore.Audio.isPlay &&
+      !currentAudio.paused &&
+      canvasRef.value &&
+      isAppWindowVisible() &&
+      isAppWindowActive() &&
+      !isPageIdle()
+  )
+}
+
+const stopVisualizer = (releaseAnalyser = true) => {
+  if (animationId) {
+    cancelAnimationFrame(animationId)
+    animationId = 0
+  }
+  if (releaseAnalyser) {
+    AudioManager.removeAnalyser('eq-visualizer')
+    analyser = null
+    drawDataArray = null
+  }
+}
 
 // Format frequency for display
 const formatFreq = (freq: number) => {
@@ -268,11 +306,23 @@ watch(
 )
 
 watch(audio, (newAudio) => {
+  stopVisualizer(true)
   if (newAudio) {
-    setupVisualizer()
     applyGains()
+    setupVisualizer()
   }
 })
+
+watch(
+  () => [enabled.value, audioStore.Audio.isPlay],
+  () => {
+    if (canRunVisualizer()) {
+      setupVisualizer()
+    } else {
+      stopVisualizer(true)
+    }
+  }
+)
 
 // Preset handling
 const handlePresetChange = (val: string) => {
@@ -420,48 +470,56 @@ const handleFileImport = async (event: Event) => {
 
 // Visualizer
 const setupVisualizer = () => {
-  if (!audio.value || !canvasRef.value) return
+  if (!canRunVisualizer()) {
+    stopVisualizer(true)
+    return
+  }
 
-  // Update canvas size to match container
-  resizeCanvas()
+  if (!analyser) {
+    resizeCanvas()
+    analyser = AudioManager.createAnalyser(audio.value!, 'eq-visualizer', 256)
+    if (!analyser) return
 
-  // Use a unique ID for EQ visualizer
-  analyser = AudioManager.createAnalyser(audio.value, 'eq-visualizer', 256)
-  if (!analyser) return
+    drawCtx = canvasRef.value!.getContext('2d')
+    if (!drawCtx) {
+      stopVisualizer(true)
+      return
+    }
 
-  drawCtx = canvasRef.value.getContext('2d')
-  if (!drawCtx) return
+    const bufferLength = analyser.frequencyBinCount
+    drawDataArray = new Uint8Array(bufferLength)
+  }
 
-  const bufferLength = analyser.frequencyBinCount
-  drawDataArray = new Uint8Array(bufferLength)
-
-  draw()
+  if (!animationId) {
+    _lastEqTs = 0
+    animationId = requestAnimationFrame(draw)
+  }
 }
 
 const draw = (ts?: number) => {
-  if (!analyser || !drawCtx || !canvasRef.value) return
+  animationId = 0
 
-  // 30fps 节流
+  if (!canRunVisualizer()) {
+    stopVisualizer(true)
+    return
+  }
+  if (!analyser || !drawCtx || !canvasRef.value || !drawDataArray) return
+
   const now = ts ?? performance.now()
-  if (now - _lastEqTs < 33) {
+  if (now - _lastEqTs < 66) {
     animationId = requestAnimationFrame(draw)
     return
   }
   _lastEqTs = now
 
-  // 页面隐藏或闲置或均衡器关闭时终止循环
-  if (document.hidden || isPageIdle() || !enabled.value) {
-    animationId = 0
-    return
-  }
   animationId = requestAnimationFrame(draw)
 
-  analyser.getByteFrequencyData(drawDataArray! as Uint8Array<ArrayBuffer>)
+  analyser.getByteFrequencyData(drawDataArray as Uint8Array<ArrayBuffer>)
 
   const width = canvasRef.value.width
   const height = canvasRef.value.height
 
-  drawCtx.fillStyle = 'rgba(30, 30, 30, 0.2)' // Fade effect
+  drawCtx.fillStyle = 'rgba(30, 30, 30, 0.2)'
   drawCtx.fillRect(0, 0, width, height)
 
   const bufferLength = analyser.frequencyBinCount
@@ -470,7 +528,7 @@ const draw = (ts?: number) => {
   let x = 0
 
   for (let i = 0; i < bufferLength; i++) {
-    barHeight = drawDataArray![i] / 2
+    barHeight = drawDataArray[i] / 2
 
     const gradient = drawCtx.createLinearGradient(0, height, 0, 0)
     gradient.addColorStop(0, '#00f260')
@@ -483,10 +541,11 @@ const draw = (ts?: number) => {
   }
 }
 
-// 页面可见性或闲置状态变化时重启 EQ 可视化循环
-const onEqVisibilityChange = () => {
-  if (!document.hidden && !isPageIdle() && audio.value && analyser) {
-    draw()
+const syncVisualizerState = () => {
+  if (canRunVisualizer()) {
+    setupVisualizer()
+  } else {
+    stopVisualizer(true)
   }
 }
 
@@ -502,25 +561,36 @@ const resizeCanvas = () => {
 }
 
 onMounted(() => {
+  isComponentActive = true
   if (audio.value) {
-    setupVisualizer()
     applyGains()
   }
 
-  // Add window resize listener
   window.addEventListener('resize', resizeCanvas)
-  document.addEventListener('visibilitychange', onEqVisibilityChange)
-  window.addEventListener('ceru-wake', onEqVisibilityChange)
+  window.addEventListener('ceru-window-state-change', syncVisualizerState)
+  window.addEventListener('ceru-wake', syncVisualizerState)
+  window.addEventListener('ceru-sleep', syncVisualizerState)
+  nextTick(syncVisualizerState)
+})
+
+onActivated(() => {
+  isComponentActive = true
+  nextTick(syncVisualizerState)
+})
+
+onDeactivated(() => {
+  isComponentActive = false
+  stopVisualizer(true)
 })
 
 onUnmounted(() => {
-  if (animationId) cancelAnimationFrame(animationId)
-  AudioManager.removeAnalyser('eq-visualizer')
+  isComponentActive = false
+  stopVisualizer(true)
 
-  // Remove window resize listener
   window.removeEventListener('resize', resizeCanvas)
-  document.removeEventListener('visibilitychange', onEqVisibilityChange)
-  window.removeEventListener('ceru-wake', onEqVisibilityChange)
+  window.removeEventListener('ceru-window-state-change', syncVisualizerState)
+  window.removeEventListener('ceru-wake', syncVisualizerState)
+  window.removeEventListener('ceru-sleep', syncVisualizerState)
 })
 </script>
 

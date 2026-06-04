@@ -4,6 +4,7 @@ import { extractColors, Color } from '@renderer/utils/color/colorExtractor'
 import DefaultCover from '@renderer/assets/images/Default.jpg'
 import CoverImage from '@renderer/assets/images/cover.png'
 import { isPageIdle } from '@renderer/utils/idleSleep'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 const props = defineProps<{
   coverImage: string
@@ -323,6 +324,11 @@ let _lastRenderTime = 0
 function render(now: number) {
   if (!gl || !program) return
 
+  if (!isAppWindowVisible() || isPageIdle()) {
+    animationFrameId = null
+    return
+  }
+
   // 20fps 节流：每 50ms 才执行一次绘制
   if (now - _lastRenderTime < 50) {
     animationFrameId = requestAnimationFrame(render)
@@ -348,19 +354,13 @@ function render(now: number) {
   // 绘制
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
-  // 页面隐藏或闲置时暂停渲染
-  if (document.hidden || isPageIdle()) {
-    animationFrameId = null
-    return
-  }
-
   // 请求下一帧
   animationFrameId = requestAnimationFrame(render)
 }
 
 // 页面可见性变化或闲置结束时重启渲染
 const onShaderVisibilityChange = () => {
-  if (!document.hidden && !isPageIdle() && animationFrameId === null) {
+  if (isAppWindowVisible() && !isPageIdle() && animationFrameId === null) {
     startRenderLoop()
   }
 }

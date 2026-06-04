@@ -234,6 +234,18 @@ async function download(task: DownloadTask): Promise<any> {
     }
 
     let finalPath = filePath
+    const downloadedStats = await fsPromise.stat(filePath)
+    if (downloadedStats.size <= 0) {
+      throw new Error('下载结果为空文件')
+    }
+    parentPort?.postMessage({
+      type: 'progress',
+      progress: 100,
+      speed: 0,
+      totalSize: downloadedStats.size,
+      downloadedSize: downloadedStats.size,
+      remainingTime: 0
+    })
     try {
       const detected = await detectFormat(filePath)
       const shouldExt = extForFormat(detected)
@@ -255,7 +267,8 @@ async function download(task: DownloadTask): Promise<any> {
 
     return {
       message: '下载成功',
-      path: finalPath
+      path: finalPath,
+      size: (await fsPromise.stat(finalPath)).size
     }
   } catch (error) {
     if (fs.existsSync(filePath)) {

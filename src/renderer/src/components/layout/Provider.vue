@@ -201,6 +201,18 @@ const flushUsage = () => {
   }
 }
 
+const clearUsageInterval = () => {
+  if (usageInterval) {
+    window.clearInterval(usageInterval)
+    usageInterval = null
+  }
+}
+
+const ensureUsageInterval = () => {
+  if (usageInterval || !usageTrackingEnabled) return
+  usageInterval = window.setInterval(flushUsage, 15000)
+}
+
 const setUsageActive = (active: boolean) => {
   if (!usageTrackingEnabled) return
   if (active === usageActive) return
@@ -218,6 +230,11 @@ const updateUsageActiveState = () => {
   const active =
     !document.hidden && (typeof document.hasFocus === 'function' ? document.hasFocus() : true)
   setUsageActive(active)
+  if (active) {
+    ensureUsageInterval()
+  } else {
+    clearUsageInterval()
+  }
 }
 
 const stopUsageTracking = () => {
@@ -334,7 +351,6 @@ onMounted(() => {
     window.addEventListener('focus', updateUsageActiveState)
     window.addEventListener('blur', updateUsageActiveState)
     window.addEventListener('beforeunload', flushUsage)
-    usageInterval = window.setInterval(flushUsage, 15000)
   }
 
   // 添加 theme-changed 事件监听器并保存清理函数

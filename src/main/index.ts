@@ -172,10 +172,45 @@ let tray: Tray | null = null
 let trayLyricLocked = false
 const MAC_TRAY_GUID = 'f4f8a5d8-9eb2-4f98-8fd7-3a3d5ec9b2cf'
 
+type AppWindowState = {
+  visible: boolean
+  focused: boolean
+  minimized: boolean
+  hidden: boolean
+  fullscreen: boolean
+}
+
+const getMainWindowState = (): AppWindowState => {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) {
+    return { visible: false, focused: false, minimized: false, hidden: true, fullscreen: false }
+  }
+  const visible = win.isVisible()
+  const minimized = win.isMinimized()
+  return {
+    visible,
+    focused: win.isFocused(),
+    minimized,
+    hidden: !visible || minimized,
+    fullscreen: isWindowedFullScreenActive() || win.isFullScreen()
+  }
+}
+
+const sendMainWindowState = (): void => {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+  mainWindow.webContents.send('app:window-state-changed', getMainWindowState())
+}
+
+const bindMainWindowStateEvents = (win: BrowserWindow): void => {
+  const push = () => sendMainWindowState()
+  ;['show', 'hide', 'minimize', 'restore', 'focus', 'blur', 'enter-full-screen', 'leave-full-screen'].forEach(
+    (eventName) => win.on(eventName as any, push)
+  )
+}
+
 const sendPlaybackControl = (channel: 'toggle' | 'playPrev' | 'playNext'): void => {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
-  // backgroundThrottling: false 已在 webPreferences 中设置，页面始终不被节流，
-  // 直接发送 IPC 即可。GPU 降级由渲染层 blur/focus 驱动。
+  // 保留主渲染进程接收后台控制 IPC；隐藏窗口后的 UI 降载由渲染层窗口状态门控处理。
   mainWindow.webContents.send(channel)
 }
 
@@ -394,6 +429,7 @@ function enterWindowedFullScreen(win: BrowserWindow): void {
   win.setAlwaysOnTop(true) // 盖住任务栏
 
   win.webContents.send('app-fullscreen-changed', true)
+  sendMainWindowState()
 }
 
 function exitWindowedFullScreen(win: BrowserWindow): void {
@@ -421,6 +457,7 @@ function exitWindowedFullScreen(win: BrowserWindow): void {
   fsState.wasMaximized = false
 
   win.webContents.send('app-fullscreen-changed', false)
+  sendMainWindowState()
 }
 
 function toggleAppFullScreen(win: BrowserWindow | null): void {
@@ -610,7 +647,7 @@ function createWindow(): void {
       webSecurity: false,
       nodeIntegration: true,
       contextIsolation: false,
-      backgroundThrottling: false
+      backgroundThrottling: true
     }
   } as BrowserWindowConstructorOptions
 
@@ -621,6 +658,7 @@ function createWindow(): void {
 
   // Create the browser window.
   mainWindow = new BrowserWindow(defaultOptions)
+  bindMainWindowStateEvents(mainWindow)
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
   initHotkeyService(mainWindow)
@@ -790,6 +828,9 @@ function createWindow(): void {
       }
     }
   )
+
+  ipcMain.removeHandler('app:get-window-state')
+  ipcMain.handle('app:get-window-state', () => getMainWindowState())
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.

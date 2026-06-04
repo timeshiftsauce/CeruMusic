@@ -58,7 +58,12 @@ import ListenTogetherEntryDialog from '@renderer/components/ListenTogether/Liste
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
-import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
+import { waitForAudioReady, createSourceSwitchDialog } from '@renderer/utils/audio/audioHelpers'
+import { calculateBestQuality } from '@common/utils/quality'
+import {
+  getDeclaredQualityFormats,
+  getVerifiedQualityFormats
+} from '@renderer/utils/audio/qualityAvailability'
 
 const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
@@ -206,7 +211,7 @@ const DEFAULT_WINDOW_TITLE = '澜音 Ceru Music'
 const pushWindowTitle = () => {
   if (!appApi?.setTitle) return
   const info: any = songInfo.value || {}
-  if (info.songmid && info.name) {
+  if ((info.songmid || info.hash || info.name) && info.name) {
     const singer = info.singer ? ` - ${info.singer}` : ''
     appApi.setTitle(`${info.name}${singer}`)
   } else {
@@ -221,7 +226,7 @@ const pushWindowProgress = (force = false) => {
   const info: any = songInfo.value || {}
   const dur = Audio.value.duration || 0
   const cur = Audio.value.currentTime || 0
-  if (!info.songmid || !dur || !isFinite(dur)) {
+  if (!(info.songmid || info.hash || info.name) || !dur || !isFinite(dur)) {
     appApi.setProgress(-1)
     lastProgressPushAt = 0
     return
@@ -254,7 +259,7 @@ const pushThumbarState = () => {
   if (!thumbarApi?.setState) return
   const info: any = songInfo.value || {}
   thumbarApi.setState({
-    hasSong: !!info.songmid,
+    hasSong: !!(info.songmid || info.hash || info.name),
     isPlaying: !!Audio.value.isPlay,
     isLiked: !!likeState.value,
     songName: info.name || '',
@@ -711,7 +716,6 @@ const onToggleLike = async () => {
 const onDownload = async () => {
   try {
     await downloadSingleSong(_.cloneDeep(toRaw(songInfo.value)) as any)
-    MessagePlugin.success('开始下载当前歌曲')
   } catch (e: any) {
     console.error('下载失败:', e)
     MessagePlugin.error('下载失败，请稍后重试')
@@ -845,6 +849,71 @@ const qualityDisplayMap: Record<string, string> = {
 
 const getQualityDisplayName = (quality: string) => qualityDisplayMap[quality] || quality
 
+const qualitySourceLabelMap: Record<string, string> = {
+  wy: 'wyy',
+  kg: 'kg',
+  tx: '秋秋',
+  kw: 'kw',
+  mg: 'mg'
+}
+
+const getQualitySourceLabel = (source?: string) => {
+  if (!source) return ''
+  return qualitySourceLabelMap[source] || source
+}
+
+const currentQualitySource = computed(() => (songInfo.value as any).source || '')
+const verifiedQualityKey = ref('')
+const verifiedQualityLoading = ref(false)
+const verifiedQualityFormats = ref<Array<{ type: string; size?: string }>>([])
+
+const getQualitySongKey = (song: any) =>
+  `${song.source || ''}:${song.songmid || song.hash || `${song.name || ''}_${song.singer || ''}`}`
+
+const hasCurrentSongIdentity = computed(() => {
+  const song = songInfo.value as any
+  return !!(song.songmid || song.hash || song.name)
+})
+
+const findCurrentListSong = () => {
+  const song = songInfo.value as any
+  const key = getQualitySongKey(song)
+  return list.value.find((s: any) => getQualitySongKey(s) === key)
+}
+
+const refreshVerifiedQualityFormats = async () => {
+  const song = songInfo.value as any
+  const key = getQualitySongKey(song)
+  if (!hasCurrentSongIdentity.value || !canSwitchQuality.value) {
+    verifiedQualityKey.value = key
+    verifiedQualityFormats.value = []
+    return
+  }
+  if (verifiedQualityKey.value === key && verifiedQualityFormats.value.length > 0) return
+
+  verifiedQualityLoading.value = true
+  verifiedQualityKey.value = key
+  try {
+    const formats = await getVerifiedQualityFormats(_.cloneDeep(toRaw(song)) as any)
+    if (verifiedQualityKey.value === key) {
+      if (formats.length > 0) {
+        verifiedQualityFormats.value = formats
+      } else if (Audio.value.url) {
+        const desiredQuality =
+          (userInfo.value.sourceQualityMap || {})[song.source] || userInfo.value.selectQuality || '128k'
+        const fallbackQuality = calculateBestQuality(getDeclaredQualityFormats(song), desiredQuality) || '128k'
+        verifiedQualityFormats.value = [{ type: fallbackQuality }]
+      } else {
+        verifiedQualityFormats.value = []
+      }
+    }
+  } finally {
+    if (verifiedQualityKey.value === key) {
+      verifiedQualityLoading.value = false
+    }
+  }
+}
+
 // 当前歌曲是否支持音质切换（来自插件音源、且非 service 插件直链）
 const canSwitchQuality = computed(() => {
   const src = (songInfo.value as any).source
@@ -853,22 +922,75 @@ const canSwitchQuality = computed(() => {
   return true
 })
 
-// 当前歌曲对应音源插件支持的音质列表
+// 当前歌曲真实可播放的音质列表
 const currentSourceQualities = computed<string[]>(() => {
   if (!canSwitchQuality.value) return []
-  const src = (songInfo.value as any).source
-  const sources = userInfo.value.supportedSources || {}
-  return sources[src]?.qualitys || []
+  return verifiedQualityFormats.value.map((item) => item.type)
 })
 
-// 当前歌曲使用的音质
+const hasDeclaredQualities = computed(() => getDeclaredQualityFormats(songInfo.value as any).length > 0)
+
+// 当前歌曲实际使用的音质
 const currentQuality = computed(() => {
   const src = (songInfo.value as any).source
-  if (!src) return ''
-  return (userInfo.value.sourceQualityMap || {})[src] || userInfo.value.selectQuality || ''
+  if (!src || verifiedQualityFormats.value.length === 0) return ''
+  const desiredQuality = (userInfo.value.sourceQualityMap || {})[src] || userInfo.value.selectQuality || ''
+  return calculateBestQuality(verifiedQualityFormats.value, desiredQuality) || verifiedQualityFormats.value[0]?.type || ''
 })
 
 const switchingQuality = ref(false)
+const switchingSource = ref(false)
+
+const switchCurrentSource = async () => {
+  if (switchingSource.value) return
+  if (!hasCurrentSongIdentity.value) return
+  if ((songInfo.value as any).source === 'local' || (songInfo.value as any).url) {
+    MessagePlugin.warning('当前歌曲不支持切换音源')
+    return
+  }
+  if (dlnaStore.currentDevice) {
+    MessagePlugin.warning('投屏模式下暂不支持切换音源')
+    return
+  }
+
+    const currentSong = findCurrentListSong()
+  if (!currentSong) {
+    MessagePlugin.warning('当前没有正在播放的歌曲')
+    return
+  }
+
+  switchingSource.value = true
+  try {
+    const nextSong = await createSourceSwitchDialog(
+      _.cloneDeep(toRaw(currentSong)) as any,
+      userInfo.value,
+      '切换播放音源'
+    )
+    if (!nextSong) return
+
+    const currentIndex = list.value.findIndex((s: any) => getQualitySongKey(s) === getQualitySongKey(currentSong))
+    if (currentIndex !== -1) {
+      list.value.splice(currentIndex, 1, nextSong as any)
+    }
+    const savedTime = Audio.value.currentTime || Audio.value.audio?.currentTime || 0
+    const wasPlaying = Audio.value.isPlay && !!Audio.value.audio && !Audio.value.audio.paused
+    userInfo.value.currentTime = savedTime
+    userInfo.value.lastPlaySongSource = nextSong.source
+    await playSong(nextSong as any, {
+      immediate: true,
+      shouldAutoStart: () => wasPlaying
+    })
+    if (!wasPlaying && Audio.value.audio) {
+      Audio.value.audio.currentTime = savedTime
+      controlAudio.setCurrentTime(savedTime)
+    }
+  } catch (e: any) {
+    console.error('切换播放音源失败:', e)
+    MessagePlugin.error('切换播放音源失败：' + (e?.message || '未知错误'))
+  } finally {
+    switchingSource.value = false
+  }
+}
 
 // 切换音质：保留当前进度与播放状态
 const switchQuality = async (quality: string) => {
@@ -882,7 +1004,7 @@ const switchQuality = async (quality: string) => {
   }
 
   const src = (songInfo.value as any).source
-  const currentSong = list.value.find((s) => s.songmid === userInfo.value.lastPlaySongId)
+  const currentSong = findCurrentListSong()
   if (!currentSong) {
     MessagePlugin.warning('当前没有正在播放的歌曲')
     return
@@ -1018,24 +1140,61 @@ const moreMenuOptions = computed(() => {
     })
   }
 
-  if (currentSourceQualities.value.length > 0) {
+  if (hasDeclaredQualities.value) {
     const cur = currentQuality.value
+    const source = currentQualitySource.value
+    const sourceLabel = getQualitySourceLabel(source)
+    const qualityChildren = verifiedQualityLoading.value
+      ? [
+          {
+            label: '正在检测真实可用音质...',
+            key: 'quality:source-title',
+            disabled: true
+          }
+        ]
+      : currentSourceQualities.value.length > 0
+        ? [
+            {
+              label: sourceLabel ? `来自 ${sourceLabel}` : '当前音源',
+              key: 'quality:source-title',
+              disabled: true
+            },
+            ...currentSourceQualities.value.map((q) => ({
+              label: getQualityDisplayName(q),
+              key: `quality:${q}`,
+              icon:
+                q === cur
+                  ? () => h(CheckIcon, { size: '14', style: { color: 'var(--td-brand-color-5)' } })
+                  : undefined,
+              disabled: switchingQuality.value
+            }))
+          ]
+        : [
+            {
+              label: '当前歌曲没有可播放音质',
+              key: 'quality:source-title',
+              disabled: true
+            }
+          ]
     opts.push({
-      label: cur ? `音质 · ${getQualityDisplayName(cur)}` : '音质',
+      label: cur ? `音质 · ${sourceLabel} · ${getQualityDisplayName(cur)}` : `音质 · ${sourceLabel}`,
       key: 'quality',
       icon: () => h(SoundIcon, { size: '16' }),
-      disabled: !songInfo.value.songmid || switchingQuality.value,
-      children: currentSourceQualities.value.map((q) => ({
-        label: getQualityDisplayName(q),
-        key: `quality:${q}`,
-        icon:
-          q === cur
-            ? () => h(CheckIcon, { size: '14', style: { color: 'var(--td-brand-color-5)' } })
-            : undefined,
-        disabled: switchingQuality.value
-      }))
+      disabled: !hasCurrentSongIdentity.value || switchingQuality.value || verifiedQualityLoading.value,
+      children: qualityChildren
     })
   }
+
+  opts.push({
+    label: '切换音源',
+    key: 'source-switch',
+    icon: () => h(RefreshIcon, { size: '16' }),
+    disabled:
+      !hasCurrentSongIdentity.value ||
+      switchingSource.value ||
+      (songInfo.value as any).source === 'local' ||
+      !!(songInfo.value as any).url
+  })
 
   opts.push({
     label: `播放倍速 · ${formatRate(playbackRate.value)}`,
@@ -1167,7 +1326,12 @@ const handleMoreMenuSelect = (key: string) => {
   }
   if (typeof key === 'string' && key.startsWith('quality:')) {
     const q = key.slice('quality:'.length)
+    if (q === 'source-title') return
     void switchQuality(q)
+    return
+  }
+  if (key === 'source-switch') {
+    void switchCurrentSource()
     return
   }
   if (typeof key === 'string' && key.startsWith('rate:')) {
@@ -1662,13 +1826,13 @@ watch(showFullPlay, (val) => {
             placement="top-start"
             :options="moreMenuOptions"
             @select="handleMoreMenuSelect"
-            @update:show="(s: boolean) => (isMoreMenuOpen = s)"
+            @update:show="(s: boolean) => { isMoreMenuOpen = s; if (s) void refreshVerifiedQualityFormats() }"
           >
             <t-button
               class="control-btn"
               shape="circle"
               variant="text"
-              :disabled="!songInfo.songmid"
+              :disabled="!hasCurrentSongIdentity"
               @click.stop
             >
               <ellipsis-icon size="18" />

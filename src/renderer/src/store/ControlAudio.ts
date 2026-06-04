@@ -4,6 +4,7 @@ import { transitionVolume } from '@renderer/utils/audio/volume'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { usePlaySettingStore } from '@renderer/store'
 import { isLtInRoom } from '@renderer/utils/listenTogether/state'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 import type {
   AudioEventCallback,
@@ -278,10 +279,9 @@ export const ControlAudioStore = defineStore(
       const volume = Audio.volume
       if (Audio.audio) {
         const audioEl = Audio.audio
-        /* 一起听:房间内强制走"无过渡"路径,绕过 transitionVolume。
-         * 过渡的渐变 ~150ms 会让真实播放比 SYNC 应用慢,跨设备就不同步了。
-         * 不修改用户设置,只在房间状态下 bypass。 */
-        if (!playSetting.getIsPauseTransition || isLtInRoom()) {
+        /* 一起听或后台隐藏窗口走无过渡路径，避免同步偏移，也避免隐藏态 play() 完成前音量停在 0。
+         * 不修改用户设置，只按当前运行形态 bypass。 */
+        if (!playSetting.getIsPauseTransition || isLtInRoom() || !isAppWindowVisible()) {
           audioEl.volume = volume / 100
           const playPromise = audioEl.play()
           // 乐观设为 true，不等 play() promise（窗口隐藏时 Chromium 可能挂起该 Promise）
@@ -315,8 +315,8 @@ export const ControlAudioStore = defineStore(
       const playSetting = usePlaySettingStore()
       if (Audio.audio) {
         Audio.isPlay = false
-        /* 一起听:房间内强制无过渡暂停,与 start 对称 */
-        if (!playSetting.getIsPauseTransition || isLtInRoom()) {
+        /* 一起听或后台隐藏窗口走无过渡暂停，与 start 对称。 */
+        if (!playSetting.getIsPauseTransition || isLtInRoom() || !isAppWindowVisible()) {
           Audio.audio.pause()
           return Promise.resolve()
         }

@@ -4,6 +4,7 @@ import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { storeToRefs } from 'pinia'
 import audioManager from '@renderer/utils/audio/audioManager'
 import { isPageIdle } from '@renderer/utils/idleSleep'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 interface Props {
   show?: boolean
@@ -77,13 +78,21 @@ const initAudioAnalyser = () => {
   }
 }
 
+const releaseAudioAnalyser = () => {
+  try {
+    audioManager.removeAnalyser(componentId.value)
+  } catch {}
+  analyser.value = undefined
+  dataArray.value = undefined
+}
+
 // 绘制可视化
 const draw = (ts?: number) => {
   if (!canvasRef.value || !analyser.value || !dataArray.value) return
 
-  // 页面隐藏或闲置时立即终止循环
-  if (!document.hasFocus() || document.hidden || isPageIdle()) {
-    animationId.value = undefined
+  // 页面隐藏或闲置时立即终止循环并释放分析器
+  if (!isAppWindowVisible() || isPageIdle()) {
+    stopVisualization(true)
     return
   }
 
@@ -177,10 +186,12 @@ const draw = (ts?: number) => {
 
 // 页面可见性变化或闲置结束时处理
 const onVisibilityChange = () => {
-  if (!document.hidden && !isPageIdle() && props.show && Audio.value.isPlay) {
-    stopVisualization()
-    startVisualization()
+  if (!isAppWindowVisible() || isPageIdle() || !props.show || !Audio.value.isPlay) {
+    stopVisualization(true)
+    return
   }
+  stopVisualization()
+  startVisualization()
 }
 
 // 开始可视化
@@ -195,11 +206,14 @@ const startVisualization = () => {
 }
 
 // 停止可视化
-const stopVisualization = () => {
+const stopVisualization = (releaseAnalyser = false) => {
   try {
     if (animationId.value) {
       cancelAnimationFrame(animationId.value)
       animationId.value = undefined
+    }
+    if (releaseAnalyser) {
+      releaseAudioAnalyser()
     }
   } catch (error) {
     console.warn('停止动画帧时出错:', error)
@@ -213,7 +227,7 @@ watch(
     if (isPlaying && props.show) {
       startVisualization()
     } else {
-      stopVisualization()
+      stopVisualization(true)
     }
   }
 )
@@ -225,7 +239,7 @@ watch(
     if (show && Audio.value.isPlay) {
       startVisualization()
     } else {
-      stopVisualization()
+      stopVisualization(true)
     }
   }
 )
@@ -236,12 +250,7 @@ watch(
   (newEl, oldEl) => {
     if (!newEl || newEl === oldEl) return
     try {
-      stopVisualization()
-      // 移除旧的 analyser 引用
-      try {
-        audioManager.removeAnalyser(componentId.value)
-      } catch {}
-      analyser.value = undefined
+      stopVisualization(true)
       // 对新元素重新初始化分析器
       initAudioAnalyser()
       if (props.show && Audio.value.isPlay) {
@@ -318,8 +327,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   console.log('AudioVisualizer 组件开始卸载')
 
-  // 停止可视化动画
-  stopVisualization()
+  // 停止可视化动画并释放分析器
+  stopVisualization(true)
 
   // 清理音频上下文和相关资源
   try {

@@ -30,6 +30,7 @@ import LyricCopyOverlay from './LyricCopyOverlay.vue'
 import ListenTogetherOverlay from './ListenTogetherOverlay.vue'
 import LtDanmakuLayer from '@renderer/components/ListenTogether/LtDanmakuLayer.vue'
 import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
+import { isAppWindowActive } from '@renderer/utils/appWindowState'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
@@ -111,6 +112,10 @@ const scheduleBursts = (w: number, h: number) => {
 }
 
 const step = (ts: number) => {
+  if (!running || !isAppWindowActive()) {
+    stopFireworks()
+    return
+  }
   if (!fwCtx || !fwCanvas) return
   const dt = ts - lastTime
   lastTime = ts
@@ -148,6 +153,7 @@ const step = (ts: number) => {
 
 const startFireworks = () => {
   if (running) return
+  if (!isAppWindowActive()) return
   if (!festivalOverlay.value) return
   fwCanvas = document.createElement('canvas')
   fwCanvas.style.position = 'absolute'
@@ -621,6 +627,7 @@ watch(
       bgRef.value?.resume()
     } else {
       bgRef.value?.pause()
+      stopFireworks()
     }
   },
   { immediate: true }
@@ -796,27 +803,26 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 // --- 后台暂停动画逻辑 Start ---
-// 注意：window 最小化/隐藏时 document.hidden 始终为 false（因为启用了
-// backgroundThrottling: false 以保证托盘播放正常工作），所以改用
-// blur/focus 事件检测窗口是否被最小化/遮盖来暂停/恢复动画。
-const isAppActive = ref(document.hasFocus())
+const isAppActive = ref(isAppWindowActive())
 
-const handleBlur = () => {
-  isAppActive.value = false
-  // 页面不可见，暂停所有动画渲染
-  bgRef.value?.pause()
-  stopFireworks()
-}
-
-const handleFocus = () => {
-  isAppActive.value = true
-  if (!document.hidden) {
+const syncAppActiveState = () => {
+  const active = isAppWindowActive()
+  isAppActive.value = active
+  if (!active) {
+    bgRef.value?.pause()
+    stopFireworks()
+    return
+  }
+  if (props.show) {
     bgRef.value?.resume()
-    if (props.show && showFestivalEffects.value && !running) {
+    if (showFestivalEffects.value && !running) {
       startFireworks()
     }
   }
 }
+
+const handleBlur = syncAppActiveState
+const handleFocus = syncAppActiveState
 // --- 后台暂停动画逻辑 End ---
 
 // 保存 debounce 函数引用以便后续移除
@@ -828,6 +834,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('blur', handleBlur)
   window.addEventListener('focus', handleFocus)
+  window.addEventListener('ceru-window-state-change', syncAppActiveState)
   // 初始检查
   setTimeout(checkOverflow, 500)
 })
@@ -838,6 +845,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('blur', handleBlur)
   window.removeEventListener('focus', handleFocus)
+  window.removeEventListener('ceru-window-state-change', syncAppActiveState)
 })
 // removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---

@@ -347,7 +347,12 @@ onDeactivated(() => {
                 @click="playPlaylist(playlist)"
               >
                 <div class="playlist-cover">
-                  <s-image :src="playlist.cover" class="playlist-cover-image" />
+                  <s-image
+                    :src="playlist.cover"
+                    class="playlist-cover-image"
+                    :observe-visibility="true"
+                    :release-on-hide="true"
+                  />
                   <span v-if="userSource.source === 'all' && playlist.source" class="source-badge">
                     {{ playlist.source }}
                   </span>

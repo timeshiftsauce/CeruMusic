@@ -1,4 +1,6 @@
 import { createWebHashHistory, createRouter, RouteRecordRaw, RouterOptions } from 'vue-router'
+import { isPageIdle } from '@renderer/utils/idleSleep'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 const appRouter: RouteRecordRaw[] = [
   {
@@ -198,9 +200,15 @@ const startPreload = () => {
 
   const INTERACT_COOLDOWN_MS = 1500
   const GAP_BETWEEN_CHUNKS_MS = 400
+  const shouldPausePreload = () => !isAppWindowVisible() || !isPageIdle()
 
   const runBatch = (deadline?: IdleDeadline) => {
     if (!getRoutePreloadEnabled()) return
+
+    if (shouldPausePreload()) {
+      setTimeout(() => idleCallback(runBatch), INTERACT_COOLDOWN_MS)
+      return
+    }
 
     // 用户刚交互过 → 推迟,避免和滚动重绘抢主线程/GPU
     if (performance.now() - lastInteract < INTERACT_COOLDOWN_MS) {

@@ -292,6 +292,10 @@ export default class DownloadManager extends EventEmitter {
       this.emit('task-progress', task)
     } else if (message.type === 'completed') {
       log.info('Task completed:', taskId)
+      if (message.result?.size && message.result.size > 0) {
+        task.totalSize = message.result.size
+        task.downloadedSize = message.result.size
+      }
       task.status = DownloadStatus.Completed
       task.progress = 100
       this.emit('task-completed', task)

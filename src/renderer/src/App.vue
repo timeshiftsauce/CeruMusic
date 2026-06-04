@@ -25,6 +25,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
 import shareAPI from '@renderer/api/share'
 import { initIdleSleep, destroyIdleSleep } from './utils/idleSleep'
+import { initAppWindowState, destroyAppWindowState, isAppWindowVisible } from './utils/appWindowState'
 
 const route = useRoute()
 const router = useRouter()
@@ -209,12 +210,15 @@ onMounted(async () => {
 
   // 启动页面闲置休眠监听
   initIdleSleep()
+  initAppWindowState()
 
   // 窗口隐藏时冻结 CSS 动画/过渡，降低 GPU 开销
   const onVisibility = () => {
-    document.body.classList.toggle('window-hidden', document.hidden)
+    document.body.classList.toggle('window-hidden', !isAppWindowVisible())
   }
+  window.addEventListener('ceru-window-state-change', onVisibility)
   document.addEventListener('visibilitychange', onVisibility)
+  onVisibility()
   // 保存引用以便卸载时清理
   ;(window as any).__ceruVisibilityHandler = onVisibility
 })
@@ -229,10 +233,12 @@ onBeforeUnmount(() => {
 
   // 销毁闲置休眠监听
   destroyIdleSleep()
+  destroyAppWindowState()
 
   // 清理可见性监听
   const h = (window as any).__ceruVisibilityHandler
   if (h) {
+    window.removeEventListener('ceru-window-state-change', h)
     document.removeEventListener('visibilitychange', h)
     ;(window as any).__ceruVisibilityHandler = null
   }

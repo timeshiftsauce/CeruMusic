@@ -381,6 +381,8 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
                 <img
                   :src="playlist.cover"
                   :alt="playlist.title"
+                  loading="lazy"
+                  decoding="async"
                   @error="playlist.cover = songCover"
                 />
                 <span v-if="userSource.source === 'all' && playlist.source" class="source-badge">

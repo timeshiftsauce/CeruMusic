@@ -81,8 +81,12 @@ function _getOtherSourceCacheKey(song: SongList): string {
 
 // ==================== 持久化缓存辅助 ====================
 /** 生成 SQLite URL 缓存的 Key（与主进程 service.ts 保持一致） */
+function _getSongIdentity(song: Partial<SongList> | any): string {
+  return String(song?.songmid || song?.hash || `${song?.name || ''}_${song?.singer || ''}`)
+}
+
 function _getCacheKey(song: SongList, quality: string): string {
-  const songMid = song.songmid || song.hash || `${song.name}_${song.singer}`
+  const songMid = _getSongIdentity(song)
   return `${song.source}_${songMid}_${quality}`
 }
 
@@ -120,12 +124,12 @@ function _getQuality(song: SongList): string {
  */
 const tryUrlSequential = async (
   song: SongList
-): Promise<{ url: string; source: string } | null> => {
+): Promise<{ url: string; song: SongList } | null> => {
   // 限流期间只试主源
   if (_isThrottled()) {
     try {
       const url = await getSongRealUrl(toRaw(song))
-      if (url && typeof url === 'string' && !url.includes('error')) return { url, source: song.source }
+      if (url && typeof url === 'string' && !url.includes('error')) return { url, song }
     } catch {}
     return null
   }
@@ -133,7 +137,7 @@ const tryUrlSequential = async (
   // 1. 当前源
   try {
     const url = await getSongRealUrl(toRaw(song))
-    if (url && typeof url === 'string' && !url.includes('error')) return { url, source: song.source }
+    if (url && typeof url === 'string' && !url.includes('error')) return { url, song }
   } catch {}
 
   if (_isThrottled()) return null
@@ -143,7 +147,7 @@ const tryUrlSequential = async (
   let candidates = _otherSourceCache.get(cacheKey)
   if (!candidates) {
     try {
-      candidates = await getCandidateSongs(song, userInfo.value)
+      candidates = await getCandidateSongs(song, userInfo.value, { lightweight: true, silent: true })
       if (candidates && candidates.length > 0) {
         _otherSourceCache.set(cacheKey, candidates)
         if (_otherSourceCache.size > _OTHER_CACHE_MAX) {
@@ -166,7 +170,7 @@ const tryUrlSequential = async (
       if (url && typeof url === 'string' && !url.includes('error')) {
         // 成功后将 URL 同时缓存在主进程
         _setCachedUrl(item, quality, url)
-        return { url, source: item.source }
+        return { url, song: item }
       }
     } catch {}
   }
@@ -184,6 +188,42 @@ const cancelPendingAutoNext = () => {
   if (pendingAutoNextTimer !== null) {
     clearTimeout(pendingAutoNextTimer)
     pendingAutoNextTimer = null
+  }
+}
+
+const applyCurrentSongInfo = (song: SongList) => {
+  songInfo.value.songmid = song.songmid
+  songInfo.value.hash = song.hash || ''
+  songInfo.value.name = song.name
+  songInfo.value.singer = song.singer
+  songInfo.value.albumName = song.albumName
+  songInfo.value.albumId = song.albumId
+  songInfo.value.source = song.source
+  songInfo.value.interval = song.interval
+  songInfo.value.img = song.img
+  songInfo.value.lrc = song.lrc ?? null
+  songInfo.value.types = song.types || []
+  songInfo.value._types = song._types || {}
+  songInfo.value.typeUrl = song.typeUrl || {}
+  userInfo.value.lastPlaySongId = song.songmid || song.hash || `${song.name}_${song.singer}`
+  userInfo.value.lastPlaySongSource = song.source
+}
+
+const replaceCurrentSongInList = (previousSong: SongList, nextSong: SongList) => {
+  const previousIdentity = _getSongIdentity(previousSong)
+  const index = list.value.findIndex(
+    (item) => _getSongIdentity(item) === previousIdentity && item.source === previousSong.source
+  )
+  if (index !== -1) {
+    list.value.splice(index, 1, nextSong)
+    return
+  }
+  const nextIdentity = _getSongIdentity(nextSong)
+  const existingIndex = list.value.findIndex(
+    (item) => _getSongIdentity(item) === nextIdentity && item.source === nextSong.source
+  )
+  if (existingIndex === -1) {
+    list.value.unshift(nextSong)
   }
 }
 
@@ -229,8 +269,13 @@ const handlePlay = async () => {
   if (!Audio.value.url) {
     if (list.value.length > 0) {
       const lastId = userInfo.value.lastPlaySongId
+      const lastSource = userInfo.value.lastPlaySongSource
       const target =
-        (lastId != null && list.value.find((s) => s.songmid === lastId)) || list.value[0]
+        (lastId != null &&
+          list.value.find(
+            (s) => _getSongIdentity(s) === String(lastId) && (!lastSource || s.source === lastSource)
+          )) ||
+        list.value[0]
       await playSong(target)
     } else {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
@@ -443,6 +488,7 @@ const playSong = async (
 
     const isHistoryPlay =
       song.songmid === userInfo.value.lastPlaySongId &&
+      song.source === userInfo.value.lastPlaySongSource &&
       userInfo.value.currentTime !== undefined &&
       userInfo.value.currentTime > 0
     if (isHistoryPlay && userInfo.value.currentTime !== undefined) {
@@ -461,11 +507,7 @@ const playSong = async (
 
     // 如果切歌了，这里先不更新 UI，等真正开始获取 URL 了再说？
     // 不，UI 应该立即响应。
-    songInfo.value.name = song.name
-    songInfo.value.singer = song.singer
-    songInfo.value.albumName = song.albumName
-    songInfo.value.img = song.img
-    userInfo.value.lastPlaySongId = song.songmid
+    applyCurrentSongInfo(song)
     // 进度条立即归零，不等 URL 获取完成
     setCurrentTime(0)
     // 注意：SMTC 的 updateMetadata 会在音频准备好后再调用，避免切换时空隙
@@ -494,8 +536,10 @@ const playSong = async (
       if (currentPlayRequestId !== requestId) return
       if (result) {
         urlToPlay = result.url
-        if (result.source !== song.source) {
-          MessagePlugin.success(`已自动切换到 ${result.source} 源播放`)
+        if (result.song.source !== song.source) {
+          replaceCurrentSongInList(song, result.song)
+          applyCurrentSongInfo(result.song)
+          MessagePlugin.success(`已自动切换到 ${result.song.source} 源播放`)
         }
       }
     }
@@ -544,7 +588,7 @@ const playSong = async (
         if (!refreshed) {
           // 候选顺序回退
           try {
-            const candidates = await getCandidateSongs(song, userInfo.value)
+            const candidates = await getCandidateSongs(song, userInfo.value, { lightweight: true, silent: true })
             if (currentPlayRequestId !== requestId) return
             let switched = false
             for (const item of candidates) {
@@ -562,13 +606,15 @@ const playSong = async (
                     a.load()
                     await waitForAudioReady(Audio.value.audio)
                     if (currentPlayRequestId !== requestId) return
+                    replaceCurrentSongInList(song, item)
+                    applyCurrentSongInfo(item)
                     broadcastChangeSongIfNeeded(url)
                     MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                     mediaSessionController.updateMetadata({
-                      title: song.name,
-                      artist: song.singer,
-                      album: song.albumName || '未知专辑',
-                      artworkUrl: song.img || defaultCoverImg
+                      title: item.name,
+                      artist: item.singer,
+                      album: item.albumName || '未知专辑',
+                      artworkUrl: item.img || defaultCoverImg
                     })
                   }
                   break
@@ -685,10 +731,13 @@ const playSong = async (
                   return
                 }
                 setUrl(url)
+                userInfo.value.cachedAudioUrl = url
                 if (Audio.value.audio) {
                   Audio.value.audio.load()
                   await waitForAudioReady(Audio.value.audio)
                   if (currentPlayRequestId !== requestId) return
+                  replaceCurrentSongInList(song, item)
+                  applyCurrentSongInfo(item)
                   MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                   if (options.shouldAutoStart && !options.shouldAutoStart()) {
                     mediaSessionController.updatePlaybackState('paused')
@@ -1388,7 +1437,12 @@ const initPlayback = async () => {
   })
 
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
-    const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
+    const lastPlaySongId = String(userInfo.value.lastPlaySongId)
+    const lastPlayedSong = list.value.find(
+      (song) =>
+        _getSongIdentity(song) === lastPlaySongId &&
+        (userInfo.value.lastPlaySongSource ? song.source === userInfo.value.lastPlaySongSource : true)
+    )
     if (lastPlayedSong) {
       // UI 立即更新
       songInfo.value = { ...lastPlayedSong }
@@ -1396,7 +1450,12 @@ const initPlayback = async () => {
       // === 零等待启动：只依赖 SQLite 持久化 URL 缓存 ===
       // 计算缓存 key 并查询，命中即零网络播放
       const quality = _getQuality(lastPlayedSong)
-      const cachedUrlForStartup = await _getCachedUrl(lastPlayedSong, quality)
+      const cachedUrlForStartup =
+        (typeof userInfo.value.cachedAudioUrl === 'string' &&
+        userInfo.value.cachedAudioUrl &&
+        !userInfo.value.cachedAudioUrl.includes('error')
+          ? userInfo.value.cachedAudioUrl
+          : null) || (await _getCachedUrl(lastPlayedSong, quality))
 
       if (cachedUrlForStartup && typeof cachedUrlForStartup === 'string' && !cachedUrlForStartup.includes('error')) {
         setUrl(cachedUrlForStartup)

@@ -341,6 +341,7 @@ import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import { useAuthStore } from '@renderer/store'
 import { useSettingsStore } from '@renderer/store/Settings'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
+import { resolveSongCover } from '@renderer/utils/audio/coverResolver'
 
 const settingsStore = useSettingsStore()
 
@@ -376,7 +377,7 @@ interface Props {
   multiSelect?: boolean
   bufferSize?: number
   coverConcurrency?: number
-  coverLoader?: (song: Song, signal: AbortSignal) => Promise<string>
+  coverLoader?: (song: Song, signal: AbortSignal) => Promise<string | null>
   extraMenuFactory?: (song: Song) => Array<{ key: string; label: string }>
   hideLocalSource?: boolean
   enableDownload?: boolean
@@ -393,7 +394,7 @@ const props = withDefaults(defineProps<Props>(), {
   playlistId: '',
   multiSelect: false,
   bufferSize: 10,
-  coverConcurrency: 8,
+  coverConcurrency: 2,
   hideLocalSource: false,
   enableDownload: true
 })
@@ -642,7 +643,7 @@ function releaseSlot() {
 }
 
 async function ensureCover(song: Song) {
-  if (!props.coverLoader) return
+  const loader = props.coverLoader || ((target: Song, signal: AbortSignal) => resolveSongCover(target as any, { signal }))
   if ((song as any).img) return
 
   const id = (song as any).songmid
@@ -654,7 +655,7 @@ async function ensureCover(song: Song) {
   await acquireSlot()
   try {
     if (ctrl.signal.aborted) return
-    const data = await props.coverLoader(song, ctrl.signal)
+    const data = await loader(song, ctrl.signal)
     if (!ctrl.signal.aborted && data) {
       ;(song as any).img = data
     }

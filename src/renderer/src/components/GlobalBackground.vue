@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
@@ -17,16 +18,39 @@ const bgBrightness = computed(() => bgSettings.value?.brightness ?? 0.8)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 
+const syncVideoPlayback = () => {
+  const video = videoRef.value
+  if (!video) return
+  if (!isEnabled.value || bgType.value !== 'video' || !isAppWindowVisible()) {
+    video.pause()
+    return
+  }
+  video.play().catch((e) => console.error('Video auto-play failed:', e))
+}
+
 watch(
   [bgType, bgUrl, isEnabled],
   ([type, _url, enabled]) => {
     if (enabled && type === 'video' && videoRef.value) {
       videoRef.value.load()
-      videoRef.value.play().catch((e) => console.error('Video auto-play failed:', e))
+      syncVideoPlayback()
+    } else if (videoRef.value) {
+      videoRef.value.pause()
     }
   },
   { immediate: true }
 )
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', syncVideoPlayback)
+  window.addEventListener('ceru-window-state-change', syncVideoPlayback)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', syncVideoPlayback)
+  window.removeEventListener('ceru-window-state-change', syncVideoPlayback)
+  videoRef.value?.pause()
+})
 
 const appContainerStyle = computed(() => {
   if (isEnabled.value) {

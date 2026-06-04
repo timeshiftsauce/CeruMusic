@@ -517,7 +517,25 @@ const api = {
   app: {
     setTitle: (title: string) => ipcRenderer.send('app:set-title', title),
     setProgress: (progress: number, options?: { paused?: boolean }) =>
-      ipcRenderer.send('app:set-progress', progress, options || null)
+      ipcRenderer.send('app:set-progress', progress, options || null),
+    getWindowState: () => ipcRenderer.invoke('app:get-window-state'),
+    onWindowStateChanged: (callback: (state: {
+      visible: boolean
+      focused: boolean
+      minimized: boolean
+      hidden: boolean
+      fullscreen: boolean
+    }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, state: {
+        visible: boolean
+        focused: boolean
+        minimized: boolean
+        hidden: boolean
+        fullscreen: boolean
+      }) => callback(state)
+      ipcRenderer.on('app:window-state-changed', handler)
+      return () => ipcRenderer.removeListener('app:window-state-changed', handler)
+    }
   }
 }
 

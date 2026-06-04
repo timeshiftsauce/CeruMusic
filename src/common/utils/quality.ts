@@ -76,7 +76,7 @@ export function getHighestQualityType(
  */
 export function buildQualityFormats(
   input:
-    | Array<{ type: string; size?: string }>
+    | Array<string | { type: string; size?: string }>
     | Record<string, { size?: string }>
     | null
     | undefined

@@ -14,7 +14,7 @@ import {
   FileExportIcon
 } from 'tdesign-icons-vue-next'
 import { createQualityDialog } from '@renderer/utils/audio/download'
-import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
+import { buildQualityFormats } from '@common/utils/quality'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
@@ -1098,30 +1098,35 @@ const downloadPlaylist = async (playlist: SongList) => {
     const settingsStore = useSettingsStore()
     const LocalUserDetail = LocalUserDetailStore()
 
-    // 1. 收集所有可能的音质选项
-    // 我们使用标准的 QUALITY_ORDER 作为基础，展示所有可能的选项
-    // 或者，我们可以收集当前歌单中所有歌曲支持的音质合集
-    const allPossibleTypes = QUALITY_ORDER.map((t) => ({ type: t, size: '' }))
+    const downloadableSongs = songs.filter((song) => song.source !== 'local' && song.types && song.types.length > 0)
+    if (downloadableSongs.length === 0) {
+      MessagePlugin.warning('没有可下载的真实音质信息')
+      return
+    }
 
-    // 2. 弹出音质选择框
+    const sharedTypes = buildQualityFormats(downloadableSongs[0].types)
+      .filter((quality) =>
+        downloadableSongs.every((song) => buildQualityFormats(song.types).some((item) => item.type === quality.type))
+      )
+      .map((quality) => ({ type: quality.type, size: '' }))
+
+    if (sharedTypes.length === 0) {
+      MessagePlugin.warning('这些歌曲没有共同可下载的音质')
+      return
+    }
+
     const userQuality = await createQualityDialog(
-      allPossibleTypes,
+      sharedTypes,
       LocalUserDetail.userSource.quality || '128k',
-      '选择批量下载音质(自动降级)'
+      '选择批量下载音质'
     )
 
     if (!userQuality) return
 
     const tasks: any[] = []
     const d = new Date()
-    for (const song of songs) {
-      if (song.source === 'local') continue
-
-      let qualityToUse = userQuality
-      if (song.types && song.types.length > 0) {
-        const best = calculateBestQuality(song.types, userQuality)
-        if (best) qualityToUse = best
-      }
+    for (const song of downloadableSongs) {
+      const qualityToUse = userQuality
 
       const songInfoWithTemplate = {
         ...toRaw(song),

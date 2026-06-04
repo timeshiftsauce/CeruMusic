@@ -8,6 +8,7 @@ import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
 import _ from 'lodash'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { playSetting } from './playSetting'
+import { resolveSongCover } from '@renderer/utils/audio/coverResolver'
 
 interface Player {
   songId?: string
@@ -198,13 +199,17 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     })
 
-    // 同步 userInfo.lastPlaySongId
+    // 同步 userInfo.lastPlaySongId / lastPlaySongSource
     watch(
-      () => localUserStore.userInfo.lastPlaySongId,
-      (newId) => {
-        if (newId && newId !== player.songId) {
+      () => [localUserStore.userInfo.lastPlaySongId, localUserStore.userInfo.lastPlaySongSource],
+      ([newId, newSource]) => {
+        if (newId && (newId !== player.songId || newSource !== (player.songInfo as any)?.source)) {
           player.songId = newId
-          const song = localUserStore.list.find((s: any) => s.songmid === newId)
+          const song = localUserStore.list.find(
+            (s: any) =>
+              (s.songmid === newId || s.hash === newId || `${s.name}_${s.singer}` === newId) &&
+              (newSource ? s.source === newSource : true)
+          )
           if (song) {
             updatePlayerInfo(song)
           }
@@ -218,8 +223,8 @@ export const useGlobalPlayStatusStore = defineStore(
 
     // 监听 songInfo 变化，处理封面
     watch(
-      () => player.songInfo?.img,
-      async (newImg) => {
+      () => [player.songInfo?.img, player.songInfo?.songmid, (player.songInfo as any)?.hash, player.songInfo?.source],
+      async ([newImg]) => {
         // 清理旧的 Blob URL
         if (currentBlobUrl) {
           URL.revokeObjectURL(currentBlobUrl)
@@ -228,6 +233,24 @@ export const useGlobalPlayStatusStore = defineStore(
 
         // 本地歌曲无 img 但有 hasCover 时,走 IPC 按需拉取,避免列表外播放时封面缺失
         const info: any = player.songInfo
+        const targetCoverKey = `${info?.source || ''}:${info?.songmid || info?.hash || `${info?.name || ''}_${info?.singer || ''}`}`
+        if (!newImg && info?.songmid && info?.source !== 'local') {
+          const targetId = String(info.songmid)
+          const targetSource = info.source
+          resolveSongCover(toRaw(info) as any)
+            .then((img) => {
+              if (
+                img &&
+                player.songInfo &&
+                String(player.songInfo.songmid) === targetId &&
+                player.songInfo.source === targetSource &&
+                !player.songInfo.img
+              ) {
+                player.songInfo.img = img
+              }
+            })
+            .catch(() => {})
+        }
         if (
           !newImg &&
           info?.source === 'local' &&
@@ -255,8 +278,14 @@ export const useGlobalPlayStatusStore = defineStore(
         const coverUrl = newImg ? newImg : defaultCover
         console.log('coverUrl', coverUrl)
 
+        const stillCurrentCover = () => {
+          const current: any = player.songInfo
+          return `${current?.source || ''}:${current?.songmid || current?.hash || `${current?.name || ''}_${current?.singer || ''}`}` === targetCoverKey
+        }
+
         if (coverUrl.startsWith('http')) {
           const blobUrl = await getBlobUrlFromUrl(coverUrl)
+          if (!stillCurrentCover()) return
           if (blobUrl) {
             currentBlobUrl = blobUrl
             player.cover = blobUrl
@@ -264,6 +293,7 @@ export const useGlobalPlayStatusStore = defineStore(
             player.cover = coverUrl
           }
         } else {
+          if (!stillCurrentCover()) return
           player.cover = coverUrl
         }
       },
@@ -328,7 +358,15 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     }
     watch(
-      [() => player.songId, () => player.songInfo?.songmid],
+      [
+        () => player.songId,
+        () => player.songInfo?.songmid,
+        () => (player.songInfo as any)?.hash,
+        () => player.songInfo?.source,
+        () => player.songInfo?.name,
+        () => player.songInfo?.singer,
+        () => (player.songInfo as any)?.lrc
+      ],
       async ([newId], _oldArgs, onCleanup) => {
         if (!newId || !player.songInfo) {
           player.lyrics.lines = []
@@ -565,10 +603,18 @@ export const useGlobalPlayStatusStore = defineStore(
       { immediate: true }
     )
 
+    const getSongIdentity = (songInfo?: Partial<SongList> | null) =>
+      songInfo?.songmid || (songInfo as any)?.hash || `${songInfo?.name || ''}_${songInfo?.singer || ''}`
+
     function updatePlayerInfo(songInfo: SongList) {
-      // 避免重复更新
-      if (player.songInfo?.songmid === songInfo.songmid) return
+      const currentSong = player.songInfo as any
+      const songId = getSongIdentity(songInfo)
+      const sameSong = getSongIdentity(currentSong) === songId && currentSong?.source === songInfo.source
+      if (sameSong) return
       player.songInfo = songInfo
+      player.songId = songId as any
+      localUserStore.userInfo.lastPlaySongId = songId as any
+      localUserStore.userInfo.lastPlaySongSource = songInfo.source || null
     }
 
     async function fetchComments(page = 1, type: 'hot' | 'latest' = 'hot') {

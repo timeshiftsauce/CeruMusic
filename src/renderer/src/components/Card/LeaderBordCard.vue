@@ -1,7 +1,13 @@
 <template>
   <div class="leaderboard-card" @click="handleClick">
     <div class="card-image">
-      <s-image v-if="data.pic" :src="data.pic" :alt="data.name" loading="lazy" />
+      <s-image
+        v-if="data.pic"
+        :src="data.pic"
+        :alt="data.name"
+        :observe-visibility="true"
+        :release-on-hide="true"
+      />
       <div v-else class="placeholder">{{ data.name[0] }}</div>
 
       <div v-if="data.source" class="source-badge">

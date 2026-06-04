@@ -1,7 +1,24 @@
-import { toRaw } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { toRaw, h, ref } from 'vue'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { type SongList } from '@renderer/types/audio'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
+
+const SEARCHABLE_SOURCE_ORDER = ['wy', 'tx', 'kg', 'kw', 'mg', 'bd', 'git']
+const NON_SEARCHABLE_SOURCES = new Set(['local', 'share', 'all'])
+const SWITCH_DIALOG_SOURCE_LABELS: Record<string, string> = {
+  wy: 'wyy',
+  kg: 'kg',
+  tx: '秋秋',
+  kw: 'kw',
+  mg: 'mg'
+}
+
+const switchDialogSourceLabel = (source?: string | null): string => {
+  if (!source) return ''
+  return SWITCH_DIALOG_SOURCE_LABELS[source] || source
+}
+
+const uniq = <T>(items: T[]): T[] => [...new Set(items)]
 
 export const strSim = (s1: string, s2: string) => {
   const t1 = (s1 || '').toLowerCase().trim()
@@ -49,36 +66,59 @@ export const waitForAudioReady = (audio: HTMLAudioElement): Promise<void> => {
 
 export const getCandidateSongs = async (
   originalSong: SongList,
-  userInfo: any
+  userInfo: any,
+  options: { lightweight?: boolean; silent?: boolean } = {}
 ): Promise<SongList[]> => {
-  MessagePlugin.loading('当前源播放失败，正在尝试自动换源...')
+  if (!options.silent) MessagePlugin.loading('正在查找可切换的音源...')
+  const supportedSources = userInfo.supportedSources || {}
   const qualityMap = userInfo.sourceQualityMap || {}
-  let sources = Object.keys(qualityMap)
-  if (sources.length === 0) {
-    sources = ['wy', 'tx', 'kg', 'kw', 'mg']
-  }
-  // 移除当前源
-  sources = sources.filter((s) => s !== originalSong.source)
+  const configuredSources = uniq([...Object.keys(supportedSources), ...Object.keys(qualityMap)])
+  let sources = configuredSources.length > 0 ? configuredSources : SEARCHABLE_SOURCE_ORDER
+  sources = sources
+    .filter((s) => s !== originalSong.source)
+    .filter((s) => !NON_SEARCHABLE_SOURCES.has(s))
+    .sort((a, b) => {
+      const ai = SEARCHABLE_SOURCE_ORDER.indexOf(a)
+      const bi = SEARCHABLE_SOURCE_ORDER.indexOf(b)
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+    })
 
-  const searchKeyword = `${originalSong.name} ${originalSong.singer}`.trim()
+  const baseKeywords = options.lightweight
+    ? [`${originalSong.name} ${originalSong.singer}`.trim()]
+    : [
+        `${originalSong.name} ${originalSong.singer}`.trim(),
+        originalSong.name,
+        `${originalSong.name} ${String(originalSong.albumName || '')}`.trim()
+      ]
+  const searchKeywords = uniq(baseKeywords.filter(Boolean))
+  const searchLimit = options.lightweight ? 12 : 30
   const originalDuration = parseInterval(originalSong.interval)
 
-  const searchPromises = sources.map(async (source) => {
-    try {
-      const res = await (window as any).api.music.requestSdk('search', {
-        source,
-        keyword: searchKeyword,
-        page: 1,
-        limit: 15
-      })
-      return (res.list || []).map((item: any) => ({ ...item, source }))
-    } catch {
-      return []
-    }
-  })
+  const searchPromises = sources.flatMap((source) =>
+    searchKeywords.map(async (keyword) => {
+      try {
+        const res = await (window as any).api.music.requestSdk('search', {
+          source,
+          keyword,
+          page: 1,
+          limit: searchLimit
+        })
+        return (res.list || []).map((item: any) => ({ ...item, source }))
+      } catch {
+        return []
+      }
+    })
+  )
 
   const results = (await Promise.all(searchPromises)).flat()
-  const ranked = results
+  const seen = new Set<string>()
+  const deduped = results.filter((item) => {
+    const key = `${item.source}:${item.songmid || item.hash || item.name + item.singer}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  const ranked = deduped
     .map((item) => {
       const nameScore = strSim(item.name, originalSong.name)
       const singerScore = strSim(item.singer, originalSong.singer)
@@ -96,7 +136,7 @@ export const getCandidateSongs = async (
       }
       return { item, score }
     })
-    .filter((x) => x.score > 0.6) // 稍微严格一点的匹配
+    .filter((x) => x.score > 0.45)
     .sort((a, b) => b.score - a.score)
 
   if (ranked.length === 0) {
@@ -106,13 +146,135 @@ export const getCandidateSongs = async (
   return ranked.map((r) => r.item)
 }
 
+export const createSourceSwitchDialog = async (
+  originalSong: SongList,
+  userInfo: any,
+  title: string = '切换音源'
+): Promise<SongList | null> =>
+  await new Promise((resolve) => {
+    const loading = ref(true)
+    const candidates = ref<SongList[]>([])
+    let resolved = false
+
+    const finish = (song: SongList | null) => {
+      if (resolved) return
+      resolved = true
+      dialog.destroy()
+      resolve(song)
+    }
+
+    const dialog = DialogPlugin({
+      header: title,
+      width: 520,
+      placement: 'center',
+      body: () =>
+        h('div', { class: 'source-switch-dialog', style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
+          h(
+            'div',
+            {
+              style: {
+                fontSize: '13px',
+                lineHeight: '1.5',
+                color: 'var(--td-text-color-secondary)'
+              }
+            },
+            loading.value
+              ? '正在查找可切换的音源...'
+              : candidates.value.length > 0
+                ? `已找到 ${candidates.value.length} 个可用音源，选择一个继续播放或下载。`
+                : '未找到可切换的其他音源'
+          ),
+          ...(loading.value
+            ? [
+                h(
+                  'div',
+                  {
+                    style: {
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--td-border-level-1-color)',
+                      color: 'var(--td-text-color-secondary)'
+                    }
+                  },
+                  '搜索中，请稍候...'
+                )
+              ]
+            : candidates.value.map((song) =>
+                h(
+                  'button',
+                  {
+                    key: `${song.source}-${song.songmid || song.hash || song.name}`,
+                    type: 'button',
+                    style: {
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: '4px',
+                      width: '100%',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--td-border-level-1-color)',
+                      background: 'var(--td-bg-color-container)',
+                      textAlign: 'left',
+                      cursor: 'pointer'
+                    },
+                    onClick: () => finish(song)
+                  },
+                  [
+                    h('div', { style: { fontWeight: '600', color: 'var(--td-text-color-primary)' } }, switchDialogSourceLabel(song.source)),
+                    h(
+                      'div',
+                      {
+                        style: {
+                          fontSize: '13px',
+                          color: 'var(--td-text-color-secondary)'
+                        }
+                      },
+                      `${song.name || '未知歌曲'} · ${song.singer || '未知歌手'}`
+                    ),
+                    h(
+                      'div',
+                      {
+                        style: {
+                          fontSize: '12px',
+                          color: 'var(--td-text-color-placeholder)'
+                        }
+                      },
+                      [song.albumName, song.interval].filter(Boolean).join(' · ')
+                    )
+                  ]
+                )
+              ))
+        ]),
+      confirmBtn: null,
+      cancelBtn: '关闭',
+      onCancel: () => finish(null),
+      onClose: () => finish(null)
+    })
+
+    getCandidateSongs(originalSong, userInfo, { silent: true })
+      .then((items) => {
+        if (resolved) return
+        candidates.value = items.filter(
+          (song, index, arr) => arr.findIndex((item) => item.source === song.source) === index
+        )
+      })
+      .catch(() => {
+        if (resolved) return
+        candidates.value = []
+      })
+      .finally(() => {
+        if (!resolved) loading.value = false
+      })
+  })
+
 export const autoSwitchSource = async (originalSong: SongList, userInfo: any): Promise<string> => {
   const candidates = await getCandidateSongs(originalSong, userInfo)
   for (const item of candidates) {
     try {
       const url = await getSongRealUrl(toRaw(item))
       if (url && typeof url === 'string' && !url.includes('error')) {
-        MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
+        MessagePlugin.success(`已自动切换到 ${switchDialogSourceLabel(item.source)} 源播放`)
         return url
       }
     } catch {

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
+import { isPageIdle } from '@renderer/utils/idleSleep'
+import { appWindowState, isAppWindowActive, isAppWindowVisible } from '@renderer/utils/appWindowState'
 import {
   PaletteIcon,
   ApiIcon,
@@ -30,6 +32,11 @@ const activeCategory = ref<string>('appearance')
 const route = useRoute()
 const contentPanelRef = ref<HTMLElement>()
 const scrollPositions = ref<Record<string, number>>({})
+const settingsPageIdle = ref(isPageIdle())
+
+const updateSettingsIdleState = () => {
+  settingsPageIdle.value = isPageIdle()
+}
 
 // 设置分类配置
 const settingsCategories = [
@@ -95,6 +102,12 @@ const sectionComponents: Record<string, any> = {
 }
 
 const currentComponent = computed(() => sectionComponents[activeCategory.value])
+const settingsRuntimeClasses = computed(() => ({
+  'settings-window-hidden': !isAppWindowVisible(),
+  'settings-window-inactive': !isAppWindowActive(),
+  'settings-page-idle': settingsPageIdle.value,
+  'settings-window-fullscreen': appWindowState.value.fullscreen
+}))
 
 // 切换设置分类
 const switchCategory = async (categoryKey: string) => {
@@ -151,6 +164,16 @@ watch(
   { immediate: true, deep: true }
 )
 
+onMounted(() => {
+  window.addEventListener('ceru-wake', updateSettingsIdleState)
+  window.addEventListener('ceru-sleep', updateSettingsIdleState)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('ceru-wake', updateSettingsIdleState)
+  window.removeEventListener('ceru-sleep', updateSettingsIdleState)
+})
+
 const handleSearchSelect = async (item: SearchItem) => {
   console.log('Settings: Handling search select', item)
   if (activeCategory.value !== item.category) {
@@ -197,7 +220,7 @@ const handleSearchSelect = async (item: SearchItem) => {
 </script>
 
 <template>
-  <div class="main-container">
+  <div class="main-container" :class="settingsRuntimeClasses">
     <!-- 标题栏 -->
     <div class="header">
       <TitleBarControls title="设置" :show-back="true" :show-account="false">
@@ -294,7 +317,10 @@ const handleSearchSelect = async (item: SearchItem) => {
     padding: 0.875rem 1.5rem;
     margin-top: 5px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
     border-left: 3px solid transparent;
     border-radius: 5px;
 
@@ -402,6 +428,31 @@ const handleSearchSelect = async (item: SearchItem) => {
         }
       }
     }
+  }
+}
+
+.settings-window-hidden,
+.settings-window-inactive,
+.settings-page-idle {
+  :deep(.settings-section),
+  :deep(.setting-group),
+  :deep(.setting-card),
+  :deep(.highlight-flash::after) {
+    animation-duration: 0.001s !important;
+    animation-delay: 0s !important;
+  }
+}
+
+.settings-window-hidden,
+.settings-page-idle {
+  .sidebar .nav-item,
+  .sidebar .nav-icon,
+  .sidebar .nav-label {
+    transition-duration: 0s !important;
+  }
+
+  .panel-content {
+    scroll-behavior: auto;
   }
 }
 

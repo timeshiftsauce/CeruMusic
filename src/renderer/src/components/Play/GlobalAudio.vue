@@ -16,6 +16,7 @@ import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
 import { isPageIdle } from '@renderer/utils/idleSleep'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 import { crossfadeState } from '@renderer/utils/audio/crossfade'
 
 type AudioSlot = 'A' | 'B'
@@ -92,6 +93,7 @@ onMounted(() => {
   applyToBoth()
 
   document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('ceru-window-state-change', onVisibilityChange)
   window.addEventListener('ceru-wake', onVisibilityChange)
 
   const activeEl = audioStore.Audio.audio
@@ -340,7 +342,9 @@ const handlePlay = (slot: AudioSlot): void => {
   }
 
   audioStore.Audio.isPlay = true
-  startSetupInterval()
+  if (isAppWindowVisible()) {
+    startSetupInterval()
+  }
   const activeEl = audioStore.Audio.audio
   audioStore.Audio.duration = activeEl?.duration || 0
   audioStore.publish('play')
@@ -350,17 +354,29 @@ let rafId: number | null = null
 
 /** 页面可见性变化或闲置结束时重启 rAF */
 const onVisibilityChange = () => {
-  if (!document.hidden && !isPageIdle() && audioStore.Audio.isPlay && rafId === null) {
+  if (!isAppWindowVisible()) {
+    safeCancelRaf(rafId)
+    rafId = null
+    return
+  }
+  const activeEl = audioStore.Audio.audio
+  if (activeEl) {
+    updateProgress(activeEl, true)
+  }
+  if (!isPageIdle() && audioStore.Audio.isPlay && rafId === null) {
     startSetupInterval()
   }
 }
 
+const isRenderedDynamicElement = (selector: string): boolean => {
+  const element = document.querySelector(selector)
+  if (!(element instanceof HTMLElement)) return false
+  return element.offsetParent !== null && element.getClientRects().length > 0
+}
+
 /** 检测是否有活跃的动态内容（频谱Canvas、WebGL着色器），决定是否使用高帧率 */
 const hasDynamicContent = (): boolean => {
-  return !!(
-    document.querySelector('.visualizer-canvas') ||
-    document.querySelector('.shader-background')
-  )
+  return isRenderedDynamicElement('.visualizer-canvas') || isRenderedDynamicElement('.shader-background')
 }
 
 /** 安全取消 rAF / setTimeout */
@@ -372,9 +388,9 @@ const safeCancelRaf = (id: number | null) => {
 
 /** 进展更新节流：rAF 路径下也最多 100ms 刷新一次进度条 */
 let _lastProgressUpdate = 0
-const updateProgress = (el: HTMLAudioElement) => {
+const updateProgress = (el: HTMLAudioElement, force = false) => {
   const now = performance.now()
-  if (now - _lastProgressUpdate < 100) return
+  if (!force && now - _lastProgressUpdate < 100) return
   _lastProgressUpdate = now
   audioStore.publish('timeupdate')
   audioStore.setCurrentTime(el.currentTime || 0)
@@ -383,8 +399,8 @@ const updateProgress = (el: HTMLAudioElement) => {
 const startSetupInterval = (): void => {
   if (rafId !== null) return
   const onFrame = () => {
-    // 页面隐藏时彻底停止（Chromium 会降级 rAF anyway）
-    if (document.hidden) {
+    // 窗口隐藏时彻底停止 UI 刷新，音频播放链路不受影响
+    if (!isAppWindowVisible()) {
       rafId = null
       return
     }
@@ -393,20 +409,19 @@ const startSetupInterval = (): void => {
       updateProgress(activeEl)
     }
     // 帧率策略：
-    // - 有动态内容（频谱/WebGL）→ requestAnimationFrame（~60fps），
-    //   但 progress 已由 updateProgress 节流到 ~10fps，不影响进度条
-    // - 无动态内容 → 10fps (100ms)
-    // - 闲置状态 → 4fps (250ms) 但不彻底停止，保证进度条持续更新
+    // - 有真实可见的频谱/WebGL → requestAnimationFrame
+    // - 普通页/设置页播放 → 4fps，降低截图这类静态界面的 CPU/GPU 压力
+    // - 闲置状态 → 2fps，只保留低频进度同步
     if (hasDynamicContent()) {
       rafId = requestAnimationFrame(onFrame)
     } else if (isPageIdle()) {
       rafId = window.setTimeout(() => {
         rafId = requestAnimationFrame(onFrame)
-      }, 250) as unknown as number
+      }, 500) as unknown as number
     } else {
       rafId = window.setTimeout(() => {
         rafId = requestAnimationFrame(onFrame)
-      }, 100) as unknown as number
+      }, 250) as unknown as number
     }
   }
   rafId = requestAnimationFrame(onFrame)
@@ -451,6 +466,7 @@ onUnmounted(() => {
     window.api.pingService.stop()
   } catch {}
   document.removeEventListener('visibilitychange', onVisibilityChange)
+  window.removeEventListener('ceru-window-state-change', onVisibilityChange)
   window.removeEventListener('ceru-wake', onVisibilityChange)
   safeCancelRaf(rafId)
   rafId = null

@@ -12,6 +12,7 @@ export interface AIConfig {
 
 export interface UserInfo {
   lastPlaySongId?: number | string | null
+  lastPlaySongSource?: string | null
   currentTime?: number
   volume?: number
   topBarStyle?: boolean

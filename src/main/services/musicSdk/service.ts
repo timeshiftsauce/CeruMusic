@@ -1,3 +1,4 @@
+import axios from 'axios'
 import {
   SearchArg,
   SearchResult,
@@ -21,6 +22,45 @@ import download from '../../utils/downloadSongs'
 function main(source: string = 'wy') {
   if (source === 'all') return aggregateMain()
   const Api = musicSdk[source]
+  const checkDownloadableUrl = async (url: string): Promise<{ ok: boolean; size: number; reason?: string }> => {
+    if (!url || typeof url !== 'string' || url.includes('error')) {
+      return { ok: false, size: 0, reason: '无有效下载链接' }
+    }
+    if (url.startsWith('file://')) return { ok: true, size: 1 }
+    try {
+      const res = await axios.get(url, {
+        responseType: 'stream',
+        timeout: 12000,
+        headers: { Range: 'bytes=0-2047' },
+        validateStatus: (status) => (status >= 200 && status < 300) || status === 206
+      })
+      const contentType = String(res.headers?.['content-type'] || '').toLowerCase()
+      const contentLength = Number.parseInt(String(res.headers?.['content-length'] || '0'), 10) || 0
+      let bytes = 0
+      await new Promise<void>((resolve, reject) => {
+        res.data.on('data', (chunk: Buffer) => {
+          bytes += chunk.length
+          if (bytes > 0) {
+            res.data.destroy()
+            resolve()
+          }
+        })
+        res.data.on('end', () => resolve())
+        res.data.on('error', reject)
+        res.data.on('close', () => resolve())
+      })
+      const looksLikeAudio =
+        !contentType ||
+        contentType.includes('audio') ||
+        contentType.includes('octet-stream') ||
+        contentType.includes('application/x-mpegurl')
+      if (bytes <= 0) return { ok: false, size: 0, reason: '下载响应为空' }
+      if (!looksLikeAudio) return { ok: false, size: contentLength || bytes, reason: '下载响应不是音频文件' }
+      return { ok: true, size: contentLength || bytes }
+    } catch (e: any) {
+      return { ok: false, size: 0, reason: e?.message || '下载探测失败' }
+    }
+  }
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {
       return (await Api.musicSearch.search(keyword, page, limit)) as Promise<SearchResult>
@@ -81,6 +121,14 @@ function main(source: string = 'wy') {
           error: '获取歌曲失败 ' + e.error || e
         }
       }
+    },
+
+    async checkDownloadable({ pluginId, songInfo, quality, isCache }: GetMusicUrlArg) {
+      const urlData = await this.getMusicUrl({ pluginId, songInfo, quality, isCache: isCache ?? false })
+      if (typeof urlData === 'object') {
+        return { ok: false, size: 0, reason: urlData.error || '无法获取下载链接' }
+      }
+      return await checkDownloadableUrl(urlData)
     },
 
     async getPic({ songInfo }: GetMusicPicArg) {
@@ -335,6 +383,9 @@ function aggregateMain() {
     },
     async getMusicUrl(_: GetMusicUrlArg): Promise<any> {
       return notSupported('getMusicUrl')
+    },
+    async checkDownloadable(_: GetMusicUrlArg): Promise<any> {
+      return notSupported('checkDownloadable')
     },
     async getPic(_: GetMusicPicArg): Promise<any> {
       return notSupported('getPic')
