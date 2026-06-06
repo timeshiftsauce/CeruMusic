@@ -6,7 +6,7 @@
     @after-leave="calcSearchSuggestHeights"
   >
     <n-card
-      v-if="SearchStore.focus && SearchStore.value"
+      v-if="SearchStore.focus && (SearchStore.value || SearchStore.history.length)"
       class="search-suggest"
       content-style="padding: 0"
       :style="{
@@ -15,10 +15,38 @@
       }"
     >
       <n-scrollbar class="scrollbar">
+        <div v-if="!SearchStore.value && SearchStore.history.length" ref="historyRef" class="history">
+          <div class="history-header">
+            <n-text class="history-title">搜索历史</n-text>
+            <button class="clear-btn" @mousedown.prevent @click.stop="clearHistory">清空</button>
+          </div>
+          <div
+            v-for="item in SearchStore.history"
+            :key="item"
+            class="history-item"
+            @mousedown.prevent
+            @click="emit('toSearch', item, 'history')"
+          >
+            <div class="history-keyword text-hidden">
+              <SvgIcon name="Search" :depth="3" />
+              <n-text class="text text-hidden">{{ item }}</n-text>
+            </div>
+            <button
+              class="delete-btn"
+              title="删除历史"
+              @mousedown.prevent
+              @click.stop="removeHistory(item)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
         <!-- 直接搜索 -->
         <div
+          v-if="SearchStore.value"
           ref="directSearchRef"
           class="direct"
+          @mousedown.prevent
           @click="emit('toSearch', SearchStore.value, 'keyword')"
         >
           <SvgIcon name="Search" :depth="3" />
@@ -40,6 +68,7 @@
                 v-for="(suggestItem, suggestIndex) in searchSuggestData[item]"
                 :key="suggestIndex"
                 class="suggest-item"
+                @mousedown.prevent
                 @click="emit('toSearch', suggestItem.name, item)"
               >
                 <n-text class="name">{{ suggestItem.name }}</n-text>
@@ -71,7 +100,7 @@ const emit = defineEmits<{
 watch(
   () => LocalUserDetailStore().userSource.source,
   () => {
-    getSearchSuggest(SearchStore.value)
+    if (SearchStore.value) getSearchSuggest(SearchStore.value)
   }
 )
 
@@ -84,6 +113,7 @@ const searchSuggestHeights = ref<number>(0)
 // 搜索建议元素
 const directSearchRef = ref<HTMLElement | null>(null)
 const searchSuggestRef = ref<HTMLElement | null>(null)
+const historyRef = ref<HTMLElement | null>(null)
 
 // 搜索建议分类
 const searchSuggestionsType = {
@@ -134,10 +164,12 @@ const getSearchSuggest = async (keywords: string) => {
 
 // 计算高度
 const calcSearchSuggestHeights = () => {
+  const historyHeight = historyRef.value?.offsetHeight
   const directSearchHeight = directSearchRef.value?.offsetHeight
   const searchSuggestionsHeight = searchSuggestRef.value?.offsetHeight
-  if (directSearchHeight || searchSuggestionsHeight) {
+  if (historyHeight || directSearchHeight || searchSuggestionsHeight) {
     const totalHeight =
+      (historyHeight || 0) +
       (directSearchHeight || 0) +
       (searchSuggestionsHeight || 0) +
       (searchSuggestionsHeight ? 8 : 0) +
@@ -148,11 +180,25 @@ const calcSearchSuggestHeights = () => {
   }
 }
 
+const removeHistory = (keyword: string) => {
+  SearchStore.removeHistory(keyword)
+  nextTick(calcSearchSuggestHeights)
+}
+
+const clearHistory = () => {
+  SearchStore.clearHistory()
+  nextTick(calcSearchSuggestHeights)
+}
+
 // 搜索框改变
 watchDebounced(
   () => SearchStore.value,
   (val) => {
-    if (!val || val === '') return
+    if (!val || val === '') {
+      searchSuggestData.value = {}
+      nextTick(calcSearchSuggestHeights)
+      return
+    }
     getSearchSuggest(val)
   },
   { debounce: 300 }
@@ -177,6 +223,68 @@ watchDebounced(
     max-height: calc(100vh - 160px);
     .n-scrollbar-content {
       padding: 10px;
+    }
+  }
+  .history {
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 6px 8px;
+    }
+
+    .history-title {
+      font-size: 13px;
+      color: var(--td-text-color-secondary);
+    }
+
+    .clear-btn,
+    .delete-btn {
+      border: none;
+      background: transparent;
+      color: var(--td-text-color-secondary);
+      cursor: pointer;
+      transition: color 0.2s;
+
+      &:hover {
+        color: var(--td-brand-color);
+      }
+    }
+
+    .clear-btn {
+      padding: 2px 4px;
+      font-size: 12px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 6px;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+      cursor: pointer;
+
+      &:hover {
+        background-color: var(--n-border-color);
+      }
+    }
+
+    .history-keyword {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .delete-btn {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      font-size: 18px;
+      line-height: 20px;
     }
   }
   .direct {

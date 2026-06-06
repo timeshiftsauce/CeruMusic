@@ -121,6 +121,29 @@ const aggregate = {
     }
   },
 
+  async searchRadio(keyword, page = 1, limit = 20) {
+    const tasks = AGGREGATE_ORDER.filter(
+      (id) => sources[id] && sources[id].radio && sources[id].radio.search
+    ).map((id) => Promise.resolve(sources[id].radio.search(keyword, page, limit)).catch(() => null))
+    const results = await Promise.all(tasks)
+    const valid = results.filter((r) => r && Array.isArray(r.list))
+    const lists = valid.map((res) => res.list.map((item) => ensureSource(item, res.source)))
+    return {
+      list: interleave(lists),
+      total: valid.reduce((sum, r) => sum + (r.total || 0), 0),
+      page,
+      source: 'all'
+    }
+  },
+
+  async getRadioPrograms({ radioId, source = 'wy', page = 1, limit = 30, asc = false, radio }) {
+    const sm = sources[source]
+    if (!sm || !sm.radio || !sm.radio.getPrograms) {
+      return { list: [], total: 0, page, limit, source }
+    }
+    return await sm.radio.getPrograms({ radioId, page, limit, asc, radio })
+  },
+
   async getPlaylistTags() {
     const ids = AGGREGATE_ORDER.filter(
       (id) => sources[id] && sources[id].songList && sources[id].songList.getTags

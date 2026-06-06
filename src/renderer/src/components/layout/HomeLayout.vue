@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
-import { SearchIcon, MicrophoneIcon } from 'tdesign-icons-vue-next'
-import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
+import { SearchIcon, MicrophoneIcon, CloseIcon } from 'tdesign-icons-vue-next'
+import { onMounted, onUnmounted, ref, watchEffect, computed, watch, nextTick } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter, useRoute } from 'vue-router'
 import { useSearchStore } from '@renderer/store'
@@ -188,12 +188,22 @@ const goForward = (): void => {
 const SearchStore = useSearchStore()
 const inputRef = ref<any>(null)
 
+const clearSearchValue = () => {
+  SearchStore.setValue('')
+  SearchStore.setFocus(true)
+  nextTick(() => inputRef.value?.focus?.())
+}
+
 // 搜索类型：1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单
 // const searchType = ref(1)
 
 // 处理搜索事件
 const handleSearch = async () => {
-  if (!SearchStore.getValue.trim()) return
+  const keyword = SearchStore.getValue.trim()
+  if (!keyword) return
+  SearchStore.addHistory(keyword)
+  SearchStore.setFocus(false)
+  inputRef.value?.blur?.()
   // 重新设置搜索关键字
   try {
     router.push({
@@ -404,15 +414,29 @@ function checkGuide() {
                   @blur="SearchStore.setFocus(false)"
                 >
                   <template #suffix>
-                    <t-button
-                      theme="primary"
-                      variant="text"
-                      shape="circle"
-                      style="display: flex; align-items: center; justify-content: center"
-                      @click="handleSearch"
-                    >
-                      <SearchIcon style="font-size: 16px; color: var(--td-text-color-primary)" />
-                    </t-button>
+                    <div class="search-suffix">
+                      <t-button
+                        v-if="SearchStore.value"
+                        theme="default"
+                        variant="text"
+                        shape="circle"
+                        class="clear-search-btn"
+                        title="清空"
+                        @mousedown.prevent
+                        @click.stop="clearSearchValue"
+                      >
+                        <CloseIcon style="font-size: 14px; color: var(--td-text-color-secondary)" />
+                      </t-button>
+                      <t-button
+                        theme="primary"
+                        variant="text"
+                        shape="circle"
+                        class="search-btn"
+                        @click="handleSearch"
+                      >
+                        <SearchIcon style="font-size: 16px; color: var(--td-text-color-primary)" />
+                      </t-button>
+                    </div>
                   </template>
                 </t-input>
                 <SearchSuggest @to-search="handleSuggestionSelect" />
@@ -793,6 +817,21 @@ function checkGuide() {
         &.t-input--suffix {
           padding-right: 0 !important;
           background-color: transparent;
+        }
+      }
+
+      .search-suffix {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+
+        .clear-search-btn,
+        .search-btn {
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
       }
 

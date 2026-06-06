@@ -15,15 +15,26 @@ interface MusicItem {
   singer: string
   name: string
   albumName: string
-  albumId: number
+  albumId: number | string
   source: string
   interval: string
-  songmid: number
+  songmid: number | string
   img: string
   lrc: null | string
-  types: string[]
+  types: any[]
   _types: Record<string, any>
   typeUrl: Record<string, any>
+}
+
+interface RadioItem {
+  id: string
+  name: string
+  desc: string
+  img: string
+  author: string
+  total: number
+  play_count: string
+  source: string
 }
 
 const settingsStore = useSettingsStore()
@@ -42,7 +53,14 @@ const pageSize = 50
 const totalItems = ref(0)
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
-const activeTab = ref<'songs' | 'playlists'>('songs')
+const activeTab = ref<'songs' | 'playlists' | 'radios'>('songs')
+
+// 电台搜索状态
+const radioResults = ref<RadioItem[]>([])
+const radioLoading = ref(false)
+const radioPage = ref(1)
+const radioLimit = 20
+const radioTotal = ref(0)
 
 // 歌单搜索状态
 const playlistResults = ref<any[]>([])
@@ -72,12 +90,16 @@ onActivated(async () => {
       keyword.value = search.getValue
       searchResults.value = []
       playlistResults.value = []
+      radioResults.value = []
       currentPage.value = 1
       playlistPage.value = 1
+      radioPage.value = 1
       if (activeTab.value === 'songs') {
         await performSearch(true)
-      } else {
+      } else if (activeTab.value === 'playlists') {
         await fetchPlaylists(true)
+      } else {
+        await fetchRadios(true)
       }
     },
     { immediate: true }
@@ -90,12 +112,16 @@ onActivated(async () => {
       if (keyword.value.trim()) {
         searchResults.value = []
         playlistResults.value = []
+        radioResults.value = []
         currentPage.value = 1
         playlistPage.value = 1
+        radioPage.value = 1
         if (activeTab.value === 'songs') {
           await performSearch(true)
-        } else {
+        } else if (activeTab.value === 'playlists') {
           await fetchPlaylists(true)
+        } else {
+          await fetchRadios(true)
         }
       }
     },
@@ -109,6 +135,8 @@ onActivated(async () => {
       await performSearch(true)
     } else if (val === 'playlists' && playlistResults.value.length === 0) {
       await fetchPlaylists(true)
+    } else if (val === 'radios' && radioResults.value.length === 0) {
+      await fetchRadios(true)
     }
   })
 })
@@ -143,7 +171,9 @@ const performSearch = async (reset = false) => {
     totalItems.value = result.total || 0
     const newSongs = (result.list || []).map((song: any, index: number) => ({
       ...song,
-      id: song.songmid || `${currentPage.value}-${index}` // 确保每首歌都有唯一ID
+      songmid: song.songmid,
+      albumId: song.albumId || 0,
+      id: (currentPage.value - 1) * pageSize + index + 1 // 确保每首歌都有唯一ID
     }))
 
     if (reset) {
@@ -187,6 +217,7 @@ async function setPic(offset: number, source: string) {
 // 计算是否有搜索结果
 const hasSongResults = computed(() => searchResults.value && searchResults.value.length > 0)
 const hasPlaylistResults = computed(() => playlistResults.value && playlistResults.value.length > 0)
+const hasRadioResults = computed(() => radioResults.value && radioResults.value.length > 0)
 
 // 组件事件处理函数
 const handlePlay = (song: MusicItem) => {
@@ -271,7 +302,7 @@ const fetchPlaylists = async (reset = false) => {
     } else {
       playlistResults.value = [...playlistResults.value, ...mapped]
     }
-    if (!reset) playlistPage.value += 1
+    playlistPage.value += 1
   } catch (e) {
     console.error('歌单搜索失败:', e)
   } finally {
@@ -305,6 +336,71 @@ const onPlaylistScroll = (event: Event) => {
   }
 }
 
+const fetchRadios = async (reset = false) => {
+  if (radioLoading.value || !keyword.value.trim()) return
+
+  if (reset) {
+    radioPage.value = 1
+    radioResults.value = []
+  }
+
+  radioLoading.value = true
+  try {
+    const localUserStore = LocalUserDetailStore()
+    if (!localUserStore.userSource.source) {
+      MessagePlugin.error('请配置音源')
+      return
+    }
+    const source = localUserStore.userSource.source as unknown as string
+    const res = await window.api.music.requestSdk('searchRadio', {
+      source,
+      keyword: keyword.value,
+      page: radioPage.value,
+      limit: radioLimit
+    })
+    console.log('电台搜索结果', res)
+    radioTotal.value = res?.total || 0
+    const list = Array.isArray(res?.list) ? res.list : []
+    if (reset) {
+      radioResults.value = list
+    } else {
+      radioResults.value = [...radioResults.value, ...list]
+    }
+    radioPage.value += 1
+  } catch (e: any) {
+    console.error('电台搜索失败:', e)
+    MessagePlugin.error(e?.message || '电台搜索失败，请稍后重试')
+  } finally {
+    radioLoading.value = false
+  }
+}
+
+const routerToRadio = (radio: RadioItem) => {
+  router.push({
+    name: 'radio-detail',
+    params: { id: radio.id },
+    query: {
+      title: radio.name,
+      source: radio.source,
+      author: radio.author,
+      cover: radio.img,
+      total: radio.total,
+      playCount: radio.play_count,
+      desc: radio.desc
+    }
+  })
+}
+
+const onRadioScroll = (event: Event) => {
+  const target = event.target as HTMLElement
+  const { scrollTop, scrollHeight, clientHeight } = target
+  const nearBottom = scrollHeight - scrollTop - clientHeight < 100
+  const hasMore = radioResults.value.length < radioTotal.value
+  if (nearBottom && hasMore && !radioLoading.value) {
+    fetchRadios(false)
+  }
+}
+
 const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
 </script>
 
@@ -319,12 +415,14 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
         </h2>
         <div class="result-info">
           <span v-if="activeTab === 'songs'">找到 {{ totalItems }} 首单曲</span>
-          <span v-else>找到 {{ playlistTotal }} 个歌单</span>
+          <span v-else-if="activeTab === 'playlists'">找到 {{ playlistTotal }} 个歌单</span>
+          <span v-else>找到 {{ radioTotal }} 个电台</span>
         </div>
       </div>
       <n-tabs v-model:value="activeTab" type="line" size="small">
         <n-tab-pane name="songs" tab="单曲" />
         <n-tab-pane name="playlists" tab="歌单" />
+        <n-tab-pane name="radios" tab="电台" />
       </n-tabs>
     </div>
 
@@ -422,6 +520,51 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
           </div>
         </div>
       </div>
+      <!-- 电台列表 -->
+      <div v-show="activeTab === 'radios'" class="radio-tab">
+        <div class="grid-scroll-container" @scroll="onRadioScroll">
+          <TransitionGroup
+            v-if="hasRadioResults"
+            name="grid-fade"
+            tag="div"
+            class="radio-grid"
+          >
+            <div v-for="radio in radioResults" :key="radio.id" class="radio-card" @click="routerToRadio(radio)">
+              <div class="radio-header">
+                <img
+                  :src="radio.img || songCover"
+                  :alt="radio.name"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div class="radio-info">
+                  <h4>{{ unescape(radio.name) }}</h4>
+                  <p>{{ radio.desc || radio.author || '电台节目' }}</p>
+                  <div class="radio-meta">
+                    <span>{{ radio.total || 0 }} 期</span>
+                    <span>{{ radio.play_count }}</span>
+                    <span v-if="userSource.source === 'all' && radio.source">{{ radio.source }}</span>
+                  </div>
+                </div>
+              </div>
+              <button class="load-programs" @click.stop="routerToRadio(radio)">查看节目</button>
+            </div>
+          </TransitionGroup>
+          <div v-else-if="!radioLoading" class="empty-state">
+            <div class="empty-content">
+              <div class="empty-icon">📻</div>
+              <h3>未找到相关电台</h3>
+              <p>请尝试其他关键词或切换音源</p>
+            </div>
+          </div>
+          <div v-else class="loading-state">
+            <div class="loading-content">
+              <div class="loading-spinner"></div>
+              <p>搜索中...</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -490,7 +633,8 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
 }
 
 .playlist-tab,
-.song-tab {
+.song-tab,
+.radio-tab {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -571,7 +715,8 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
 }
 
 /* 歌单卡片样式（简洁展示信息） */
-.playlist-grid {
+.playlist-grid,
+.radio-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -676,6 +821,66 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
         color: var(--find-text-muted);
       }
     }
+  }
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--find-card-shadow-hover);
+  }
+}
+
+.radio-card {
+  background: var(--find-card-bg);
+  border-radius: 12px;
+  box-shadow: var(--find-card-shadow);
+  overflow: hidden;
+  .radio-header {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    cursor: pointer;
+    img {
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+  }
+  .radio-info {
+    min-width: 0;
+    h4 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      color: var(--find-text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    p {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--find-text-secondary);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+  .radio-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--find-text-muted);
+  }
+  .load-programs {
+    width: calc(100% - 24px);
+    margin: 0 12px 12px;
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    color: var(--find-text-primary);
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
   }
   &:hover {
     transform: translateY(-2px);

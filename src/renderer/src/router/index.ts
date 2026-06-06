@@ -50,6 +50,11 @@ const appRouter: RouteRecordRaw[] = [
         component: () => import('@renderer/views/music/list.vue')
       },
       {
+        path: 'radio/:id',
+        name: 'radio-detail',
+        component: () => import('@renderer/views/music/radio.vue')
+      },
+      {
         path: 'download',
         name: 'download',
         component: () => import('@renderer/views/download/index.vue')
@@ -174,6 +179,7 @@ const startPreload = () => {
     '/home/profile',
     '/home/recognize',
     '/home/list/:id',
+    '/home/radio/:id',
     '/home/local/edit-tag',
     '/settings',
     '/desktop-lyric',

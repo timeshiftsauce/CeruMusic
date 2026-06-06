@@ -804,6 +804,7 @@ const handleClickOutside = (event: MouseEvent) => {
 
 // --- 后台暂停动画逻辑 Start ---
 const isAppActive = ref(isAppWindowActive())
+const shouldRenderOverlays = computed(() => props.show && isAppActive.value)
 
 const syncAppActiveState = () => {
   const active = isAppWindowActive()
@@ -1041,12 +1042,14 @@ onUnmounted(() => {
       </Transition>
     </div>
     <CommentsOverlay
+      v-if="shouldRenderOverlays"
       :show="props.showComments"
       :main-color="lightMainColor"
       @close="emit('update:showComments', false)"
     />
     <!-- 歌词复制浮层 —— 右键歌词区域 / 更多菜单触发,样式与评论/一起听保持一致 -->
     <LyricCopyOverlay
+      v-if="shouldRenderOverlays"
       :show="lyricExtrasStore.copyOverlayVisible"
       :lyric-lines="(player.lyrics.lines as any) || []"
       :song-title="player.songInfo?.name || ''"
@@ -1056,12 +1059,13 @@ onUnmounted(() => {
     />
     <!-- 一起听浮层 —— 与 CommentsOverlay 平行的浮层，由 store.overlayVisible 控制 -->
     <ListenTogetherOverlay
+      v-if="shouldRenderOverlays"
       :show="props.showListenTogether"
       :main-color="lightMainColor"
       @close="emit('update:showListenTogether', false)"
     />
     <!-- 一起听弹幕层 —— 房间内自动激活,房外什么都不渲染 -->
-    <LtDanmakuLayer />
+    <LtDanmakuLayer v-if="shouldRenderOverlays" />
   </div>
 </Transition>
 </template>

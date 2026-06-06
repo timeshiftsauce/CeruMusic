@@ -8,6 +8,7 @@ import comment from './comment'
 import tipSearch from './tipSearch'
 import recognize from './recognize'
 import singer from './singer'
+import radio from './radio'
 
 const wy = {
   tipSearch,
@@ -18,6 +19,7 @@ const wy = {
   comment,
   recognize,
   singer,
+  radio,
   getLyric(songInfo) {
     return getLyric(songInfo.songmid)
   },

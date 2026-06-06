@@ -64,6 +64,7 @@ import {
   getDeclaredQualityFormats,
   getVerifiedQualityFormats
 } from '@renderer/utils/audio/qualityAvailability'
+import { isAppWindowVisible } from '@renderer/utils/appWindowState'
 
 const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
@@ -203,6 +204,11 @@ onMounted(() => refreshLikeState())
 // === Windows 任务栏缩略图工具栏（Thumbnail Toolbar）状态同步 ===
 const thumbarApi = (window as any).api?.thumbar
 let removeThumbarToggleLikeListener: (() => void) | null = null
+const appWindowVisible = ref(isAppWindowVisible())
+let pendingThumbarCover: string | null = null
+let cachedThumbarCoverSrc: string | null = null
+let cachedThumbarCoverDataUrl: string | null = null
+let thumbarCoverRequestId = 0
 
 // === 窗口标题 + 任务栏/Dock 进度条同步 ===
 // 启动默认标题在 App.vue 推一次,这里只在有歌时切换"歌名 - 歌手",无歌回退默认名。
@@ -299,22 +305,56 @@ watch(
   () => Audio.value.duration,
   () => pushWindowProgress(true)
 )
+const setThumbarCover = async (cover: string | null, force = false): Promise<void> => {
+  if (!thumbarApi?.setCover) return
+
+  const requestId = ++thumbarCoverRequestId
+
+  if (!cover) {
+    pendingThumbarCover = null
+    cachedThumbarCoverSrc = null
+    cachedThumbarCoverDataUrl = null
+    thumbarApi.setCover(null)
+    return
+  }
+
+  if (!force && !isAppWindowVisible()) {
+    pendingThumbarCover = cover
+    return
+  }
+
+  pendingThumbarCover = null
+
+  if (cachedThumbarCoverSrc === cover && cachedThumbarCoverDataUrl) {
+    thumbarApi.setCover(cachedThumbarCoverDataUrl)
+    return
+  }
+
+  const dataUrl = await blobOrUrlToDataUrl(cover)
+  if (requestId !== thumbarCoverRequestId) return
+  if (!dataUrl) return
+
+  cachedThumbarCoverSrc = cover
+  cachedThumbarCoverDataUrl = dataUrl
+  thumbarApi.setCover(dataUrl)
+}
+
+const flushPendingThumbarCover = (): void => {
+  if (!pendingThumbarCover) return
+  void setThumbarCover(pendingThumbarCover, true)
+}
+
 watch(
   () => player.value.cover,
-  async (cover) => {
-    if (!thumbarApi?.setCover) return
-    if (!cover) {
-      thumbarApi.setCover(null)
-      return
-    }
-    const dataUrl = await blobOrUrlToDataUrl(cover)
-    if (dataUrl) thumbarApi.setCover(dataUrl)
+  (cover) => {
+    void setThumbarCover(cover || null)
   },
   { immediate: true }
 )
 
 const showFullPlay = ref(false)
 const showComments = ref(false)
+const shouldRenderFullPlay = computed(() => showFullPlay.value && appWindowVisible.value)
 
 const toggleComments = () => {
   showComments.value = !showComments.value
@@ -492,6 +532,12 @@ function globalControls(e) {
   }
 }
 
+const syncAppWindowVisibleState = () => {
+  const visible = isAppWindowVisible()
+  appWindowVisible.value = visible
+  if (visible) flushPendingThumbarCover()
+}
+
 onMounted(async () => {
   // 监听来自主进程的锁定状态广播
   lyricLockHandler = (_: any, lock: any) => {
@@ -521,6 +567,9 @@ onMounted(async () => {
     desktopLyricLocked.value = !!lock
   } catch {}
   window.addEventListener('global-music-control', globalControls)
+  window.addEventListener('ceru-window-state-change', syncAppWindowVisibleState)
+  window.addEventListener('ceru-wake', syncAppWindowVisibleState)
+  syncAppWindowVisibleState()
   openPlaylistHandler = () => {
     showPlaylist.value = true
     nextTick(() => {
@@ -563,6 +612,8 @@ onUnmounted(() => {
     window.electron?.ipcRenderer?.removeListener?.('closeDesktopLyric', lyricCloseHandler)
   }
   window.removeEventListener('global-music-control', globalControls)
+  window.removeEventListener('ceru-window-state-change', syncAppWindowVisibleState)
+  window.removeEventListener('ceru-wake', syncAppWindowVisibleState)
   if (openPlaylistHandler) window.removeEventListener('open-playlist', openPlaylistHandler)
   if (closePlaylistHandler) window.removeEventListener('close-playlist', closePlaylistHandler)
   if (unsubSlotSwap) {
@@ -748,10 +799,10 @@ watch(showListenTogether, (visible) => {
   }
 })
 
-/* showFullPlay 单向镜像到 lt store —— LtChatToast 等挂在 root 的组件靠它判断
- * 走弹幕还是 toast。immediate 同步初始值,避免冷启动期间状态空窗。 */
+/* shouldRenderFullPlay 单向镜像到 lt store —— LtChatToast 等挂在 root 的组件靠它判断
+ * 走弹幕还是 toast。窗口隐藏时视觉层暂停，业务房间状态不变。 */
 watch(
-  showFullPlay,
+  shouldRenderFullPlay,
   (v) => {
     listenTogetherStore.setFullPlayVisible(v)
   },
@@ -1993,7 +2044,7 @@ watch(showFullPlay, (val) => {
       v-model:show-comments="showComments"
       v-model:show-listen-together="showListenTogether"
       :song-id="songInfo.songmid ? songInfo.songmid.toString() : null"
-      :show="showFullPlay"
+      :show="shouldRenderFullPlay"
       :cover-image="player.cover"
       :song-info="songInfo"
       :main-color="maincolor"

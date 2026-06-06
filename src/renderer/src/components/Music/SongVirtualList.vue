@@ -243,6 +243,9 @@
                     {{ song.source }}
                   </span>
                   {{ song.singer }}
+                  <span v-if="getPublishDateDisplay(song)" class="publish-date">
+                    {{ getPublishDateDisplay(song) }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -347,11 +350,11 @@ const settingsStore = useSettingsStore()
 
 interface Song {
   id?: number
-  songmid: number
+  songmid: number | string
   singer: string
   name: string
   albumName: string
-  albumId: number
+  albumId: number | string
   source: string
   interval: string | number
   img: string
@@ -362,6 +365,8 @@ interface Song {
   bitrate?: number
   sampleRate?: number
   path?: string
+  publishTime?: number | string
+  publishDate?: string
 }
 
 interface Props {
@@ -417,7 +422,7 @@ const emit = defineEmits([
 
 // 虚拟滚动相关状态
 const scrollContainer = ref<HTMLElement>()
-const hoveredSong = ref<number | null>(null)
+const hoveredSong = ref<number | string | null>(null)
 const itemHeight = 64
 const buffer = computed(() => Number(props.bufferSize) || 10)
 
@@ -461,6 +466,19 @@ const parseDuration = (interval: string | number): number => {
     return parseInt(parts[0]) * 60 + parseInt(parts[1])
   }
   return parseInt(interval) || 0
+}
+
+const getPublishDateDisplay = (song: Song): string => {
+  if (song.publishDate) return song.publishDate
+  const rawTimestamp = Number(song.publishTime)
+  if (!rawTimestamp) return ''
+  const timestamp = rawTimestamp < 1000000000000 ? rawTimestamp * 1000 : rawTimestamp
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 const isTitleSortActive = computed(() =>
@@ -847,7 +865,7 @@ const onScroll = (event: Event) => {
 
 // 多选相关
 const isMultiSelect = computed(() => props.multiSelect)
-const selectedSet = ref<Set<number>>(new Set())
+const selectedSet = ref<Set<number | string>>(new Set())
 const selectedSongs = computed(() => {
   const set = selectedSet.value
   return props.songs.filter((s) => set.has(s.songmid))
@@ -885,7 +903,7 @@ const toggleSelectAll = () => {
   if (isAllSelected.value) {
     selectedSet.value.clear()
   } else {
-    const all = new Set<number>(props.songs.map((s) => s.songmid))
+    const all = new Set<number | string>(props.songs.map((s) => s.songmid))
     selectedSet.value = all
   }
 }
@@ -1692,6 +1710,12 @@ defineExpose({
             border-radius: 5px;
             font-size: 10px;
             line-height: 1;
+          }
+          .publish-date {
+            color: var(--td-text-color-placeholder);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            flex-shrink: 0;
           }
         }
       }

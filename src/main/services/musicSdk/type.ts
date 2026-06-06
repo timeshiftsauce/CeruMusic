@@ -122,3 +122,11 @@ export interface GetAlbumDetailArg {
   page: number
   limit: number
 }
+
+export interface RadioProgramArg {
+  radioId: string
+  page: number
+  limit: number
+  asc?: boolean
+  radio?: Record<string, any>
+}

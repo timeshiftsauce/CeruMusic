@@ -11,7 +11,8 @@ import {
   DownloadSingleSongArgs,
   TipSearchResult,
   GetCommentArg,
-  GetAlbumDetailArg
+  GetAlbumDetailArg,
+  RadioProgramArg
 } from './type'
 import pluginService from '../plugin/index'
 import musicSdk from '../../utils/musicSdk/index'
@@ -64,6 +65,16 @@ function main(source: string = 'wy') {
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {
       return (await Api.musicSearch.search(keyword, page, limit)) as Promise<SearchResult>
+    },
+
+    async searchRadio({ keyword, page = 1, limit = 20 }: SearchArg) {
+      if (!Api.radio?.search) return { list: [], total: 0, page, source } as any
+      return await Api.radio.search(keyword, page, limit)
+    },
+
+    async getRadioPrograms({ radioId, page = 1, limit = 30, asc = false, radio }: RadioProgramArg) {
+      if (!Api.radio?.getPrograms) return { list: [], total: 0, page, limit, source } as any
+      return await Api.radio.getPrograms({ radioId, page, limit, asc, radio })
     },
 
     async tipSearch({ keyword }: { keyword: string }) {
@@ -377,6 +388,13 @@ function aggregateMain() {
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {
       return (await Agg.search(keyword, page, limit)) as Promise<SearchResult>
+    },
+    async searchRadio({ keyword, page = 1, limit = 20 }: SearchArg): Promise<any> {
+      return await Agg.searchRadio(keyword, page, limit)
+    },
+    async getRadioPrograms({ radioId, page = 1, limit = 30, asc = false, radio }: RadioProgramArg): Promise<any> {
+      const source = (radio as any)?.source || 'wy'
+      return await Agg.getRadioPrograms({ radioId, source, page, limit, asc, radio })
     },
     async tipSearch(_: { keyword: string }) {
       return (await Agg.tipSearch(_.keyword)) as Promise<TipSearchResult>
