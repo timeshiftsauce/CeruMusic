@@ -59,6 +59,7 @@ const api = {
       ipcRenderer.invoke('service-plugin-addPlugin', pluginCode, pluginName, targetPluginId),
     getPluginById: (id: string) => ipcRenderer.invoke('service-plugin-getPluginById', id),
     loadAllPlugins: () => ipcRenderer.invoke('service-plugin-loadAllPlugins'),
+    reloadAllPlugins: () => ipcRenderer.invoke('service-plugin-reloadAllPlugins'),
     uninstallPlugin: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId),
     getPluginLog: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPluginLog', pluginId),

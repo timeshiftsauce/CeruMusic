@@ -1,0 +1,103 @@
+name: Android Build
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/android/**'
+      - 'packages/shared-contract/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'packages/shared-contract/**'
+      - '.github/workflows/android.yml'
+
+jobs:
+  android:
+    name: build android debug and release artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'yarn'
+          cache-dependency-path: apps/android/yarn.lock
+
+      - name: Install Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Dependencies
+        working-directory: apps/android
+        run: |
+          npm i -g yarn
+          yarn install --frozen-lockfile
+
+      - name: Decode Android signing keystore
+        env:
+          CERU_ANDROID_KEYSTORE_BASE64: ${{ secrets.CERU_ANDROID_KEYSTORE_BASE64 }}
+        working-directory: apps/android
+        run: |
+          if [ -z "$CERU_ANDROID_KEYSTORE_BASE64" ]; then
+            echo "Android signing keystore is not configured; release artifacts will use the default unsigned boundary."
+            exit 0
+          fi
+          mkdir -p android/app/signing
+          printf '%s' "$CERU_ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/signing/release.keystore
+
+      - name: Typecheck
+        working-directory: apps/android
+        run: yarn typecheck
+
+      - name: Lint
+        working-directory: apps/android
+        run: yarn lint
+
+      - name: Build Debug APK
+        working-directory: apps/android
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        run: yarn android:assemble
+
+      - name: Build Release APK
+        working-directory: apps/android
+        env:
+          CERU_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          CERU_ANDROID_VERSION_NAME: ${{ github.ref_name }}
+          CERU_ANDROID_KEYSTORE_FILE: app/signing/release.keystore
+          CERU_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.CERU_ANDROID_KEYSTORE_PASSWORD }}
+          CERU_ANDROID_KEY_ALIAS: ${{ secrets.CERU_ANDROID_KEY_ALIAS }}
+          CERU_ANDROID_KEY_PASSWORD: ${{ secrets.CERU_ANDROID_KEY_PASSWORD }}
+        run: yarn android:release
+
+      - name: Build Release AAB
+        working-directory: apps/android
+        env:
+          CERU_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          CERU_ANDROID_VERSION_NAME: ${{ github.ref_name }}
+          CERU_ANDROID_KEYSTORE_FILE: app/signing/release.keystore
+          CERU_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.CERU_ANDROID_KEYSTORE_PASSWORD }}
+          CERU_ANDROID_KEY_ALIAS: ${{ secrets.CERU_ANDROID_KEY_ALIAS }}
+          CERU_ANDROID_KEY_PASSWORD: ${{ secrets.CERU_ANDROID_KEY_PASSWORD }}
+        run: yarn android:bundle
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-build-artifacts
+          path: |
+            apps/android/android/app/build/outputs/apk/debug/*.apk
+            apps/android/android/app/build/outputs/apk/release/*.apk
+            apps/android/android/app/build/outputs/bundle/release/*.aab

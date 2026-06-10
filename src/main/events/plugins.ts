@@ -58,6 +58,15 @@ export default function InitPluginService() {
     }
   })
 
+  ipcMain.handle('service-plugin-reloadAllPlugins', async (): Promise<any> => {
+    try {
+      return await pluginService.reloadAllPlugins()
+    } catch (error: any) {
+      console.error('Error reloading all plugins:', error)
+      return { error: error.message }
+    }
+  })
+
   ipcMain.handle('service-plugin-getPluginLog', async (_, pluginId): Promise<any> => {
     try {
       return await pluginService.getPluginLog(pluginId)

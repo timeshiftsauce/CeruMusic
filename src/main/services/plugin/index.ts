@@ -320,6 +320,12 @@ const pluginService = {
     })
   },
 
+  async reloadAllPlugins() {
+    await this.disposeAll()
+    await this.initializePlugins()
+    return await this.getPluginsList()
+  },
+
   async downloadAndAddPlugin(url: string, type: 'lx' | 'cr', targetPluginId?: string) {
     try {
       // 验证URL

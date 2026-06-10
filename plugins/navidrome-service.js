@@ -280,6 +280,45 @@ function mapPlaylist(config, pl) {
   }
 }
 
+function mapSong(config, song) {
+  return {
+    name: song.title || song.name || '未知歌曲',
+    singer: song.artist || '未知歌手',
+    albumName: song.album || '',
+    albumId: String(song.albumId || ''),
+    interval: formatDuration(song.duration),
+    img: song.coverArt ? buildCoverArtUrl(config, song.coverArt, 300) : '',
+    source: 'navidrome',
+    songmid: 'navidrome_' + song.id,
+    url: buildStreamUrl(config, song.id),
+    types: ['navidrome'],
+    _types: { navidrome: { size: song.size || 0 } },
+    lrc: null
+  }
+}
+
+/**
+ * 搜索歌曲
+ */
+async function search(config, keyword, page, limit) {
+  const pageNo = page || 1
+  const pageSize = limit || 30
+  const offset = Math.max(0, (pageNo - 1) * pageSize)
+  const response = await apiRequest(
+    config,
+    `search3&query=${encodeURIComponent(keyword)}&songCount=${pageSize}&songOffset=${offset}&artistCount=0&albumCount=0`
+  )
+  const songs = response.searchResult3?.song || []
+  const list = Array.isArray(songs) ? songs : songs ? [songs] : []
+
+  return {
+    items: list.map(function (song) {
+      return mapSong(config, song)
+    }),
+    total: response.searchResult3?.songCount || list.length
+  }
+}
+
 /**
  * 获取歌单中的歌曲
  */
@@ -294,20 +333,7 @@ async function getPlaylistSongs(config, playlistId) {
   const songList = Array.isArray(entries) ? entries : entries ? [entries] : []
 
   const songs = songList.map(function (song) {
-    return {
-      name: song.title || song.name || '未知歌曲',
-      singer: song.artist || '未知歌手',
-      albumName: song.album || '',
-      albumId: String(song.albumId || ''),
-      interval: formatDuration(song.duration),
-      img: song.coverArt ? buildCoverArtUrl(config, song.coverArt, 300) : '',
-      source: 'navidrome',
-      songmid: 'navidrome_' + song.id,
-      url: buildStreamUrl(config, song.id),
-      types: ['navidrome'],
-      _types: { navidrome: { size: song.size || 0 } },
-      lrc: null
-    }
+    return mapSong(config, song)
   })
 
   return {
@@ -336,6 +362,7 @@ module.exports = {
   sources: [],
   configSchema: configSchema,
   testConnection: testConnection,
+  search: search,
   getPlaylists: getPlaylists,
   getPlaylistSongs: getPlaylistSongs,
   getLyric: getLyric

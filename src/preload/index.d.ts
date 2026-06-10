@@ -144,6 +144,7 @@ interface CustomAPI {
     ) => () => void
     getPluginById: (id: string) => Promise<any>
     loadAllPlugins: () => Promise<any>
+    reloadAllPlugins: () => Promise<any>
     getPluginLog: (pluginId: string) => Promise<any>
   }
   ping: (callback: Function<any>) => undefined

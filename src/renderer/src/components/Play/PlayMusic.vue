@@ -58,6 +58,11 @@ import ListenTogetherEntryDialog from '@renderer/components/ListenTogether/Liste
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
+import {
+  ensureLocalFavoritesPlaylist,
+  syncAddSongsToCloud,
+  syncRemoveSongsFromCloud
+} from '@renderer/utils/playlist/cloudLibrarySync'
 import { waitForAudioReady, createSourceSwitchDialog } from '@renderer/utils/audio/audioHelpers'
 import { calculateBestQuality } from '@common/utils/quality'
 import {
@@ -703,37 +708,19 @@ const onToggleLike = async () => {
       return
     }
 
-    // 读取持久化的“我的喜欢”歌单ID
-    const favIdRes = await window.api.songList.getFavoritesId()
-    let favoritesId: string | null = (favIdRes && favIdRes.data) || null
-
-    // 如果已有ID但歌单不存在，则置空
-    if (favoritesId) {
-      const existsRes = await songListAPI.exists(favoritesId)
-      if (!existsRes.success || !existsRes.data) {
-        favoritesId = null
-      }
-    }
-
-    // 如果没有ID，尝试查找同名歌单；找不到则创建
-    if (!favoritesId) {
-      const searchRes = await songListAPI.search('我的喜欢', 'local')
-      if (searchRes.success && Array.isArray(searchRes.data)) {
-        const exact = searchRes.data.find((pl) => pl.name === '我的喜欢' && pl.source === 'local')
-        favoritesId = exact?.id || null
-      }
-      if (!favoritesId) {
-        const createRes = await songListAPI.create('我的喜欢', '', 'local')
-        if (!createRes.success || !createRes.data?.id) {
-          MessagePlugin.error(createRes.error || '创建“我的喜欢”失败')
-          return
-        }
-        favoritesId = createRes.data.id
-      }
-      // 持久化ID到主进程配置
-      await window.api.songList.setFavoritesId(favoritesId)
-    }
+    const favoritesId = await ensureLocalFavoritesPlaylist()
     cachedFavoritesId = favoritesId
+    const favoritesPlaylistRes = await songListAPI.getById(favoritesId)
+    const favoritesPlaylist = favoritesPlaylistRes.data || {
+      id: favoritesId,
+      name: '我的喜欢',
+      description: '',
+      coverImgUrl: 'default-cover',
+      createTime: '',
+      updateTime: '',
+      source: 'local',
+      meta: { semantic: 'favorites' }
+    }
 
     // 根据当前状态决定添加或移除
     if (likeState.value) {
@@ -743,6 +730,12 @@ const onToggleLike = async () => {
       )
       if (removeRes.success && removeRes.data) {
         likeState.value = false
+        syncRemoveSongsFromCloud(favoritesPlaylist as any, [userInfo.value.lastPlaySongId as any]).catch(
+          (error) => {
+            console.error('同步取消喜欢到云端失败:', error)
+            MessagePlugin.warning('本地已取消喜欢，云端同步稍后重试')
+          }
+        )
         // MessagePlugin.success('已取消喜欢')
       } else {
         MessagePlugin.error(removeRes.error || '取消喜欢失败')
@@ -753,6 +746,12 @@ const onToggleLike = async () => {
       ])
       if (addRes.success) {
         likeState.value = true
+        syncAddSongsToCloud(favoritesPlaylist as any, [_.cloneDeep(toRaw(currentSong)) as any]).catch(
+          (error) => {
+            console.error('同步喜欢到云端失败:', error)
+            MessagePlugin.warning('本地已添加喜欢，云端同步稍后重试')
+          }
+        )
         // MessagePlugin.success('已添加到“我的喜欢”')
       } else {
         MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')

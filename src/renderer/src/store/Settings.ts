@@ -44,6 +44,12 @@ export interface SettingsState {
   /** macOS 状态栏歌词开关（仅 mac 生效） */
   macStatusBarLyricEnabled?: boolean
   globalBackground?: GlobalBackgroundSettings
+  nasSyncEnabled?: boolean
+  nasSyncServerUrl?: string
+  nasSyncPairCode?: string
+  nasSyncStatus?: 'connected' | 'disconnected'
+  nasSyncToken?: string
+  nasSyncLastRevision?: number
 }
 
 export const useSettingsStore = defineStore(
@@ -82,7 +88,13 @@ export const useSettingsStore = defineStore(
         opacity: 0.5,
         blur: 10,
         brightness: 0.8
-      }
+      },
+      nasSyncEnabled: false,
+      nasSyncServerUrl: '',
+      nasSyncPairCode: '',
+      nasSyncStatus: 'disconnected',
+      nasSyncToken: '',
+      nasSyncLastRevision: 0
     }
 
     // 从本地存储加载设置（与默认值深合并）
@@ -163,6 +175,24 @@ export const useSettingsStore = defineStore(
       }
       if (typeof settings.value.macStatusBarLyricEnabled === 'undefined') {
         settings.value.macStatusBarLyricEnabled = false
+      }
+      if (typeof settings.value.nasSyncEnabled === 'undefined') {
+        settings.value.nasSyncEnabled = false
+      }
+      if (typeof settings.value.nasSyncServerUrl === 'undefined') {
+        settings.value.nasSyncServerUrl = ''
+      }
+      if (typeof settings.value.nasSyncPairCode === 'undefined') {
+        settings.value.nasSyncPairCode = ''
+      }
+      if (typeof settings.value.nasSyncStatus === 'undefined') {
+        settings.value.nasSyncStatus = 'disconnected'
+      }
+      if (typeof settings.value.nasSyncToken === 'undefined') {
+        settings.value.nasSyncToken = ''
+      }
+      if (typeof settings.value.nasSyncLastRevision === 'undefined') {
+        settings.value.nasSyncLastRevision = 0
       }
       if (!settings.value.globalBackground) {
         settings.value.globalBackground = {

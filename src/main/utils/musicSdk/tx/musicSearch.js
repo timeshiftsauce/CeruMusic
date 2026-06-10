@@ -160,7 +160,8 @@ export default {
             : `https://y.gtimg.cn/music/photo_new/T002R500x500M000${albumId}.jpg`,
         types,
         _types,
-        typeUrl: {}
+        typeUrl: {},
+        publishDate: item.album?.time_public || item.time_public || ''
       })
     })
     return list

@@ -8,7 +8,8 @@
     "src/renderer/components.d.ts",
     "src/preload/*.d.ts",
     "src/types/**/*",
-    "src/common/**/*"
+    "src/common/**/*",
+    "packages/shared-contract/src/**/*"
   ],
   "exclude": [
     "src/renderer/src/public/**/*",
@@ -24,7 +25,8 @@
     "paths": {
       "@renderer/*": ["src/renderer/src/*"],
       "@common/*": ["src/common/*"],
-      "@types/*": ["src/renderer/src/types/*"]
+      "@types/*": ["src/renderer/src/types/*"],
+      "@ceru/shared-contract": ["packages/shared-contract/src"]
     }
   }
 }

@@ -36,6 +36,11 @@ import {
   handleUploadToCloudHelper,
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
+import {
+  pullFavoritesFromCloud,
+  syncDeletePlaylistFromCloud,
+  syncPlaylistInfoToCloud
+} from '@renderer/utils/playlist/cloudLibrarySync'
 import SharePlaylistDialog from '@renderer/components/Share/SharePlaylistDialog.vue'
 import { useAuthStore } from '@renderer/store'
 
@@ -298,6 +303,10 @@ const createPlaylist = async () => {
         meta: {}
       } as SongList
       addPlaylistState(created)
+      syncPlaylistInfoToCloud(created).catch((error) => {
+        console.error('同步创建歌单到云端失败:', error)
+        MessagePlugin.warning('本地歌单已创建，云端同步稍后重试')
+      })
       newPlaylistForm.value = { name: '我的歌单', description: '这是我创建的歌单' }
       // 触发歌单更新事件
       window.dispatchEvent(new Event('playlist-updated'))
@@ -361,9 +370,18 @@ const savePlaylistEdit = async () => {
       success = result.success
       errorMsg = result.error || '更新歌单信息失败'
       if (result.success) {
-        updatePlaylistState(currentEditingPlaylist.value.id, {
+        const updatedPlaylist = {
+          ...currentEditingPlaylist.value,
           name: editPlaylistForm.value.name.trim(),
           description: editPlaylistForm.value.description.trim()
+        }
+        updatePlaylistState(currentEditingPlaylist.value.id, {
+          name: updatedPlaylist.name,
+          description: updatedPlaylist.description
+        })
+        syncPlaylistInfoToCloud(updatedPlaylist).catch((error) => {
+          console.error('同步歌单信息到云端失败:', error)
+          MessagePlugin.warning('本地歌单已更新，云端同步稍后重试')
         })
       }
     }
@@ -418,6 +436,12 @@ const deletePlaylist = async (playlist: SongList) => {
           const result = await songListAPI.delete(playlist.id)
           success = result.success
           errorMsg = result.error || '删除歌单失败'
+          if (result.success) {
+            syncDeletePlaylistFromCloud(playlist).catch((error) => {
+              console.error('同步删除云端歌单失败:', error)
+              MessagePlugin.warning('本地歌单已删除，云端删除稍后重试')
+            })
+          }
         }
 
         if (success) {
@@ -1534,10 +1558,31 @@ const closeContextMenu = () => {
 // 滚动位置保持
 const scrollRef = ref<HTMLElement>()
 const scrollTop = ref(0)
+let cloudFavoritesPulling = false
+
+const refreshPlaylistsWithCloudFavorites = async () => {
+  if (cloudFavoritesPulling) return
+  cloudFavoritesPulling = true
+  try {
+    await pullFavoritesFromCloud().catch((error) => {
+      console.warn('拉取云端收藏失败:', error)
+    })
+    await loadPlaylists()
+  } finally {
+    cloudFavoritesPulling = false
+  }
+}
+
+const handleDesktopLibraryResume = () => {
+  if (document.visibilityState === 'visible') void refreshPlaylistsWithCloudFavorites()
+}
 
 // 组件挂载时加载数据
 onMounted(() => {
-  loadPlaylists()
+  void refreshPlaylistsWithCloudFavorites()
+  document.addEventListener('visibilitychange', handleDesktopLibraryResume)
+  window.addEventListener('focus', refreshPlaylistsWithCloudFavorites)
+  window.addEventListener('playlist-updated', refreshPlaylistsWithCloudFavorites)
   // 监听页面滚动，关闭右键菜单
   nextTick(() => {
     if (scrollRef.value) {
@@ -1547,6 +1592,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleDesktopLibraryResume)
+  window.removeEventListener('focus', refreshPlaylistsWithCloudFavorites)
+  window.removeEventListener('playlist-updated', refreshPlaylistsWithCloudFavorites)
   if (scrollRef.value) {
     scrollRef.value.removeEventListener('scroll', handleScrollCloseMenu)
   }

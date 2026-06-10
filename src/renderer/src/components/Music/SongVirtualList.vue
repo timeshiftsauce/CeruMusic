@@ -181,6 +181,7 @@
       class="virtual-scroll-container"
       :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
       @scroll="onScroll"
+      @wheel.passive="onWheel"
     >
       <div class="virtual-scroll-spacer" :style="{ height: totalHeight + 'px' }">
         <div class="virtual-scroll-content" :style="{ transform: `translateY(${offsetY}px)` }">
@@ -339,8 +340,12 @@ import songListAPI from '@renderer/api/songList'
 import type { SongList } from '@common/types/songList'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
-import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
+import {
+  ensureLocalFavoritesPlaylist,
+  syncAddSongsToCloud,
+  syncRemoveSongsFromCloud
+} from '@renderer/utils/playlist/cloudLibrarySync'
 import { useAuthStore } from '@renderer/store'
 import { useSettingsStore } from '@renderer/store/Settings'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
@@ -412,6 +417,7 @@ const emit = defineEmits([
   'downloadBatch',
   'playBatch',
   'scroll',
+  'scroll-intent',
   'removeFromLocalPlaylist',
   'removeBatch',
   'exitMultiSelect',
@@ -863,6 +869,10 @@ const onScroll = (event: Event) => {
   emit('scroll', event)
 }
 
+const onWheel = () => {
+  emit('scroll-intent')
+}
+
 // 多选相关
 const isMultiSelect = computed(() => props.multiSelect)
 const selectedSet = ref<Set<number | string>>(new Set())
@@ -1176,38 +1186,40 @@ const handlePlaylistUpdated = async () => {
 const isLiked = (song: Song) => likedSet.value.has(song.songmid)
 
 const ensureFavoritesId = async (): Promise<string | null> => {
-  if (favoritesId.value) {
-    const existsRes = await songListAPI.exists(favoritesId.value)
-    if (existsRes.success && existsRes.data) return favoritesId.value
-    favoritesId.value = null
-  }
-  const searchRes = await songListAPI.search('我的喜欢', 'local')
-  if (searchRes.success && Array.isArray(searchRes.data)) {
-    const exact = searchRes.data.find((pl) => pl.name === '我的喜欢' && pl.source === 'local')
-    if (exact?.id) {
-      favoritesId.value = exact.id
-      await (window as any).api?.songList?.setFavoritesId?.(favoritesId.value)
-      return favoritesId.value
-    }
-  }
-  const createRes = await songListAPI.create('我的喜欢', '', 'local')
-  if (!createRes.success || !createRes.data?.id) {
-    MessagePlugin.error(createRes.error || '创建“我的喜欢”失败')
+  try {
+    const id = await ensureLocalFavoritesPlaylist()
+    favoritesId.value = id
+    return id
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || '创建“我的喜欢”失败')
     return null
   }
-  favoritesId.value = createRes.data.id
-  await (window as any).api?.songList?.setFavoritesId?.(favoritesId.value)
-  return favoritesId.value
 }
 
 const onToggleLike = async (song: Song) => {
   try {
     const id = await ensureFavoritesId()
     if (!id) return
+    const favoritesPlaylistRes = await songListAPI.getById(id)
+    const favoritesPlaylist = favoritesPlaylistRes.data || ({
+      id,
+      name: '我的喜欢',
+      description: '',
+      coverImgUrl: 'default-cover',
+      createTime: '',
+      updateTime: '',
+      source: 'local',
+      meta: { semantic: 'favorites' }
+    } as SongList)
+
     if (isLiked(song)) {
       const removeRes = await songListAPI.removeSong(id, song.songmid)
       if (removeRes.success && removeRes.data) {
         likedSet.value.delete(song.songmid)
+        syncRemoveSongsFromCloud(favoritesPlaylist, [song.songmid]).catch((error) => {
+          console.error('同步取消喜欢到云端失败:', error)
+          MessagePlugin.warning('本地已取消喜欢，云端同步稍后重试')
+        })
         // MessagePlugin.success('已取消喜欢')
       } else {
         MessagePlugin.error(removeRes.error || '取消喜欢失败')
@@ -1216,6 +1228,10 @@ const onToggleLike = async (song: Song) => {
       const addRes = await songListAPI.addSongs(id, [toRaw(song) as any])
       if (addRes.success) {
         likedSet.value.add(song.songmid)
+        syncAddSongsToCloud(favoritesPlaylist, [toRaw(song) as any]).catch((error) => {
+          console.error('同步喜欢到云端失败:', error)
+          MessagePlugin.warning('本地已添加喜欢，云端同步稍后重试')
+        })
         // MessagePlugin.success('已添加到“我的喜欢”')
       } else {
         MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
@@ -1243,26 +1259,10 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
     const result = await songListAPI.addSongs(playlist.id, [toRaw(song) as any])
     if (result.success) {
       MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
-
-      // 如果是已同步的本地歌单，尝试同步到云端
-      if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
-        try {
-          const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
-          if (res && res.updatedAt) {
-            // Update local meta with new localUpdatedAt
-            const newMeta = await syncLocalMetaWithCloudUpdate(
-              playlist.id,
-              playlist.meta,
-              res.updatedAt
-            )
-            // Update in-memory playlist object to reflect change immediately
-            playlist.meta = { ...playlist.meta, ...newMeta, localUpdatedAt: res.updatedAt }
-          }
-        } catch (e: any) {
-          console.error('同步添加到云端失败:', e)
-          MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))
-        }
-      }
+      syncAddSongsToCloud(playlist, [toRaw(song) as any]).catch((error: any) => {
+        console.error('同步添加到云端失败:', error)
+        MessagePlugin.warning('本地添加成功，云端同步稍后重试')
+      })
     } else {
       MessagePlugin.error(result.error || '添加到歌单失败')
     }

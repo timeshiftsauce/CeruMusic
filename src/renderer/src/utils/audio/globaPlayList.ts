@@ -108,6 +108,13 @@ async function _setCachedUrl(song: SongList, quality: string, url: string): Prom
   } catch {}
 }
 
+async function _invalidateCachedUrl(song: SongList, quality?: string): Promise<void> {
+  try {
+    const key = _getCacheKey(song, quality || _getQuality(song))
+    await window.api.musicUrlCache.invalidate(key)
+  } catch {}
+}
+
 /** 从 userInfo 中获取当前音质（与 playlistManager.getSongRealUrl 逻辑一致） */
 function _getQuality(song: SongList): string {
   const qualityMap = userInfo.value.sourceQualityMap || {}
@@ -137,7 +144,10 @@ const tryUrlSequential = async (
       if (isAllowedUrl(url) && (await verifyPlayableUrl(url))) {
         return { url, song }
       }
-      if (url && typeof url === 'string') options.failedUrls?.add(url)
+      if (url && typeof url === 'string') {
+        options.failedUrls?.add(url)
+        await _invalidateCachedUrl(song)
+      }
     } catch {}
     return null
   }
@@ -149,7 +159,10 @@ const tryUrlSequential = async (
       if (isAllowedUrl(url) && (await verifyPlayableUrl(url))) {
         return { url, song }
       }
-      if (url && typeof url === 'string') options.failedUrls?.add(url)
+      if (url && typeof url === 'string') {
+        options.failedUrls?.add(url)
+        await _invalidateCachedUrl(song)
+      }
     } catch {}
   }
 
@@ -185,7 +198,10 @@ const tryUrlSequential = async (
         _setCachedUrl(item, quality, url)
         return { url, song: item }
       }
-      if (url && typeof url === 'string') options.failedUrls?.add(url)
+      if (url && typeof url === 'string') {
+        options.failedUrls?.add(url)
+        await _invalidateCachedUrl(item, quality)
+      }
     } catch {}
   }
 
@@ -557,6 +573,7 @@ const playSong = async (
         urlToPlay = sqliteCachedUrl
       } else if (sqliteCachedUrl && typeof sqliteCachedUrl === 'string') {
         failedUrls.add(sqliteCachedUrl)
+        await _invalidateCachedUrl(song, quality)
       }
     }
 
@@ -907,24 +924,49 @@ const playSong = async (
   }
 }
 
+let lastPlaybackErrorNotice = { text: '', at: 0 }
+
+const isLongProgramSong = (song: Partial<SongList> | any): boolean => {
+  const seconds = parseIntervalSeconds(String(song?.interval || ''))
+  if (seconds < 20 * 60) return false
+  if (song?.source === 'kw') return true
+  const text = `${song?.name || ''} ${song?.albumName || ''}`
+  return /播客|博客|节目|电台|有声|期|月刊|周刊|访谈|脱口秀/.test(text)
+}
+
+const buildPlaybackFailureMessage = (reason: string): string => {
+  if (isLongProgramSong(songInfo.value)) {
+    return `当前节目无法播放：播放地址可能已过期，或当前插件暂不支持解析该节目。原因：${reason}`
+  }
+  return `当前歌曲无法播放：${reason}`
+}
+
+const showPlaybackError = (text: string): void => {
+  const now = Date.now()
+  if (lastPlaybackErrorNotice.text === text && now - lastPlaybackErrorNotice.at < 1800) return
+  lastPlaybackErrorNotice = { text, at: now }
+  MessagePlugin.error(text)
+}
+
 const tryAutoNext = (reason: string) => {
+  const failureMessage = buildPlaybackFailureMessage(reason)
   if (
     localUserStore.userSource.pluginId === undefined ||
     _isThrottled() ||
     reason.includes('频率') ||
     reason.includes('限制')
   ) {
-    MessagePlugin.error(`当前歌曲无法播放：${reason}`)
+    showPlaybackError(failureMessage)
     return
   }
-  if (list.value.length <= 1 || playMode.value === PlayMode.SINGLE) {
-    MessagePlugin.error(`当前歌曲无法播放：${reason}`)
+  if (list.value.length <= 1 || playMode.value === PlayMode.SINGLE || isLongProgramSong(songInfo.value)) {
+    showPlaybackError(failureMessage)
     return
   }
   const limit = getAutoNextLimit()
-  MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
+  showPlaybackError(`自动跳过当前歌曲：原因：${reason}`)
   if ((autoNextCount.value >= limit || autoNextCount.value >= 10) && autoNextCount.value > 2) {
-    MessagePlugin.error(
+    showPlaybackError(
       `自动下一首失败：${autoNextCount.value}/${limit > 10 ? 10 : limit}次。原因：${reason}`
     )
     return
@@ -1493,8 +1535,8 @@ const initPlayback = async () => {
     }
   )
 
-  // 注册插件禁用监听：插件因崩溃次数过多被永久禁用，提示用户并停止换源
-  _unsubscribeDisabled = window.api.pluginNotice.onPluginDisabled(({ pluginId, reason }) => {
+  // 注册插件禁用监听：插件因崩溃次数过多被禁用，本轮播放不再继续尝试该插件
+  _unsubscribeDisabled = window.api.pluginNotice.onPluginDisabled(({ pluginId }) => {
     _disabledPlugins.add(pluginId)
     // 清理限流定时器（已禁用的插件不需要再恢复）
     const t = _throttleTimers.get(pluginId)
@@ -1502,10 +1544,6 @@ const initPlayback = async () => {
       clearTimeout(t)
       _throttleTimers.delete(pluginId)
     }
-    MessagePlugin.error(
-      `插件已被禁用：${reason}。请检查插件是否包含死循环或异常逻辑，必要时重新加载或卸载该插件。`,
-      8000
-    )
   })
 
   // 初始化无感过渡管理器：注入 getNextSong 回调，订阅 slotSwap 重置自动下一首计数

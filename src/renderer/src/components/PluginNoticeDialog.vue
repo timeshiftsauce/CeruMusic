@@ -14,6 +14,9 @@
         <!-- 通知消息 -->
         <div class="notice-message">
           <p class="message-text">{{ notice?.message }}</p>
+          <p v-if="notice?.repeatCount && notice.repeatCount > 1" class="repeat-text">
+            同类通知已合并 {{ notice.repeatCount }} 次
+          </p>
 
           <!-- 更新通知的额外信息 -->
           <div v-if="notice?.dialogType === 'update'" class="update-info">
@@ -74,6 +77,7 @@ interface DialogNotice {
   pluginType?: 'lx' | 'cr'
   currentVersion?: string
   newVersion?: string
+  repeatCount?: number
   actions: Array<{
     text: string
     type: 'cancel' | 'update' | 'confirm'
@@ -92,22 +96,66 @@ const dialogWidth = computed(() => {
   return notice.value?.dialogType === 'update' ? '500px' : '400px'
 })
 
-// 对话框标题（包含队列信息）
+// 对话框标题（包含重复和队列信息）
 const dialogTitle = computed(() => {
   const baseTitle = notice.value?.title || '插件通知'
+  const repeatText = notice.value?.repeatCount && notice.value.repeatCount > 1 ? `（重复 ${notice.value.repeatCount} 次）` : ''
   const queueLength = noticeQueue.value.length
 
   if (queueLength > 0) {
-    return `${baseTitle} (还有 ${queueLength} 个通知)`
+    return `${baseTitle}${repeatText} (还有 ${queueLength} 个通知)`
   }
 
-  return baseTitle
+  return `${baseTitle}${repeatText}`
 })
+
+const getNoticeKey = (noticeData: DialogNotice): string => {
+  return [
+    noticeData.pluginId || noticeData.pluginName,
+    noticeData.dialogType,
+    noticeData.title,
+    noticeData.message,
+    noticeData.updateUrl || ''
+  ].join('|')
+}
+
+const isMusicUrlFailureNotice = (noticeData: DialogNotice): boolean => {
+  const text = `${noticeData.title || ''} ${noticeData.message || ''}`
+  return /音乐链接获取失败|获取音乐链接失败|API Key失效|鉴权失败/.test(text)
+}
+
+const lightNoticeKeys = new Set<string>()
+
+const showLightFailureNotice = (noticeData: DialogNotice): void => {
+  const key = getNoticeKey(noticeData)
+  if (lightNoticeKeys.has(key)) return
+  lightNoticeKeys.add(key)
+  MessagePlugin.warning(`${noticeData.title}: ${noticeData.message}`, 5000)
+}
 
 // 显示通知对话框
 const showNotice = (noticeData: DialogNotice) => {
+  if (isMusicUrlFailureNotice(noticeData)) {
+    showLightFailureNotice(noticeData)
+    return
+  }
+
+  const key = getNoticeKey(noticeData)
+  const currentKey = notice.value ? getNoticeKey(notice.value) : ''
+  if (visible.value && notice.value && currentKey === key) {
+    notice.value.repeatCount = (notice.value.repeatCount || 1) + 1
+    return
+  }
+
+  const queuedNotice = noticeQueue.value.find((item) => getNoticeKey(item) === key)
+  if (queuedNotice) {
+    queuedNotice.repeatCount = (queuedNotice.repeatCount || 1) + 1
+    console.log('[PluginNotice] 合并重复通知:', queuedNotice, '队列长度:', noticeQueue.value.length)
+    return
+  }
+
   // 添加到队列
-  noticeQueue.value.push(noticeData)
+  noticeQueue.value.push({ ...noticeData, repeatCount: noticeData.repeatCount || 1 })
   console.log('[PluginNotice] 添加通知到队列:', noticeData, '队列长度:', noticeQueue.value.length)
 
   // 如果当前没有显示对话框，立即显示
@@ -322,6 +370,12 @@ defineExpose({
       font-size: 14px;
       line-height: 1.5;
       color: var(--td-text-color-primary);
+    }
+
+    .repeat-text {
+      margin: -8px 0 16px 0;
+      font-size: 12px;
+      color: var(--td-text-color-secondary);
     }
 
     .update-info {

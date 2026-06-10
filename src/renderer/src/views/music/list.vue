@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
+import { cloudFavoriteAPI, cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
+import { getPreferredFavoriteAPI, getPreferredSongListAPI } from '@renderer/api/nasSync'
 import songListAPI from '@renderer/api/songList'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
@@ -11,6 +12,11 @@ import {
   handleUploadToCloudHelper,
   syncLocalMetaWithCloudUpdate
 } from '@renderer/utils/playlist/cloudSyncHelper'
+import {
+  ensureCloudPlaylistForLocal,
+  syncAddSongsToCloud,
+  syncRemoveSongsFromCloud
+} from '@renderer/utils/playlist/cloudLibrarySync'
 import { NIcon } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import {
@@ -213,6 +219,7 @@ onMounted(() => {
   }
 
   fetchPlaylistSongs()
+  refreshPlaylistFavoriteRelations()
   triggerLocateBtnVisible()
 
   // 检查是否需要自动同步平台歌单 (从歌单列表页右键菜单触发)
@@ -261,6 +268,96 @@ const isCloudUserPlaylist = computed(() => {
 const isPlaylistShare = computed(() => {
   return route.query.type === 'playlist_share'
 })
+
+const playlistFavoriteIds = ref<Set<string>>(new Set())
+const favoriteRelationError = ref('')
+const playlistFavoriteLoading = ref(false)
+const currentCloudPlaylistId = computed(() =>
+  String(playlistInfo.value.meta?.cloudId || (isCloudUserPlaylist.value ? playlistInfo.value.id : '') || '')
+)
+const canFavoriteCurrentPlaylist = computed(() => isLocalPlaylist.value || isCloudUserPlaylist.value)
+const isCurrentPlaylistFavorited = computed(() =>
+  !!currentCloudPlaylistId.value && playlistFavoriteIds.value.has(currentCloudPlaylistId.value)
+)
+
+const refreshPlaylistFavoriteRelations = async () => {
+  favoriteRelationError.value = ''
+  try {
+    const page = await (getPreferredFavoriteAPI() || cloudFavoriteAPI).listPlaylistFavorites()
+    playlistFavoriteIds.value = new Set(
+      page.items.filter((item) => !item.deletedAt).map((item) => item.playlistId)
+    )
+  } catch (error: any) {
+    favoriteRelationError.value = error?.message || '收藏歌单关系不可用'
+  }
+}
+
+const getCurrentPlaylistForCloudBinding = (): SongList => ({
+  id: playlistInfo.value.id,
+  name: playlistInfo.value.title,
+  description: playlistInfo.value.desc,
+  coverImgUrl: playlistInfo.value.cover,
+  createTime: '',
+  updateTime: '',
+  source: 'local',
+  meta: playlistInfo.value.meta
+})
+
+const resolveCurrentCloudPlaylistId = async () => {
+  if (isCloudUserPlaylist.value) return playlistInfo.value.id
+  if (!isLocalPlaylist.value) return ''
+
+  const cloudId = await ensureCloudPlaylistForLocal(getCurrentPlaylistForCloudBinding())
+  if (cloudId) {
+    playlistInfo.value.meta = {
+      ...(playlistInfo.value.meta || {}),
+      cloudId,
+      isSynced: true
+    }
+  }
+  return cloudId || ''
+}
+
+const handleTogglePlaylistFavorite = async () => {
+  if (!canFavoriteCurrentPlaylist.value) {
+    MessagePlugin.warning('当前歌单暂不支持云端收藏关系')
+    return
+  }
+
+  playlistFavoriteLoading.value = true
+  try {
+    const playlistId = await resolveCurrentCloudPlaylistId()
+    if (!playlistId) throw new Error('缺少云端歌单ID')
+
+    if (playlistFavoriteIds.value.has(playlistId)) {
+      await (getPreferredFavoriteAPI() || cloudFavoriteAPI).unfavoritePlaylist(playlistId)
+      playlistFavoriteIds.value = new Set(
+        [...playlistFavoriteIds.value].filter((item) => item !== playlistId)
+      )
+      MessagePlugin.success('已取消收藏歌单')
+    } else {
+      await (getPreferredFavoriteAPI() || cloudFavoriteAPI).favoritePlaylist({
+        playlistId,
+        sourcePlaylistId: isLocalPlaylist.value ? playlistInfo.value.id : playlistInfo.value.meta?.localId,
+        source: isLocalPlaylist.value ? 'local' : undefined,
+        title: playlistInfo.value.title,
+        description: playlistInfo.value.desc,
+        coverUrl: playlistInfo.value.cover
+      })
+      playlistFavoriteIds.value = new Set([...playlistFavoriteIds.value, playlistId])
+      MessagePlugin.success('已收藏歌单')
+    }
+    favoriteRelationError.value = ''
+    refreshPlaylistFavoriteRelations().catch((error) => {
+      console.error('刷新收藏歌单关系失败:', error)
+    })
+  } catch (error: any) {
+    favoriteRelationError.value = error?.message || '收藏歌单关系不可用'
+    MessagePlugin.error(favoriteRelationError.value)
+  } finally {
+    playlistFavoriteLoading.value = false
+  }
+}
 
 // 获取歌单歌曲列表
 const bgImageLoaded = ref(false)
@@ -411,7 +508,7 @@ const fetchCloudUserPlaylist = async (reset = false) => {
     }
     console.log('cloudNextPos.value', cloudNextPos.value)
     const limit = pageSize
-    const { list: cloudSongs, total } = await cloudSongListAPI.getSongListDetail(
+    const { list: cloudSongs, total } = await (getPreferredSongListAPI() || cloudSongListAPI).getSongListDetail(
       cloudId,
       'asc',
       limit,
@@ -802,23 +899,10 @@ const handleAddBatchToSongList = async (batchSongs: MusicItem[], playlist: SongL
     if (result.success) {
       const added = (result.data && (result.data as any).added) ?? batchSongs.length
       MessagePlugin.success(`已将 ${added} 首歌曲添加到歌单"${playlist.name}"`)
-
-      if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
-        try {
-          const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, cloudSongs)
-          if (res && res.updatedAt) {
-            const newMeta = await syncLocalMetaWithCloudUpdate(
-              playlist.id,
-              playlist.meta,
-              res.updatedAt
-            )
-            playlist.meta = { ...playlist.meta, ...newMeta, localUpdatedAt: res.updatedAt }
-          }
-        } catch (e: any) {
-          console.error('同步添加到云端失败:', e)
-          MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))
-        }
-      }
+      syncAddSongsToCloud(playlist, rawSongs as any).catch((error: any) => {
+        console.error('同步添加到云端失败:', error)
+        MessagePlugin.warning('本地添加成功，云端同步稍后重试')
+      })
     } else {
       MessagePlugin.error(result.error || '添加到歌单失败')
     }
@@ -871,31 +955,22 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
         playlistInfo.value.total = songs.value.length
       }
 
-      // Cloud Sync
-      console.log('Checking Cloud Sync for Delete:', playlistInfo.value.meta)
-      if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
-        console.log('Syncing delete to cloud:', playlistInfo.value.meta.cloudId)
-        cloudSongListAPI
-          .removeSongsFromList(playlistInfo.value.meta.cloudId, [String(song.songmid)])
-          .then(async (res) => {
-            if (res && res.updatedAt) {
-              const newMeta = await syncLocalMetaWithCloudUpdate(
-                playlistInfo.value.id,
-                playlistInfo.value.meta,
-                res.updatedAt
-              )
-              playlistInfo.value.meta = {
-                ...playlistInfo.value.meta,
-                ...newMeta,
-                localUpdatedAt: res.updatedAt
-              }
-            }
-          })
-          .catch((e) => {
-            console.error('Cloud sync delete failed', e)
-            MessagePlugin.error('云端同步删除失败: ' + (e.message || '未知错误'))
-          })
-      }
+      syncRemoveSongsFromCloud(
+        {
+          id: playlistInfo.value.id,
+          name: playlistInfo.value.title,
+          description: playlistInfo.value.desc,
+          coverImgUrl: playlistInfo.value.cover,
+          createTime: '',
+          updateTime: '',
+          source: 'local',
+          meta: playlistInfo.value.meta
+        } as SongList,
+        [song.songmid]
+      ).catch((error: any) => {
+        console.error('同步云端删除失败:', error)
+        MessagePlugin.warning('本地已移除，云端同步稍后重试')
+      })
 
       MessagePlugin.success(`已将"${song.name}"从歌单中移出`)
     } else {
@@ -1065,25 +1140,22 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
         songs.value = songs.value.filter((s) => !set.has(s.songmid))
         playlistInfo.value.total = songs.value.length
 
-        if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
-          try {
-            const res = await cloudSongListAPI.removeSongsFromList(
-              playlistInfo.value.meta.cloudId,
-              mids.map(String)
-            )
-            if (res && res.updatedAt) {
-              const newMeta = await syncLocalMetaWithCloudUpdate(
-                playlistInfo.value.id,
-                playlistInfo.value.meta,
-                res.updatedAt
-              )
-              playlistInfo.value.meta = { ...playlistInfo.value.meta, ...newMeta }
-            }
-          } catch (e: any) {
-            console.error('Cloud sync delete failed', e)
-            MessagePlugin.error('云端同步删除失败: ' + (e.message || '未知错误'))
-          }
-        }
+        syncRemoveSongsFromCloud(
+          {
+            id: playlistInfo.value.id,
+            name: playlistInfo.value.title,
+            description: playlistInfo.value.desc,
+            coverImgUrl: playlistInfo.value.cover,
+            createTime: '',
+            updateTime: '',
+            source: 'local',
+            meta: playlistInfo.value.meta
+          } as SongList,
+          mids
+        ).catch((error: any) => {
+          console.error('同步云端批量删除失败:', error)
+          MessagePlugin.warning('本地已移除，云端同步稍后重试')
+        })
 
         MessagePlugin.success(`已移除 ${mids.length} 首歌曲`)
       } else {
@@ -1570,6 +1642,11 @@ const setPicForPlaylist = async (songs: any[], source: string) => {
 /**
  * 滚动事件处理：更新头部紧凑状态，并在接近底部时触发分页加载
  */
+const handleScrollIntent = () => {
+  if (waitingLocateScrollEnd) return
+  triggerLocateBtnVisible()
+}
+
 const handleScroll = (event?: Event) => {
   if (waitingLocateScrollEnd) {
     locateScrollSeen = true
@@ -1710,6 +1787,13 @@ const moreActions = computed(() => [
     icon: renderIcon(RootListFilledIcon)
   },
   {
+    label: isCurrentPlaylistFavorited.value ? '取消收藏歌单' : '收藏歌单',
+    key: 'togglePlaylistFavorite',
+    show: canFavoriteCurrentPlaylist.value,
+    disabled: playlistFavoriteLoading.value,
+    icon: renderIcon(CloudIcon)
+  },
+  {
     label: '上传到云端',
     key: 'uploadToCloud',
     show: isLocalPlaylist.value && !playlistInfo.value.meta?.cloudId,
@@ -1737,6 +1821,10 @@ const moreActions = computed(() => [
 function handleMoreAction(key: string) {
   if (key === 'syncPlaylist') {
     handleSyncPlaylist()
+    return
+  }
+  if (key === 'togglePlaylistFavorite') {
+    handleTogglePlaylistFavorite()
     return
   }
   if (key === 'saveToLocal') {
@@ -1917,6 +2005,7 @@ const filteredMoreActions = computed(() =>
           @remove-batch="handleRemoveBatchSelected"
           @add-to-song-list-batch="handleAddBatchToSongList"
           @scroll="handleScroll"
+          @scroll-intent="handleScrollIntent"
           @exit-multi-select="handleExitMultiSelect"
           @move-to-position="handleMoveToPosition"
         />

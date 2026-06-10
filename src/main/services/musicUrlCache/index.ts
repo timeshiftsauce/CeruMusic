@@ -8,6 +8,11 @@ export class MusicUrlCache {
   private saveStmt!: Database.Statement<{ song_id: string; url: string; updated_at: number }>
   private deleteStmt!: Database.Statement<[string]>
 
+  private getMaxAgeSeconds(songId: string): number {
+    if (songId.startsWith('git_')) return 7 * 24 * 60 * 60
+    return 6 * 60 * 60
+  }
+
   constructor() {
     const dbPath = path.join(app.getPath('userData'), 'url-cache.db')
     this.db = new Database(dbPath)
@@ -22,7 +27,7 @@ export class MusicUrlCache {
       )
     `)
 
-    this.getStmt = this.db.prepare('SELECT url FROM url_cache WHERE song_id = ?')
+    this.getStmt = this.db.prepare('SELECT url, updated_at FROM url_cache WHERE song_id = ?')
     this.saveStmt = this.db.prepare(
       'INSERT INTO url_cache (song_id, url, updated_at) VALUES (@song_id, @url, @updated_at) ON CONFLICT(song_id) DO UPDATE SET url = @url, updated_at = @updated_at'
     )
@@ -32,8 +37,15 @@ export class MusicUrlCache {
   /** 获取缓存的 URL，未命中返回 null */
   getUrl(songId: string): string | null {
     try {
-      const row = this.getStmt.get(songId) as { url: string } | undefined
-      return row?.url ?? null
+      const row = this.getStmt.get(songId) as { url: string; updated_at: number } | undefined
+      if (!row?.url) return null
+      const now = Math.floor(Date.now() / 1000)
+      const updatedAt = Number(row.updated_at) || 0
+      if (updatedAt > 0 && now - updatedAt > this.getMaxAgeSeconds(songId)) {
+        this.invalidateUrl(songId)
+        return null
+      }
+      return row.url
     } catch {
       return null
     }

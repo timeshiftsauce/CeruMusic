@@ -56,7 +56,7 @@ const settingsCategories = [
     key: 'playlist',
     label: '播放设置',
     icon: PlayCircleIcon,
-    description: '播放列表，歌词管理和相关设置'
+    description: '播放列表、歌词管理、同步服务和相关设置'
   },
   {
     key: 'hotkeys',

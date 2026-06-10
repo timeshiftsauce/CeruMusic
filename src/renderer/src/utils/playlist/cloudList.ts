@@ -26,19 +26,20 @@ const mapSongsToCloud = (songs: readonly any[]): any[] => {
  * @returns - 返回映射后的本地格式歌曲数据对象
  */
 const mapCloudSongToLocal = (s: any): any => {
+  const types = Array.isArray(s.types) ? s.types : Array.isArray(s.qualities) ? s.qualities : []
   return {
-    songmid: s.songmid, // 歌曲的唯一标识ID
+    songmid: s.songmid ?? s.id, // 歌曲的唯一标识ID
     hash: s.hash, // 歌曲的哈希值，用于唯一标识
-    name: s.name, // 歌曲名称
+    name: s.name ?? s.title, // 歌曲名称
     albumId: s.albumId, // 专辑ID
-    albumName: s.albumName, // 专辑名称
-    singer: s.singer, // 歌手信息
+    albumName: s.albumName ?? s.album, // 专辑名称
+    singer: s.singer ?? s.artist, // 歌手信息
     source: s.source, // 歌曲来源
-    interval: s.interval,
-    img: s.img, // 歌曲封面图片链接
-    types: s.types || [], // 歌曲类型数组，如果没有则设为空数组
+    interval: s.interval ?? s.durationText,
+    img: s.img ?? s.artworkUrl, // 歌曲封面图片链接
+    types, // 歌曲类型数组，如果没有则设为空数组
     // 处理歌曲类型信息，将数组转换为对象格式
-    _types: s.types.reduce((acc: any, t: any) => {
+    _types: types.reduce((acc: any, t: any) => {
       acc[t.type] = { size: t.size, hash: t.hash } // 为每种类型创建包含大小和哈希值的对象
       if (!t.hash) delete acc[t.type].hash // 如果没有哈希值，则删除该属性
       return acc

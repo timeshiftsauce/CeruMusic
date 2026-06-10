@@ -521,12 +521,14 @@ function selectPlugin(plugin: Plugin) {
 }
 
 // 获取已安装的插件列表
-async function getPlugins() {
+async function getPlugins(options: { reload?: boolean } = {}) {
   loading.value = true
   error.value = null
 
   try {
-    const result = await window.api.plugins.loadAllPlugins()
+    const result = options.reload
+      ? await window.api.plugins.reloadAllPlugins()
+      : await window.api.plugins.loadAllPlugins()
     console.log(result)
     // 检查返回结果是否有错误
     if (result && typeof result === 'object' && 'error' in result) {
@@ -682,7 +684,7 @@ async function uninstallPlugin(pluginId: string, pluginName: string) {
 
 // 刷新插件列表
 async function refreshPlugins() {
-  await getPlugins()
+  await getPlugins({ reload: true })
 }
 
 // 查看插件日志

@@ -90,6 +90,13 @@ export const searchItems: SearchItem[] = [
     keywords: ['音效', 'dsp']
   },
   {
+    id: 'playback-nas-sync',
+    category: 'playlist',
+    title: 'NAS 登录模块',
+    description: '配置歌单歌曲数据同步服务',
+    keywords: ['NAS', '同步', '服务器', '歌单', '登录']
+  },
+  {
     id: 'playback-performance',
     category: 'playlist',
     title: '全屏播放-性能优化',

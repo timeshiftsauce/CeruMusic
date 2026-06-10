@@ -33,7 +33,15 @@
     "docs:preview": "vitepress preview docs",
     "release:preview": "bash scripts/preview-release-notes.sh",
     "cleanup:win-aumid": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-windows-aumid.ps1",
-    "test": "jest"
+    "test": "jest",
+    "node-runtime:dev": "yarn --cwd apps/node-runtime dev",
+    "node-runtime:start": "yarn --cwd apps/node-runtime start",
+    "node-runtime:typecheck": "yarn --cwd apps/node-runtime typecheck",
+    "node-runtime:lint": "yarn --cwd apps/node-runtime lint",
+    "nas-sync:dev": "yarn --cwd apps/nas-sync-server dev",
+    "nas-sync:start": "yarn --cwd apps/nas-sync-server start",
+    "nas-sync:typecheck": "yarn --cwd apps/nas-sync-server typecheck",
+    "verify:android-migration": "node scripts/verify-android-migration.mjs"
   },
   "dependencies": {
     "@applemusic-like-lyrics/lyric": "^1.0.0",

@@ -5,7 +5,7 @@
  */
 export const getPersistentMeta = (meta: Record<string, any>) => {
   const persistentMeta = { ...meta }
-  const TEMPORARY_KEYS = ['cloudId', 'isSynced', 'cloudUpdatedAt', 'isCloudOnly']
+  const TEMPORARY_KEYS = ['isSynced', 'cloudUpdatedAt', 'isCloudOnly']
   TEMPORARY_KEYS.forEach((key) => {
     delete persistentMeta[key]
   })

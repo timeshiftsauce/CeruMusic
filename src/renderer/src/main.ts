@@ -12,6 +12,7 @@ import LogtoClient, { LogtoConfig, UserScope } from '@logto/browser'
 import config from './config'
 const { endpoint, appId, resources } = config
 import { Request } from '@renderer/utils/request'
+import { installMessageBehavior } from '@renderer/utils/ui/message'
 // router
 import router from './router'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -33,6 +34,7 @@ const appConfig: LogtoConfig = {
 const logtoClient = new LogtoClient(appConfig)
 Request.setLogtoClient(logtoClient)
 config.instance = logtoClient
+installMessageBehavior()
 
 // 挂载
 const app = createApp(App)
