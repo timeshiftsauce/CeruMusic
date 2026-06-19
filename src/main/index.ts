@@ -99,20 +99,20 @@ const consumeScreenSourceLookupGrant = (webContentsId: number): boolean => {
   return true
 }
 
-const hasMediaPermissionGrant = (webContentsId: number): boolean => {
-  const grant = getMediaCaptureGrant(webContentsId)
-  return !!grant && grant.remainingMediaRequests > 0
-}
+// const hasMediaPermissionGrant = (webContentsId: number): boolean => {
+//   const grant = getMediaCaptureGrant(webContentsId)
+//   return !!grant && grant.remainingMediaRequests > 0
+// }
 
-const consumeMediaPermissionGrant = (webContentsId: number): boolean => {
-  const grant = getMediaCaptureGrant(webContentsId)
-  if (!grant || grant.remainingMediaRequests <= 0) return false
-  grant.remainingMediaRequests -= 1
-  if (!grant.allowScreenSourceLookup && grant.remainingMediaRequests <= 0) {
-    mediaCaptureGrants.delete(webContentsId)
-  }
-  return true
-}
+// const consumeMediaPermissionGrant = (webContentsId: number): boolean => {
+//   const grant = getMediaCaptureGrant(webContentsId)
+//   if (!grant || grant.remainingMediaRequests <= 0) return false
+//   grant.remainingMediaRequests -= 1
+//   if (!grant.allowScreenSourceLookup && grant.remainingMediaRequests <= 0) {
+//     mediaCaptureGrants.delete(webContentsId)
+//   }
+//   return true
+// }
 
 const queueOpenPlaylist = (filePath: string) => {
   if (!filePath) return
@@ -858,7 +858,7 @@ app.whenReady().then(async () => {
       if (!webContents || !isMainWindowWebContents(webContents)) {
         return false
       }
-      return hasMediaPermissionGrant(webContents.id)
+      return true
     }
     return true
   })
@@ -868,7 +868,7 @@ app.whenReady().then(async () => {
         callback(false)
         return
       }
-      callback(consumeMediaPermissionGrant(webContents.id))
+      callback(true)
       return
     }
     callback(true)

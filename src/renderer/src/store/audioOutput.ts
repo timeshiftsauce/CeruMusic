@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import { ControlAudioStore } from './ControlAudio'
 
 export interface AudioOutputDevice {
   deviceId: string
@@ -28,6 +29,7 @@ export const useAudioOutputStore = defineStore(
       latency: 0
     })
 
+    const pauseOnDeviceChange = ref(false)
     // For A/B testing
     const primaryDeviceId = ref<string>('default')
     const secondaryDeviceId = ref<string>('')
@@ -193,6 +195,37 @@ export const useAudioOutputStore = defineStore(
       }
     }
 
+    /**
+     * 注册设备变化监听
+     */
+    const initAudio = async () => {
+      try {
+        // 先注册监听
+        navigator.mediaDevices.removeEventListener('devicechange', handleMediaListChange)
+        navigator.mediaDevices.addEventListener('devicechange', handleMediaListChange)
+        // 静默激活设备监听（用完立刻释放，麦克风图标几乎不会显示）
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach((t) => t.stop())
+        // 首次枚举
+        await navigator.mediaDevices.enumerateDevices()
+      } catch (err) {
+        //@ts-expect-error 类型预期错误
+        console.error('初始化失败:', err.name, err.message)
+      }
+    }
+
+    const handleMediaListChange = async () => {
+      if (!pauseOnDeviceChange.value) {
+        return
+      }
+      await navigator.mediaDevices.enumerateDevices()
+      if (ControlAudioStore().Audio.isPlay && useAudioOutputStore().pauseOnDeviceChange) {
+        ControlAudioStore().stop()
+      }
+    }
+
+    initAudio()
+
     return {
       devices,
       sortedDevices,
@@ -209,7 +242,8 @@ export const useAudioOutputStore = defineStore(
       toggleAB,
       init,
       playTestSound,
-      simulateDevices
+      simulateDevices,
+      pauseOnDeviceChange
     }
   },
   {

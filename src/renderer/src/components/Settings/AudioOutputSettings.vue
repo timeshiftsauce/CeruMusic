@@ -1,5 +1,12 @@
 <template>
   <div class="audio-output-settings" :class="{ 'embedded-mode': embedded }">
+    <div class="setting-item">
+      <div class="item-info">
+        <div class="item-title">设备改变时暂停播放</div>
+        <div class="item-desc">当音频输出设备改变时自动暂停音乐播放</div>
+      </div>
+      <t-switch v-model="store.pauseOnDeviceChange" />
+    </div>
     <component
       :is="embedded ? 'div' : 't-card'"
       :bordered="!embedded"
@@ -242,6 +249,29 @@ onUnmounted(() => {
 <style scoped>
 .audio-output-settings {
   padding: 0;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--td-component-border);
+}
+
+.item-info {
+  flex: 1;
+}
+
+.item-title {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.item-desc {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 
 .output-card {
