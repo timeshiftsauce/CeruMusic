@@ -63,7 +63,7 @@ export interface PluginSource {
 export interface PluginConfigField {
   key: string
   label: string
-  type: 'text' | 'password' | 'number' | 'select'
+  type: 'text' | 'password' | 'number' | 'select' | 'switch'
   required?: boolean
   default?: any
   placeholder?: string
@@ -109,6 +109,7 @@ interface PluginMeta {
   sources: PluginSource[]
   pluginType: PluginType
   configSchema: PluginConfigField[]
+  serviceRole?: string
   hasMethods: Record<string, boolean>
 }
 
@@ -224,6 +225,11 @@ class CeruMusicPluginHost {
   getPluginType(): PluginType {
     this._ensureReady()
     return this.meta!.pluginType || 'music-source'
+  }
+
+  getServiceRole(): string | undefined {
+    this._ensureReady()
+    return this.meta!.serviceRole
   }
 
   getConfigSchema(): PluginConfigField[] {

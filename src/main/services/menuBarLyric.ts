@@ -35,16 +35,17 @@ const savePersistedState = (value: Partial<MenuBarLyricPersistedState>) =>
 
 const initialPersistedState = getPersistedState()
 
-const DEFAULT_DISPLAY_WIDTH = 14
-const ASCII_DISPLAY_WIDTH = 30
+const DISPLAY_WIDTH = 22
 const DEFAULT_SCROLL_GAP = '   '
 const ASCII_SCROLL_GAP = ' '
 const SCROLL_START_DELAY_MS = 1200
 const SCROLL_INTERVAL_MS = 380
-const PADDING_CHAR = ' '
+const HALF_WIDTH_PADDING_CHAR = ' '
+const FULL_WIDTH_PADDING_CHAR = '　'
 const ZERO_WIDTH_PATTERN = /[​-‍﻿]/g
 // eslint-disable-next-line no-control-regex
 const ASCII_CHAR_PATTERN = /[\x00-\x7F]/
+const WIDE_CHAR_PATTERN = /[^\x00-\xFF]/
 const TITLE_OPTIONS = { fontType: 'monospaced' as const }
 
 // 零宽度空格：视觉完全不可见，但让 macOS 认为 tray 有内容，从而保持菜单位置持久化
@@ -62,16 +63,40 @@ const isAsciiDominantText = (text: string) => {
   return asciiCount / chars.length >= 0.85
 }
 
-const getDisplayWidth = (text: string) =>
-  isAsciiDominantText(text) ? ASCII_DISPLAY_WIDTH : DEFAULT_DISPLAY_WIDTH
+const getDisplayWidth = (_text: string) => DISPLAY_WIDTH
 
 const getScrollGap = (text: string) =>
   isAsciiDominantText(text) ? ASCII_SCROLL_GAP : DEFAULT_SCROLL_GAP
 
-const padDisplayText = (text: string, width = DEFAULT_DISPLAY_WIDTH) => {
-  const chars = getChars(text)
-  if (chars.length >= width) return chars.slice(0, width).join('')
-  return `${text}${PADDING_CHAR.repeat(width - chars.length)}`
+const getVisualWidth = (text: string) =>
+  getChars(text).reduce((width, char) => width + (WIDE_CHAR_PATTERN.test(char) ? 2 : 1), 0)
+
+const sliceByVisualWidth = (text: string, maxWidth: number) => {
+  let width = 0
+  let result = ''
+  for (const char of getChars(text)) {
+    const charWidth = WIDE_CHAR_PATTERN.test(char) ? 2 : 1
+    if (width + charWidth > maxWidth) break
+    result += char
+    width += charWidth
+  }
+  return result
+}
+
+const padDisplayText = (text: string, width = DISPLAY_WIDTH) => {
+  const displayText = sliceByVisualWidth(text, width)
+  let remainingWidth = width - getVisualWidth(displayText)
+  if (remainingWidth <= 0) return displayText
+
+  let padding = ''
+  while (remainingWidth >= 2) {
+    padding += FULL_WIDTH_PADDING_CHAR
+    remainingWidth -= 2
+  }
+  if (remainingWidth > 0) {
+    padding += HALF_WIDTH_PADDING_CHAR
+  }
+  return `${displayText}${padding}`
 }
 
 const getPlainLineText = (line?: MenuBarLyricLine | null) => {
@@ -149,6 +174,8 @@ class MenuBarLyricService {
       savePersistedState({ lastSongTitle: nextSongTitle })
     }
 
+    this.lyrics = []
+    this.currentIndex = -1
     this.refresh()
   }
 
@@ -204,8 +231,7 @@ class MenuBarLyricService {
 
     const displayWidth = getDisplayWidth(this.sourceText)
     const scrollGap = getScrollGap(this.sourceText)
-    const chars = getChars(this.sourceText)
-    if (chars.length <= displayWidth) {
+    if (getVisualWidth(this.sourceText) <= displayWidth) {
       return padDisplayText(this.sourceText, displayWidth)
     }
 
@@ -213,14 +239,14 @@ class MenuBarLyricService {
     const marqueeChars = getChars(marqueeSource)
     const start = this.scrollOffset % marqueeChars.length
     const doubledChars = [...marqueeChars, ...marqueeChars]
-    return doubledChars.slice(start, start + displayWidth).join('')
+    return padDisplayText(doubledChars.slice(start, start + displayWidth).join(''), displayWidth)
   }
 
   private restartMarquee() {
     this.stopMarquee()
     const displayWidth = getDisplayWidth(this.sourceText)
     const scrollGap = getScrollGap(this.sourceText)
-    if (!this.sourceText || getChars(this.sourceText).length <= displayWidth) return
+    if (!this.sourceText || getVisualWidth(this.sourceText) <= displayWidth) return
 
     this.scrollStartTimer = setTimeout(() => {
       this.scrollTimer = setInterval(() => {

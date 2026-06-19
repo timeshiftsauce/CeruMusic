@@ -42,6 +42,7 @@ type OutboundMsg =
         sources: any
         pluginType: string
         configSchema: any
+        serviceRole?: string
         hasMethods: Record<string, boolean>
       }
     }
@@ -406,6 +407,7 @@ function initSandbox(pluginCode: string): {
   sources: any
   pluginType: string
   configSchema: any
+  serviceRole?: string
   hasMethods: Record<string, boolean>
 } {
   sandboxContext = createSandbox()
@@ -450,6 +452,7 @@ function initSandbox(pluginCode: string): {
     sources: safeSerialize(pluginExports.sources) || [],
     pluginType,
     configSchema: safeSerialize(pluginExports.configSchema) || [],
+    serviceRole: typeof pluginExports.serviceRole === 'string' ? pluginExports.serviceRole : undefined,
     hasMethods: {
       musicUrl: typeof pluginExports.musicUrl === 'function',
       getPic: typeof pluginExports.getPic === 'function',

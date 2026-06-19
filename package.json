@@ -38,9 +38,9 @@
     "node-runtime:start": "yarn --cwd apps/node-runtime start",
     "node-runtime:typecheck": "yarn --cwd apps/node-runtime typecheck",
     "node-runtime:lint": "yarn --cwd apps/node-runtime lint",
-    "nas-sync:dev": "yarn --cwd apps/nas-sync-server dev",
-    "nas-sync:start": "yarn --cwd apps/nas-sync-server start",
-    "nas-sync:typecheck": "yarn --cwd apps/nas-sync-server typecheck",
+    "nas-sync:dev": "yarn --cwd nas-sync-server dev",
+    "nas-sync:start": "yarn --cwd nas-sync-server start",
+    "nas-sync:typecheck": "yarn --cwd nas-sync-server typecheck",
     "verify:android-migration": "node scripts/verify-android-migration.mjs"
   },
   "dependencies": {

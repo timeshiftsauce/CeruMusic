@@ -29,14 +29,68 @@ type RequestOptions = {
   body?: unknown
 }
 
-const normalizeBaseUrl = (serverUrl?: string) => (serverUrl || '').trim().replace(/\/+$/, '')
-
-export const canUseNasSync = () => {
-  const settings = useSettingsStore().settings
-  return Boolean(settings.nasSyncEnabled && settings.nasSyncServerUrl && settings.nasSyncToken)
+type NasSyncConfig = {
+  enabled?: boolean
+  serverUrl?: string
+  accessToken?: string
+  status?: 'connected' | 'disconnected'
+  [key: string]: unknown
 }
 
-const getNasSettings = () => useSettingsStore().settings
+let cachedNasPluginId = ''
+
+const normalizeBaseUrl = (serverUrl?: string) => (serverUrl || '').trim().replace(/\/+$/, '')
+
+const findNasSyncPluginId = async () => {
+  if (cachedNasPluginId) return cachedNasPluginId
+  const plugins = await window.api.plugins.loadAllPlugins().catch(() => [])
+  if (!Array.isArray(plugins)) return ''
+
+  const plugin = plugins.find((item: any) => item?.pluginType === 'service' && item?.serviceRole === 'nas-sync')
+  if (plugin?.pluginId) {
+    cachedNasPluginId = plugin.pluginId
+    return cachedNasPluginId
+  }
+  return ''
+}
+
+const getPluginNasConfig = async (): Promise<NasSyncConfig | null> => {
+  const pluginId = await findNasSyncPluginId()
+  if (!pluginId) return null
+  const result = await window.api.plugins.getConfig(pluginId).catch(() => null)
+  return result?.data || null
+}
+
+const getLegacyNasConfig = (): NasSyncConfig => {
+  const settings = useSettingsStore().settings
+  return {
+    enabled: settings.nasSyncEnabled,
+    serverUrl: settings.nasSyncServerUrl,
+    accessToken: settings.nasSyncToken,
+    status: settings.nasSyncStatus
+  }
+}
+
+const getNasConfig = async () => {
+  const pluginConfig = await getPluginNasConfig()
+  return pluginConfig || getLegacyNasConfig()
+}
+
+export const canUseNasSync = async () => {
+  const config = await getNasConfig()
+  return Boolean(config.enabled && config.serverUrl && config.accessToken)
+}
+
+export const getNasSyncLastRevision = () => {
+  const raw = localStorage.getItem('ceru_nas_sync_last_revision') || '0'
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : 0
+}
+
+export const setNasSyncLastRevision = (revision: number) => {
+  if (!Number.isFinite(revision)) return
+  localStorage.setItem('ceru_nas_sync_last_revision', String(Math.max(0, Math.floor(revision))))
+}
 
 const unwrapNasResponse = async <T>(response: Response): Promise<T> => {
   const body = await response.json().catch(() => null)
@@ -50,8 +104,8 @@ const unwrapNasResponse = async <T>(response: Response): Promise<T> => {
 }
 
 const requestNas = async <T>(endpoint: string, options: RequestOptions = {}) => {
-  const settings = getNasSettings()
-  const baseUrl = normalizeBaseUrl(settings.nasSyncServerUrl)
+  const config = await getNasConfig()
+  const baseUrl = normalizeBaseUrl(config.serverUrl)
   if (!baseUrl) throw new Error('请先填写 NAS 同步服务器地址')
 
   const response = await fetch(`${baseUrl}${endpoint}`, {
@@ -59,8 +113,8 @@ const requestNas = async <T>(endpoint: string, options: RequestOptions = {}) => 
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      ...(options.token || settings.nasSyncToken
-        ? { Authorization: `Bearer ${options.token || settings.nasSyncToken}` }
+      ...(options.token || config.accessToken
+        ? { Authorization: `Bearer ${options.token || config.accessToken}` }
         : {})
     },
     body: options.body ? JSON.stringify(options.body) : undefined
@@ -153,5 +207,5 @@ export const nasFavoriteAPI = {
     })
 }
 
-export const getPreferredSongListAPI = () => (canUseNasSync() ? nasCloudSongListAPI : null)
-export const getPreferredFavoriteAPI = () => (canUseNasSync() ? nasFavoriteAPI : null)
+export const getPreferredSongListAPI = async () => (await canUseNasSync() ? nasCloudSongListAPI : null)
+export const getPreferredFavoriteAPI = async () => (await canUseNasSync() ? nasFavoriteAPI : null)

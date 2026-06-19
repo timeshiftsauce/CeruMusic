@@ -76,6 +76,16 @@ export default function InitPluginService() {
     }
   })
 
+  ipcMain.handle('service-plugin-appendPluginLog', async (_, pluginId, level, ...args): Promise<any> => {
+    try {
+      pluginService.appendPluginLog(pluginId, level, ...args)
+      return { success: true }
+    } catch (error: any) {
+      console.error('Error appending plugin log:', error)
+      return { error: error.message }
+    }
+  })
+
   ipcMain.handle('service-plugin-uninstallPlugin', async (_, pluginId): Promise<any> => {
     try {
       return await pluginService.uninstallPlugin(pluginId)
@@ -90,6 +100,14 @@ export default function InitPluginService() {
   ipcMain.handle('service-plugin-getPluginType', async (_, pluginId): Promise<any> => {
     try {
       return { data: pluginService.getPluginType(pluginId) }
+    } catch (error: any) {
+      return { error: error.message }
+    }
+  })
+
+  ipcMain.handle('service-plugin-getServiceRole', async (_, pluginId): Promise<any> => {
+    try {
+      return { data: pluginService.getServiceRole(pluginId) }
     } catch (error: any) {
       return { error: error.message }
     }

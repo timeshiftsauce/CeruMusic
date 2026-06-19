@@ -15,8 +15,8 @@ export const FAVORITES_PLAYLIST_NAME = '我的喜欢'
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : typeof error === 'string' ? error : '未知错误'
 
-const canUseCloudLibrary = () => {
-  if (canUseNasSync()) return true
+const canUseCloudLibrary = async () => {
+  if (await canUseNasSync()) return true
   try {
     return !!useAuthStore().isAuthenticated
   } catch {
@@ -24,7 +24,7 @@ const canUseCloudLibrary = () => {
   }
 }
 
-const getSongListSyncAPI = () => (canUseNasSync() ? nasCloudSongListAPI : cloudSongListAPI)
+const getSongListSyncAPI = async () => (await canUseNasSync() ? nasCloudSongListAPI : cloudSongListAPI)
 
 const compactMeta = (meta: Record<string, any>) => {
   const next = { ...meta }
@@ -53,7 +53,8 @@ const findCloudMatch = (cloudLists: CloudSongList[], playlist: SongList) => {
 }
 
 const createCloudPlaylist = async (playlist: SongList, songs: readonly Songs[] = []) => {
-  const res = await getSongListSyncAPI().createUserSongList({
+  const syncAPI = await getSongListSyncAPI()
+  const res = await syncAPI.createUserSongList({
     localId: playlist.id,
     name: playlist.name,
     describe: playlist.description || '',
@@ -136,14 +137,15 @@ export const ensureLocalFavoritesPlaylist = async () => {
 }
 
 export const ensureCloudPlaylistForLocal = async (playlist: SongList) => {
-  if (!canUseCloudLibrary()) return null
+  if (!(await canUseCloudLibrary())) return null
   if (playlist.meta?.isCloudOnly) return playlist.meta?.cloudId || playlist.id
 
   if (playlist.meta?.cloudId) return playlist.meta.cloudId as string
 
   try {
+    const syncAPI = await getSongListSyncAPI()
     const [cloudLists, songsRes] = await Promise.all([
-      getSongListSyncAPI().getUserSongLists(),
+      syncAPI.getUserSongLists(),
       songListAPI.getSongs(playlist.id)
     ])
     const songs = songsRes.success ? [...(songsRes.data || [])] : []
@@ -190,14 +192,15 @@ export const ensureFavoritesCloudBinding = async () => {
 }
 
 export const syncAddSongsToCloud = async (playlist: SongList, songs: readonly Songs[]) => {
-  if (!canUseCloudLibrary()) return null
+  if (!(await canUseCloudLibrary())) return null
   const cloudSongs = mapSongsToCloud(songs) as CloudSongDto[]
   if (cloudSongs.length === 0) return null
 
   try {
     const cloudId = await ensureCloudPlaylistForLocal(playlist)
     if (!cloudId) return null
-    const res = await getSongListSyncAPI().addSongsToList(cloudId, cloudSongs)
+    const syncAPI = await getSongListSyncAPI()
+    const res = await syncAPI.addSongsToList(cloudId, cloudSongs)
     await markPlaylistCloudSyncOk(playlist, cloudId, res.updatedAt)
     return res
   } catch (error) {
@@ -210,13 +213,14 @@ export const syncRemoveSongsFromCloud = async (
   playlist: SongList,
   songmids: readonly (string | number)[]
 ) => {
-  if (!canUseCloudLibrary()) return null
+  if (!(await canUseCloudLibrary())) return null
   if (songmids.length === 0) return null
 
   try {
     const cloudId = await ensureCloudPlaylistForLocal(playlist)
     if (!cloudId) return null
-    const res = await getSongListSyncAPI().removeSongsFromList(
+    const syncAPI = await getSongListSyncAPI()
+    const res = await syncAPI.removeSongsFromList(
       cloudId,
       songmids.map((id) => String(id))
     )
@@ -229,12 +233,13 @@ export const syncRemoveSongsFromCloud = async (
 }
 
 export const syncPlaylistInfoToCloud = async (playlist: SongList) => {
-  if (!canUseCloudLibrary()) return null
+  if (!(await canUseCloudLibrary())) return null
 
   try {
     const cloudId = await ensureCloudPlaylistForLocal(playlist)
     if (!cloudId) return null
-    const res = await getSongListSyncAPI().updateUserSongList({
+    const syncAPI = await getSongListSyncAPI()
+    const res = await syncAPI.updateUserSongList({
       listId: cloudId,
       localId: playlist.id,
       name: playlist.name,
@@ -253,20 +258,22 @@ export const syncPlaylistInfoToCloud = async (playlist: SongList) => {
 }
 
 export const syncDeletePlaylistFromCloud = async (playlist: SongList) => {
-  if (!canUseCloudLibrary()) return null
+  if (!(await canUseCloudLibrary())) return null
   const cloudId = playlist.meta?.cloudId || (playlist.meta?.isCloudOnly ? playlist.id : '')
   if (!cloudId) return null
-  return getSongListSyncAPI().deleteUserSongList(cloudId)
+  const syncAPI = await getSongListSyncAPI()
+  return syncAPI.deleteUserSongList(cloudId)
 }
 
 export const pullFavoritesFromCloud = async () => {
-  if (!canUseCloudLibrary()) return null
+  if (!(await canUseCloudLibrary())) return null
 
   const { localId, cloudId, playlist } = await ensureFavoritesCloudBinding()
   if (!cloudId) return null
 
   try {
-    const detail = await getSongListSyncAPI().getSongListDetail(cloudId)
+    const syncAPI = await getSongListSyncAPI()
+    const detail = await syncAPI.getSongListDetail(cloudId)
     const cloudSongs = Array.isArray(detail.list) ? detail.list : []
     const cloudSongmids = new Set(cloudSongs.map((song) => String(song.songmid)))
     const localSongsRes = await songListAPI.getSongs(localId)

@@ -111,7 +111,12 @@
               <span v-if="plugin.disabled" class="disabled-tag">已禁用</span>
             </h3>
             <p class="author">作者: {{ plugin.pluginInfo.author }}</p>
-            <p class="description">{{ plugin.pluginInfo.description || '无描述' }}</p>
+            <p v-if="plugin.serviceRole !== 'nas-sync'" class="description">
+              {{ plugin.pluginInfo.description || '无描述' }}
+            </p>
+            <p v-if="plugin.serviceRole === 'nas-sync'" class="plugin-note">
+              这是通过 NAS 自建部署的同步服务器插件，用于歌单备份和多端同步；配置时请填写你自己的 NAS 服务地址。
+            </p>
             <div
               v-if="plugin.supportedSources && Object.keys(plugin.supportedSources).length > 0"
               class="plugin-sources"
@@ -140,7 +145,7 @@
               <template #icon><t-icon name="setting" /></template> 配置
             </t-button>
             <t-button
-              v-if="isServicePlugin(plugin)"
+              v-if="isServicePlugin(plugin) && plugin.serviceRole !== 'nas-sync'"
               theme="primary"
               size="small"
               @click.stop="openImportDialog(plugin)"
@@ -274,7 +279,12 @@
         <template #header>{{ configPluginName }} - 配置</template>
         <template #body>
           <div class="config-form">
-            <div v-for="field in configSchema" :key="field.key" class="config-field">
+            <div
+              v-for="field in configSchema"
+              :key="field.key"
+              class="config-field"
+              :class="{ 'config-field-switch': field.type === 'switch' }"
+            >
               <label class="config-label">
                 {{ field.label }}
                 <span v-if="field.required" class="required-mark">*</span>
@@ -312,16 +322,39 @@
                   :label="opt.label"
                 />
               </t-select>
+              <t-switch
+                v-else-if="field.type === 'switch'"
+                v-model="configValues[field.key]"
+              />
             </div>
 
             <div class="config-test">
+              <div v-if="isNasSyncConfig" class="nas-sync-status-hint">
+                这是你部署在 NAS 上的同步服务器地址，用于歌单备份和多端同步，不是公共云地址。
+              </div>
+              <div
+                v-if="isNasSyncConfig"
+                class="nas-sync-status"
+                :class="configValues.status === 'connected' ? 'connected' : 'disconnected'"
+              >
+                {{ configValues.status === 'connected' ? '已连接' : '未连接' }}
+              </div>
+              <t-button
+                v-if="isNasSyncConfig"
+                theme="primary"
+                size="small"
+                :loading="configTesting"
+                @click="loginNasSyncPlugin"
+              >
+                登录 NAS 同步服务
+              </t-button>
               <t-button
                 theme="default"
                 size="small"
                 :loading="configTesting"
                 @click="testPluginConnection"
               >
-                测试连接
+                {{ isNasSyncConfig ? '检测连接' : '测试连接' }}
               </t-button>
               <span
                 v-if="configTestResult"
@@ -367,7 +400,7 @@ interface PluginInfo {
 interface PluginConfigField {
   key: string
   label: string
-  type: 'text' | 'password' | 'number' | 'select'
+  type: 'text' | 'password' | 'number' | 'select' | 'switch'
   required?: boolean
   default?: any
   placeholder?: string
@@ -380,6 +413,7 @@ interface Plugin {
   pluginInfo: PluginInfo
   supportedSources: { [key: string]: PluginSource }
   pluginType?: 'music-source' | 'service'
+  serviceRole?: string
   disabled?: boolean
 }
 
@@ -442,6 +476,8 @@ const configValues = ref<Record<string, any>>({})
 const configSaving = ref(false)
 const configTesting = ref(false)
 const configTestResult = ref<{ success: boolean; message: string } | null>(null)
+const configServiceRole = ref('')
+const isNasSyncConfig = computed(() => configServiceRole.value === 'nas-sync')
 
 // 导入歌单相关
 const importDialogVisible = ref(false)
@@ -540,9 +576,17 @@ async function getPlugins(options: { reload?: boolean } = {}) {
       // 异步获取每个插件的类型
       for (const p of plugins.value) {
         try {
-          const typeRes = await window.api.plugins.getPluginType(p.pluginId)
-          if (typeRes?.data) {
-            p.pluginType = typeRes.data
+          if (!p.pluginType) {
+            const typeRes = await window.api.plugins.getPluginType(p.pluginId)
+            if (typeRes?.data) {
+              p.pluginType = typeRes.data
+            }
+          }
+          if (!p.serviceRole && p.pluginType === 'service') {
+            const roleRes = await window.api.plugins.getServiceRole(p.pluginId)
+            if (roleRes?.data) {
+              p.serviceRole = roleRes.data
+            }
           }
         } catch {
           // 旧插件可能不支持，忽略
@@ -805,6 +849,7 @@ function exportLogs() {
 async function openConfigDialog(plugin: Plugin) {
   configPluginId.value = plugin.pluginId
   configPluginName.value = plugin.pluginInfo.name
+  configServiceRole.value = plugin.serviceRole || ''
   configTestResult.value = null
 
   try {
@@ -826,6 +871,59 @@ async function openConfigDialog(plugin: Plugin) {
     configDialogVisible.value = true
   } catch (err: any) {
     MessagePlugin.error(`获取插件配置失败: ${err.message}`)
+  }
+}
+
+async function loginNasSyncPlugin() {
+  if (!configValues.value.serverUrl?.trim()) {
+    MessagePlugin.warning('请先填写 NAS 同步服务器地址')
+    return
+  }
+  if (!configValues.value.pairCode?.trim()) {
+    MessagePlugin.warning('请填写绑定码')
+    return
+  }
+
+  configTesting.value = true
+  configTestResult.value = null
+  try {
+    const baseUrl = String(configValues.value.serverUrl || '').trim().replace(/\/+$/, '')
+    const response = await fetch(`${baseUrl}/auth/pair`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ pairCode: configValues.value.pairCode })
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok || body?.success === false) {
+      throw new Error(body?.error || `NAS 同步服务请求失败：${response.status}`)
+    }
+
+    const session = body?.success === true && 'data' in body ? body.data : body
+    configValues.value.enabled = true
+    configValues.value.accessToken = session.accessToken
+    configValues.value.tokenExpiresAt = session.expiresAt
+    configValues.value.userId = session.user?.id || ''
+    configValues.value.username = session.user?.username || ''
+    configValues.value.nickname = session.user?.nickname || ''
+    configValues.value.pairCode = ''
+    configValues.value.status = 'connected'
+
+    const plainConfig = JSON.parse(JSON.stringify(toRaw(configValues.value)))
+    await window.api.plugins.saveConfig(configPluginId.value, plainConfig)
+    configTestResult.value = { success: true, message: 'NAS 同步服务已连接' }
+    MessagePlugin.success('NAS 同步服务已连接')
+  } catch (err: any) {
+    configValues.value.status = 'disconnected'
+    configValues.value.accessToken = ''
+    const plainConfig = JSON.parse(JSON.stringify(toRaw(configValues.value)))
+    await window.api.plugins.saveConfig(configPluginId.value, plainConfig)
+    configTestResult.value = { success: false, message: err.message || 'NAS 同步服务连接失败' }
+    MessagePlugin.error(err.message || 'NAS 同步服务连接失败')
+  } finally {
+    configTesting.value = false
   }
 }
 
@@ -1326,6 +1424,14 @@ onMounted(async () => {
   max-width: 500px;
 }
 
+.plugin-note {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--plugins-text-muted);
+  max-width: 620px;
+}
+
 .plugin-sources {
   display: flex;
   flex-wrap: wrap;
@@ -1383,6 +1489,15 @@ onMounted(async () => {
   gap: 6px;
 }
 
+.config-field-switch {
+  align-items: flex-start;
+
+  :deep(.t-switch) {
+    width: auto;
+    max-width: none;
+  }
+}
+
 .config-label {
   font-size: 14px;
   font-weight: 500;
@@ -1398,6 +1513,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--plugins-border);
@@ -1410,6 +1526,30 @@ onMounted(async () => {
     &.fail {
       color: #e34d59;
     }
+  }
+}
+
+.nas-sync-status-hint {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--plugins-text-secondary);
+}
+
+.nas-sync-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  border: 1px solid var(--plugins-border);
+
+  &.connected {
+    color: #2ba471;
+    background: rgba(43, 164, 113, 0.12);
+  }
+
+  &.disconnected {
+    color: var(--plugins-text-secondary);
+    background: var(--plugins-card-bg);
   }
 }
 

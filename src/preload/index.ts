@@ -63,9 +63,13 @@ const api = {
     uninstallPlugin: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-uninstallPlugin', pluginId),
     getPluginLog: (pluginId: string) => ipcRenderer.invoke('service-plugin-getPluginLog', pluginId),
+    appendPluginLog: (pluginId: string, level: string, ...args: any[]) =>
+      ipcRenderer.invoke('service-plugin-appendPluginLog', pluginId, level, ...args),
     // 服务插件相关
     getPluginType: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-getPluginType', pluginId),
+    getServiceRole: (pluginId: string) =>
+      ipcRenderer.invoke('service-plugin-getServiceRole', pluginId),
     getConfigSchema: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-getConfigSchema', pluginId),
     getConfig: (pluginId: string) => ipcRenderer.invoke('service-plugin-getConfig', pluginId),

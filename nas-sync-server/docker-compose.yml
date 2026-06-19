@@ -1,0 +1,16 @@
+services:
+  ceru-nas-sync:
+    build:
+      context: ..
+      dockerfile: nas-sync-server/Dockerfile
+    container_name: ceru-nas-sync
+    restart: unless-stopped
+    environment:
+      CERU_SYNC_HOST: 0.0.0.0
+      CERU_SYNC_PORT: 31231
+      CERU_SYNC_DB_PATH: /data/ceru-sync.sqlite
+      CERU_SYNC_ADMIN_TOKEN: ${CERU_SYNC_ADMIN_TOKEN:?set CERU_SYNC_ADMIN_TOKEN in .env}
+    ports:
+      - "31231:31231"
+    volumes:
+      - ./data:/data

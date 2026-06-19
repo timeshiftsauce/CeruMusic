@@ -22,6 +22,7 @@ declare module 'vue' {
     DesktopLyricStyle: typeof import('./src/components/Settings/DesktopLyricStyle.vue')['default']
     DevAuthInjector: typeof import('./src/components/Dev/DevAuthInjector.vue')['default']
     DirectorySettings: typeof import('./src/components/Settings/DirectorySettings.vue')['default']
+    DuplicateSongsDialog: typeof import('./src/components/Music/DuplicateSongsDialog.vue')['default']
     EqualizerSettings: typeof import('./src/components/Settings/EqualizerSettings.vue')['default']
     FirstRunDialog: typeof import('./src/components/FirstRunDialog.vue')['default']
     FloatBall: typeof import('./src/components/AI/FloatBall.vue')['default']

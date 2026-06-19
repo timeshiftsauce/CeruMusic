@@ -21,6 +21,8 @@ let _throttleHandler: ((pluginId: string, reason: string, duration?: number) => 
 /** 全局禁用回调，由 main/index.ts 注入。插件因崩溃次数过多被永久禁用时触发。 */
 let _disabledHandler: ((pluginId: string, reason: string) => void) | null = null
 
+type PluginLogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug' | 'group' | 'groupEnd'
+
 const pluginService = {
   /**
    * 设置全局限流处理器（由 main/index.ts 在启动时注入）。
@@ -284,7 +286,9 @@ const pluginService = {
               pluginId,
               pluginName,
               pluginInfo,
-              supportedSources: ceruPluginManager.getSupportedSources()
+              supportedSources: ceruPluginManager.getSupportedSources(),
+              pluginType: ceruPluginManager.getPluginType(),
+              serviceRole: ceruPluginManager.getServiceRole()
             }
           } catch (error: any) {
             console.error(`加载插件 ${file.name} 失败:`, error)
@@ -315,6 +319,8 @@ const pluginService = {
         pluginName: pluginId.split('-')[1] || pluginId,
         pluginInfo: ceruPluginManager.getPluginInfo(),
         supportedSources: ceruPluginManager.getSupportedSources(),
+        pluginType: ceruPluginManager.getPluginType(),
+        serviceRole: ceruPluginManager.getServiceRole(),
         disabled: ceruPluginManager.isDisabled()
       }
     })
@@ -396,12 +402,28 @@ const pluginService = {
     return await getLog(pluginId)
   },
 
+  appendPluginLog(
+    pluginId: string,
+    level: PluginLogLevel,
+    ...args: any[]
+  ) {
+    const logger = new Logger(pluginId)
+    const writer = logger[level] || logger.log
+    writer.apply(logger, args)
+  },
+
   // ==================== 服务插件方法 ====================
 
   getPluginType(pluginId: string) {
     const plugin = this.getPluginById(pluginId)
     if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
     return plugin.getPluginType()
+  },
+
+  getServiceRole(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
+    return plugin.getServiceRole()
   },
 
   getConfigSchema(pluginId: string) {

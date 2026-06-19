@@ -131,6 +131,7 @@ interface CustomAPI {
     uninstallPlugin(pluginId: string): ApiResult | PromiseLike<ApiResult>
     addPlugin: (pluginCode: string, pluginName: string, targetPluginId?: string) => Promise<any>
     getPluginType: (pluginId: string) => Promise<any>
+    getServiceRole: (pluginId: string) => Promise<any>
     getConfigSchema: (pluginId: string) => Promise<any>
     getConfig: (pluginId: string) => Promise<any>
     saveConfig: (pluginId: string, config: Record<string, any>) => Promise<any>
@@ -146,6 +147,7 @@ interface CustomAPI {
     loadAllPlugins: () => Promise<any>
     reloadAllPlugins: () => Promise<any>
     getPluginLog: (pluginId: string) => Promise<any>
+    appendPluginLog: (pluginId: string, level: string, ...args: any[]) => Promise<any>
   }
   ping: (callback: Function<any>) => undefined
   pingService: {

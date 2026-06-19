@@ -24,6 +24,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
 import shareAPI from '@renderer/api/share'
+import { startNasSyncPoller, stopNasSyncPoller } from '@renderer/services/nasSyncPoller'
 import { initIdleSleep, destroyIdleSleep } from './utils/idleSleep'
 import { initAppWindowState, destroyAppWindowState, isAppWindowVisible } from './utils/appWindowState'
 
@@ -211,6 +212,7 @@ onMounted(async () => {
   // 启动页面闲置休眠监听
   initIdleSleep()
   initAppWindowState()
+  startNasSyncPoller()
 
   // 窗口隐藏时冻结 CSS 动画/过渡，降低 GPU 开销
   const onVisibility = () => {
@@ -232,6 +234,7 @@ onBeforeUnmount(() => {
   unsubCloseRequest = null
 
   // 销毁闲置休眠监听
+  stopNasSyncPoller()
   destroyIdleSleep()
   destroyAppWindowState()
 

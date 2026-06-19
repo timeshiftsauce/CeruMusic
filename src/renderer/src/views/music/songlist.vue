@@ -29,6 +29,7 @@ import {
   type CloudSongList,
   type CloudSongDto
 } from '@renderer/api/cloudSongList'
+import { getPreferredSongListAPI } from '@renderer/api/nasSync'
 import { getPersistentMeta } from '@renderer/utils/playlist/meta'
 import { CloudIcon, CloudUploadIcon, CloudDownloadIcon } from 'tdesign-icons-vue-next'
 import { mapCloudSongToLocal } from '@renderer/utils/playlist/cloudList'
@@ -65,6 +66,8 @@ const removePlaylistState = (id: string) => {
   const idx = playlists.value.findIndex((p) => p.id === id)
   if (idx !== -1) playlists.value.splice(idx, 1)
 }
+
+const getSongListSyncAPI = async () => (await getPreferredSongListAPI()) || cloudSongListAPI
 
 // 对话框状态
 const showCreatePlaylistDialog = ref(false)
@@ -187,11 +190,12 @@ const loadPlaylists = async () => {
   console.log('authStore.isAuthenticated', authStore.isAuthenticated)
   try {
     async function getCloudSongList() {
-      if (!authStore.isAuthenticated) {
+      const syncAPI = await getPreferredSongListAPI()
+      if (!syncAPI && !authStore.isAuthenticated) {
         console.log('未登录跳过云歌单')
         return []
       }
-      return await cloudSongListAPI.getUserSongLists().catch((err) => {
+      return await (syncAPI || cloudSongListAPI).getUserSongLists().catch((err) => {
         MessagePlugin.error(err.message || '获取云歌单失败')
         return []
       })
@@ -200,6 +204,7 @@ const loadPlaylists = async () => {
 
     const localLists = (localRes.success ? localRes.data : []) || []
     const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
+    const activeCloudIds = new Set(cloudLists.map((item) => item.id))
 
     console.log('Local Lists:', localLists)
     console.log('Cloud Lists:', cloudLists)
@@ -212,6 +217,12 @@ const loadPlaylists = async () => {
     localLists.forEach((l) => {
       // Ensure meta exists
       if (!l.meta) l.meta = {}
+      if (l.meta.cloudId && !l.meta.isCloudOnly && !activeCloudIds.has(l.meta.cloudId)) {
+        songListAPI.delete(l.id).catch((error) => {
+          console.error('删除已在云端移除的本地歌单失败:', error)
+        })
+        return
+      }
       localMap.set(l.id, l)
       mergedLists.push(l)
     })
@@ -344,7 +355,8 @@ const savePlaylistEdit = async () => {
 
     if (currentEditingPlaylist.value.meta?.isCloudOnly) {
       try {
-        const resp = await cloudSongListAPI.updateUserSongList({
+        const syncAPI = await getSongListSyncAPI()
+        const resp = await syncAPI.updateUserSongList({
           listId: currentEditingPlaylist.value.id,
           name: editPlaylistForm.value.name.trim(),
           describe: editPlaylistForm.value.description.trim()
@@ -426,7 +438,8 @@ const deletePlaylist = async (playlist: SongList) => {
 
         if (playlist.meta?.isCloudOnly) {
           try {
-            await cloudSongListAPI.deleteUserSongList(playlist.id)
+            const syncAPI = await getSongListSyncAPI()
+            await syncAPI.deleteUserSongList(playlist.id)
             success = true
           } catch (e) {
             success = false
@@ -545,9 +558,8 @@ const playPlaylist = async (playlist: SongList) => {
 
     if (playlist.meta?.isCloudOnly) {
       try {
-        songs = (await cloudSongListAPI.getSongListDetail(playlist.id)).list.map(
-          mapCloudSongToLocal
-        )
+        const syncAPI = await getSongListSyncAPI()
+        songs = (await syncAPI.getSongListDetail(playlist.id)).list.map(mapCloudSongToLocal)
       } catch (e) {
         MessagePlugin.error((e as Error).message || '获取歌单歌曲失败')
         return
@@ -1258,12 +1270,8 @@ const handleDownloadCloudPlaylist = async (pl: any) => {
     const limit = 100
 
     while (true) {
-      const { list: batch, total } = await cloudSongListAPI.getSongListDetail(
-        pl.id,
-        'asc',
-        limit,
-        pos
-      )
+      const syncAPI = await getSongListSyncAPI()
+      const { list: batch, total } = await syncAPI.getSongListDetail(pl.id, 'asc', limit, pos)
       if (!batch || batch.length === 0) break
 
       allCloudSongs = [...allCloudSongs, ...batch]
@@ -1296,7 +1304,8 @@ const handleDownloadCloudPlaylist = async (pl: any) => {
     }
 
     // 重要：通知云端更新 localId，建立双向绑定
-    await cloudSongListAPI.updateUserSongList({
+    const syncAPI = await getSongListSyncAPI()
+    await syncAPI.updateUserSongList({
       listId: pl.id,
       localId: localId
     })
@@ -1318,7 +1327,8 @@ const handleDeleteCloudPlaylist = async (pl: SongList) => {
     onConfirm: async () => {
       confirm.destroy()
       try {
-        await cloudSongListAPI.deleteUserSongList(pl.id)
+        const syncAPI = await getSongListSyncAPI()
+        await syncAPI.deleteUserSongList(pl.id)
         MessagePlugin.success('删除成功')
         removePlaylistState(pl.id)
       } catch (e: any) {
@@ -1363,9 +1373,8 @@ const handleDeleteBoth = async (pl: SongList) => {
       try {
         // Delete cloud
         if (pl.meta?.cloudId) {
-          await cloudSongListAPI
-            .deleteUserSongList(pl.meta.cloudId)
-            .catch((e) => console.error('Cloud delete failed', e))
+          const syncAPI = await getSongListSyncAPI()
+          await syncAPI.deleteUserSongList(pl.meta.cloudId).catch((e) => console.error('Cloud delete failed', e))
         }
 
         // Delete local

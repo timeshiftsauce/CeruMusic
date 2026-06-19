@@ -1,0 +1,9 @@
+node_modules
+dist
+out
+data
+nas-sync-server/data
+.git
+.DS_Store
+*.sqlite
+*.sqlite-*

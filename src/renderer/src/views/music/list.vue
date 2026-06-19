@@ -43,6 +43,7 @@ import {
 } from 'vue'
 import { useRoute } from 'vue-router'
 import shareAPI from '@renderer/api/share'
+import DuplicateSongsDialog from '@renderer/components/Music/DuplicateSongsDialog.vue'
 
 interface MusicItem {
   singer: string
@@ -79,6 +80,7 @@ const currentPage = ref(1)
 const pageSize = 50
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
+const duplicateDialogVisible = ref(false)
 const playlistInfo = ref({
   id: '',
   title: '',
@@ -283,7 +285,8 @@ const isCurrentPlaylistFavorited = computed(() =>
 const refreshPlaylistFavoriteRelations = async () => {
   favoriteRelationError.value = ''
   try {
-    const page = await (getPreferredFavoriteAPI() || cloudFavoriteAPI).listPlaylistFavorites()
+    const favoriteAPI = (await getPreferredFavoriteAPI()) || cloudFavoriteAPI
+    const page = await favoriteAPI.listPlaylistFavorites()
     playlistFavoriteIds.value = new Set(
       page.items.filter((item) => !item.deletedAt).map((item) => item.playlistId)
     )
@@ -329,14 +332,15 @@ const handleTogglePlaylistFavorite = async () => {
     const playlistId = await resolveCurrentCloudPlaylistId()
     if (!playlistId) throw new Error('缺少云端歌单ID')
 
+    const favoriteAPI = (await getPreferredFavoriteAPI()) || cloudFavoriteAPI
     if (playlistFavoriteIds.value.has(playlistId)) {
-      await (getPreferredFavoriteAPI() || cloudFavoriteAPI).unfavoritePlaylist(playlistId)
+      await favoriteAPI.unfavoritePlaylist(playlistId)
       playlistFavoriteIds.value = new Set(
         [...playlistFavoriteIds.value].filter((item) => item !== playlistId)
       )
       MessagePlugin.success('已取消收藏歌单')
     } else {
-      await (getPreferredFavoriteAPI() || cloudFavoriteAPI).favoritePlaylist({
+      await favoriteAPI.favoritePlaylist({
         playlistId,
         sourcePlaylistId: isLocalPlaylist.value ? playlistInfo.value.id : playlistInfo.value.meta?.localId,
         source: isLocalPlaylist.value ? 'local' : undefined,
@@ -508,7 +512,8 @@ const fetchCloudUserPlaylist = async (reset = false) => {
     }
     console.log('cloudNextPos.value', cloudNextPos.value)
     const limit = pageSize
-    const { list: cloudSongs, total } = await (getPreferredSongListAPI() || cloudSongListAPI).getSongListDetail(
+    const songListAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+    const { list: cloudSongs, total } = await songListAPI.getSongListDetail(
       cloudId,
       'asc',
       limit,
@@ -659,9 +664,10 @@ const checkCloudSync = async () => {
         let allCloudSongs: CloudSongDto[] = []
         let pos: number | undefined = undefined
         const limit = 100 // 增加每次获取的数量以减少请求次数
+        const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
 
         while (true) {
-          const { list: batch, total } = await cloudSongListAPI.getSongListDetail(
+          const { list: batch, total } = await syncAPI.getSongListDetail(
             playlistInfo.value.meta?.cloudId || '',
             'asc',
             limit,
@@ -890,7 +896,8 @@ const handleAddBatchToSongList = async (batchSongs: MusicItem[], playlist: SongL
     const cloudSongs = mapSongsToCloud(rawSongs as any[])
 
     if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
-      await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, cloudSongs)
+      const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+      await syncAPI.addSongsToList(playlist.meta.cloudId, cloudSongs)
       MessagePlugin.success(`已将 ${batchSongs.length} 首歌曲添加到云端歌单"${playlist.name}"`)
       return
     }
@@ -926,7 +933,8 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
       const cloudId = playlistInfo.value.meta?.cloudId || playlistInfo.value.id
       if (!cloudId) throw new Error('缺少云歌单ID')
 
-      await cloudSongListAPI.removeSongsFromList(cloudId, [String(song.songmid)])
+      const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+      await syncAPI.removeSongsFromList(cloudId, [String(song.songmid)])
 
       // 更新前端数据
       const index = songs.value.findIndex((s) => s.songmid === song.songmid)
@@ -1105,7 +1113,8 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
     if (!cloudId) throw new Error('缺少云歌单ID')
 
     const mids = batchSongs.map((s: any) => String(s.songmid))
-    await cloudSongListAPI.removeSongsFromList(cloudId, mids)
+    const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+    await syncAPI.removeSongsFromList(cloudId, mids)
 
     const set = new Set(mids)
     songs.value = songs.value.filter((s) => !set.has(String(s.songmid)))
@@ -1128,7 +1137,8 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
   try {
     const mids = batchSongs.map((s: any) => s.songmid)
     if (route.query.type === 'cloud_user') {
-      await cloudSongListAPI.removeSongsFromList(playlistInfo.value.id, mids.map(String))
+      const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+      await syncAPI.removeSongsFromList(playlistInfo.value.id, mids.map(String))
       const set = new Set(mids.map(String))
       songs.value = songs.value.filter((s) => !set.has(String(s.songmid)))
       playlistInfo.value.total = songs.value.length
@@ -1211,7 +1221,8 @@ const handleFileSelect = async (event: Event) => {
   if (isCloudUserPlaylist.value) {
     try {
       const cloudId = playlistInfo.value.meta?.cloudId || playlistInfo.value.id
-      const result: any = await cloudSongListAPI.updateUserSongList({
+      const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+      const result: any = await syncAPI.updateUserSongList({
         listId: cloudId,
         cover: file
       })
@@ -1251,7 +1262,8 @@ const handleFileSelect = async (event: Event) => {
           // 如果已关联云端歌单，同步更新云端封面
           if (playlistInfo.value.meta?.cloudId) {
             try {
-              const res = await cloudSongListAPI.updateUserSongList({
+              const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+              const res = await syncAPI.updateUserSongList({
                 listId: playlistInfo.value.meta.cloudId,
                 cover: file
               })
@@ -1749,7 +1761,8 @@ const handleSyncFromCloud = async () => {
       throw new Error('未关联云端歌单')
     }
     // getSongListDetail 现在返回 { list, total }
-    const { list: cloudSongs, total } = await cloudSongListAPI.getSongListDetail(
+    const syncAPI = (await getPreferredSongListAPI()) || cloudSongListAPI
+    const { list: cloudSongs, total } = await syncAPI.getSongListDetail(
       playlistInfo.value.meta.cloudId
     )
     const localSongs = cloudSongs.map(mapCloudSongToLocal)
@@ -1785,6 +1798,13 @@ const moreActions = computed(() => [
     label: multiSelect.value ? '取消批量选择' : '批量选择',
     key: 'toggleMultiSelect',
     icon: renderIcon(RootListFilledIcon)
+  },
+  {
+    label: '查重清理',
+    key: 'duplicateCleanup',
+    show: isLocalPlaylist.value,
+    disabled: songs.value.length < 2,
+    icon: renderIcon(SearchIcon)
   },
   {
     label: isCurrentPlaylistFavorited.value ? '取消收藏歌单' : '收藏歌单',
@@ -1845,11 +1865,42 @@ function handleMoreAction(key: string) {
   }
   if (key === 'toggleMultiSelect') {
     multiSelect.value = !multiSelect.value
+    return
+  }
+  if (key === 'duplicateCleanup') {
+    duplicateDialogVisible.value = true
   }
 }
 
 function handleExitMultiSelect() {
   multiSelect.value = false
+}
+
+const removeDuplicateSong = async ({
+  songmid
+}: {
+  songmid: string | number
+  source: string
+}) => {
+  const result = await window.api.songList.removeSongs(playlistInfo.value.id, [songmid])
+  if (!result.success) {
+    MessagePlugin.error(result.error || '删除重复歌曲失败')
+    return
+  }
+  songs.value = songs.value.filter((song) => String(song.songmid) !== String(songmid))
+  playlistInfo.value.total = songs.value.length
+  MessagePlugin.success('已删除重复歌曲')
+}
+
+const removeDuplicateSongs = async ({ songmids }: { songmids: Array<string | number> }) => {
+  const result = await window.api.songList.removeSongs(playlistInfo.value.id, songmids)
+  if (!result.success) {
+    MessagePlugin.error(result.error || '批量删除重复歌曲失败')
+    return
+  }
+  const removeSet = new Set(songmids.map((id) => String(id)))
+  songs.value = songs.value.filter((song) => !removeSet.has(String(song.songmid)))
+  playlistInfo.value.total = songs.value.length
 }
 
 const filteredMoreActions = computed(() =>
@@ -2024,6 +2075,14 @@ const filteredMoreActions = computed(() =>
         </transition>
       </div>
     </div>
+
+    <DuplicateSongsDialog
+      v-model:show="duplicateDialogVisible"
+      :songs="songs"
+      :playlist-title="playlistInfo.title"
+      @remove="removeDuplicateSong"
+      @remove-many="removeDuplicateSongs"
+    />
   </div>
 </template>
 

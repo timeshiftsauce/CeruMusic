@@ -23,6 +23,10 @@ let isLyricWindowOpen = false
 // visibilitychange 处理器引用，用于卸载时清理
 let visibilityHandler: (() => void) | null = null
 
+const MENU_BAR_VISIBLE_INTERVAL_MS = 200
+const MENU_BAR_HIDDEN_INTERVAL_MS = 1000
+const DESKTOP_LYRIC_INTERVAL_MS = 50
+
 function buildLyricPayload(lines: LyricLine[]) {
   return JSON.parse(JSON.stringify(lines || []))
 }
@@ -50,14 +54,21 @@ export function installDesktopLyricBridge() {
 
   let lastIndex = -1
 
+  const getCurrentTimeMs = () => {
+    const audioEl = controlAudio.Audio.audio
+    const rawTime =
+      audioEl && Number.isFinite(audioEl.currentTime)
+        ? audioEl.currentTime
+        : controlAudio.Audio.currentTime
+    return Math.round((rawTime || 0) * 1000)
+  }
+
   // 监听歌词变化
   watch(
     () => player.value.lyrics.lines,
     (lines) => {
-      lastIndex = -1
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', buildLyricPayload(lines))
-      // 提示前端进入准备态
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
+      pushSnapshot()
     },
     { immediate: true }
   )
@@ -69,6 +80,8 @@ export function installDesktopLyricBridge() {
       try {
         const name = (song as any)?.name || ''
         const artist = (song as any)?.singer || ''
+        ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', [])
+        ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
         if (name || artist) {
           ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', { name, artist })
         }
@@ -89,7 +102,7 @@ export function installDesktopLyricBridge() {
   watch(() => controlAudio.Audio.isPlay, checkPlayState, { immediate: true })
 
   // 快照推送函数：在窗口准备就绪或切换显示时调用，保证首屏不空
-  const pushSnapshot = () => {
+  function pushSnapshot() {
     try {
       const currentSong = player.value.songInfo as any
       const name = currentSong?.name || ''
@@ -102,8 +115,7 @@ export function installDesktopLyricBridge() {
         'play-lyric-change',
         buildLyricPayload(currentLines)
       )
-      const a = controlAudio.Audio
-      let ms = Math.round((a?.currentTime || 0) * 1000)
+      let ms = getCurrentTimeMs()
       if (ms <= 0) {
         const lastId = userInfo.value?.lastPlaySongId
         const songId = currentSong?.songmid
@@ -158,18 +170,11 @@ export function installDesktopLyricBridge() {
       return
     }
 
-    // 停止条件：页面同时处于隐藏 且 闲置（用户走开了）
-    if (document.hidden && isPageIdle()) {
-      playStateInterval = null
-      return
-    }
-
     const hidden = document.hidden
     const idle = isPageIdle()
 
     // 取音频时间
-    const a = controlAudio.Audio
-    let ms = Math.round((a?.currentTime || 0) * 1000)
+    let ms = getCurrentTimeMs()
     if (ms <= 0) {
       const currentSong = player.value.songInfo as any
       const lastId = userInfo.value?.lastPlaySongId
@@ -207,12 +212,14 @@ export function installDesktopLyricBridge() {
 
     // ---- 三档自适应 ----
     let interval: number
-    if (hidden || idle) {
-      interval = 1200          // 隐藏/闲置：极低频，仅保活菜单栏
+    if (hidden && controlAudio.Audio.isPlay) {
+      interval = MENU_BAR_HIDDEN_INTERVAL_MS
+    } else if (hidden || idle) {
+      interval = 1200          // 隐藏/闲置且未播放：极低频
     } else if (isLyricWindowOpen) {
-      interval = 50            // 桌面歌词开：高频
+      interval = DESKTOP_LYRIC_INTERVAL_MS // 桌面歌词开：高频
     } else {
-      interval = 200           // 仅菜单栏：中频
+      interval = MENU_BAR_VISIBLE_INTERVAL_MS // 仅菜单栏：中频
     }
 
     playStateInterval = window.setTimeout(scheduleNext, interval) as unknown as number
@@ -223,11 +230,14 @@ export function installDesktopLyricBridge() {
 
   // 页面可见性变化 / 闲置唤醒时重新调度
   visibilityHandler = () => {
-    if (playStateInterval === null && !(document.hidden && isPageIdle())) {
-      playStateInterval = window.setTimeout(scheduleNext, 200) as unknown as number
+    pushSnapshot()
+    if (playStateInterval !== null) {
+      window.clearTimeout(playStateInterval)
     }
+    playStateInterval = window.setTimeout(scheduleNext, MENU_BAR_VISIBLE_INTERVAL_MS) as unknown as number
   }
   document.addEventListener('visibilitychange', visibilityHandler)
+  window.addEventListener('ceru-window-state-change', visibilityHandler)
   window.addEventListener('ceru-wake', visibilityHandler)
 }
 
@@ -240,6 +250,7 @@ export function uninstallDesktopLyricBridge() {
 
   if (visibilityHandler) {
     document.removeEventListener('visibilitychange', visibilityHandler)
+    window.removeEventListener('ceru-window-state-change', visibilityHandler)
     window.removeEventListener('ceru-wake', visibilityHandler)
     visibilityHandler = null
   }
