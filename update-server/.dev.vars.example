@@ -1,4 +1,0 @@
-# wrangler dev 时使用 .dev.vars (复制本文件为 .dev.vars).
-# 生产环境用: wrangler secret put GITHUB_TOKEN
-
-GITHUB_TOKEN=
