@@ -134,6 +134,9 @@ jobs:
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+          npm_config_electron_builder_binaries_mirror: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
           sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
@@ -144,6 +147,9 @@ jobs:
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+          npm_config_electron_builder_binaries_mirror: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
           sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml

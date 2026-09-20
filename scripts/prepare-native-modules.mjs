@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const require = createRequire(import.meta.url)
 
@@ -11,12 +13,25 @@ database.prepare('SELECT 1').get()
 database.close()
 
 if (process.platform === 'win32') {
-  const { rebuild } = await import('@electron/rebuild')
-  await rebuild({
-    buildPath: fileURLToPath(new URL('../', import.meta.url)),
-    electronVersion: require('electron/package.json').version,
-    onlyModules: ['registry-js']
-  })
+  // registry-js ships a N-API binary, so it is compatible with Electron
+  // without an Electron-ABI rebuild. Download it explicitly when install
+  // scripts were skipped in CI; falling back to node-gyp would require VS.
+  const registryPackage = require.resolve('registry-js/package.json')
+  const registryRoot = dirname(registryPackage)
+  const registryBinary = resolve(registryRoot, 'build', 'Release', 'registry.node')
+  if (!existsSync(registryBinary)) {
+    const prebuildInstall = require.resolve('prebuild-install/bin.js', {
+      paths: [registryRoot]
+    })
+    const result = spawnSync(
+      process.execPath,
+      [prebuildInstall, '--runtime', 'napi', '--target', '3', '--force'],
+      { cwd: registryRoot, stdio: 'inherit' }
+    )
+    if (result.status !== 0) {
+      throw new Error(`Failed to download registry-js prebuild (exit ${result.status ?? 'unknown'})`)
+    }
+  }
   require('registry-js')
 }
 
