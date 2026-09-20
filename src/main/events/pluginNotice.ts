@@ -4,7 +4,7 @@
  * This software is the confidential and proprietary information of 时迁酱.
  * Unauthorized copying of this file, via any medium is strictly prohibited.
  *
- * @author 时迁酱，无聊的霜霜，Star
+ * @author 时迁酱，无聊的霜霜
  * @since 2025-9-20
  * @version 1.0
  */

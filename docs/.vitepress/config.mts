@@ -140,13 +140,13 @@ export default defineConfig({
   base: '/',
   head: [
     ['link', { rel: 'icon', href: '/logo.svg' }],
-    ['meta', { name: 'author', href: '时迁酱，无聊的霜霜，star' }],
+    ['meta', { name: 'author', href: '时迁酱，无聊的霜霜' }],
     [
       'meta',
       {
         name: 'keywords',
         content:
-          'Ceru Music,音乐播放器,音乐播放器工具,音乐播放器软件,音乐播放器下载,音乐播放器下载地址,澜音播放器,免费的音乐播放器,cerumusic,时迁酱,周晨鹭,无聊的霜霜,star,洛雪音乐,洛雪'
+          'Ceru Music,音乐播放器,音乐播放器工具,音乐播放器软件,音乐播放器下载,音乐播放器下载地址,澜音播放器,免费的音乐播放器,cerumusic,时迁酱,周晨鹭,无聊的霜霜,洛雪音乐,洛雪'
       }
     ],
     ['meta', { name: 'baidu-site-verification', content: 'codeva-ocKFImCsOO' }],
