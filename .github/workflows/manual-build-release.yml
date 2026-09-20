@@ -120,7 +120,10 @@ jobs:
             export PATH="$PWD/.fake-bin:$PATH"
           fi
 
-          yarn install --frozen-lockfile
+          yarn install --frozen-lockfile --ignore-scripts
+
+          node node_modules/electron/install.js
+          node scripts/prepare-native-modules.mjs
 
       - name: Build Electron App for Windows
         if: steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest'
@@ -130,26 +133,20 @@ jobs:
         if: steps.gate.outputs.run == 'true' && matrix.os == 'macos-15-intel'
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:intel
 
       - name: Build Electron App for macOS Apple Silicon (arm64)
         if: steps.gate.outputs.run == 'true' && matrix.os == 'macos-latest'
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:arm64
 
       - name: Build Electron App for Linux

@@ -62,23 +62,20 @@ jobs:
         shell: bash
         run: |
           npm i -g yarn
-          yarn install --frozen-lockfile
+          yarn install --frozen-lockfile --ignore-scripts
+
+          node node_modules/electron/install.js
+          node scripts/prepare-native-modules.mjs
 
       - name: Build Electron App for macOS Intel (x64)
         if: matrix.os == 'macos-15-intel'
         shell: bash
         env:
-          # macOS 代码签名 + 公证(Apple notarization)所需环境变量
-          # CSC_LINK / CSC_KEY_PASSWORD 由 electron-builder 用于导入 Developer ID Application 证书
-          # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 由 notarytool 用于提交公证
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:intel
           if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-x64.yml; fi
 
@@ -86,13 +83,10 @@ jobs:
         if: matrix.os == 'macos-latest'
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:arm64
           if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-arm64.yml; fi
 

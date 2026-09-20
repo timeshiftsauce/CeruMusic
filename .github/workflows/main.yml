@@ -63,12 +63,16 @@ jobs:
             export PATH="$PWD/.fake-bin:$PATH"
           fi
 
-          yarn install --frozen-lockfile
+          # better-sqlite3 13 ships Node-API prebuilds. Running Yarn lifecycle
+          # scripts here can incorrectly fall back to node-gyp on Windows,
+          # which requires a C++ toolchain that the runner does not need.
+          yarn install --frozen-lockfile --ignore-scripts
 
-      # Electron 42+ 不再通过依赖的 postinstall 下载运行时，提前安装并检查原生模块。
+      # Install Electron explicitly, then run the project-owned native checks.
       - name: Verify Electron runtime and native modules
         run: |
-          yarn install-electron
+          node node_modules/electron/install.js
+          node scripts/prepare-native-modules.mjs
           node scripts/check-native-runtime.cjs
 
       - name: Build Electron App for windows
@@ -79,17 +83,12 @@ jobs:
         if: matrix.os == 'macos-15-intel'
         shell: bash
         env:
-          # macOS 代码签名 + 公证(Apple notarization)所需环境变量
-          # CSC_LINK / CSC_KEY_PASSWORD 由 electron-builder 用于导入 Developer ID Application 证书
-          # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 由 notarytool 用于提交公证
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # 暂时发布未签名构建，证书恢复后删除此开关并恢复签名 secrets。
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:intel
           # 重命名 mac yml,避免 arm64 那台 runner 后上传时覆盖 (后续 update-server 会自动合并)
           if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-x64.yml; fi
@@ -98,13 +97,11 @@ jobs:
         if: matrix.os == 'macos-latest'
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # 暂时发布未签名构建，证书恢复后删除此开关并恢复签名 secrets。
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:arm64
           if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-arm64.yml; fi
 
