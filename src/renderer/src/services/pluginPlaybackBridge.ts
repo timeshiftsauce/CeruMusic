@@ -4,6 +4,8 @@ import type { Router } from 'vue-router'
 import { toAppTrack, toPluginTrack } from '@common/pluginMusic'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { PlayMode } from '@renderer/types/audio'
 
 export const pluginPlaybackMethods = [
@@ -40,8 +42,7 @@ const sameRef = (a: ResourceRef | undefined, b: ResourceRef) =>
 export async function handlePluginPlayback(method: string, args: unknown[]): Promise<unknown> {
   const store = LocalUserDetailStore()
   if (!store.initialization) store.init()
-  const global = await import('@renderer/store/GlobalPlayStatus')
-  const currentRef = global.useGlobalPlayStatusStore().player.songInfo?.pluginResource
+  const currentRef = useGlobalPlayStatusStore().player.songInfo?.pluginResource
   const queueState = () => ({
     items: store.list.map((song) => toPluginTrack(song)),
     currentIndex: currentRef
@@ -51,7 +52,6 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
   })
   if (method === 'services.queue.get') return queueState()
   if (method.startsWith('services.queue.')) {
-    const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
     if (useListenTogetherStore().isInRoom) throw new Error('请先退出一起听，再修改本地播放队列')
     if (method === 'services.queue.remove') {
       const refs = args[0] as ResourceRef[]
@@ -89,11 +89,10 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
   const playback = await import('@renderer/utils/audio/globaPlayList')
   if (method === 'services.player.getState') {
     const mode = playback.playMode.value
+    const currentSong = useGlobalPlayStatusStore().player.songInfo
     return {
       status: audio.isPlay ? 'playing' : currentRef ? 'paused' : 'idle',
-      track: global.useGlobalPlayStatusStore().player.songInfo
-        ? toPluginTrack(global.useGlobalPlayStatusStore().player.songInfo)
-        : null,
+      track: currentSong ? toPluginTrack(currentSong) : null,
       positionMs: Math.round((audio.currentTime || 0) * 1000),
       durationMs: Math.round((audio.duration || 0) * 1000),
       volume: Math.max(0, Math.min(1, (audio.volume || 0) / 100)),

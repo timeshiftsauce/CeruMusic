@@ -27,7 +27,7 @@ src/main/
 | IPC definitions               | `events/*.ts`                 | Each file registers its own `ipcMain.handle/on` handlers; import via `events/index.ts` |
 | Download queue                | `services/DownloadManager.ts` | Emits task events to renderer, wires lyrics/url fetchers                               |
 | Plugin runtime                | `services/plugin/`            | Manages user plugins (LuoXue + Ceru) inside VM host                                    |
-| Music SDK bridge              | `utils/musicSdk/`             | Vendor JS adapters, signature hacks, API clients per platform                          |
+| Music SDK bridge              | `services/musicSdk/`          | Plugin-backed provider routing, lyric conversion, and download URL resolution           |
 | Worker thread                 | `workers/downloadWorker.ts`   | Node worker sharing `@common` types                                                    |
 
 ## CONVENTIONS
@@ -47,7 +47,7 @@ src/main/
 
 ## GOTCHAS
 
-- `utils/musicSdk` mixes plain JS + vendor minified blobs; run through Node (CommonJS) expectations.
+- `services/musicSdk` routes provider requests through the plugin host; keep IPC contracts synchronized.
 - `request.js` builds custom headers per provider; share agent pools to avoid socket exhaustion.
 - Worker + main share types from `@common`; keep message payloads serializable.
 - System-tray toggles (lyrics lock/show) rely on renderer IPC events—update both sides when renaming channels.

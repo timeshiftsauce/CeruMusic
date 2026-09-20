@@ -29,6 +29,8 @@ import PluginHostBridge from '@renderer/components/PluginHostBridge.vue'
 import { appEntryQueue } from '@renderer/services/entryQueue'
 import { showListenTogetherInvite } from '@renderer/services/listenTogetherInvite'
 import { showExternalPluginInstall } from '@renderer/services/externalPluginInstall'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { addToPlaylistAndPlay } from '@renderer/utils/playlist/playlistManager'
 import type { QueuedDeepLink } from '@common/types/deepLink'
 
 const route = useRoute()
@@ -90,11 +92,7 @@ async function openSongShare(id: string) {
       ...detail.song,
       source: (detail.song as any).source || detail.source
     }
-    const [{ addToPlaylistAndPlay }, { playSong }, { LocalUserDetailStore }] = await Promise.all([
-      import('@renderer/utils/playlist/playlistManager'),
-      import('@renderer/utils/audio/globaPlayList'),
-      import('@renderer/store/LocalUserDetail')
-    ])
+    const { playSong } = await import('@renderer/utils/audio/globaPlayList')
     await addToPlaylistAndPlay(song, LocalUserDetailStore(), playSong)
   } catch (e: any) {
     console.error('打开分享失败', e)

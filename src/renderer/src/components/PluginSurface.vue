@@ -33,7 +33,7 @@ let closing: Promise<unknown> = Promise.resolve()
 let unsubscribe: (() => void) | undefined
 onMounted(() => {
   unsubscribe = window.api.plugins.onChanged((change) => {
-    if (change?.pluginId === props.pluginId && change.type === 'updated') reload.value++
+    if (change?.pluginId === props.pluginId && change?.type === 'updated') reload.value++
   })
 })
 onBeforeUnmount(() => unsubscribe?.())

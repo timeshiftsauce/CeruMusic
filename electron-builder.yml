@@ -33,6 +33,17 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,.idea,.kiro,.codebuddy}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # Build/test toolchains must never enter the production dependency tree.
+  - '!node_modules/@esbuild/**'
+  - '!node_modules/@rollup/**'
+  - '!node_modules/@vitest/**'
+  - '!node_modules/esbuild/**'
+  - '!node_modules/rollup/**'
+  - '!node_modules/vite/**'
+  - '!node_modules/vitest/**'
+  # better-sqlite3 ships build-time C/C++ sources; runtime uses lib + prebuilds.
+  - '!node_modules/better-sqlite3/deps/**'
+  - '!node_modules/better-sqlite3/src/**'
 asarUnpack:
   - resources/**
   - node_modules/ffmpeg-static/**
