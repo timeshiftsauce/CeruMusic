@@ -164,15 +164,6 @@ const openLink = (url: string) => {
         </div>
         <div class="developer-item">
           <div class="developer-avatar">
-            <img src="/star.png" alt="Star" />
-          </div>
-          <div class="developer-info">
-            <h4>Star</h4>
-            <p>插件管理相关功能 & 部分接口封装</p>
-          </div>
-        </div>
-        <div class="developer-item">
-          <div class="developer-avatar">
             <img src="/lemon.jpg" alt="lemon" />
           </div>
           <div class="developer-info">
