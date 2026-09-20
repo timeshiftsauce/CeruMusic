@@ -138,6 +138,8 @@ jobs:
           NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          export npm_config_electron_builder_binaries_mirror='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+          unset npm_package_config_electron_builder_binaries_mirror || true
           sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:intel
 
@@ -150,6 +152,8 @@ jobs:
           NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
+          export npm_config_electron_builder_binaries_mirror='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+          unset npm_package_config_electron_builder_binaries_mirror || true
           sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
           yarn run build:mac:arm64
 
