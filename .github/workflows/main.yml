@@ -88,7 +88,6 @@ jobs:
           # npmmirror may not contain the dmg-builder archive used by this version.
           ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
           NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          npm_config_electron_builder_binaries_mirror: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
         run: |
           # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
@@ -106,7 +105,6 @@ jobs:
           # npmmirror may not contain the dmg-builder archive used by this version.
           ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
           NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          npm_config_electron_builder_binaries_mirror: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
         run: |
           sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
           sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
