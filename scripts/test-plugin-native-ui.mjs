@@ -50,7 +50,21 @@ export const markPluginUIReady=()=>{},refreshPluginContributions=async()=>{}
   )
   await writeFile(
     path.join(workspace, 'playback.js'),
-    'export const pluginPlaybackMethods=[];export const handlePluginPlayback=()=>{};export const openPluginPlaylist=()=>{}'
+    `export async function playSong(song){
+      const state=window.__nativeUI
+      state.calls.push({method:'playSong',ref:JSON.parse(JSON.stringify(song.pluginResource))})
+      if(state.holdPlayback)await new Promise(resolve=>{state.releasePlayback=resolve})
+      if(state.failPlayback)throw Error('测试播放失败')
+    }
+    export const handlePlay=async()=>{}`
+  )
+  await writeFile(
+    path.join(workspace, 'playback-stores.js'),
+    `import { reactive } from 'vue'
+    const store=reactive({initialization:true,list:[]})
+    export const LocalUserDetailStore=()=>store
+    export const useListenTogetherStore=()=>({isInRoom:false})
+    export const useGlobalPlayStatusStore=()=>({player:{}})`
   )
   await writeFile(
     path.join(workspace, 'main.js'),
@@ -82,7 +96,7 @@ const listeners=new Set()
 const accountListeners=new Set(),uiListeners=new Set(),responses=new Map(),changeListeners=new Set()
 const sessions=new Map()
 const state=window.__nativeUI={calls:[],playlists,tracks,summary:{signedIn:false},refreshAccounts:refreshPluginAccounts,shown,playlistSections}
-const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:{render:()=>null}},{path:'/home/songlist',component:{render:()=>null}}]})
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:{render:()=>null}},{path:'/home/songlist',component:{render:()=>null}},{name:'list',path:'/home/list/:id',component:{render:()=>null}}]})
 state.route=()=>router.currentRoute.value
 const installedContributions=activePluginContributions.value
 state.togglePlugin=enabled=>{activePluginContributions.value=enabled?installedContributions:[]}
@@ -105,6 +119,12 @@ window.api={plugins:{
     state.calls.push(payload);
     if(action==='render.daily')return structuredClone(page());
     if(action==='render.drawer')return {type:'page',title:'原生抽屉内容',description:'插件声明通过同一套原生组件渲染。',sections:[]};
+    if(action==='play'){
+      const refs=input.refs??[input.ref],items=refs.map(ref=>tracks.find(track=>track.ref.id===ref.id));
+      state.queue=await state.emitUI('services.queue.replace',{args:[items]});
+      await state.emitUI('services.player.play',{args:[input.ref??refs[0]]});
+    }
+    if(action==='playlist.open')await state.emitUI('ui.navigation.open',{page:'playlist',ref:input.ref});
     if(action==='refresh')revision++;
     return null
   },
@@ -115,7 +135,11 @@ window.api={plugins:{
   onAccountChanged(listener){accountListeners.add(listener);return()=>accountListeners.delete(listener)},
   onUI(listener){uiListeners.add(listener);return()=>uiListeners.delete(listener)},
   onUICancel(){return()=>{}},onChanged(listener){changeListeners.add(listener);return()=>changeListeners.delete(listener)},async uiReady(){return true},
-  async respondUI({id,value,error}){const response=responses.get(id);responses.delete(id);if(error)response.reject(Error(error));else response.resolve(value)},
+  async respondUI(result){
+    const {id,value,error}=structuredClone(result);
+    if(state.rejectNextResponse&&!error){state.rejectNextResponse=false;throw Error('测试传输失败')}
+    const response=responses.get(id);responses.delete(id);if(error)response.reject(Error(error));else response.resolve(value)
+  },
   async openSurface(pluginId,surfaceId){state.calls.push({method:'openSurface',pluginId,surfaceId});await state.emitUI('ui.drawer.open',session(surfaceId))}
 }}
 const app=createApp(defineComponent({setup(){return()=>h('div',{class:'verification-app'},[
@@ -147,8 +171,12 @@ state.unmount=()=>app.unmount()
       alias: [
         { find: '@renderer/store/Auth', replacement: path.join(workspace, 'auth.js') },
         {
-          find: '@renderer/services/pluginPlaybackBridge',
+          find: '@renderer/utils/audio/globaPlayList',
           replacement: path.join(workspace, 'playback.js')
+        },
+        {
+          find: /^@renderer\/store\/(LocalUserDetail|ListenTogether|GlobalPlayStatus)$/,
+          replacement: path.join(workspace, 'playback-stores.js')
         },
         {
           find: /^@renderer\/(api\/(songList|cloudSongList)|utils\/playlist\/cloudList)$/,
@@ -168,7 +196,7 @@ state.unmount=()=>app.unmount()
   })
   await server.listen()
   const address = server.httpServer.address()
-  browser = await chromium.launch({ channel: 'msedge', headless: true })
+  browser = await chromium.launch({ channel: 'chrome', headless: true })
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
     reducedMotion: 'reduce'
@@ -209,8 +237,23 @@ state.unmount=()=>app.unmount()
     () => window.__nativeUI.calls.find((call) => call.action === 'playlist.import').input
   )
   assert.deepEqual(importInput, { mode: 'picker', ref: fullRef })
-  await page.locator('.native-track').nth(1).click()
+  await page.evaluate(() => {
+    window.__nativeUI.holdPlayback = true
+  })
+  await page.locator('.native-track').nth(1).dblclick()
   await page.waitForFunction(() => window.__nativeUI.calls.some((call) => call.action === 'play'))
+  await page.waitForFunction(
+    () => window.__nativeUI.calls.some((call) => call.method === 'playSong'),
+    null,
+    { timeout: 5000 }
+  )
+  assert.equal(
+    await page.evaluate(
+      () => window.__nativeUI.calls.filter((call) => call.action === 'play').length
+    ),
+    1,
+    'double click must send only one in-flight playback command'
+  )
   const playInput = await page.evaluate(
     () => window.__nativeUI.calls.find((call) => call.action === 'play').input
   )
@@ -218,6 +261,44 @@ state.unmount=()=>app.unmount()
     window.__nativeUI.tracks.slice(1).map((item) => item.ref)
   )
   assert.deepEqual(playInput, { ref: expectedTracks[0], refs: expectedTracks })
+  assert.deepEqual(
+    await page.evaluate(() => window.__nativeUI.queue.items.map((item) => item.ref)),
+    expectedTracks,
+    'reactive queue reply must cross IPC with nested resource data intact'
+  )
+  assert.deepEqual(
+    await page.evaluate(
+      () => window.__nativeUI.calls.find((call) => call.method === 'playSong').ref
+    ),
+    expectedTracks[0],
+    'queue replacement must continue to the selected song playback'
+  )
+  await page.getByRole('button', { name: '刷新推荐', exact: true }).click({ timeout: 3000 })
+  await page.locator('.playlist-open').nth(1).click({ timeout: 3000 })
+  await page.waitForFunction(() => window.__nativeUI.route().params.id === 'playlist-1')
+  await page.evaluate(() => {
+    window.__nativeUI.holdPlayback = false
+    window.__nativeUI.releasePlayback()
+  })
+  await page.waitForFunction(() => !document.querySelector('.native-track').disabled)
+  const verifyPlaybackFailure = async (flag, message) => {
+    await page.evaluate((flag) => {
+      window.__nativeUI[flag] = true
+    }, flag)
+    await page.getByRole('button', { name: '播放全部', exact: true }).click()
+    await page
+      .locator('.native-error')
+      .getByText(message, { exact: true })
+      .waitFor({ timeout: 3000 })
+    await page.waitForFunction(() => !document.querySelector('.native-track').disabled)
+    await page.evaluate((flag) => {
+      window.__nativeUI[flag] = false
+    }, flag)
+    await page.locator('.playlist-open').first().click({ timeout: 3000 })
+    await page.waitForFunction(() => window.__nativeUI.route().params.id === 'playlist-0')
+  }
+  await verifyPlaybackFailure('failPlayback', '测试播放失败')
+  await verifyPlaybackFailure('rejectNextResponse', '测试传输失败')
   await page.locator('.native-tracks').scrollIntoViewIfNeeded()
   await settleAnimations(page)
   await page.screenshot({ path: path.join(artifacts, 'native-playback.png'), fullPage: true })
@@ -494,6 +575,9 @@ state.unmount=()=>app.unmount()
       'Electron-compatible structured clone of all native action payloads',
       'item action import',
       'native track playback action',
+      'reactive queue response reaches selected playback through the actual host bridge',
+      'pending playback leaves refresh and playlist navigation available',
+      'playback and reply failures release action controls without remounting',
       'compact native track rows and cover dimensions',
       'play all action',
       'state refresh',

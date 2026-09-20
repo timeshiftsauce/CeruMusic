@@ -3,12 +3,14 @@
     <div class="routing-intro">
       <div>
         <slot name="navigation"><h3>能力分配</h3></slot>
-        <p>按平台选择搜索、播放等功能使用的插件。</p>
+        <p>查看已启用插件提供的全部功能，并按能力选择实际使用的插件。</p>
       </div>
       <span class="routing-count">{{ enabledPlugins.length }} 个插件可用</span>
     </div>
 
-    <div v-if="!rows.length" class="routing-empty">启用至少一个音源插件后即可配置。</div>
+    <div v-if="!rows.length && !uiGroups.length" class="routing-empty">
+      启用插件后可查看其功能与界面服务。
+    </div>
     <div v-else class="routing-layout">
       <aside class="routing-nav">
         <button
@@ -23,21 +25,21 @@
           ><small>{{ group.rows.length }}</small>
         </button>
         <button
-          v-if="uiRows.length"
+          v-for="group in uiGroups"
+          :key="group.key"
           type="button"
-          :class="{ active: activeSource === '__ui' }"
-          :aria-pressed="activeSource === '__ui'"
-          @click="selectSource('__ui')"
+          :class="{ active: activeSource === group.key }"
+          :aria-pressed="activeSource === group.key"
+          @click="selectSource(group.key)"
         >
-          <span>首页界面</span><small>{{ uiRows.length }}</small>
+          <span>{{ group.name }}</span
+          ><small>{{ group.rows.length }}</small>
         </button>
       </aside>
       <section class="routing-group">
         <div class="routing-group-title">
-          <strong>{{ activeSource === '__ui' ? '首页界面' : selectedGroup?.name }}</strong>
-          <span
-            >{{ activeSource === '__ui' ? uiRows.length : selectedGroup?.rows.length }} 项功能</span
-          >
+          <strong>{{ selectedUIGroup?.name || selectedGroup?.name }}</strong>
+          <span>{{ selectedUIGroup?.rows.length ?? selectedGroup?.rows.length }} 项功能</span>
         </div>
         <div
           ref="rowsViewport"
@@ -46,32 +48,42 @@
           aria-label="功能分配列表"
           @scroll="rememberRowsScroll"
         >
-          <template v-if="activeSource !== '__ui'">
+          <template v-if="!selectedUIGroup">
             <div v-for="row in selectedGroup?.rows || []" :key="row.key" class="routing-row">
               <div class="routing-copy">
                 <span>{{ row.label }}</span
                 ><small>{{ row.description }}</small>
               </div>
               <t-select
+                v-if="row.selectable"
                 :value="selection(row.key)"
                 :options="options(row)"
                 class="routing-select"
                 @change="(value) => changeCapability(row, String(value || ''))"
               />
+              <div v-else class="routing-provider">
+                <span>{{ row.implementations.map((item) => item.manifest.name).join('、') }}</span>
+                <small>已注册 · 当前未接入统一分配</small>
+              </div>
             </div>
           </template>
           <template v-else>
-            <div v-for="row in uiRows" :key="row.key" class="routing-row">
+            <div v-for="row in selectedUIGroup.rows" :key="row.key" class="routing-row">
               <div class="routing-copy">
                 <span>{{ row.label }}</span
-                ><small>多个插件提供同一区块时选择实际展示的实现</small>
+                ><small>{{ row.description }}</small>
               </div>
               <t-select
+                v-if="row.selectable && row.implementations.length > 1"
                 :value="uiSelection(row)"
                 :options="uiOptions(row)"
                 class="routing-select"
                 @change="(value) => changeUI(row, String(value || ''))"
               />
+              <div v-else class="routing-provider">
+                <span>{{ row.implementations[0].manifest.name }}</span>
+                <small>{{ row.status }}</small>
+              </div>
             </div>
           </template>
         </div>
@@ -90,9 +102,12 @@ import {
 } from '@renderer/services/pluginState'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { describePluginCapability } from '@renderer/utils/pluginCapabilityLabels'
+import { isRoutablePluginCapability } from '@common/pluginCapabilities'
+import { getPluginContributionGroups } from '@renderer/utils/pluginContributionCatalog'
 
 const store = LocalUserDetailStore()
 const enabledPlugins = activePluginContributions
+const uiGroups = computed(() => getPluginContributionGroups(enabledPlugins.value))
 
 interface Row {
   key: string
@@ -100,26 +115,34 @@ interface Row {
   capability: string
   label: string
   description: string
+  selectable: boolean
   implementations: any[]
 }
 
 const rows = computed<Row[]>(() => {
   const byKey = new Map<string, Row>()
   for (const plugin of enabledPlugins.value) {
-    for (const provider of plugin.manifest.contributes?.providers ?? []) {
+    const providers = new Set<string>([
+      ...(plugin.manifest.contributes?.providers ?? []).map((provider: any) => provider.id),
+      ...Object.keys(plugin.providerMethods ?? {})
+    ])
+    for (const source of providers) {
       const capabilities = [
-        ...(plugin.providerMethods?.[provider.id] ?? []),
-        ...(plugin.actionIds ?? []).map((action: string) => `action:${action}`)
+        ...(plugin.providerMethods?.[source] ?? []),
+        ...(plugin.actionIds ?? [])
+          .map((action: string) => `action:${action}`)
+          .filter(isRoutablePluginCapability)
       ]
       for (const capability of capabilities) {
-        const key = `${provider.id}:${capability}`
+        const key = `${source}:${capability}`
         const { label, description } = describePluginCapability(capability, plugin.manifest)
         const row: Row = byKey.get(key) ?? {
           key,
-          source: provider.id,
+          source,
           capability,
           label,
           description,
+          selectable: isRoutablePluginCapability(capability),
           implementations: []
         }
         row.implementations.push(plugin)
@@ -172,24 +195,39 @@ async function selectSource(source: string) {
   rowsActive = true
 }
 watch(
-  groupedRows,
-  (groups) => {
+  [groupedRows, uiGroups],
+  ([groups, interfaces]) => {
     if (
-      activeSource.value !== '__ui' &&
-      !groups.some((group) => group.source === activeSource.value)
+      !groups.some((group) => group.source === activeSource.value) &&
+      !interfaces.some((group) => group.key === activeSource.value)
     )
-      activeSource.value = groups[0]?.source || ''
+      activeSource.value = groups[0]?.source || interfaces[0]?.key || ''
   },
   { immediate: true }
 )
 const selectedGroup = computed(() =>
   groupedRows.value.find((group) => group.source === activeSource.value)
 )
+const selectedUIGroup = computed(() =>
+  uiGroups.value.find((group) => group.key === activeSource.value)
+)
 
-const options = (row: Row) => [
-  { label: `自动（${row.implementations[0]?.manifest.name}）`, value: '' },
-  ...row.implementations.map((item) => ({ label: item.manifest.name, value: item.pluginId }))
-]
+const options = (row: Row) => {
+  const sourceOwnerId = store.userInfo.sourcePluginMap?.[row.source]
+  const sourceOwner = enabledPlugins.value.find(
+    (item) =>
+      item.pluginId === sourceOwnerId &&
+      item.manifest.contributes?.providers?.some((provider: any) => provider.id === row.source)
+  )
+  const automatic = sourceOwner
+    ? (row.implementations.find((item) => item.pluginId === sourceOwner.pluginId) ??
+      row.implementations[0])
+    : row.implementations[0]
+  return [
+    { label: `自动（${automatic?.manifest.name || '当前音源未提供'}）`, value: '' },
+    ...row.implementations.map((item) => ({ label: item.manifest.name, value: item.pluginId }))
+  ]
+}
 const selection = (key: string) => store.userInfo.capabilityPluginMap?.[key] || ''
 async function changeCapability(row: Row, pluginId: string) {
   try {
@@ -199,25 +237,6 @@ async function changeCapability(row: Row, pluginId: string) {
   }
 }
 
-const uiRows = computed(() => {
-  const groups = new Map<string, any[]>()
-  for (const plugin of enabledPlugins.value) {
-    for (const section of plugin.manifest.contributes?.homeSections ?? []) {
-      if (section.kind === 'custom') continue
-      const list = groups.get(section.kind) ?? []
-      list.push({ ...plugin, section })
-      groups.set(section.kind, list)
-    }
-  }
-  return [...groups]
-    .filter(([, items]) => items.length > 1)
-    .map(([kind, implementations]) => ({
-      key: `home:${kind}`,
-      kind,
-      label: kind === 'playlists' ? '首页歌单' : kind === 'charts' ? '首页排行榜' : kind,
-      implementations
-    }))
-})
 const uiOptions = (row: any) => [
   { label: `自动（${row.implementations[0].manifest.name}）`, value: '' },
   ...row.implementations.map((item: any) => ({ label: item.manifest.name, value: item.pluginId }))
@@ -361,6 +380,15 @@ function changeUI(row: any, pluginId: string) {
 }
 .routing-select {
   width: 100%;
+}
+.routing-provider {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 10px;
+  small {
+    color: var(--td-text-color-placeholder);
+  }
 }
 @media (max-width: 720px) {
   .routing-panel {

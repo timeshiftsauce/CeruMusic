@@ -774,16 +774,8 @@ async function selectPlugin(plugin: Plugin) {
     if (activation?.error) throw new Error(activation.error)
     plugin.enabled = true
     plugin.disabled = false
-    if (!localUserStore.initialization) localUserStore.init()
-    localUserStore.userInfo.pluginId = plugin.pluginId
-    localUserStore.userInfo.pluginName = plugin.pluginInfo.name
-    // Using a plugin selects its implementation of each existing source, not a new source.
-    const sources = (plugin.manifest?.contributes?.providers ?? []).map(provider => provider.id)
-    await Promise.all(sources.map(source => window.api.plugins.setProviderOwner(source, plugin.pluginId)))
-    localUserStore.userInfo.sourcePluginMap = {
-      ...(localUserStore.userInfo.sourcePluginMap ?? {}),
-      ...Object.fromEntries(sources.map(source => [source, plugin.pluginId]))
-    }
+    // Enabling adds available implementations. Only explicit routing settings change owners.
+    // The contribution refresh fills new platforms and preserves existing selections.
     syncAfterPluginChange()
     MessagePlugin.success(`已使用 ${plugin.pluginInfo.name}`)
     if (activation?.viewError) MessagePlugin.warning(`插件已启用，配置页打开失败：${activation.viewError}`)

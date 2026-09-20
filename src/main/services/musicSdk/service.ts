@@ -74,16 +74,25 @@ function main(source: string = 'wy') {
     if (!provider) throw new Error(`未安装提供「${source}」的音源插件，请先安装插件`)
     return provider
   }
-  const optionalAction = async (action: string, songInfo: any, input: any, fallback: any) => {
+  const songActionTarget = (action: string, songInfo: any) => {
     const resource = songInfo?.pluginResource
     if (resource) assertResourceRef(resource)
+    const currentSource = resource?.providerId || songInfo?.source || source
     const provider = pluginService.getV2Action(
-      resource?.providerId || source,
+      currentSource,
       action,
-      resource?.pluginId
+      resource?.scope === 'provider' ? undefined : resource?.pluginId
     )
+    const song = resource && provider
+      ? { ...songInfo, source: currentSource,
+          pluginResource: retargetTrackRef(resource, provider.host.getPluginInfo().id) }
+      : songInfo
+    return { provider, song, currentSource }
+  }
+  const optionalAction = async (action: string, songInfo: any, input: any, fallback: any) => {
+    const { provider, song, currentSource } = songActionTarget(action, songInfo)
     if (!provider) return fallback
-    return provider.host.invokeV2Action(action, { ...input, source: resource?.providerId || source })
+    return provider.host.invokeV2Action(action, { ...input, song, source: currentSource })
   }
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {
@@ -168,11 +177,8 @@ function main(source: string = 'wy') {
 
     async getPic({ songInfo }: GetMusicPicArg) {
       try {
-        const resource = songInfo.pluginResource
-        if (resource) assertResourceRef(resource)
-        const currentSource = resource?.providerId || songInfo.source || source
-        const provider = pluginService.getV2Action(currentSource, 'artwork.get', resource?.pluginId)
-        return songInfo.img || (await provider?.host.getPic(currentSource, songInfo))
+        const { provider, song, currentSource } = songActionTarget('artwork.get', songInfo)
+        return songInfo.img || (await provider?.host.getPic(currentSource, song))
       } catch (e: any) {
         return {
           error: '获取歌曲失败 ' + (e.message || e.error || String(e))
@@ -453,14 +459,11 @@ function main(source: string = 'wy') {
     },
     // 获取专辑列表
     async getAlbumList({ songInfo, page = 1, limit = 10 }: GetAlbumDetailArg) {
-      const resource = songInfo.pluginResource
-      if (resource) assertResourceRef(resource)
-      const currentSource = resource?.providerId || songInfo.source || source
-      const provider = pluginService.getV2Action(currentSource, 'album.list', resource?.pluginId)
+      const { provider, song, currentSource } = songActionTarget('album.list', songInfo)
       if (!provider) throw new Error('未安装专辑列表能力')
       return await provider.host.invokeV2Action('album.list', {
         source: currentSource,
-        song: songInfo,
+        song,
         page,
         limit
       })

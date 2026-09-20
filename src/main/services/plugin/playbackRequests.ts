@@ -43,7 +43,10 @@ export function registerPlaybackRequest(
   cleanup(now)
   requests.set(keyFor(url), {
     headers: Object.freeze({ ...headers }),
-    expiresAt: Math.max(now + 1000, Math.min(Number(expiresAt) || now + maximumLifetimeMs, now + maximumLifetimeMs))
+    expiresAt: Math.max(
+      now + 1000,
+      Math.min(Number(expiresAt) || now + maximumLifetimeMs, now + maximumLifetimeMs)
+    )
   })
 }
 
@@ -55,8 +58,16 @@ export function playbackRequestHeaders(url: string): Record<string, string> {
 
 export function applyPlaybackRequestHeaders(
   url: string,
-  current: Record<string, string>
+  current: Record<string, string>,
+  resourceType?: string
 ): Record<string, string> {
+  // External artwork must not inherit the application's page URL as its referrer.
+  // This covers img, CSS backgrounds and Image() without platform-specific rules.
+  // Explicit headers registered for this exact URL still take precedence below.
+  if (resourceType === 'image') {
+    for (const name of Object.keys(current))
+      if (name.toLowerCase() === 'referer') delete current[name]
+  }
   const configured = playbackRequestHeaders(url)
   for (const [name, value] of Object.entries(configured)) {
     for (const existing of Object.keys(current))

@@ -23,6 +23,7 @@ import {
 import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
 import { GuestStore } from '@shiqianjiang/ceru-plugin-core/guests'
 import { deletePluginStorage } from './storage'
+import { isRoutablePluginCapability } from '@common/pluginCapabilities'
 
 // 导出类型以解决TypeScript错误
 
@@ -401,6 +402,8 @@ const pluginService = {
       capabilityOwners.delete(key)
       return
     }
+    if (!isRoutablePluginCapability(capability))
+      throw new Error('插件内部操作不能分配给其他插件')
     const host = this.getPluginById(pluginId)
     const supported = capability.startsWith('action:')
       ? host?.supportsV2Provider(source) && host.supportsAction(capability.slice(7))
@@ -432,10 +435,8 @@ const pluginService = {
     }
     const sourceOwnerId = providerOwners.get(source)
     const sourceOwner = sourceOwnerId ? this.getPluginById(sourceOwnerId) : null
-    if (sourceOwnerId && sourceOwner?.supportsV2Provider(source))
-      return sourceOwner.supportsV2Provider(source, method)
-        ? { pluginId: sourceOwnerId, host: sourceOwner }
-        : null
+    if (sourceOwnerId && sourceOwner?.supportsV2Provider(source, method))
+      return { pluginId: sourceOwnerId, host: sourceOwner }
     for (const [pluginId, host] of runtimeEntries()) {
       if (host.supportsV2Provider(source, method)) return { pluginId, host }
     }
@@ -453,14 +454,15 @@ const pluginService = {
       const owner = owners.length === 1 ? owners[0] : undefined
       return owner && supports(owner[1]) ? { pluginId: owner[0], host: owner[1] } : null
     }
+    if (!isRoutablePluginCapability(`action:${action}`)) return null
     const selected = configuredId
       ? candidates.find(([pluginId, host]) => pluginId === configuredId && supports(host))
       : undefined
     if (selected) return { pluginId: selected[0], host: selected[1] }
     const sourceOwnerId = providerOwners.get(source)
     const sourceOwner = sourceOwnerId ? this.getPluginById(sourceOwnerId) : null
-    if (sourceOwnerId && sourceOwner?.supportsV2Provider(source))
-      return supports(sourceOwner) ? { pluginId: sourceOwnerId, host: sourceOwner } : null
+    if (sourceOwnerId && sourceOwner && supports(sourceOwner))
+      return { pluginId: sourceOwnerId, host: sourceOwner }
     const fallback = candidates.find(([, host]) => supports(host))
     return fallback ? { pluginId: fallback[0], host: fallback[1] } : null
   },
@@ -676,6 +678,7 @@ const pluginService = {
           providerMethods: host?.getProviderMethods() ?? {},
           providerIconUrls: host?.getProviderIconUrls() ?? {},
           actionIds: host?.getActionIds() ?? [],
+          registrations: host?.getRegistrationInfo(),
           pluginType: host?.getPluginType() ?? 'music-source',
           enabled: installed.state.enabled && Boolean(host) && !host?.isDisabled(),
           requestedEnabled: installed.state.enabled,
