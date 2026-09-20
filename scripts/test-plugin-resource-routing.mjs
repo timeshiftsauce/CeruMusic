@@ -8,14 +8,20 @@ const state = { calls: [], cacheKeys: [], cached: null }
 globalThis.__resourceRoutingTest = state
 
 async function bundle(entry, stubs, extra = '') {
-  const source = await readFile(new URL('../' + entry, import.meta.url), 'utf8')
+  const file = await readFile(new URL('../' + entry, import.meta.url), 'utf8')
+  const source = entry.endsWith('.vue')
+    ? file.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
+    : file
   const result = await build({
     stdin: { contents: source + extra, sourcefile: entry, loader: 'ts', resolveDir: root },
     bundle: true,
     platform: 'node',
     format: 'esm',
     write: false,
-    alias: { '@common': fileURLToPath(new URL('../src/common', import.meta.url)) },
+    alias: {
+      '@common': fileURLToPath(new URL('../src/common', import.meta.url)),
+      '@renderer': fileURLToPath(new URL('../src/renderer/src', import.meta.url))
+    },
     plugins: [
       {
         name: 'isolated-host-dependencies',
@@ -24,7 +30,8 @@ async function bundle(entry, stubs, extra = '') {
             Object.hasOwn(stubs, path) ? { path, namespace: 'fixture' } : undefined
           )
           builder.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({
-            contents: 'const s=globalThis.__resourceRoutingTest;' + stubs[path]
+            contents: 'const s=globalThis.__resourceRoutingTest;' + stubs[path],
+            resolveDir: root
           }))
         }
       }
@@ -36,6 +43,50 @@ async function bundle(entry, stubs, extra = '') {
 }
 
 try {
+  const { migratePluginCapabilitySelections } = await bundle('src/common/pluginCapabilities.ts', {})
+  assert.deepEqual(migratePluginCapabilitySelections({
+    'shared:action:music.resolve': 'runtime-default',
+    'shared:action:play': 'runtime-owner',
+    'shared:action:render.library': 'runtime-owner',
+    'shared:action:comments.get': 'runtime-default'
+  }), {
+    'shared:tracks.resolve': 'runtime-default',
+    'shared:action:comments.get': 'runtime-default'
+  }, 'old resolver choice becomes effective; internal actions do not become routing settings')
+  assert.deepEqual(migratePluginCapabilitySelections({
+    'shared:action:music.resolve': 'runtime-default',
+    'shared:tracks.resolve': 'runtime-owner'
+  }), { 'shared:tracks.resolve': 'runtime-owner' }, 'explicit provider choice wins over an alias')
+
+  state.uiStore = { userInfo: { sourcePluginMap: { shared: 'runtime-owner' } } }
+  state.uiContributions = { value: ['default', 'owner'].map(name => ({
+    pluginId: 'runtime-' + name,
+    manifest: { name, contributes: { providers: [{ id: 'shared', name: 'Shared' }] } },
+    providerMethods: { shared: ['tracks.resolve', 'tracks.search', 'tracks.future'] },
+    actionIds: name === 'default' ? ['music.resolve', 'search.tips'] : ['play', 'render.library']
+  })) }
+  const panel = await bundle('src/renderer/src/components/Settings/PluginRoutingPanel.vue', {
+    vue: "export { computed, ref, watch, nextTick } from 'vue/dist/vue.runtime.esm-bundler.js'; export const onActivated=()=>{}; export const onDeactivated=()=>{}",
+    '@renderer/store/LocalUserDetail': 'export const LocalUserDetailStore=()=>s.uiStore',
+    '@renderer/services/pluginState': 'export const activePluginContributions=s.uiContributions; export const selectCapabilityImplementation=()=>{}; export const selectUIImplementation=()=>{}',
+    'tdesign-vue-next': 'export const MessagePlugin={}'
+  }, '\nexport { rows, options };')
+  assert.deepEqual(panel.rows.value.map(row => row.capability),
+    ['tracks.resolve', 'tracks.search', 'tracks.future', 'action:search.tips'],
+    'settings show public capabilities once and omit private adapter/UI commands')
+  const playbackRow = panel.rows.value.find(row => row.capability === 'tracks.resolve')
+  assert.equal(playbackRow.label, '播放解析')
+  assert.equal(panel.rows.value.find(row => row.capability === 'tracks.future').selectable, false,
+    'a newly registered method remains visible without being falsely presented as routable')
+  assert.deepEqual(panel.options(playbackRow), [
+    { label: '自动（owner）', value: '' },
+    { label: 'default', value: 'runtime-default' },
+    { label: 'owner', value: 'runtime-owner' }
+  ], 'both resolvers appear; automatic selection reflects the selected platform provider')
+  const tipsRow = panel.rows.value.find(row => row.capability === 'action:search.tips')
+  assert.equal(panel.options(tipsRow)[0].label, '自动（default）',
+    'the source preference lacking a capability does not hide a working implementation')
+
   const registry = await bundle(
     'src/main/services/plugin/index.ts',
     {
@@ -144,6 +195,22 @@ try {
     fixture.loadedPlugins[id] = value
     fixture.installedPlugins.set(id, { pluginId: id, state: { order } })
   }
+  for (const pluginId of ['runtime-default', 'runtime-owner']) {
+    service.setCapabilityOwner('shared', 'tracks.resolve', pluginId)
+    assert.equal(service.getV2Provider('shared', undefined, 'tracks.resolve').pluginId, pluginId,
+      'both plugins can be selected through the same playback capability')
+  }
+  for (const action of ['play', 'render.library', 'music.resolve']) {
+    ownerHost.actions.add(action)
+    assert.throws(() => service.setCapabilityOwner('shared', 'action:' + action, 'runtime-owner'),
+      /内部操作/, 'an internal command is not a selectable shared capability')
+    fixture.capabilityOwners.set('shared:action:' + action, 'runtime-owner')
+    assert.equal(service.getV2Action('shared', action), null,
+      'stale internal command settings cannot redirect another plugin')
+    assert.equal(service.getV2Action('shared', action, 'owner.plugin').host, ownerHost,
+      'the original plugin can still run its own commands')
+    service.setCapabilityOwner('shared', 'action:' + action, null)
+  }
   fixture.capabilityOwners.set('shared:tracks.resolve', 'runtime-default')
   fixture.capabilityOwners.set('shared:action:comments.get', 'runtime-default')
   assert.equal(service.getV2Provider('shared', 'owner.plugin', 'tracks.resolve').host, ownerHost)
@@ -165,8 +232,13 @@ try {
   assert.equal(service.getV2Action('shared', 'comments.get').host, ownerHost)
   ownerHost.methods.delete('tracks.resolve')
   ownerHost.actions.delete('comments.get')
-  assert.equal(service.getV2Provider('shared', undefined, 'tracks.resolve'), null)
-  assert.equal(service.getV2Action('shared', 'comments.get'), null)
+  assert.equal(service.getV2Provider('shared', undefined, 'tracks.resolve').host, defaultHost,
+    'a partial source provider is supplemented by another enabled resolver')
+  assert.equal(service.getV2Action('shared', 'comments.get').host, defaultHost,
+    'a partial source provider is supplemented by another enabled public action')
+  assert.equal(service.getV2Provider('shared', 'owner.plugin', 'tracks.resolve'), null,
+    'private owner-bound resources still never cross to the fallback plugin')
+  assert.equal(service.getV2Action('shared', 'comments.get', 'owner.plugin'), null)
   ownerHost.methods.add('tracks.resolve')
   ownerHost.actions.add('comments.get')
   fixture.capabilityOwners.set('shared:tracks.resolve', 'runtime-default')
@@ -283,6 +355,14 @@ try {
   const publicRef = { pluginId: 'owner.plugin', providerId: 'shared', kind: 'track',
     id: 'track-1', scope: 'provider', data: { privateToken: 'do-not-forward' } }
   const publicSong = { ...song, pluginResource: publicRef }
+  ownerHost.actions.delete('comments.get')
+  await api.getComment({ songInfo: publicSong })
+  assert.equal(state.calls.at(-1).manifestId, 'default.plugin',
+    'public account tracks use another implementation for missing comment capabilities')
+  assert.equal(state.calls.at(-1).input.song.pluginResource.pluginId, 'default.plugin')
+  assert.equal(state.calls.at(-1).input.song.pluginResource.data, undefined,
+    'public action routing strips the original plugin private data')
+  ownerHost.actions.add('comments.get')
   fixture.capabilityOwners.set('shared:tracks.resolve', 'runtime-default')
   assert.equal(await api.getMusicUrl({ songInfo: publicSong, quality: 'flac' }),
     'https://media.example/default.plugin')

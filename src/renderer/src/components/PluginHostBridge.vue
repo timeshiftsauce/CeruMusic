@@ -155,7 +155,8 @@ async function handle(request: any, signal?: AbortSignal): Promise<any> {
   }
   if (method === 'ui.drawer.close') {
     if (
-      drawer.value && drawer.value.pluginId === pluginId &&
+      drawer.value &&
+      drawer.value.pluginId === pluginId &&
       (!payload.sessionId || drawer.value.sessionId === payload.sessionId)
     )
       closeDrawer()
@@ -354,11 +355,20 @@ onMounted(() => {
     const controller = new AbortController()
     uiRequests.set(request.id, controller)
     void handle(request, controller.signal)
-      .then(
-        (value) => window.api.plugins.respondUI({ id: request.id, value: value ?? null }),
-        (error) => window.api.plugins.respondUI({ id: request.id, error: error.message })
+      .then((value) =>
+        window.api.plugins.respondUI({
+          id: request.id,
+          // Host service results are JSON. Nested Pinia/Vue proxies cannot cross Electron IPC.
+          value: JSON.parse(JSON.stringify(value ?? null))
+        })
       )
-      .catch(() => {})
+      .catch((error) =>
+        window.api.plugins.respondUI({
+          id: request.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      )
+      .catch((error) => console.warn('返回插件界面操作结果失败:', error))
       .finally(() => uiRequests.delete(request.id))
   })
   cancelUI = window.api.plugins.onUICancel(({ id }) => uiRequests.get(id)?.abort())

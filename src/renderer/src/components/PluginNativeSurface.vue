@@ -12,7 +12,9 @@ const props = defineProps<{ session: PluginNativeSession; embedded?: boolean }>(
 // Views are replaced as immutable snapshots. Keep resource/action data cloneable for Electron IPC.
 const view = shallowRef<NativeView>()
 const loading = ref(false)
-const busy = ref(false)
+// Suppress duplicate actions without blocking unrelated navigation or refresh operations.
+const pendingActions = ref(new Set<string>())
+const isBusy = (action: string | undefined) => !!action && pendingActions.value.has(action)
 const error = ref('')
 let disposed = false,
   generation = 0
@@ -40,8 +42,8 @@ async function render() {
   }
 }
 async function run(action: string | undefined, input: any = {}) {
-  if (!action || busy.value) return
-  busy.value = true
+  if (!action || disposed || isBusy(action)) return
+  pendingActions.value.add(action)
   error.value = ''
   try {
     await invoke(action, input)
@@ -49,7 +51,7 @@ async function run(action: string | undefined, input: any = {}) {
   } catch (reason: any) {
     if (!disposed) error.value = reason.message || '操作失败'
   } finally {
-    busy.value = false
+    pendingActions.value.delete(action)
   }
 }
 const cards = (section: NativeViewSection) =>
@@ -101,7 +103,7 @@ onBeforeUnmount(() => {
           :key="action.action + action.label"
           :theme="action.primary ? 'primary' : 'default'"
           :variant="action.primary ? 'base' : 'outline'"
-          :disabled="busy"
+          :disabled="isBusy(action.action)"
           @click="run(action.action, action.input)"
           >{{ action.label }}</t-button
         >
@@ -118,7 +120,7 @@ onBeforeUnmount(() => {
       <PlaylistGrid
         v-if="section.layout === 'grid'"
         :items="cards(section)"
-        :disabled="busy"
+        :disabled="isBusy(section.onOpen)"
         @open="(index) => run(section.onOpen, { ref: section.items[index].ref })"
       >
         <template v-if="section.itemActions?.length" #actions="{ index }">
@@ -126,7 +128,6 @@ onBeforeUnmount(() => {
             <t-button
               shape="circle"
               variant="outline"
-              :disabled="busy"
               :aria-label="section.items[index].title + '的更多操作'"
               ><template #icon><MoreIcon /></template
             ></t-button>
@@ -134,6 +135,7 @@ onBeforeUnmount(() => {
               ><t-dropdown-item
                 v-for="action in section.itemActions"
                 :key="action.action + action.label"
+                :disabled="isBusy(action.action)"
                 @click="
                   run(action.action, {
                     ...(typeof action.input === 'object' && !Array.isArray(action.input)
@@ -153,7 +155,7 @@ onBeforeUnmount(() => {
           v-for="(item, index) in section.items"
           :key="JSON.stringify(item.ref)"
           class="native-track"
-          :disabled="busy"
+          :disabled="isBusy(section.onPlay || section.onOpen)"
           @click="
             run(section.onPlay || section.onOpen, {
               ref: item.ref,

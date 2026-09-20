@@ -857,12 +857,17 @@ app.whenReady().then(async () => {
   })
 
   // Plugins may declare headers for an exact, short-lived media URL. The values
-  // stay in the main process and are never exposed to the renderer.
+  // stay in the main process and are never exposed to the renderer. Images use
+  // no referrer by default so CDNs do not reject the application's page origin.
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
     (details, callback) => {
       callback({
-        requestHeaders: applyPlaybackRequestHeaders(details.url, details.requestHeaders)
+        requestHeaders: applyPlaybackRequestHeaders(
+          details.url,
+          details.requestHeaders,
+          details.resourceType
+        )
       })
     }
   )

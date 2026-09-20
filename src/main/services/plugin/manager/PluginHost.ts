@@ -383,6 +383,15 @@ export default class PluginHost {
   getActionIds() {
     return [...this.actionIds]
   }
+  getRegistrationInfo() {
+    const snapshot = this.core?.snapshot()
+    // Expose registration identities only. Never forward the private config/manifest snapshot.
+    // Future registry collections remain discoverable without adding another UI whitelist.
+    return Object.fromEntries(Object.entries(snapshot ?? {}).filter(([key, value]) =>
+      key !== 'manifest' && key !== 'config' &&
+      Array.isArray(value) && value.every(item => typeof item === 'string')
+    )) as Record<string, string[]>
+  }
   private operation() {
     return {
       id: randomUUID(),

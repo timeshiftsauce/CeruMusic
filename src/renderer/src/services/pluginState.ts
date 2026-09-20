@@ -1,5 +1,9 @@
 import { computed, ref } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import {
+  isRoutablePluginCapability,
+  migratePluginCapabilitySelections
+} from '@common/pluginCapabilities'
 
 export const pluginContributions = ref<any[]>([])
 export const pluginImportRequest = ref<{
@@ -121,7 +125,7 @@ export async function refreshPluginContributions(force = false): Promise<void> {
       }
       for (const source of Object.keys(sourcePluginMap))
         if (restorationReady && !sourceIds.includes(source)) delete sourcePluginMap[source]
-      const capabilityPluginMap = { ...(store.userInfo.capabilityPluginMap ?? {}) }
+      const capabilityPluginMap = migratePluginCapabilitySelections(store.userInfo.capabilityPluginMap)
       const activeCapabilityOwners: Record<string, string> = {}
       for (const key of Object.keys(capabilityPluginMap)) {
         const [source, ...parts] = key.split(':')
@@ -139,7 +143,9 @@ export async function refreshPluginContributions(force = false): Promise<void> {
         const base = implementations.find(
           (item) => item.provider.id === source && item.pluginId === activeSourceOwners[source]
         )!.provider
-        const playbackId = activeCapabilityOwners[`${source}:tracks.resolve`] ?? activeSourceOwners[source]
+        const resolvers = enabled.filter(item => item.providerMethods?.[source]?.includes('tracks.resolve'))
+        const playbackId = activeCapabilityOwners[`${source}:tracks.resolve`] ??
+          (resolvers.find(item => item.pluginId === activeSourceOwners[source]) ?? resolvers[0])?.pluginId
         const playback = implementations.find(
           (item) => item.provider.id === source && item.pluginId === playbackId
         )?.provider
@@ -149,6 +155,14 @@ export async function refreshPluginContributions(force = false): Promise<void> {
         Object.entries(activeSourceOwners).map(([source, pluginId]) =>
           window.api.plugins.setProviderOwner(source, pluginId)
         )
+      )
+      await Promise.all(
+        Object.keys(store.userInfo.capabilityPluginMap ?? {})
+          .filter((key) => !activeCapabilityOwners[key])
+          .map((key) => {
+            const [source, ...parts] = key.split(':')
+            return window.api.plugins.setCapabilityOwner(source, parts.join(':'), null)
+          })
       )
       await Promise.all(
         Object.entries(activeCapabilityOwners).map(([key, pluginId]) => {
@@ -307,6 +321,8 @@ export async function selectCapabilityImplementation(
   capability: string,
   pluginId: string | null
 ) {
+  if (pluginId && !isRoutablePluginCapability(capability))
+    throw new Error('插件内部操作不能分配给其他插件')
   return applyRoutingChange('capability:' + source + ':' + capability, async () => {
     const store = LocalUserDetailStore()
     const key = `${source}:${capability}`
