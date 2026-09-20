@@ -1,6 +1,7 @@
 import type { ContentEntity, ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { toAppTrack, toPluginTrack } from '@common/pluginMusic'
 import songListAPI from '@renderer/api/songList'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore, type SettingsState } from '@renderer/store/Settings'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
@@ -158,7 +159,6 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
         refs.map(async (ref) => !!unwrap(await songListAPI.hasSong(favoritesId, ref.id)))
       )
     if (method.endsWith('.add')) {
-      const { LocalUserDetailStore } = await import('@renderer/store/LocalUserDetail')
       const queue = LocalUserDetailStore().list
       const songs = refs.map((ref) => {
         const song = queue.find((item) => sameRef(item, ref))
@@ -180,7 +180,6 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
     const name = method.slice('services.downloads.'.length)
     if (name === 'create') {
       const request = args[0] ?? {}
-      const { LocalUserDetailStore } = await import('@renderer/store/LocalUserDetail')
       const queue = LocalUserDetailStore().list
       const local = await window.api.localMusic.getList()
       const history = historyItems().map(toAppTrack)
@@ -311,7 +310,6 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
     }
     if (method.endsWith('.requestTrack')) {
       const ref = args[0] as ResourceRef
-      const { LocalUserDetailStore } = await import('@renderer/store/LocalUserDetail')
       const song = LocalUserDetailStore().list.find((item) => sameRef(item, ref))
       if (!song) throw new Error('点播歌曲不在当前队列中')
       room.requestSong({

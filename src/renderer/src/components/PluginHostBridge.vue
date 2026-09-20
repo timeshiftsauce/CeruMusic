@@ -535,7 +535,7 @@ onMounted(() => {
   changed = window.api.plugins.onChanged((change) => {
     if (
       change?.pluginId === drawer.value?.pluginId &&
-      (change.type === 'uninstalled' || change.enabled === false)
+      (change?.type === 'uninstalled' || change?.enabled === false)
     )
       closeDrawer()
     if (router.currentRoute.value.path !== '/' && router.currentRoute.value.name !== 'welcome')
