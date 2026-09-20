@@ -70,12 +70,26 @@ interface OperationContext {
 
 `ctx.log.debug/info/warn/error(message: string, data?: JsonValue): void` 写入插件日志。工作台可查看日志，桌面通过日志目录排查。日志使用结构化小对象，不记录密码、Cookie、token 或完整私人响应。
 
-## 宿主模块与第三方包
+## 直接 API 与兼容模块
 
 ```ts
-const http = ctx.modules.require('@ceru/http')
+const unregister = ctx.actions.register('ping', async (_input, operation) => {
+  const response = await ctx.http.request({
+    permissionKey: 'api',
+    url: 'https://example.com/ping',
+    operation
+  })
+  await ctx.ui.toast({ message: `状态码：${response.status}` })
+})
+ctx.effects.add(unregister)
 const names = ctx.utils.lodash.uniq(['Morning', 'Morning', 'Night'])
 ```
+
+这个例子假定 Manifest 中已经声明了 `key: "api"`、`name: "network.request"` 的权限。
+
+新代码优先使用 `ctx.http`、`ctx.ui`、`ctx.sockets`、`ctx.library`、`ctx.account` 和 `ctx.player` 等直接 API。它们有明确的类型和权限边界，也更容易在工作台和桌面之间排查。
+
+`ctx.modules.require()` 只用于兼容层或特殊内建模块。需要兼容模块时，必须确认该模块在当前 Host 可用，不能因为能加载模块就假设对应业务服务已经接通。
 
 | 模块                                               | 对应能力                     |
 | -------------------------------------------------- | ---------------------------- |
@@ -131,9 +145,8 @@ exports.manifest = {
 }
 
 exports.activate = function (ctx) {
-  const ui = require('@ceru/ui')
   ctx.actions.register('hello', async () => {
-    await ui.notify({ key: 'hello', level: 'info', message: '你好，澜音！' })
+    await ctx.ui.toast({ message: '你好，澜音！' })
   })
 }
 ```

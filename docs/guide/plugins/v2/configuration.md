@@ -40,7 +40,7 @@ export default definePlugin(async (ctx) => {
 
 `get<T = JsonObject>(): Promise<Readonly<T>>` 没有参数。泛型用于编译期提示，不会在运行时验证你手写的 T；外部数据仍应自行校验。
 
-`dev/build` 生成的 `@ceru/plugin-config` 声明不包含配置值。若模块尚不存在，先 build。JS 可使用 `import('@ceru/plugin-config').PluginConfig` 的 JSDoc 类型。
+`@ceru/plugin-config` 是 CLI 根据当前工程配置生成的类型声明，不是需要安装的普通 SDK 包。`dev/build` 会在 `.ceru-dev/types/plugin-config.d.ts` 生成它，声明中不包含配置值；若模块尚不存在，先运行一次 `build` 或 `dev`。JS 可使用 `import('@ceru/plugin-config').PluginConfig` 的 JSDoc 类型。
 
 ## 配置覆盖顺序
 

@@ -64,7 +64,7 @@ pageClass: plugin-v2-doc
 import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
 
 export default definePlugin((ctx) => {
-  ctx.actions.register('connect', async (_input, operation) => {
+  const unregister = ctx.actions.register('connect', async (_input, operation) => {
     const result = await ctx.permissions.requestGroup({
       group: 'network',
       keys: ['api'],
@@ -76,6 +76,7 @@ export default definePlugin((ctx) => {
     }
     // 连接内网前另申请 localNetwork 组。
   })
+  ctx.effects.add(unregister)
 })
 ```
 
@@ -92,10 +93,10 @@ _开发构建界面示意；仅展示演示插件声明。_
 | `network`                        | network.request、network.socket                      | HTTP、Socket                                                              |
 | `localNetwork`                   | network.private、network.discovery                   | 私网许可已接入；发现服务并不因此可用                                      |
 | `account`                        | account.profile                                      | 基本账号资料                                                              |
-| `libraryRead / libraryManage`    | library.read / library.write                         | 歌单读取与导入                                                            |
+| `libraryRead / libraryManage`    | library.read / library.write                         | 分别用于读取、导入或修改歌单                                              |
 | `guestPlugins`                   | guests.manage、guests.run                            | 安装与运行子插件                                                          |
 | `libraryDelete`                  | library.delete                                       | SDK 声明，桌面无通用删除接口                                              |
-| `playbackRead / playbackControl` | player.read / player.control、playback.fallback.hold | SDK 声明；通用播放器服务未接入                                            |
+| `playbackRead / playbackControl` | player.read / player.control、playback.fallback.hold | 播放器状态与控制服务已接入；仍需检查能力和资源归属                        |
 | 其他组                           | 文件、下载、剪贴板、设备、AI、后台任务等             | 查阅[逐方法支持表](./host-services)和[完整权限目录](./reference#资源目录) |
 
 桌面 `requestGroup` 当前按组名与 keys 筛选静态声明；不要假定 `scopes`、`intent` 已实现动态范围授予。升级版本可能进一步实现这些契约。
@@ -104,4 +105,4 @@ _开发构建界面示意；仅展示演示插件声明。_
 
 撤销网络权限会关闭连接并取消正在进行的请求。插件应停止对应操作、更新界面，允许用户主动重试。未声明权限会失败，不能靠 request 临时创造任意权限。
 
-`ctx.capabilities.get(service)` 用来查询宿主服务是否接入，不是权限检查。桌面当前仅粗粒度报告 account/library；没有出现在列表的 API 不可仅凭名称推断，详见[宿主服务](./host-services)。
+`ctx.capabilities.get(service)` 用来查询宿主是否接入某项服务及其 `methods`，不是权限检查。调用前同时确认三件事：权限 key 已声明且已获准、服务为 `available`、要调用的方法出现在 `methods` 中。能力报告可用不等于权限已授予，详见[宿主服务](./host-services)。

@@ -107,11 +107,19 @@ Web Surface 会自动报告自然内容高度，Host 的 modal 按内容调整�
 
 这里查询的是**澜音账号**的基本状态，不是网易云、哔哩哔哩等服务的登录状态。插件自己的账号登录、二维码和轮询应放在插件中实现，使用 [Vue/Web 页面](./surfaces)显示。
 
-在 Manifest 声明 account.profile 后，在命令回调中：
+在 Manifest 声明 `account.profile` 后，先为它取一个插件内稳定的 key，再在命令回调中传入同一个 key：
+
+```json
+{
+  "key": "accountAccess",
+  "name": "account.profile",
+  "reason": "读取澜音账号登录状态"
+}
+```
 
 ```ts
 const session = await ctx.account.getSession({
-  permissionKey: 'account',
+  permissionKey: 'accountAccess',
   operation
 })
 if (!session.loggedIn) {
@@ -119,7 +127,7 @@ if (!session.loggedIn) {
 }
 ```
 
-以上 permissionKey 应对应清单 key，不能用授权结果获取邮箱、电话、Cookie 或认证提供商 token。
+`permissionKey` 必须对应 Manifest 中声明的 `key`，不是权限名，也不是随意填写的服务名。不能用授权结果获取邮箱、电话、Cookie 或认证提供商 token。
 
 ### 请求插件更新
 
