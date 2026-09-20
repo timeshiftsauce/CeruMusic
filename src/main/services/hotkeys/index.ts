@@ -44,6 +44,7 @@ const getStoredHotkeyConfig = (): HotkeyConfig => {
 let currentMainWindow: BrowserWindow | null = null
 let ipcBound = false
 let lastStatus: HotkeyStatus = { failedActions: [], actionErrors: {} }
+const registeredAppHotkeys = new Set<string>()
 
 const actionCallbacks = (mainWindow: BrowserWindow) => {
   const sendCtrl = (name: string, val?: unknown) => {
@@ -111,7 +112,8 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
     return { success: false, errors: uniq.map((a) => `快捷键冲突：${a}`) }
   }
 
-  globalShortcut.unregisterAll()
+  for (const accelerator of registeredAppHotkeys) globalShortcut.unregister(accelerator)
+  registeredAppHotkeys.clear()
 
   if (!cfg.enabled) {
     configManager.set('hotkeys', cfg)
@@ -129,6 +131,8 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
       const msg = `注册失败：${actionLabel[action]}（${acc}）`
       errors.push(msg)
       actionErrors[action] = [...(actionErrors[action] || []), msg]
+    } else {
+      registeredAppHotkeys.add(acc)
     }
   }
 

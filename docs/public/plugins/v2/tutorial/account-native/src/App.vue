@@ -21,6 +21,13 @@ const cells = computed(() => {
   })
 })
 
+const statusText = computed(() => {
+  if (status.value === 'scanned') return '已确认，正在登录'
+  if (status.value === 'expired') return '二维码已过期'
+  if (status.value === 'error') return '登录失败'
+  return '等待确认'
+})
+
 const invoke = (action: string, input: JsonObject = {}) => props.context.invoke(action, input)
 
 function stopPolling() {
@@ -116,25 +123,23 @@ onBeforeUnmount(() => {
     <header>
       <span class="logo" aria-hidden="true">♪</span>
       <div>
-        <p class="eyebrow">账号 Surface</p>
         <h1>连接演示音乐账号</h1>
+        <p class="muted">本地演示账号</p>
       </div>
     </header>
 
-    <p class="notice">这是本地教学流程，不会连接任何真实音乐平台。按钮用来模拟手机扫码确认。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
 
     <section v-if="!account.signedIn">
       <div class="qr" aria-label="演示二维码图案">
         <i v-for="(dark, index) in cells" :key="index" :class="{ dark }" />
       </div>
-      <strong>{{ status === 'scanned' ? '手机已确认，正在登录…' : '等待演示扫码' }}</strong>
-      <p class="muted">关闭窗口会取消轮询；再次打开会生成新的登录会话。</p>
+      <strong>{{ statusText }}</strong>
       <div class="actions">
         <button class="primary" :disabled="busy || status === 'scanned'" @click="simulateScan">
-          模拟手机扫码并确认
+          确认登录
         </button>
-        <button :disabled="busy" @click="startLogin">重新取码</button>
+        <button :disabled="busy || status === 'scanned'" @click="startLogin">重新获取</button>
         <button @click="cancel">取消</button>
       </div>
     </section>
@@ -150,8 +155,6 @@ onBeforeUnmount(() => {
       <p class="muted">登录已完成，账号菜单和原生音乐页会同步刷新。</p>
       <button class="primary done" @click="cancel">完成</button>
     </section>
-
-    <footer>Cookie 仅保存在插件私有 Storage；公开 state 中没有凭据。</footer>
   </main>
 </template>
 
@@ -184,36 +187,23 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 22px;
-}
-.eyebrow {
-  color: #7569d8;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 20px;
+  letter-spacing: 0;
 }
 .logo {
   display: grid;
   place-items: center;
   width: 48px;
   height: 48px;
-  border-radius: 15px;
+  border-radius: 6px;
   color: white;
-  font-size: 27px;
-  background: linear-gradient(145deg, #7667e8, #bd6cbd);
+  font-size: 25px;
+  background: #366a58;
 }
-.notice,
-section,
-footer {
+section {
   border: 1px solid #e7e5ee;
-  border-radius: 14px;
+  border-radius: 6px;
   background: white;
-}
-.notice {
-  margin-bottom: 12px;
-  padding: 11px 14px;
-  color: #625d70;
 }
 section {
   padding: 16px;
@@ -226,7 +216,7 @@ section {
   margin: 0 auto 15px;
   padding: 13px;
   border: 1px solid #ddd9e8;
-  border-radius: 10px;
+  border-radius: 4px;
   background: white;
 }
 .qr i {
@@ -251,15 +241,15 @@ section {
 button {
   padding: 9px 14px;
   border: 1px solid #ddd9e8;
-  border-radius: 9px;
+  border-radius: 5px;
   background: white;
   color: inherit;
   cursor: pointer;
 }
 button.primary {
-  border-color: #7464dc;
+  border-color: #366a58;
   color: white;
-  background: #7464dc;
+  background: #366a58;
 }
 button:disabled {
   opacity: 0.55;
@@ -278,21 +268,12 @@ button:disabled {
 .done {
   margin-top: 18px;
 }
-footer {
-  margin-top: 12px;
-  padding: 10px 14px;
-  color: #777181;
-  font-size: 12px;
-  text-align: center;
-}
 @media (prefers-color-scheme: dark) {
   :global(body) {
     background: #17161b;
     color: #f3f0f5;
   }
-  .notice,
-  section,
-  footer {
+  section {
     border-color: #39353f;
     background: #211f26;
   }

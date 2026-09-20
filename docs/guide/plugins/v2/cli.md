@@ -5,25 +5,13 @@ title: 脚手架与 CLI
 
 # 脚手架与 CLI
 
-npm registry 上的稳定工具链目前是 **0.3.5**。要求 Node.js **22.12+**。在工程中使用 npm scripts 或 <code>npx ceru-plugin</code> 调用本地 CLI，不要求全局安装。
-
-## npm 包分别做什么
-
-| 包                                            | 当前版本 | 安装者与用途                        |
-| --------------------------------------------- | -------- | ----------------------------------- |
-| <code>create-ceru-plugin</code>               | 0.3.5    | 创建工程                            |
-| <code>@shiqianjiang/ceru-plugin-cli</code>    | 0.3.5    | 构建、工作台、校验与发行            |
-| <code>@shiqianjiang/ceru-plugin-sdk</code>    | 0.3.5    | 插件类型与辅助函数                  |
-| <code>@shiqianjiang/ceru-plugin-core</code>   | 0.3.5    | Host 集成运行时，普通插件不直接依赖 |
-| <code>@shiqianjiang/ceru-plugin-issuer</code> | 0.3.5    | 静态校验、签名和个性化发行          |
-
-五个包应保持同一版本线。0.3.5 的能力和升级方式见 [0.3.5 工具链更新](./sdk-upgrade)。
+要求 Node.js **22.12+**。在工程中使用 npm scripts 或 <code>npx ceru-plugin</code> 调用本地 CLI，无需全局安装。各依赖的用途见[开发环境与依赖](./sdk-upgrade)。
 
 ## 创建与列出模板
 
 ```shell
-npm create ceru-plugin@0.3.5
-npm create ceru-plugin@0.3.5 my-plugin -- --template vue --lang ts
+npm create ceru-plugin@latest
+npm create ceru-plugin@latest my-plugin -- --template vue --lang ts
 ```
 
 第一种交互选择目录、模板和语言；第二种一次指定。已有本地 CLI 时也可以：
@@ -86,5 +74,3 @@ VS Code 调试：
 npm ls @shiqianjiang/ceru-plugin-cli @shiqianjiang/ceru-plugin-sdk
 npm view create-ceru-plugin version dist.integrity
 ```
-
-0.3.3 的 CLI 帮助横幅可能显示 0.2.5；0.3.4 已修复这段显示，修复保留在 0.3.5。不要因为横幅文字降级或改用临时 tgz，以 registry 和 <code>npm ls</code> 为准。

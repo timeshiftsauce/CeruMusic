@@ -1,65 +1,112 @@
 ---
 pageClass: plugin-v2-doc
-title: Vue 登录与账号状态
-description: 实现账号摘要、扫码轮询、状态广播、自动关窗与退出。
+title: 3. Vue 登录与账号
+description: 用后台状态机保存会话，用 Vue 页面发起、轮询和取消登录。
 prev:
-  text: 工程与 Manifest
+  text: 最小账号入口
   link: /guide/plugins/v2/tutorial-account-native/manifest
 next:
   text: 原生歌单区块
   link: /guide/plugins/v2/tutorial-account-native/native-library
 ---
 
-# Vue 登录与账号状态
+# 3. Vue 登录与账号
 
-账号功能分成三层。这样 Vue 页面关闭后，登录资料仍由后台管理，宿主也不需要知道某个平台怎样登录。
+上一节只有一条未登录摘要。本节把它改成完整的本地登录流程：打开账号项会生成一次登录请求，页面轮询后台；确认后，后台保存会话并更新账号菜单；关闭页面会停止轮询。
 
-| 层          | 负责什么                                        | 不应该保存什么        |
-| ----------- | ----------------------------------------------- | --------------------- |
-| 插件后台    | 请求登录接口、解析 Cookie、判断会员、持久化会话 | DOM 与 Vue 响应式对象 |
-| Web Surface | 展示二维码、轮询状态、处理取消和关窗            | 长期 Cookie、刷新令牌 |
-| 澜音宿主    | 展示账号入口和通用弹窗，调用声明的动作          | 平台私有接口逻辑      |
+本节只改账号功能，不加入歌单和播放。
 
-## 1. 返回 AccountSummary
+## 1. 替换 Manifest
 
-账号菜单调用 <code>accountItems[].action</code>。这个动作返回：
+完整替换 `ceru.plugin.json`。新增的六个动作都同时出现在 `commands` 和后台代码中；退出动作完成后，`accountItems` 才声明 `logoutAction`。
 
-```ts
-type AccountSummary = {
-  signedIn: boolean
-  displayName: string
-  avatarUrl?: string
-  badge?: string
+<details>
+<summary>ceru.plugin.json 完整内容</summary>
+
+```json [ceru.plugin.json]
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.account-native",
+    "name": "账号与原生歌单教程",
+    "version": "0.1.0",
+    "description": "演示账号菜单、Vue 登录页和原生歌单",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "libraries": { "vue": "^3.5.0" }
+    },
+    "modules": {
+      "logic": {
+        "entry": "logic.main",
+        "activation": ["onCommand:account.open"]
+      },
+      "surfaces": [
+        {
+          "id": "account",
+          "kind": "web",
+          "entry": "view.account",
+          "title": "连接演示账号",
+          "presentation": { "kind": "modal", "size": 360 },
+          "lifecycle": { "closeAction": "account.cancel" }
+        }
+      ]
+    },
+    "contributes": {
+      "commands": [
+        { "id": "account.open", "title": "连接演示账号", "action": "account.open", "view": "account" },
+        { "id": "account.summary", "title": "读取账号摘要", "action": "account.summary" },
+        { "id": "account.session", "title": "读取公开账号状态", "action": "account.session" },
+        { "id": "account.start", "title": "开始演示登录", "action": "account.start" },
+        { "id": "account.approve", "title": "确认演示登录", "action": "account.approve" },
+        { "id": "account.poll", "title": "检查演示登录", "action": "account.poll" },
+        { "id": "account.cancel", "title": "取消演示登录", "action": "account.cancel" },
+        { "id": "account.logout", "title": "退出演示账号", "action": "account.logout" }
+      ],
+      "accountItems": [
+        {
+          "id": "demo-account",
+          "title": "演示音乐账号",
+          "view": "account",
+          "action": "account.summary",
+          "logoutAction": "account.logout"
+        }
+      ]
+    },
+    "permissions": [],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": {
+    "logic.main": "src/index.ts",
+    "view.account": "src/view.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js",
+  "framework": "vue"
 }
 ```
 
-完整注册代码：
+</details>
 
-```ts
-const accountSummary = (): AccountSummary => ({
-  signedIn: !!session,
-  displayName: session?.displayName ?? '演示音乐账号',
-  ...(session?.avatarUrl ? { avatarUrl: session.avatarUrl } : {}),
-  ...(session?.membership && session.membership !== 'FREE' ? { badge: session.membership } : {})
-})
+`lifecycle.closeAction` 是宿主关闭 modal 时的兜底清理。Vue 组件仍要清除自己的定时器，因为后台动作无法清除页面里的 `setTimeout`。
 
-ctx.effects.add(ctx.actions.register('account.summary', () => accountSummary()))
-```
+## 2. 新建账号后台
 
-| 字段                     | 返回规则                    | 宿主中的结果                   |
-| ------------------------ | --------------------------- | ------------------------------ |
-| <code>signedIn</code>    | 有已验证会话才为 true       | false 时显示默认头像与“未登录” |
-| <code>displayName</code> | 始终返回非空字符串          | 登录后显示昵称                 |
-| <code>avatarUrl</code>   | 只返回 HTTP(S) 公开头像地址 | 登录后替换默认头像             |
-| <code>badge</code>       | 仅 VIP/SVIP 等有效权益返回  | 昵称旁显示短标签               |
+新建 `src/account.ts`。这个文件拥有私密 `session` 和当前 `attempt`，页面只能通过动作取得筛选后的公开数据。
 
-普通用户不要返回 <code>badge: "FREE"</code>，直接省略字段。Cookie、用户手机号、令牌和会员接口原始响应都不能进入摘要。
+<details>
+<summary>src/account.ts 完整内容</summary>
 
-## 2. 把私密会话与公开状态分开
+```ts [src/account.ts]
+import type {
+  AccountSummary,
+  JsonObject,
+  JsonValue,
+  PluginContext
+} from '@shiqianjiang/ceru-plugin-sdk'
 
-教程中的后台会话含一个模拟 Cookie：
+const SESSION_KEY = 'tutorial.session.v1'
 
-```ts
 type DemoSession = {
   cookie: string
   displayName: string
@@ -67,74 +114,130 @@ type DemoSession = {
   membership: 'FREE' | 'VIP' | 'SVIP'
 }
 
-await ctx.storage.set('tutorial.session.v1', session)
-```
+type LoginAttempt = {
+  id: string
+  approved: boolean
+  createdAt: number
+}
 
-Storage 每个插件最多 **10 MiB（10,485,760 字节）**。它适合小型 JSON 会话，不适合缓存封面或歌曲文件。完整容量与共享读取规则见 [Storage](../storage)。
+const object = (value: JsonValue | undefined): JsonObject | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value : undefined
 
-对外广播时重新挑选字段：
+function readSession(value: JsonValue | null): DemoSession | null {
+  const data = object(value ?? undefined)
+  if (
+    typeof data?.cookie !== 'string' ||
+    typeof data.displayName !== 'string' ||
+    typeof data.avatarUrl !== 'string' ||
+    !['FREE', 'VIP', 'SVIP'].includes(String(data.membership))
+  ) return null
+  return data as unknown as DemoSession
+}
 
-```ts
-const publicAccount = () => ({
-  signedIn: !!session,
-  displayName: session?.displayName ?? '演示音乐账号',
-  ...(session?.avatarUrl ? { avatarUrl: session.avatarUrl } : {}),
-  ...(session && session.membership !== 'FREE' ? { badge: session.membership } : {})
-})
+export async function registerAccount(ctx: PluginContext) {
+  let session = readSession(await ctx.storage.get(SESSION_KEY))
+  let attempt: LoginAttempt | null = null
 
-await ctx.ui.setState('account', { account: publicAccount() })
-await ctx.ui.setState('library', { account: publicAccount(), changedAt: Date.now() })
-```
+  const publicAccount = (): JsonObject => ({
+    signedIn: !!session,
+    displayName: session?.displayName ?? '演示音乐账号',
+    ...(session?.avatarUrl ? { avatarUrl: session.avatarUrl } : {}),
+    ...(session?.membership && session.membership !== 'FREE'
+      ? { badge: session.membership }
+      : {})
+  })
 
-<code>ctx.ui.setState(surfaceId, state)</code> 的 state 是公开、可克隆的 JSON 快照。它会通知已打开的 Surface，并让 native Surface 重新 render。不要放 Cookie、Authorization 头或刷新令牌。
+  const summary = (): AccountSummary => {
+    const state = publicAccount()
+    return {
+      signedIn: state.signedIn as boolean,
+      displayName: state.displayName as string,
+      ...(typeof state.avatarUrl === 'string' ? { avatarUrl: state.avatarUrl } : {}),
+      ...(typeof state.badge === 'string' ? { badge: state.badge } : {})
+    }
+  }
 
-## 3. 用动作实现一次登录
+  const publish = async () => {
+    await ctx.ui.setState('account', { account: publicAccount() })
+  }
 
-演示版把真实二维码接口拆成四个动作：
+  ctx.actions.register('account.open', () => ctx.ui.openView('account'))
+  ctx.actions.register('account.summary', () => summary())
+  ctx.actions.register('account.session', () => publicAccount())
 
-| 动作                         | 输入                            | 返回                                       | 调用方                           |
-| ---------------------------- | ------------------------------- | ------------------------------------------ | -------------------------------- |
-| <code>account.start</code>   | <code>{ attemptId }</code>      | <code>{ status, attemptId, qrText }</code> | Vue 页面首次打开或重新取码       |
-| <code>account.approve</code> | <code>{ attemptId }</code>      | <code>{ status: "scanned" }</code>         | 教程里的“模拟手机确认”按钮       |
-| <code>account.poll</code>    | <code>{ attemptId }</code>      | waiting / expired / success                | Vue 定时轮询                     |
-| <code>account.cancel</code>  | 可选 <code>{ attemptId }</code> | <code>null</code>                          | 关闭、取消或生命周期 closeAction |
+  ctx.actions.register('account.start', (input) => {
+    const requestedId = object(input)?.attemptId
+    const id = typeof requestedId === 'string' ? requestedId : `attempt-${Date.now()}`
+    attempt = { id, approved: false, createdAt: Date.now() }
+    return { status: 'waiting', attemptId: id, qrText: `CERU-DEMO:${id}` }
+  })
 
-真实平台通常不需要 <code>account.approve</code>。手机 App 扫码后，平台的轮询接口会自然从 waiting 变成 scanned 和 success。
+  ctx.actions.register('account.approve', (input) => {
+    const id = object(input)?.attemptId
+    if (!attempt || id !== attempt.id) throw new Error('本次二维码已失效')
+    attempt.approved = true
+    return { status: 'scanned' }
+  })
 
-关键点是登录成功时先完成后台动作：
+  ctx.actions.register('account.poll', async (input) => {
+    const id = object(input)?.attemptId
+    if (!attempt || id !== attempt.id || Date.now() - attempt.createdAt > 180_000) {
+      attempt = null
+      return { status: 'expired' } as JsonObject
+    }
+    if (!attempt.approved) return { status: 'waiting' } as JsonObject
 
-```ts
-session = await verifyPlatformLogin(login)
-await ctx.storage.set(SESSION_KEY, session)
-login = null
-await publishAccount()
+    session = {
+      cookie: `demo_session_${Date.now()}`,
+      displayName: '演示体验用户',
+      avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=CeruDemo',
+      membership: 'SVIP'
+    }
+    await ctx.storage.set(SESSION_KEY, session as unknown as JsonValue)
+    attempt = null
+    await publish()
+    return { status: 'success', account: publicAccount() } as JsonObject
+  })
 
-return {
-  status: 'success',
-  account: publicAccount()
+  ctx.actions.register('account.cancel', (input) => {
+    const id = object(input)?.attemptId
+    if (!id || id === attempt?.id) attempt = null
+    return null
+  })
+
+  ctx.actions.register('account.logout', async () => {
+    attempt = null
+    session = null
+    await ctx.storage.delete(SESSION_KEY)
+    await publish()
+    await ctx.ui.closeView('account')
+    return publicAccount()
+  })
+
+  await publish()
 }
 ```
 
-在写入 Storage 之前验证平台响应，确认账号资料与会员接口都属于当前登录会话。退出时删除记录：
+</details>
 
-```ts
-ctx.actions.register('account.logout', async () => {
-  login = null
-  session = null
-  await ctx.storage.delete(SESSION_KEY)
-  await publishAccount()
-  await ctx.ui.closeView('account')
-  return publicAccount()
+`cookie` 只写入插件私有 Storage。`AccountSummary` 和 `setState()` 都是宿主或页面能读取的公开数据，只放登录状态、昵称、头像和可选会员标签。
+
+用下面内容完整替换 `src/index.ts`：
+
+```ts [src/index.ts]
+import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
+import { registerAccount } from './account'
+
+export default definePlugin(async (ctx) => {
+  await registerAccount(ctx)
 })
 ```
 
-账号菜单在已登录项上显示悬停二级菜单，并调用 <code>logoutAction</code>。<code>ctx.ui.closeView('account')</code> 是后台主动关闭已打开 Surface 的方式。
+## 3. 挂载 Vue 页面
 
-## 4. 挂载 Vue Surface
+完整替换 `src/view.ts`。这个入口只负责挂载和卸载 Vue；业务状态仍在后台。
 
-<code>src/view.ts</code> 只有桥接职责：
-
-```ts
+```ts [src/view.ts]
 import { createApp } from 'vue'
 import { defineSurface } from '@shiqianjiang/ceru-plugin-sdk'
 import App from './App.vue'
@@ -146,102 +249,211 @@ export default defineSurface((context) => {
 })
 ```
 
-Vue 和组件代码会被打进最终 <code>dist/plugin.js</code>。页面运行在隔离 Surface 中，不会作为组件注入澜音的 Vue 应用。
+完整替换 `src/App.vue`：
 
-## 5. 让 modal 跟随内容高度
+<details>
+<summary>src/App.vue 完整内容</summary>
 
-0.3.5 的 Core、CLI 工作台和澜音 Host 会观察 Web Surface 的实际内容高度。Manifest 中的 <code>presentation.size</code> 控制 modal 宽度：
+```vue [src/App.vue]
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { JsonObject, SurfaceContext } from '@shiqianjiang/ceru-plugin-sdk'
 
-```json
-"presentation": { "kind": "modal", "size": 360 }
-```
-
-Vue 页面使用自然高度即可：
-
-```css
-html,
-body {
-  margin: 0;
-}
-
-main {
-  width: 100%;
-  padding: 18px;
-}
-```
-
-不要给页面根元素设置 <code>height: 100vh</code> 或 <code>min-height: 100vh</code>。否则 iframe 会把视口高度当成内容高度，短页面也会出现大块空白或内部滚动。内容变高、变矮、字体加载或状态切换时，宿主会重新测量并在视口上限内调整。
-
-真实网易云插件采用 360 像素宽 modal：扫码状态的内容高度约 330 像素，已登录摘要约 154 像素。它们是内容布局结果，不需要插件手动发送 resize 消息。
-
-## 6. 页面调用后台并订阅状态
-
-在 <code>App.vue</code> 中，页面只能拿到 <code>SurfaceContext</code>：
-
-```ts
 const props = defineProps<{ context: SurfaceContext }>()
+const account = ref<JsonObject>({ signedIn: false, displayName: '演示音乐账号' })
+const status = ref<'idle' | 'waiting' | 'scanned' | 'expired' | 'error'>('idle')
+const attemptId = ref('')
+const qrText = ref('')
+const busy = ref(false)
+const error = ref('')
+let disposed = false
+let timer: ReturnType<typeof setTimeout> | undefined
+let unsubscribe: (() => void) | undefined
+
+const cells = computed(() => {
+  const seed = qrText.value || 'CERU-DEMO'
+  return Array.from({ length: 121 }, (_, index) => {
+    const char = seed.charCodeAt(index % seed.length)
+    return (char * (index + 7) + index * index) % 11 < 5
+  })
+})
+
+const statusText = computed(() => {
+  if (status.value === 'scanned') return '已确认，正在登录'
+  if (status.value === 'expired') return '二维码已过期'
+  if (status.value === 'error') return '登录失败'
+  return '等待确认'
+})
 
 const invoke = (action: string, input: JsonObject = {}) => props.context.invoke(action, input)
 
+function stopPolling() {
+  clearTimeout(timer)
+  timer = undefined
+}
+
+async function poll(id: string) {
+  if (disposed || id !== attemptId.value) return
+  try {
+    const result = (await invoke('account.poll', { attemptId: id })) as JsonObject
+    if (disposed || id !== attemptId.value) return
+    status.value = String(result.status) as typeof status.value
+    if (result.status === 'success') {
+      account.value = (result.account as JsonObject) ?? account.value
+      stopPolling()
+      await props.context.close()
+      return
+    }
+    if (result.status === 'waiting' || result.status === 'scanned') {
+      timer = setTimeout(() => void poll(id), 700)
+    }
+  } catch (cause) {
+    status.value = 'error'
+    error.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+async function startLogin() {
+  stopPolling()
+  busy.value = true
+  error.value = ''
+  const id = `surface-${Date.now()}`
+  attemptId.value = id
+  try {
+    const result = (await invoke('account.start', { attemptId: id })) as JsonObject
+    qrText.value = String(result.qrText ?? '')
+    status.value = 'waiting'
+    timer = setTimeout(() => void poll(id), 700)
+  } catch (cause) {
+    status.value = 'error'
+    error.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function approve() {
+  if (!attemptId.value || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await invoke('account.approve', { attemptId: attemptId.value })
+    status.value = 'scanned'
+  } catch (cause) {
+    status.value = 'error'
+    error.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function cancel() {
+  stopPolling()
+  const id = attemptId.value
+  attemptId.value = ''
+  if (id) await invoke('account.cancel', { attemptId: id }).catch(() => {})
+  if (!disposed) await props.context.close()
+}
+
 onMounted(async () => {
   unsubscribe = props.context.subscribe((state) => {
-    if (state.account && typeof state.account === 'object') {
+    if (!disposed && state.account && typeof state.account === 'object') {
       account.value = state.account as JsonObject
     }
   })
-
   account.value = (await invoke('account.session')) as JsonObject
   if (!account.value.signedIn) await startLogin()
 })
-```
 
-<code>invoke</code> 只能调用 Manifest 中已经声明、后台已经注册的动作。它返回动作的 JSON 结果；失败时 Promise reject，页面应显示可操作的错误。
-
-登录成功后等待动作完全返回，再关闭：
-
-```ts
-const result = await invoke('account.poll', { attemptId })
-if (result.status === 'success') {
-  stopPolling()
-  await props.context.close()
-}
-```
-
-如果在后台写入和 <code>setState</code> 完成前关窗，当前调用可能被会话取消。顺序应始终是“动作返回 → 页面关闭”。
-
-## 7. 关闭必须停止轮询
-
-```ts
 onBeforeUnmount(() => {
   disposed = true
   stopPolling()
   unsubscribe?.()
-  if (attemptId) {
-    void invoke('account.cancel', { attemptId }).catch(() => {})
-  }
+  const id = attemptId.value
+  if (id) void invoke('account.cancel', { attemptId: id }).catch(() => {})
 })
+</script>
+
+<template>
+  <main>
+    <header>
+      <span class="logo" aria-hidden="true">♪</span>
+      <div><h1>连接演示音乐账号</h1><p class="muted">本地演示账号</p></div>
+    </header>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <section v-if="!account.signedIn">
+      <div class="qr" aria-label="演示二维码图案">
+        <i v-for="(dark, index) in cells" :key="index" :class="{ dark }" />
+      </div>
+      <strong>{{ statusText }}</strong>
+      <div class="actions">
+        <button class="primary" :disabled="busy || status === 'scanned'" @click="approve">确认登录</button>
+        <button :disabled="busy || status === 'scanned'" @click="startLogin">重新获取</button>
+        <button @click="cancel">取消</button>
+      </div>
+    </section>
+    <section v-else>
+      <img v-if="account.avatarUrl" class="avatar" :src="String(account.avatarUrl)" alt="账号头像" />
+      <h2>{{ account.displayName }}</h2>
+      <p class="muted">登录已完成</p>
+      <button class="primary done" @click="cancel">完成</button>
+    </section>
+  </main>
+</template>
+
+<style scoped>
+:global(*) { box-sizing: border-box; }
+:global(body) { margin: 0; background: #f8f8fb; color: #26242c; }
+main { width: 100%; padding: 18px; font: 14px/1.55 system-ui, 'Microsoft YaHei', sans-serif; }
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+h1, h2, p { margin: 0; }
+h1 { font-size: 20px; letter-spacing: 0; }
+.logo { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 6px; color: white; font-size: 25px; background: #366a58; }
+section { padding: 16px; border: 1px solid #e7e5ee; border-radius: 6px; background: white; text-align: center; }
+.qr { display: grid; grid-template-columns: repeat(11, 11px); width: fit-content; margin: 0 auto 15px; padding: 13px; border: 1px solid #ddd9e8; border-radius: 4px; background: white; }
+.qr i { width: 11px; height: 11px; background: white; }
+.qr i.dark { background: #24212b; }
+.muted { margin-top: 4px; color: #777181; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 18px; }
+button { padding: 9px 14px; border: 1px solid #ddd9e8; border-radius: 5px; background: white; color: inherit; cursor: pointer; }
+button.primary { border-color: #366a58; color: white; background: #366a58; }
+button:disabled { opacity: .55; cursor: wait; }
+.error { margin-bottom: 14px; color: #b42336; }
+.avatar { width: 72px; height: 72px; margin-bottom: 10px; border-radius: 50%; }
+.done { margin-top: 18px; }
+@media (prefers-color-scheme: dark) {
+  :global(body) { background: #17161b; color: #f3f0f5; }
+  section { border-color: #39353f; background: #211f26; }
+  button { border-color: #46414d; background: #29262f; color: inherit; }
+}
+</style>
 ```
 
-同时在 Manifest 设置：
+</details>
 
-```json
-"lifecycle": { "closeAction": "account.cancel" }
+页面根元素使用自然高度。不要设置 `100vh`，否则短内容也会撑满 modal。
+
+## 4. 运行本节
+
+```shell
+npm run typecheck
+npm run build
+npm run dev
 ```
 
-两层清理覆盖用户点击取消、宿主关闭窗口、热更新和插件停用。再次打开时组件重新 mount，并调用 <code>account.start</code> 取得新码，不复用上一次 attempt。
+在工作台账号区域点击“演示音乐账号”，然后点击“确认登录”。预期结果：
 
-## 8. 换成真实接口时谁负责什么？
+1. modal 自动关闭；
+2. 账号摘要变成“演示体验用户”和 `SVIP`；
+3. 停止再重新运行 `npm run dev`，登录状态仍能恢复；
+4. 执行退出后，摘要回到未登录。
 
-真实插件在后台完成：
+常见错误：
 
-1. 调用取码接口并返回公开的二维码 URL。
-2. 带 <code>operation.signal</code> 调用轮询接口，窗口关闭时停止。
-3. 从成功响应提取 Cookie 或令牌并写私有 Storage。
-4. 调用用户资料和会员接口，计算 FREE、VIP 或 SVIP。
-5. 只把昵称、头像和可选标签发布给宿主。
+- 点击动作不存在：Manifest 的 `commands[].action` 必须与 `actions.register()` 完全一致；
+- 页面一直等待：确认 `account.approve` 收到的 `attemptId` 与当前页面一致；
+- 关闭后仍在调用：检查 `onBeforeUnmount` 是否清除了定时器和订阅；
+- 登录后立即关闭却没有保存：必须先等待 `account.poll` 返回成功，再调用 `context.close()`；
+- 摘要里出现 Cookie：只返回 `publicAccount()`，不要直接返回 `session`。
 
-宿主只负责通用网络、权限、存储、账号菜单和窗口，不会内置网易云或其他平台的登录规则。
-
-::: tip 完成标志
-打开账号项会自动取码；关闭时轮询停止；重新打开得到新会话；成功后 modal 自动关闭；账号菜单显示昵称、头像和 SVIP；悬停退出后回到默认头像与未登录。
-:::
+下一节：[把账号歌单放进澜音现有“歌单”页 →](./native-library)

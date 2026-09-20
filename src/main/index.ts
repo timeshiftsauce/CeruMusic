@@ -329,7 +329,14 @@ function setupTray(): void {
  * @param {BrowserWindow} win - 要更新的窗口实例
  */
 function updateWindowMaxLimits(win: BrowserWindow | null): void {
-  if (!win) return
+  if (!win || isAppFullScreen(win)) return
+
+  // Windows 最大化时外框会超出屏幕边缘；按屏幕宽度限制外框会裁掉内容区。
+  // 交给系统管理最大化/全屏，普通窗口仍由 resized 回调限制在工作区内。
+  if (process.platform === 'win32') {
+    win.setMaximumSize(0, 0)
+    return
+  }
 
   // 1. 获取窗口的当前边界 (bounds)
   const currentBounds: Rectangle = win.getBounds()
@@ -342,93 +349,38 @@ function updateWindowMaxLimits(win: BrowserWindow | null): void {
 
   // 4. 应用新的最大尺寸限制
   // 移除 maxWidth/maxHeight 上的硬限制，使其能够最大化到当前屏幕的尺寸。
-  // 注意：设置为 0, 0 意味着没有最小限制，我们只关注最大限制。
+  // 注意：设置为 0, 0 意味着没有最大尺寸限制。
   win.setMaximumSize(currentScreenWidth, currentScreenHeight)
 }
 
-/**
- * 网易云式窗口化全屏（borderless windowed fullscreen）。
- * 不走 OS 原生 setFullScreen（在 Windows 配合 titleBarStyle:'hidden' 会被 DWM 边框压缩 16px），
- * 改为：setBounds 到 display.bounds + alwaysOnTop 覆盖任务栏。
- * 进入前快照窗口状态，退出后完整还原。
- */
-const fsState = {
-  active: false,
-  bounds: null as Rectangle | null,
-  maxSize: null as { width: number; height: number } | null,
-  resizable: null as boolean | null,
-  movable: null as boolean | null,
-  alwaysOnTop: null as boolean | null,
-  wasMaximized: false
+// 原生全屏在 macOS 上异步完成；切换期间暂停窗口尺寸修正与保存。
+const fullscreenTransitions = new WeakSet<BrowserWindow>()
+// 保留原生事件确认的状态，供渲染端订阅和窗口切换期间使用。
+const fullscreenWindows = new WeakSet<BrowserWindow>()
+
+function isAppFullScreen(win: BrowserWindow): boolean {
+  return fullscreenTransitions.has(win) || fullscreenWindows.has(win) || win.isFullScreen()
 }
 
-function isWindowedFullScreenActive(): boolean {
-  return fsState.active
-}
-
-function enterWindowedFullScreen(win: BrowserWindow): void {
-  if (fsState.active) return
-
-  fsState.wasMaximized = win.isMaximized()
-  if (fsState.wasMaximized) win.unmaximize()
-
-  fsState.bounds = win.getBounds()
-  const [maxW, maxH] = win.getMaximumSize()
-  fsState.maxSize = { width: maxW, height: maxH }
-  fsState.resizable = win.isResizable()
-  fsState.movable = win.isMovable()
-  fsState.alwaysOnTop = win.isAlwaysOnTop()
-
-  // 必须先置 active：setBounds 会立刻触发 resized 事件，guard 才能跳过
-  fsState.active = true
-
-  win.setMaximumSize(0, 0)
-  win.setResizable(false)
-  win.setMovable(false)
-  const display = screen.getDisplayMatching(fsState.bounds)
-  win.setBounds(display.bounds)
-  win.setAlwaysOnTop(true) // 盖住任务栏
-
-  win.webContents.send('app-fullscreen-changed', true)
-}
-
-function exitWindowedFullScreen(win: BrowserWindow): void {
-  if (!fsState.active) return
-
-  // 先把 active 置 false 之前，先调用 setBounds 等会触发 resized；
-  // 这里反过来：先恢复，最后再置 false，避免 resized 中途看到 active=false 误处理
-  win.setAlwaysOnTop(fsState.alwaysOnTop ?? false)
-  win.setMovable(fsState.movable ?? true)
-  win.setResizable(fsState.resizable ?? true)
-  if (fsState.maxSize) {
-    win.setMaximumSize(fsState.maxSize.width, fsState.maxSize.height)
+function setAppFullScreen(win: BrowserWindow, fullscreen: boolean): void {
+  if (win.isDestroyed() || fullscreenTransitions.has(win) || isAppFullScreen(win) === fullscreen) {
+    return
   }
-  if (fsState.bounds) win.setBounds(fsState.bounds)
-
-  fsState.active = false
-
-  if (fsState.wasMaximized) win.maximize()
-
-  fsState.bounds = null
-  fsState.maxSize = null
-  fsState.resizable = null
-  fsState.movable = null
-  fsState.alwaysOnTop = null
-  fsState.wasMaximized = false
-
-  win.webContents.send('app-fullscreen-changed', false)
+  fullscreenTransitions.add(win)
+  if (fullscreen) win.setMaximumSize(0, 0)
+  win.setFullScreen(fullscreen)
 }
 
 function toggleAppFullScreen(win: BrowserWindow | null): void {
   if (!win) return
-  if (fsState.active) exitWindowedFullScreen(win)
-  else enterWindowedFullScreen(win)
+  setAppFullScreen(win, !isAppFullScreen(win))
 }
 
 import { downloadManager } from './services/DownloadManager'
 import pluginService from './services/plugin/index'
 import musicSdkService, { resolveDownloadUrl } from './services/musicSdk/service'
 import { musicCacheService } from './services/musicCache'
+import { normalizeLyricFormat } from '@common/lyricFormats'
 import { applyPlaybackRequestHeaders } from './services/plugin/playbackRequests'
 
 function setupDownloadManager() {
@@ -442,62 +394,25 @@ function setupDownloadManager() {
     }
 
     const source = task.songInfo.source
-    const songIdBase = `${task.songInfo.name}-${task.songInfo.singer}-${source}`
-    const preferWordByWord = task.tagWriteOptions?.lyricFormat === 'word-by-word'
-    const cacheKey = `${songIdBase}:${preferWordByWord ? 'word' : 'lrc'}`
-
-    // Check cache
+    const format = normalizeLyricFormat(task.tagWriteOptions?.lyricFormat)
+    if (!format) throw new Error('不支持的歌词导出格式')
+    const resource = task.songInfo.pluginResource
+    const cacheKey = 'lyric-export-v2:' + JSON.stringify([
+      resource?.pluginId ?? task.pluginId ?? null,
+      resource?.providerId ?? source,
+      resource?.connectionId ?? null,
+      resource?.id ??
+        task.songInfo.songmid ??
+        task.songInfo.hash ??
+        `${task.songInfo.name}-${task.songInfo.singer}`,
+      format
+    ])
     const cachedLyric = await musicCacheService.getCachedLyric(cacheKey)
     if (cachedLyric) return cachedLyric
-
-    let lyric: string | null = null
-
-    // Lyrics are provided by the installed v2 source plugin.
-    if (!lyric) {
-      try {
-        const api = musicSdkService(source)
-        const result = await api.getLyric({
-          songInfo: task.songInfo,
-          useFormat: task.tagWriteOptions?.lyricFormat || 'lrc'
-        })
-
-        if (result && !(result as any).error) {
-          if (typeof result === 'string') {
-            lyric = result
-          } else {
-            const cr = (result as any).crlyric || (result as any).cr_lyric || null
-            const std = (result as any).lyric || (result as any).lrc || null
-            if (preferWordByWord) {
-              lyric = (cr as any) || (std as any) || null
-            } else {
-              lyric = (std as any) || (cr as any) || null
-            }
-            // 若同时拿到两种格式，分别缓存以便下次命中正确偏好
-            if (cr && typeof cr === 'string') {
-              const wordKey = `${songIdBase}:word`
-              musicCacheService.cacheLyric(wordKey, cr as string).catch(() => {})
-            }
-            if (std && typeof std === 'string') {
-              const lrcKey = `${songIdBase}:lrc`
-              musicCacheService.cacheLyric(lrcKey, std as string).catch(() => {})
-            }
-          }
-        } else if (result && (result as any).error) {
-          console.warn(`Plugin getLyric error for ${source}:`, (result as any).error)
-        }
-      } catch (error) {
-        console.warn(`Plugin getLyric exception for ${source}:`, error)
-      }
-    }
-
-    if (lyric && typeof lyric === 'object') {
-      throw new Error('Failed to get lyric: ' + JSON.stringify(lyric))
-    }
-
-    // Cache result（按偏好维度区分缓存键）
-    if (lyric) {
-      musicCacheService.cacheLyric(cacheKey, lyric).catch(console.error)
-    }
+    const result = await musicSdkService(source).getLyric({ songInfo: task.songInfo, useFormat: format })
+    if (result?.error) throw new Error(result.error)
+    const lyric = typeof result === 'string' && result ? result : null
+    if (lyric) musicCacheService.cacheLyric(cacheKey, lyric).catch(console.error)
 
     return lyric
   })
@@ -575,6 +490,8 @@ function createWindow(): void {
     center: !savedBounds, // 如果有保存的位置，则不居中
     autoHideMenuBar: true,
     titleBarStyle: 'hidden' as const,
+    // 保留 Windows 原生边框，以支持 Win11 圆角、阴影和边缘缩放。
+    roundedCorners: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     icon: path.join(__dirname, '../../resources/logo.ico'),
     webPreferences: {
@@ -594,6 +511,20 @@ function createWindow(): void {
 
   // Create the browser window.
   mainWindow = new BrowserWindow(defaultOptions)
+  // 以 Electron 原生事件同步 UI，包括系统触发的全屏切换。
+  const win = mainWindow
+  win.on('enter-full-screen', () => {
+    fullscreenWindows.add(win)
+    win.setMaximumSize(0, 0)
+    fullscreenTransitions.delete(win)
+    win.webContents.send('app-fullscreen-changed', true)
+  })
+  win.on('leave-full-screen', () => {
+    fullscreenWindows.delete(win)
+    fullscreenTransitions.delete(win)
+    updateWindowMaxLimits(win)
+    win.webContents.send('app-fullscreen-changed', false)
+  })
   bindPluginUIWindow(mainWindow)
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
@@ -613,20 +544,20 @@ function createWindow(): void {
         mainWindow?.webContents.openDevTools()
       }
     }
-    // F11 切换窗口化全屏
+    // F11 切换原生全屏
     if (input.key === 'F11' && input.type === 'keyDown') {
       event.preventDefault()
-      toggleAppFullScreen(mainWindow)
+      if (!input.isAutoRepeat) toggleAppFullScreen(mainWindow)
     }
-    // ESC 退出窗口化全屏
+    // ESC 退出原生全屏
     if (
       input.key === 'Escape' &&
       input.type === 'keyDown' &&
-      isWindowedFullScreenActive() &&
-      mainWindow
+      mainWindow &&
+      isAppFullScreen(mainWindow)
     ) {
       event.preventDefault()
-      exitWindowedFullScreen(mainWindow)
+      setAppFullScreen(mainWindow, false)
     }
   })
   mainWindow.on('blur', () => {
@@ -635,11 +566,11 @@ function createWindow(): void {
 
   // ⚠️ 关键修改 2: 监听 'moved' 事件，动态更新最大尺寸
   mainWindow.on('moved', () => {
-    if (isWindowedFullScreenActive()) return
+    if (!mainWindow || isAppFullScreen(mainWindow)) return
     // 当窗口移动时，确保最大尺寸限制随屏幕变化
     updateWindowMaxLimits(mainWindow)
 
-    if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
+    if (mainWindow && !mainWindow.isMaximized() && !isAppFullScreen(mainWindow)) {
       const bounds = mainWindow.getBounds()
       configManager.saveWindowBounds(bounds)
     }
@@ -649,8 +580,9 @@ function createWindow(): void {
   updateWindowMaxLimits(mainWindow)
 
   mainWindow.on('resized', () => {
-    if (isWindowedFullScreenActive()) return
-    if (mainWindow && !mainWindow.isMaximized() && !mainWindow.isFullScreen()) {
+    if (!mainWindow || isAppFullScreen(mainWindow)) return
+    updateWindowMaxLimits(mainWindow)
+    if (mainWindow && !mainWindow.isMaximized() && !isAppFullScreen(mainWindow)) {
       const bounds = mainWindow.getBounds()
 
       // 获取当前屏幕尺寸 (已在文件顶部导入 screen，无需 require)
@@ -699,12 +631,18 @@ function createWindow(): void {
     toggleAppFullScreen(mainWindow)
   })
 
-  // IPC：window-maximize 在我方全屏期间需要先退出再最大化
+  // 新挂载的组件主动读取状态，避免错过已经发生的全屏事件。
+  ipcMain.removeAllListeners('window:request-fullscreen-state')
+  ipcMain.on('window:request-fullscreen-state', (event) => {
+    event.reply('app-fullscreen-changed', mainWindow ? isAppFullScreen(mainWindow) : false)
+  })
+
+  // IPC：全屏期间点击最大化按钮先恢复窗口模式
   ipcMain.removeAllListeners('app-maximize-internal')
   ipcMain.on('app-maximize-internal', () => {
     if (!mainWindow) return
-    if (isWindowedFullScreenActive()) {
-      exitWindowedFullScreen(mainWindow)
+    if (isAppFullScreen(mainWindow)) {
+      setAppFullScreen(mainWindow, false)
       return
     }
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
@@ -975,10 +913,10 @@ ipcMain.handle('deeplink:ack', (_event, sequence: number) => {
 /* 主进程剪贴板读取 —— 比 renderer 的 navigator.clipboard.readText() 更可靠:
  *  - 无需窗口焦点 / 用户手势
  *  - 不受 Permissions Policy / 浏览器异步权限提示影响
- *  - Electron 的 clipboard 模块同步读取系统剪贴板,直接返回纯文本 */
+ *  - Electron 44 的 clipboard 模块异步读取系统剪贴板 */
 ipcMain.handle('clipboard:read-text', async () => {
   try {
-    return clipboard.readText() || ''
+    return (await clipboard.readText()) || ''
   } catch (e) {
     console.warn('clipboard:read-text failed', e)
     return ''

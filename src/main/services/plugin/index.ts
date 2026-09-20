@@ -402,8 +402,7 @@ const pluginService = {
       capabilityOwners.delete(key)
       return
     }
-    if (!isRoutablePluginCapability(capability))
-      throw new Error('插件内部操作不能分配给其他插件')
+    if (!isRoutablePluginCapability(capability)) throw new Error('插件内部操作不能分配给其他插件')
     const host = this.getPluginById(pluginId)
     const supported = capability.startsWith('action:')
       ? host?.supportsV2Provider(source) && host.supportsAction(capability.slice(7))
@@ -473,7 +472,7 @@ const pluginService = {
   },
   getLyricConverters(): CeruMusicPluginHost[] {
     return (Object.values(loadedPlugins) as CeruMusicPluginHost[]).filter(
-      host => !host.isDisabled() && host.getManifest().contributes?.lyricConverters?.length
+      (host) => !host.isDisabled() && host.getManifest().contributes?.lyricConverters?.length
     )
   },
 
@@ -836,6 +835,11 @@ const pluginService = {
     if (!plugin) throw new Error(`插件 ${pluginId} 未找到`)
     const config = getPluginConfig(pluginId)
     return await plugin.getServiceLyric(config, songInfo)
+  },
+
+  async publishHostEvent(event: string, value: unknown, pluginId?: string) {
+    const hosts = pluginId ? runtimeEntries().filter(([id]) => id === pluginId) : runtimeEntries()
+    await Promise.allSettled(hosts.map(([, host]) => host.publishHostEvent(event, value)))
   },
 
   /** 应用退出前调用，销毁所有插件 worker，避免阻塞退出。 */

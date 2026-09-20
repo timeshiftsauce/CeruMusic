@@ -83,7 +83,7 @@ export default definePlugin((ctx) => {
 
 ![澜音文档演示插件的网络权限界面](/plugins/v2/desktop-permissions.png)
 
-_澜音 1.14.1 开发构建；仅展示演示插件声明。_
+_开发构建界面示意；仅展示演示插件声明。_
 
 ## 权限组与支持
 

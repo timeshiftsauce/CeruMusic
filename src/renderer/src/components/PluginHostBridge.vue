@@ -43,10 +43,26 @@ import type { PluginDrawerSession } from '@common/pluginDrawer'
 import { pluginAccountItems, refreshPluginAccounts } from '@renderer/services/pluginAccounts'
 import {
   handlePluginPlayback,
+  markPluginQueueChanged,
   openPluginPlaylist,
   pluginPlaybackMethods
 } from '@renderer/services/pluginPlaybackBridge'
+import {
+  getPluginDevices,
+  getPluginPublicSettings,
+  getPluginRoomState,
+  handlePluginHostService,
+  recordPluginHistory,
+  toPluginDownloadTask
+} from '@renderer/services/pluginHostServices'
 import { useAuthStore } from '@renderer/store/Auth'
+import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useSettingsStore } from '@renderer/store/Settings'
+import { useListenTogetherStore } from '@renderer/store/ListenTogether'
+import { useAudioOutputStore } from '@renderer/store/audioOutput'
+import { useDlnaStore } from '@renderer/store/dlna'
 import songListAPI from '@renderer/api/songList'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
@@ -144,6 +160,19 @@ async function choosePlaylist(suggestedName?: string) {
 async function handle(request: any, signal?: AbortSignal): Promise<any> {
   const { method, data: payload = {}, pluginId } = request
   if (pluginPlaybackMethods.includes(method)) return handlePluginPlayback(method, payload.args)
+  if (
+    [
+      'services.favorites.',
+      'services.downloads.',
+      'services.localMusic.',
+      'services.settings.',
+      'services.rooms.',
+      'services.devices.',
+      'services.ai.'
+    ].some((prefix) => method.startsWith(prefix)) ||
+    method === 'services.window.control'
+  )
+    return handlePluginHostService(method, payload.args ?? [])
   if (method === 'ui.drawer.open') {
     await closeDrawer()
     drawer.value = { ...payload, pluginId }
@@ -334,9 +363,140 @@ let accountChanged: (() => void) | undefined
 let surfaceClosed: (() => void) | undefined
 let stopAccountWatch: (() => void) | undefined
 const uiRequests = new Map<string, AbortController>()
+const hostEventCleanups: Array<() => void> = []
 let mounted = false
+
+function publishHostEvent(event: string, value: unknown, pluginId?: string) {
+  const plainValue = JSON.parse(JSON.stringify(value ?? null))
+  void window.api.plugins
+    .publishHostEvent(event, plainValue, pluginId)
+    .catch((error) => console.warn(`发布插件宿主事件 ${event} 失败:`, error))
+}
+
+function startHostEventPublishing() {
+  const globalStatus = useGlobalPlayStatusStore()
+  const audio = ControlAudioStore().Audio
+  const queue = LocalUserDetailStore()
+  const settings = useSettingsStore()
+  const room = useListenTogetherStore()
+  const audioOutput = useAudioOutputStore()
+  const dlna = useDlnaStore()
+  if (!queue.initialization) queue.init()
+
+  const publishPlayer = () =>
+    void handlePluginPlayback('services.player.getState', []).then((state) =>
+      publishHostEvent('player.changed', state)
+    )
+  const publishQueue = () => {
+    markPluginQueueChanged()
+    void handlePluginPlayback('services.queue.get', []).then((state) =>
+      publishHostEvent('queue.changed', state)
+    )
+  }
+
+  hostEventCleanups.push(
+    watch(
+      () =>
+        JSON.stringify([
+          globalStatus.player.songInfo?.source,
+          globalStatus.player.songInfo?.songmid,
+          audio.isPlay,
+          audio.duration,
+          audio.volume,
+          audio.audio?.muted
+        ]),
+      () => publishPlayer(),
+      { immediate: true }
+    ),
+    watch(
+      () =>
+        JSON.stringify(
+          queue.list.map((song) => song.pluginResource ?? [song.source, String(song.songmid)])
+        ),
+      () => publishQueue(),
+      { immediate: true }
+    ),
+    watch(
+      () => globalStatus.player.songInfo,
+      (song) => recordPluginHistory(song),
+      { immediate: true }
+    ),
+    watch(
+      () => JSON.stringify(globalStatus.player.lyrics.crlyric ?? null),
+      (lyrics) => publishHostEvent('lyrics.changed', JSON.parse(lyrics)),
+      { immediate: true }
+    ),
+    watch(
+      () => JSON.stringify(getPluginPublicSettings()),
+      (next, previous) => {
+        const current = JSON.parse(next) as Record<string, unknown>
+        const old = previous ? (JSON.parse(previous) as Record<string, unknown>) : {}
+        const keys = Object.keys(current).filter(
+          (key) => JSON.stringify(current[key]) !== JSON.stringify(old[key])
+        )
+        if (keys.length) publishHostEvent('settings.changed', { keys })
+      },
+      { immediate: true }
+    ),
+    watch(
+      () => !!settings.settings.isDarkMode,
+      (dark) => publishHostEvent('theme.changed', { theme: dark ? 'dark' : 'light' }),
+      { immediate: true }
+    ),
+    watch(
+      () => JSON.stringify([room.meta, room.myRole, room.members.length, room.connectionStatus]),
+      () => publishHostEvent('rooms.changed', getPluginRoomState()),
+      { immediate: true }
+    ),
+    watch(
+      () =>
+        JSON.stringify([
+          audioOutput.devices,
+          audioOutput.currentDeviceId,
+          dlna.devices,
+          dlna.currentDevice
+        ]),
+      () => publishHostEvent('devices.changed', getPluginDevices()),
+      { immediate: true }
+    ),
+    watch(
+      () => [auth.isAuthenticated, auth.user?.sub, auth.user?.name] as const,
+      ([loggedIn, subject, displayName]) =>
+        publishHostEvent('account.changed', { loggedIn, subject, displayName }),
+      { immediate: true }
+    ),
+    watch(libraryRevision, () =>
+      publishHostEvent('library.changed', {
+        target: { id: 'library', location: 'local' },
+        reason: 'updated'
+      })
+    )
+  )
+
+  const playerTimer = window.setInterval(() => {
+    if (globalStatus.player.songInfo?.songmid != null) publishPlayer()
+  }, 5000)
+  hostEventCleanups.push(() => window.clearInterval(playerTimer))
+
+  const publishDownload = (_event: unknown, task: any) =>
+    task?.pluginId
+      ? publishHostEvent('downloads.changed', toPluginDownloadTask(task), task.pluginId)
+      : undefined
+  hostEventCleanups.push(
+    window.api.download.onTaskAdded(publishDownload),
+    window.api.download.onTaskProgress(publishDownload),
+    window.api.download.onTaskStatusChanged(publishDownload),
+    window.api.download.onTaskCompleted(publishDownload),
+    window.api.download.onTaskError(publishDownload),
+    window.api.download.onTasksReset((_event, tasks) => {
+      for (const task of tasks) publishDownload(_event, task)
+    })
+  )
+}
+
 onMounted(() => {
   mounted = true
+  startHostEventPublishing()
   surfaceClosed = window.api.plugins.onSurfaceState((event) => {
     if (
       event.closed &&
@@ -399,6 +559,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   mounted = false
+  for (const cleanup of hostEventCleanups.splice(0)) cleanup()
   surfaceClosed?.()
   accountChanged?.()
   stopAccountWatch?.()

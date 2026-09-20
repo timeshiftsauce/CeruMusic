@@ -15,7 +15,7 @@ import {
 import pluginService from '../plugin/index'
 import { assertResourceRef, retargetTrackRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { toAppTrack } from '@common/pluginMusic'
-import { parseLocalLrc } from '@common/localLyrics'
+import { parseLocalLyrics, exportBuiltinLyrics } from '@common/localLyrics'
 import { resolveLocalLyrics } from '../localLyrics'
 import { localMusicIndexService } from '../LocalMusicIndex'
 import { readTags } from '../../utils/tagUtils'
@@ -32,7 +32,9 @@ export async function resolveDownloadUrl(task: {
 }): Promise<string> {
   if (!task.songInfo || !task.quality) throw new Error('Task missing song or quality')
   const result = await main(task.songInfo.source).getMusicUrl({
-    pluginId: task.pluginId ?? '', songInfo: task.songInfo, quality: task.quality
+    pluginId: task.pluginId ?? '',
+    songInfo: task.songInfo,
+    quality: task.quality
   })
   if (typeof result !== 'string') throw new Error(result.error)
   return result
@@ -83,10 +85,14 @@ function main(source: string = 'wy') {
       action,
       resource?.scope === 'provider' ? undefined : resource?.pluginId
     )
-    const song = resource && provider
-      ? { ...songInfo, source: currentSource,
-          pluginResource: retargetTrackRef(resource, provider.host.getPluginInfo().id) }
-      : songInfo
+    const song =
+      resource && provider
+        ? {
+            ...songInfo,
+            source: currentSource,
+            pluginResource: retargetTrackRef(resource, provider.host.getPluginInfo().id)
+          }
+        : songInfo
     return { provider, song, currentSource }
   }
   const optionalAction = async (action: string, songInfo: any, input: any, fallback: any) => {
@@ -142,7 +148,10 @@ function main(source: string = 'wy') {
           provider.pluginId,
           currentSource,
           effectiveRef?.connectionId ?? null,
-          effectiveRef?.id ?? songInfo.hash ?? songInfo.songmid ?? `${songInfo.name}-${songInfo.singer}`,
+          effectiveRef?.id ??
+            songInfo.hash ??
+            songInfo.songmid ??
+            `${songInfo.name}-${songInfo.singer}`,
           quality
         ])
 
@@ -201,21 +210,26 @@ function main(source: string = 'wy') {
         )
         if (!provider) throw new Error('请安装这首歌曲所需的插件')
         const res = await provider.host.invokeV2Provider(currentSource, 'tracks.lyrics', [
-          resource ? retargetTrackRef(resource, provider.host.getPluginInfo().id) : {
-            pluginId: provider.host.getPluginInfo().id,
-            providerId: currentSource,
-            kind: 'track',
-            id: String(songInfo.songmid || songInfo.hash || (songInfo as any).id),
-            data: { song: songInfo }
-          }
+          resource
+            ? retargetTrackRef(resource, provider.host.getPluginInfo().id)
+            : {
+                pluginId: provider.host.getPluginInfo().id,
+                providerId: currentSource,
+                kind: 'track',
+                id: String(songInfo.songmid || songInfo.hash || (songInfo as any).id),
+                data: { song: songInfo }
+              }
         ])
-        if (useFormat !== null)
+        if (useFormat !== null) {
+          const builtin = exportBuiltinLyrics(res, useFormat)
+          if (builtin) return builtin.text
           return (
             await provider.host.convertLyrics('export', {
               document: res,
-              format: useFormat === 'word-by-word' ? 'enhanced-lrc' : 'lrc'
+              format: useFormat
             })
           ).text
+        }
         return { crlyric: res }
       } catch (e: any) {
         return {
@@ -236,32 +250,38 @@ function main(source: string = 'wy') {
     async parseLyrics({ text, track }: { text: string; track: any }): Promise<any> {
       if (source === 'local') {
         const song = localMusicIndexService.getSongById(String(track?.id ?? ''))
-        if (song?.path) return resolveLocalLyrics({
-          audioPath: song.path,
-          embedded: readTags(song.path, true).lrc || '',
-          track: { pluginId: 'local.library', providerId: 'local', kind: 'track', id: String(track.id) },
-          converters: pluginService.getLyricConverters().flatMap(host =>
-            (host.getManifest().contributes?.lyricConverters ?? []).map((converter: any) => ({
-              formats: converter.formats,
-              parse: (request: import('@shiqianjiang/ceru-plugin-sdk').LyricParseRequest) =>
-                host.convertLyrics('parse', request, converter.id, 3000)
-            }))
-          )
-        })
-        const local = parseLocalLrc(text, track)
+        if (song?.path)
+          return resolveLocalLyrics({
+            audioPath: song.path,
+            embedded: readTags(song.path, true).lrc || '',
+            track: {
+              pluginId: 'local.library',
+              providerId: 'local',
+              kind: 'track',
+              id: String(track.id)
+            },
+            converters: pluginService.getLyricConverters().flatMap((host) =>
+              (host.getManifest().contributes?.lyricConverters ?? []).map((converter: any) => ({
+                formats: converter.formats,
+                parse: (request: import('@shiqianjiang/ceru-plugin-sdk').LyricParseRequest) =>
+                  host.convertLyrics('parse', request, converter.id, 3000)
+              }))
+            )
+          })
+      }
+      try {
+        const local = parseLocalLyrics(text, track)
         if (local) return local
+      } catch {
+        /* Unsupported or malformed input can still be handled by a converter. */
       }
       const converter = pluginService.getLyricConverter()
       if (!converter) throw new Error('内嵌歌词已读取，请先使用支持歌词转换的插件后重试')
       return converter.convertLyrics('parse', { text, format: 'auto', track })
     },
-    async exportLyrics({
-      document,
-      format
-    }: {
-      document: any
-      format: 'lrc' | 'enhanced-lrc' | 'yrc'
-    }): Promise<any> {
+    async exportLyrics({ document, format }: { document: any; format: string }): Promise<any> {
+      const builtin = exportBuiltinLyrics(document, format)
+      if (builtin) return builtin
       const converter = pluginService.getLyricConverter()
       if (!converter) throw new Error('请安装歌词转换插件')
       return converter.convertLyrics('export', { document, format })
@@ -317,7 +337,12 @@ function main(source: string = 'wy') {
       const provider = pluginService.getV2Provider(source, ref?.pluginId, 'playlists.get')
       if (!provider) throw new Error('未安装提供此歌单的插件，请先安装并启用原插件')
       const res = await provider.host.invokeV2Provider(source, 'playlists.get', [
-        ref ?? { pluginId: provider.host.getPluginInfo().id, providerId: source, kind: 'playlist', id },
+        ref ?? {
+          pluginId: provider.host.getPluginInfo().id,
+          providerId: source,
+          kind: 'playlist',
+          id
+        },
         ref ? cursor : String(page)
       ])
       return v2Page(res) as PlaylistDetailResult
@@ -328,7 +353,8 @@ function main(source: string = 'wy') {
       songInfo,
       quality,
       tagWriteOptions,
-      lazy
+      lazy,
+      path
     }: DownloadSingleSongArgs) {
       let url = ''
       if (lazy && songInfo.typeUrl && songInfo.typeUrl[quality]) {
@@ -340,7 +366,7 @@ function main(source: string = 'wy') {
         url = result
       }
       if (!url) throw new Error('无法获取歌曲下载链接')
-      return await download(songInfo, url, tagWriteOptions, pluginId, quality)
+      return await download(songInfo, url, tagWriteOptions, pluginId, quality, path)
     },
 
     async downloadBatchSongs({ tasks }: { tasks: DownloadSingleSongArgs[] }) {
@@ -358,7 +384,8 @@ function main(source: string = 'wy') {
             url,
             task.tagWriteOptions,
             task.pluginId,
-            task.quality
+            task.quality,
+            task.path
           )
           results.push({ success: true, songmid: task.songInfo.songmid, ...res })
         } catch (e: any) {
@@ -435,21 +462,31 @@ function main(source: string = 'wy') {
     },
     // 热门评论
     async getHotComment({ songInfo, page = 1, limit = 100 }: GetCommentArg) {
-      return optionalAction('comments.hot', songInfo, {
-        source,
-        song: songInfo,
-        page,
-        limit
-      }, { source, comments: [], total: 0, page, limit, maxPage: 0 })
+      return optionalAction(
+        'comments.hot',
+        songInfo,
+        {
+          source,
+          song: songInfo,
+          page,
+          limit
+        },
+        { source, comments: [], total: 0, page, limit, maxPage: 0 }
+      )
     },
     // 最新评论
     async getComment({ songInfo, page = 1, limit = 20 }: GetCommentArg) {
-      return optionalAction('comments.get', songInfo, {
-        source,
-        song: songInfo,
-        page,
-        limit
-      }, { source, comments: [], total: 0, page, limit, maxPage: 0 })
+      return optionalAction(
+        'comments.get',
+        songInfo,
+        {
+          source,
+          song: songInfo,
+          page,
+          limit
+        },
+        { source, comments: [], total: 0, page, limit, maxPage: 0 }
+      )
     },
     // 听歌识曲
     async recognize({ fp, duration }: { fp: string; duration: number }) {

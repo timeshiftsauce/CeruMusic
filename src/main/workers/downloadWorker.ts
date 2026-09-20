@@ -7,6 +7,8 @@ import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'url'
 import { parentPort, isMainThread } from 'worker_threads'
 import type { DownloadTask } from '../types/download'
+import { parseLocalLyrics, exportBuiltinLyrics } from '@common/localLyrics'
+import { lyricFileExtension, normalizeLyricFormat } from '@common/lyricFormats'
 
 if (!isMainThread) {
   parentPort?.on('message', async (message: DownloadTask | { type: 'pause' | 'cancel' }) => {
@@ -52,7 +54,6 @@ let currentResponseStream: any = null
 
 // This worker will handle the download of a single song.
 // It receives song information and download options from the main thread.
-
 
 const fileLock: Record<string, boolean> = {}
 
@@ -273,6 +274,26 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
   const baseName = path.basename(songPath, path.extname(songPath))
   const dirName = path.dirname(songPath)
   let coverPath: string | undefined
+  let lyricText = ''
+  if ((tagWriteOptions.lyrics || tagWriteOptions.downloadLyrics) && songInfo?.lrc) {
+    try {
+      const format = normalizeLyricFormat(tagWriteOptions.lyricFormat)
+      if (!format) throw new Error('不支持的歌词导出格式')
+      if (songInfo.lyricExportFormat === format) lyricText = songInfo.lrc
+      else {
+        const document = parseLocalLyrics(songInfo.lrc, {
+          pluginId: 'local.library',
+          providerId: 'local',
+          kind: 'track',
+          id: String(songInfo.songmid ?? songInfo.hash ?? baseName)
+        })
+        if (!document) throw new Error('无法识别下载歌词的原始格式')
+        lyricText = exportBuiltinLyrics(document, format)?.text || ''
+      }
+    } catch (error) {
+      console.warn('转换下载歌词失败:', error)
+    }
+  }
 
   try {
     if (tagWriteOptions.cover && songInfo?.img) {
@@ -291,13 +312,10 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
       }
     }
 
-    if (tagWriteOptions.downloadLyrics && typeof songInfo?.lrc === 'string' && songInfo.lrc) {
+    if (tagWriteOptions.downloadLyrics && lyricText) {
       try {
-        const lrcPath = path.join(dirName, `${baseName}.lrc`)
-        const lrcContent = songInfo.lrc
-        if (lrcContent) {
-          await fsPromise.writeFile(lrcPath, lrcContent)
-        }
+        const lyricPath = path.join(dirName, `${baseName}.${lyricFileExtension(tagWriteOptions)}`)
+        await fsPromise.writeFile(lyricPath, lyricText)
       } catch (error) {
         console.warn('单独下载歌词文件失败:', error)
       }
@@ -318,8 +336,8 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
     songFile.tag.performers = artists
     songFile.tag.albumArtists = artists
 
-    if (tagWriteOptions.lyrics && typeof songInfo?.lrc === 'string' && songInfo.lrc) {
-      songFile.tag.lyrics = songInfo.lrc
+    if (tagWriteOptions.lyrics && lyricText) {
+      songFile.tag.lyrics = lyricText
     }
 
     if (coverPath && fs.existsSync(coverPath)) {
@@ -331,7 +349,7 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
     }
     songFile.dispose()
   } catch (error) {
-    console.warn('写入音乐元信息或LRC文件失败:', error)
+    console.warn('写入音乐元信息或歌词文件失败:', error)
   } finally {
     if (coverPath && fs.existsSync(coverPath)) {
       await fsPromise.unlink(coverPath).catch(() => {})

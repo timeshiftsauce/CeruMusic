@@ -8,7 +8,7 @@ const tracks = [
     artist: 'Ceru Tutorial',
     album: 'First Source',
     durationMs: 2200,
-    qualities: ['128k', '320k', 'lossless'],
+    qualities: ['lossless'],
   },
   {
     id: 'rain',
@@ -16,7 +16,7 @@ const tracks = [
     artist: 'Ceru Tutorial',
     album: 'First Source',
     durationMs: 2200,
-    qualities: ['128k', '320k', 'lossless'],
+    qualities: ['lossless'],
   },
   {
     id: 'night',
@@ -24,7 +24,7 @@ const tracks = [
     artist: 'Ceru Tutorial',
     album: 'First Source',
     durationMs: 2200,
-    qualities: ['128k', '320k', 'lossless'],
+    qualities: ['lossless'],
   },
 ]
 

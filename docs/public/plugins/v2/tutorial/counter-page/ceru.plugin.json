@@ -1,29 +1,57 @@
 {
   "manifest": {
     "manifestVersion": 2,
-    "id": "example.counter",
+    "id": "tutorial.counter-page",
     "name": "计数页面",
     "version": "0.1.0",
-    "engines": { "hostApi": "^2.0.0", "logicRuntime": "ceru-js@1" },
+    "description": "用 Vue 演示页面与插件逻辑通信",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "uiSchema": "^1.0.0"
+    },
     "modules": {
       "logic": { "entry": "logic.main" },
       "surfaces": [
         {
           "id": "counter",
           "kind": "web",
-          "entry": "ui.counter",
+          "entry": "view.counter",
           "title": "计数页面",
-          "presentation": { "kind": "drawer", "placement": "right", "size": 480 }
+          "presentation": { "kind": "drawer", "placement": "right", "size": 440 },
+          "lifecycle": {
+            "openAction": "counter.surface-open",
+            "closeAction": "counter.surface-close"
+          }
         }
       ]
     },
     "contributes": {
-      "commands": [{ "id": "increment", "title": "计数 +1", "action": "counter.increment" }],
+      "commands": [
+        { "id": "counter.read", "title": "读取计数", "action": "counter.read" },
+        { "id": "counter.increment", "title": "计数加一", "action": "counter.increment" },
+        { "id": "counter.reset", "title": "重置计数", "action": "counter.reset" },
+        {
+          "id": "counter.surface-open",
+          "title": "计数页已打开",
+          "action": "counter.surface-open"
+        },
+        {
+          "id": "counter.surface-close",
+          "title": "计数页已关闭",
+          "action": "counter.surface-close"
+        }
+      ],
       "settingsPages": [{ "id": "counter", "title": "计数页面", "view": "counter" }]
     },
-    "permissions": []
+    "permissions": [],
+    "dataSchemas": { "config": 1, "state": 1 }
   },
-  "entries": { "logic.main": "src/index.ts", "ui.counter": "src/view.ts" },
+  "entries": {
+    "logic.main": "src/index.ts",
+    "view.counter": "src/view.ts"
+  },
   "resources": {},
-  "output": "dist/plugin.js"
+  "output": "dist/plugin.js",
+  "framework": "vue"
 }

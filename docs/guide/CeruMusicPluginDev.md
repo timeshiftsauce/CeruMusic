@@ -1,7 +1,7 @@
 # CeruMusic 插件开发指南
 
 ::: warning 插件 1.0 历史文档
-本页保留旧版原生插件与 LX 直接兼容 API，适用于使用 v1 Host 的历史桌面版本。澜音 **1.14.1 起**使用插件 v2；新项目请阅读 [v2 开发指南](/guide/plugins/v2/)，已有插件参考 [迁移指南](/guide/plugins/v2/migration)。下文旧全局对象、安装流程与接口不应直接用于 v2。
+本页保留 v1 原生插件与 LX 直接兼容 API，适用于澜音 **1.14.1 等使用 v1 的版本**。澜音 **2.0 起**使用插件 v2；开发 v2 插件请阅读 [v2 开发指南](/guide/plugins/v2/)，已有插件参考 [迁移指南](/guide/plugins/v2/migration)。下文全局对象、安装流程与接口不应直接用于 v2。
 :::
 
 ## 概述
@@ -505,7 +505,7 @@ cerumusic.NoticeCenter('info', {
 
 ```javascript
 /*!
- * @name 澜音源
+ * @name 示例音源插件
  * @description 澜音插件 支持酷我，网易，咪咕平台最高flac
  * @version v4.0.0
  * @author 时迁酱
@@ -514,7 +514,7 @@ cerumusic.NoticeCenter('info', {
 
 // 插件信息
 const pluginInfo = {
-  name: '澜音源',
+  name: '示例音源插件',
   version: 'v4.0.0',
   author: '时迁酱',
   description: '澜音插件 支持酷我，网易，咪咕平台最高flac',

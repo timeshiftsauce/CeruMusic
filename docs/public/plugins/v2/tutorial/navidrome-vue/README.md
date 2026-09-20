@@ -9,4 +9,4 @@
 5. 搜索 `Morning`，测试播放和歌词。
 6. `npm run typecheck && npm run build && npm run validate`
 
-模拟服务只用于教程。连接真实服务器时应优先使用 HTTPS，且不要把密码、盐或令牌写入日志。
+核心代码按职责拆在 `model.ts`、`api.ts`、`provider.ts` 和 `index.ts` 中。模拟服务只用于教程。连接真实服务器时应使用 HTTPS，且不要把密码、盐或令牌写入日志。

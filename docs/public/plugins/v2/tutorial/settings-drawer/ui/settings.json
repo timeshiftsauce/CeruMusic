@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "presentation": {
+    "kind": "drawer",
+    "placement": "right",
+    "size": 480,
+    "openAction": "settings.load"
+  },
+  "root": {
+    "type": "form",
+    "title": "插件设置",
+    "submitAction": "settings.save",
+    "submitLabel": "保存设置",
+    "submitInput": { "source": "settings-form" },
+    "children": [
+      { "type": "text", "bind": "status", "label": "状态" },
+      {
+        "type": "text-input",
+        "bind": "displayName",
+        "label": "显示名称",
+        "placeholder": "我的音乐服务",
+        "required": true
+      },
+      {
+        "type": "password",
+        "bind": "accessToken",
+        "label": "访问令牌",
+        "description": "留空表示保留已经保存的令牌"
+      },
+      {
+        "type": "number",
+        "bind": "resultLimit",
+        "label": "每页结果数",
+        "required": true
+      },
+      { "type": "toggle", "bind": "autoPlay", "label": "搜索后自动播放" },
+      {
+        "type": "select",
+        "bind": "quality",
+        "label": "默认音质",
+        "options": [
+          { "label": "标准 · 128k", "value": "128k" },
+          { "label": "高品质 · 320k", "value": "320k" },
+          { "label": "无损 · FLAC", "value": "flac" }
+        ]
+      },
+      {
+        "type": "button",
+        "label": "恢复默认值",
+        "action": "settings.reset",
+        "input": { "scope": "all" },
+        "requires": "canReset"
+      }
+    ]
+  }
+}

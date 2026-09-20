@@ -1,38 +1,179 @@
 ---
 pageClass: plugin-v2-doc
-title: 开发插件页面
+title: 开发 Vue 插件页面
 ---
 
-# 开发插件页面
+# 开发 Vue 插件页面
 
-如果你想让用户点击按钮、扫码登录或浏览自己的曲库，可以给插件加一个网页。这样的插件页面叫 **Surface**。
+插件需要登录表单、数据列表或复杂交互时，可以使用 Web Surface。它是一块由插件控制的页面区域，Vue 代码负责界面，插件逻辑负责存储和业务操作。
 
-先做一个能点击的计数器，再把按钮连接到后台动作。你熟悉 Vue 或 React 时，可以沿用这些框架。
+本页从 Vue 脚手架开始，完成一个会持久保存的计数页面。完成后你会实际用到四件事：
 
-## 先运行一个 Vue 页面
+- `defineSurface` 挂载和卸载 Vue；
+- `context.invoke()` 从页面调用后台 Action；
+- Action 的返回值只回答本次调用；
+- `ctx.ui.setState()` 与 `context.subscribe()` 把最新状态推给页面。
 
-创建一个新的页面示例工程，不要覆盖前面教程的 my-plugin：
+## 1. 创建工程
+
+新建工程，不要覆盖前面教程中的 `my-plugin`：
 
 ```shell
-npm create ceru-plugin@0.3.5 my-plugin-page -- --template vue --lang ts
-cd my-plugin-page
+npm create ceru-plugin@latest my-counter-page -- --template vue --lang ts
+cd my-counter-page
 npm install
 npm run dev
 ```
 
-在工作台左侧点击 `page · web`，应看到“Vue 插件页面”。点击“计数 0”，数字变成 1。打开 `src/App.vue`，修改标题并保存，确认页面跟着变化。
+工作台打开后，点击左侧的 `page · web`。如果能看到 Vue 示例页，说明页面编译和挂载正常。
 
-本页使用正式发布的 `0.3.5` 工具链。新 Surface 声明至少需要 0.3.3，旧 0.2.x 不应直接套用新字段；版本关系见[版本与兼容](./compatibility)。
+这个工程中有两个入口：
 
-::: details 使用 React 或普通 JavaScript
-把模板换成 `react` 或 `web-surface` 即可。JS 版本使用 `--lang js`。React 页面在 App.tsx/App.jsx 中，普通 DOM 页面在 view.ts/view.js 中。
-:::
+```text
+src/index.ts  插件后台：Action、Storage、公开状态
+src/view.ts   页面入口：创建和销毁 Vue 应用
+src/App.vue   页面组件：显示状态并响应点击
+```
 
-## 页面在哪里挂载？
+下面仍在这个工程中修改，不再切换到普通 DOM 示例。
 
-模板的 `src/view.ts` 负责把 Vue 应用放到宿主提供的容器里：
+## 2. 声明页面和动作
 
-```ts
+用下面内容完整替换 `ceru.plugin.json`：
+
+```json [ceru.plugin.json]
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.counter-page",
+    "name": "计数页面",
+    "version": "0.1.0",
+    "description": "用 Vue 演示页面与插件逻辑通信",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "uiSchema": "^1.0.0"
+    },
+    "modules": {
+      "logic": { "entry": "logic.main" },
+      "surfaces": [
+        {
+          "id": "counter",
+          "kind": "web",
+          "entry": "view.counter",
+          "title": "计数页面",
+          "presentation": { "kind": "drawer", "placement": "right", "size": 440 },
+          "lifecycle": {
+            "openAction": "counter.surface-open",
+            "closeAction": "counter.surface-close"
+          }
+        }
+      ]
+    },
+    "contributes": {
+      "commands": [
+        { "id": "counter.read", "title": "读取计数", "action": "counter.read" },
+        { "id": "counter.increment", "title": "计数加一", "action": "counter.increment" },
+        { "id": "counter.reset", "title": "重置计数", "action": "counter.reset" },
+        {
+          "id": "counter.surface-open",
+          "title": "计数页已打开",
+          "action": "counter.surface-open"
+        },
+        {
+          "id": "counter.surface-close",
+          "title": "计数页已关闭",
+          "action": "counter.surface-close"
+        }
+      ],
+      "settingsPages": [{ "id": "counter", "title": "计数页面", "view": "counter" }]
+    },
+    "permissions": [],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": {
+    "logic.main": "src/index.ts",
+    "view.counter": "src/view.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js",
+  "framework": "vue"
+}
+```
+
+三处 ID 必须对上：`settingsPages[].view` 指向 Surface 的 `id`，Surface 的 `entry` 再指向 `entries` 中的页面入口。
+
+页面会调用的 Action 和生命周期 Action 都必须出现在 `contributes.commands`。仅在 `src/index.ts` 注册并不算声明。
+
+## 3. 编写后台逻辑
+
+用下面内容完整替换 `src/index.ts`：
+
+```ts [src/index.ts]
+import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
+
+export default definePlugin(async (ctx) => {
+  const saved = await ctx.storage.get<number>('counter')
+  let count = Number.isInteger(saved) && Number(saved) >= 0 ? Number(saved) : 0
+  let openedAt = 0
+  let timer: ReturnType<typeof setInterval> | undefined
+
+  const state = (status: string) => ({
+    count,
+    status,
+    activeSeconds: openedAt ? Math.floor((Date.now() - openedAt) / 1000) : 0
+  })
+
+  const publish = async (status: string) => {
+    const value = state(status)
+    await ctx.ui.setState('counter', value)
+    return value
+  }
+
+  ctx.actions.register('counter.read', async () => state('页面已连接'))
+
+  ctx.actions.register('counter.increment', async () => {
+    count += 1
+    await ctx.storage.set('counter', count)
+    return publish('计数已保存')
+  })
+
+  ctx.actions.register('counter.reset', async () => {
+    count = 0
+    await ctx.storage.set('counter', count)
+    return publish('计数已重置')
+  })
+
+  ctx.actions.register('counter.surface-open', async () => {
+    if (timer) clearInterval(timer)
+    openedAt = Date.now()
+    const value = await publish('页面已连接')
+    timer = setInterval(() => void publish('页面已连接'), 1000)
+    return value
+  })
+
+  ctx.actions.register('counter.surface-close', () => {
+    if (timer) clearInterval(timer)
+    timer = undefined
+    openedAt = 0
+    return { closed: true }
+  })
+
+  return () => {
+    if (timer) clearInterval(timer)
+  }
+})
+```
+
+`counter.increment` 同时做了三件不同的事：Storage 保存跨重启的数据，返回值回答当前这次 `invoke`，`setState` 把新状态发给所有正在显示这个 Surface 的页面。
+
+`surface-open` 在页面真正挂载后启动计时器，`surface-close` 在页面关闭时停止它。只有页面确实拥有轮询、Socket 或定时器时才需要关闭动作；没有资源要清理时可以不声明生命周期。
+
+## 4. 挂载 Vue
+
+模板已经生成 `src/view.ts`。确认它的完整内容如下：
+
+```ts [src/view.ts]
 import { createApp } from 'vue'
 import { defineSurface } from '@shiqianjiang/ceru-plugin-sdk'
 import App from './App.vue'
@@ -44,165 +185,220 @@ export default defineSurface((ctx) => {
 })
 ```
 
-`ctx.root` 是你可以使用的页面区域。返回的函数在页面被销毁时清理 Vue 应用。计数器只更新这个页面里的状态，还没有调用插件后台。
+`ctx.root` 是宿主分给插件的页面区域。返回的清理函数会在页面关闭时卸载 Vue，组件的 `onBeforeUnmount` 也会随之执行。
 
-## 把按钮接到后台
+## 5. 调用动作并订阅状态
 
-页面上下文没有直接的 storage 或 http。需要保存偏好、发起请求时，在后台注册一个动作，然后由页面调用它：
+用下面内容完整替换 `src/App.vue`：
 
-<PluginDiagram src="/plugins/v2/surface-actions.svg" alt="用户点击页面按钮，通过 invoke 调用后台动作，后台更新 storage 和页面 state" />
+```vue [src/App.vue]
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import type { JsonObject, JsonValue, SurfaceContext } from '@shiqianjiang/ceru-plugin-sdk'
 
-下面是一个独立的普通 DOM 小例子，演示计数如何保存在后台。可以在 web-surface 工程中使用，配套清单见下一节。
+const props = defineProps<{ context: SurfaceContext }>()
+const state = reactive({ count: 0, activeSeconds: 0, status: '正在连接...' })
+const busy = ref(false)
+const error = ref('')
+let stopState: (() => void) | undefined
 
-**后台 `src/index.ts`：**
-
-```ts
-import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
-
-export default definePlugin((ctx) => {
-  ctx.actions.register('counter.increment', async () => {
-    const old = await ctx.storage.get<number>('counter')
-    const count = (old ?? 0) + 1
-    await ctx.storage.set('counter', count)
-    await ctx.ui.setState('counter', { count })
-    return { count }
-  })
-})
-```
-
-**页面 `src/view.ts`：**
-
-```ts
-import { defineSurface } from '@shiqianjiang/ceru-plugin-sdk'
-
-export default defineSurface((surface) => {
-  const button = document.createElement('button')
-  const output = document.createElement('p')
-  button.textContent = '计数 +1'
-  output.textContent = '点击按钮，从后台读取并保存计数'
-  surface.root.append(button, output)
-
-  const click = async () => {
-    button.disabled = true
-    try {
-      await surface.invoke('counter.increment', null)
-    } catch {
-      output.textContent = '操作失败，请查看插件日志后重试'
-    } finally {
-      button.disabled = false
-    }
-  }
-  button.addEventListener('click', click)
-  const unsubscribe = surface.subscribe((state) => {
-    output.textContent = '计数：' + String(state.count ?? 0)
-  })
-  return () => {
-    unsubscribe()
-    button.removeEventListener('click', click)
-    button.remove()
-    output.remove()
-  }
-})
-```
-
-点击按钮时，`invoke` 发出请求；后台的 `setState` 更新状态；页面的 `subscribe` 接到状态后显示数字。这样页面只负责显示，业务代码集中在后台。
-
-## 配套清单
-
-上面两份文件配套的完整 `ceru.plugin.json`：
-
-也可以下载[完整计数页面工程](/plugins/v2/tutorial/ceru-counter-page.zip)，解压后执行 `npm install`、`npm run dev`，再对照下面的配置阅读。
-
-```json
-{
-  "manifest": {
-    "manifestVersion": 2,
-    "id": "example.counter",
-    "name": "计数页面",
-    "version": "0.1.0",
-    "engines": { "hostApi": "^2.0.0", "logicRuntime": "ceru-js@1" },
-    "modules": {
-      "logic": { "entry": "logic.main" },
-      "surfaces": [
-        {
-          "id": "counter",
-          "kind": "web",
-          "entry": "ui.counter",
-          "title": "计数页面",
-          "presentation": { "kind": "drawer", "placement": "right", "size": 480 }
-        }
-      ]
-    },
-    "contributes": {
-      "commands": [{ "id": "increment", "title": "计数 +1", "action": "counter.increment" }],
-      "settingsPages": [{ "id": "counter", "title": "计数页面", "view": "counter" }]
-    },
-    "permissions": []
-  },
-  "entries": { "logic.main": "src/index.ts", "ui.counter": "src/view.ts" },
-  "resources": {},
-  "output": "dist/plugin.js"
+function applyState(value: JsonValue) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return
+  const next = value as JsonObject
+  if (typeof next.count === 'number') state.count = next.count
+  if (typeof next.activeSeconds === 'number') state.activeSeconds = next.activeSeconds
+  if (typeof next.status === 'string') state.status = next.status
 }
-```
 
-`settingsPages.view` 与 Surface 的 `id` 对应。安装后从插件的配置入口打开 counter 页面。`presentation` 写在 Surface 声明里，不要再新增旧实验格式 `surface.<id>` 资源。
-
-## 页面打开与关闭
-
-需要“打开后读初始数据”或“关闭时取消轮询”，在 Surface 上声明：
-
-```json
-"lifecycle": {
-  "openAction": "counter.open",
-  "closeAction": "counter.close"
+async function run(action: 'counter.increment' | 'counter.reset' | 'counter.read') {
+  busy.value = true
+  error.value = ''
+  try {
+    const result = await props.context.invoke(action, {})
+    applyState(result)
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason)
+  } finally {
+    busy.value = false
+  }
 }
-```
 
-然后在 `contributes.commands` 中声明这两个 action，并在后台注册它们。宿主挂载完成后调用 openAction；关闭、切换或卸载页面时调用 closeAction，结束未完成的会话调用。
+onMounted(async () => {
+  stopState = props.context.subscribe(applyState)
+  await run('counter.read')
+})
 
-在 openAction 中读取初始数据并 setState。关闭动作负责取消插件自己创建的轮询、定时器等业务资源。不要认为所有定时器都会因为一个请求取消就自动停止。
+onBeforeUnmount(() => stopState?.())
+</script>
 
-::: tip 账号页面也是普通插件页面
-二维码、登录轮询、会员信息和个人歌单数据由插件实现。账号页使用 Web Surface；个人歌单通过 native Surface 与 <code>playlistSections</code> 显示在宿主现有“歌单”页。宿主只提供容器和受控的基础能力，不解析平台账号业务。旧 `ceru.integrations` 专用协议已经撤回，参见[迁移说明](./desktop-extensions#旧账号区块协议已撤回)。
-:::
+<template>
+  <main>
+    <p class="status">{{ state.status }}</p>
+    <h1>持久计数器</h1>
+    <p class="count">{{ state.count }}</p>
+    <p class="session">本次页面已打开 {{ state.activeSeconds }} 秒</p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <div class="actions">
+      <button type="button" class="primary" :disabled="busy" @click="run('counter.increment')">
+        加一
+      </button>
+      <button type="button" :disabled="busy || state.count === 0" @click="run('counter.reset')">
+        重置
+      </button>
+    </div>
+  </main>
+</template>
 
-## 页面 API 参考
-
-| 字段或方法                      | 作用                                              |
-| ------------------------------- | ------------------------------------------------- |
-| `root`                          | HTMLElement，页面挂载容器                         |
-| `invoke(action, input)`         | 调用已声明并注册的动作，返回 `Promise<JsonValue>` |
-| `subscribe(handler)`            | 接收页面 state，返回取消订阅函数                  |
-| `mount`                         | 宿主给出的挂载信息                                |
-| `host / utils / icons / assets` | 环境信息、工具及共享资源                          |
-
-页面不能读取主窗口 DOM、调用 Electron 或直接使用 Node 文件系统。动作的参数和结果使用 JSON。Vue/React 的生产运行代码会打入成品，用户不需要安装框架。
-
-### 显示参数
-
-`title` 是容器标题；`presentation.kind` 为 drawer 或 modal；drawer 的 placement 支持 left/right/top/bottom；size 为 280–1200 px，实际尺寸受窗口限制。这些参数只管外部容器，里面展示什么由你的页面决定。
-
-0.3.5 起，Web Surface 会观察页面实际内容并自动调整 modal 高度。页面使用自然高度：
-
-```css
-html,
-body {
+<style scoped>
+:global(*) {
+  box-sizing: border-box;
+}
+:global(body) {
   margin: 0;
+  background: #f4f7f5;
+  color: #1d2922;
 }
-
-#app {
+main {
   width: 100%;
+  padding: 28px;
+  font: 15px/1.5 system-ui, sans-serif;
 }
+.status,
+.session {
+  margin: 0;
+  color: #5a675f;
+}
+h1 {
+  margin: 8px 0 18px;
+  font-size: 24px;
+}
+.count {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  color: #207447;
+}
+.session {
+  margin-top: 12px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+}
+button {
+  min-width: 84px;
+  padding: 9px 15px;
+  border: 1px solid #bdc8c0;
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+button.primary {
+  border-color: #207447;
+  background: #207447;
+  color: #fff;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.error {
+  color: #b42318;
+}
+@media (prefers-color-scheme: dark) {
+  :global(body) {
+    background: #19211c;
+    color: #edf4ef;
+  }
+  .status,
+  .session {
+    color: #aebbb2;
+  }
+  .count {
+    color: #69c58d;
+  }
+  button {
+    border-color: #435047;
+    background: #222c26;
+  }
+  button.primary {
+    border-color: #55ad78;
+    background: #55ad78;
+    color: #102016;
+  }
+}
+</style>
 ```
 
-不要给 <code>html</code>、<code>body</code>、<code>#app</code> 或页面根元素设置 <code>height: 100vh</code> / <code>min-height: 100vh</code>。否则短内容会按 iframe 视口撑满并产生空白或内部滚动。插件不需要自行调用 resize API；内容、字体或状态变化时 Core 会自动测量，CLI 与 Host 再按窗口上限显示。
+页面挂载时先订阅公开状态，再调用 `counter.read` 取得一次直接结果。这样两条数据通路都能独立工作：
 
-### 样式与资源
+| 通路 | 用途 | 本例 |
+| --- | --- | --- |
+| `invoke()` 的返回值 | 回答当前操作 | 点击“加一”后立即得到新计数 |
+| `setState()` → `subscribe()` | 后台主动发布最新状态 | 每秒更新页面打开时长 |
+| `storage` | 跨工作台或澜音重启保存 | 再次打开仍保留计数 |
 
-保留模板的 CSS 和资源构建方式，用 `npm run preview` 验证成品。不要把宿主资源名称理解为必须支持的音乐平台。
+订阅返回的函数必须在卸载时调用。页面自己创建的事件监听器、定时器和观察器也应在 `onBeforeUnmount` 中清理。
 
-SDK 中的 `uiExtensions` 和通用 Slot 声明不代表当前桌面已经接入所有挂载位置。具体能力查[宿主支持表](./host-services)。
+## 6. 运行结果
 
-## 动手试试
+保存文件后，工作台会重新加载。点击 `counter · web`，应看到“持久计数器”：
 
-把“计数 +1”改成一个你想做的操作名称，找出它连接的 action。接入业务前，先让动作返回一条本地演示结果，确认页面和后台的通信走通。
+1. 页面打开时长每秒增加；
+2. 点击“加一”，数字和状态立即变化；
+3. 关闭后重新打开，计数保留，打开时长从 0 开始；
+4. 停止并重新执行 `npm run dev`，计数仍然保留。
+
+工作台的 Storage 保存在工程的开发数据目录。需要从头验证时，使用工作台提供的清理开发数据操作，不要把 `dist` 是否存在当成存储状态。
+
+## 7. 构建与桌面入口
+
+```shell
+npm run typecheck
+npm run build
+npm run validate
+npm run preview
+```
+
+安装 `dist/plugin.js` 后，在澜音 2.0 的“设置 → 插件管理”中找到该插件，点击它的“计数页面”配置入口。`settingsPages` 决定这个入口，`presentation` 决定它以右侧抽屉打开。
+
+也可以下载[完成版计数页面工程](/plugins/v2/tutorial/ceru-counter-page.zip)对照。它是本页最终代码，不是下一步必需品。
+
+## 常见问题
+
+**点击后提示动作未声明**
+
+检查 `contributes.commands[].action`、`context.invoke()` 和 `ctx.actions.register()` 三处字符串是否完全一致。
+
+**页面一直显示“正在连接”**
+
+确认 `src/view.ts` 把 `context` 传给了 `App.vue`，并检查工作台日志中是否有后台激活错误。
+
+**计数变化，但页面打开时长不更新**
+
+`invoke` 的返回值已经生效，订阅通路没有生效。检查 `subscribe` 是否在挂载时执行，以及后台是否对 Surface ID `counter` 调用了 `setState`。
+
+**页面出现大片空白或内部滚动**
+
+不要给 `html`、`body`、`#app` 或页面根元素设置 `height: 100vh` / `min-height: 100vh`。宿主会按内容和窗口上限计算页面尺寸。
+
+## SurfaceContext 速查
+
+| 字段或方法 | 作用 |
+| --- | --- |
+| `root` | 插件可挂载内容的 HTMLElement |
+| `invoke(action, input)` | 调用已声明的 Action，参数和结果必须是 JSON |
+| `subscribe(handler)` | 接收该 Surface 的公开状态，返回取消订阅函数 |
+| `close()` | 当前 Action 返回后关闭这个页面 |
+| `mount` | 当前页面的挂载位置和模式 |
+| `host / utils / icons / assets` | 环境信息、工具、宿主图标和共享资源 |
+
+Surface 不能读取主窗口 DOM，也不能直接使用 Electron、Node 文件系统、Storage 或 HTTP。需要这些能力时，由页面 `invoke` 后台 Action。
+
+::: details React 或普通 JavaScript
+创建工程时可把模板改为 `react` 或 `web-surface`，JavaScript 项目使用 `--lang js`。通信模型不变，只有组件挂载和清理写法不同。
+:::

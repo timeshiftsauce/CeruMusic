@@ -107,7 +107,7 @@ const handleBack = (): void => {
   router.back()
 }
 
-// 监听窗口化全屏状态（全屏期间隐藏标题栏控件）
+// 监听原生全屏状态（全屏期间隐藏标题栏控件）
 const isAppFullscreen = ref(false)
 let unsubFullscreen: (() => void) | null = null
 

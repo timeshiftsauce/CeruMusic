@@ -1,7 +1,7 @@
 # v2 插件抽屉与存储
 
 ::: tip 完整文档已归入 v2 专区
-适用于澜音 **1.14.1 起**。本页保留原地址与章节锚点；完整参数、容量、类型差异、错误和可运行示例请阅读 [原生配置抽屉](/guide/plugins/v2/ui-schema)、[Storage 存储与共享](/guide/plugins/v2/storage)。首次开发请从 [快速开始](/guide/plugins/v2/quick-start)进入。
+适用于使用 v2 插件的澜音 **2.0 起**；1.14.1 仍使用 v1。本页保留原地址与章节锚点；完整参数、容量、类型差异、错误和可运行示例请阅读 [原生配置抽屉](/guide/plugins/v2/ui-schema)、[Storage 存储与共享](/guide/plugins/v2/storage)。首次开发请从 [运行插件](/guide/plugins/v2/quick-start)进入。
 :::
 
 以下是澜音桌面 Host 的 v2 扩展，沿用现有 `ctx.ui`、`ctx.storage` 传输协议。需要包含这些扩展的桌面版本；旧 Host 不会自动获得这些能力。

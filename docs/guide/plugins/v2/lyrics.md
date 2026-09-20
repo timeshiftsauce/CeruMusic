@@ -99,6 +99,8 @@ Core 对转换输入/导出文本另有 **2 × 1024 × 1024 的字符串 length*
 
 ## 音质的顺序
 
+常用音质标识推荐使用 `128k`、`320k`、`flac`、`flac24bit`、`hires`、`atmos`、`atmos_plus`、`master`。它们是命名约定，不是强制枚举；按实际能力选取，也可以自定义。详见[音源命名约定](./source-conventions#音质标识)。
+
 在 Provider 声明中按**从低到高**排列：
 
 ```json

@@ -1,7 +1,7 @@
 ---
 pageClass: plugin-v2-doc
-title: 快速上手
-description: 创建插件工程，打开开发工作台，运行第一次搜索。
+title: 运行插件
+description: 创建工程，在开发工作台运行一次搜索。
 prev:
   text: 简介
   link: /guide/plugins/v2/
@@ -10,100 +10,78 @@ next:
   link: /guide/plugins/v2/first-command
 ---
 
-# 快速上手
+# 1. 运行插件
 
 <PluginLessonNav :step="0" />
 
-这一节只做一件事：**把示例插件运行起来，搜索到 Morning Light**。先不用修改代码。
+这一节先把开发环境跑通：创建 `my-plugin`，搜索到模板里的 **Morning Light**。暂时不用修改代码。
 
 ## 准备环境
 
-你的电脑需要安装 **Node.js 22.12 或更高版本**。Node.js 会附带 npm，用于下载开发工具和依赖。在终端执行：
+安装 **Node.js 22.12 或更高版本**和一个代码编辑器。在终端执行：
 
 ```shell
 node --version
 npm --version
 ```
 
-两个命令都能显示版本号，就可以继续。若提示找不到命令，请先安装 Node.js，再重新打开终端。编辑器使用你熟悉的即可；下文以 VS Code 中能打开项目文件为前提。
+两个命令都应显示版本号。若提示找不到命令，安装 Node.js 后重新打开终端。npm 随 Node.js 一起安装，用于下载插件开发工具。
 
-安装插件到正式软件是最后一节的内容，到时需要澜音 **1.14.1 或更高版本**。
+前四节使用独立工作台，无需启动澜音。最后安装插件时，需要**澜音 2.0**；1.14.1 不支持本教程的 v2 插件。
 
-## 创建一个工程
+## 创建工程
 
-在准备存放插件代码的目录中执行：
-
-```shell
-npm create ceru-plugin@0.3.5 my-plugin -- --template source --lang ts
-```
-
-命令中的 `my-plugin` 是新文件夹的名字。`source` 表示“音乐数据模板”，`ts` 表示使用 TypeScript。这里固定脚手架版本，让生成的文件和教程一致。
-
-接着进入目录并安装依赖：
+在准备存放代码的目录执行：
 
 ```shell
+npm create ceru-plugin@latest my-plugin -- --template source --lang ts
 cd my-plugin
 npm install
-```
-
-看到安装结束后，启动开发工具：
-
-```shell
 npm run dev
 ```
 
-这会打开 **Ceru Plugin 开发工作台**。它是专门测试插件的小窗口，能让你在开发期间查看结果和日志。请保持终端运行。
+若 npm 询问是否安装 `create-ceru-plugin`，输入 `y`。这几条命令依次创建文件夹、进入文件夹、安装依赖、启动工作台。
 
-::: details 没有出现窗口？
-先看终端是否还在安装或下载 Electron。若命令已经报错，检查 Node.js 版本和安装日志。提示端口被占用时，关闭之前的工作台再试。其他情况见[故障排查](./troubleshooting)。
-:::
+`source` 是音乐数据模板；`ts` 表示 TypeScript。生成的代码就在你自己的 `my-plugin` 目录中。后续命令都在这个目录执行。
 
-## 运行第一次搜索
+`npm run dev` 会保持运行，并打开 **Ceru Plugin 开发工作台**。保留这个终端，保存源码时它会重新构建插件。
 
-在工作台中找到“搜索与解析”：
+## 搜索一首歌曲
 
-1. 等待出现“运行中”和“搜索来源已就绪”。
-2. 输入 **Morning**。
-3. 点击 **调用搜索**。
+在工作台找到“搜索与解析”，等待出现“运行中”和“搜索来源已就绪”。输入 `Morning`，点击**调用搜索**，应看到 **Morning Light**。
 
-你应该看到 **Morning Light**，下方还有插件返回的歌曲数据。
+![工作台搜索 Morning 的结果](/plugins/v2/playground.png)
 
-![工作台搜索 Morning 后出现 Morning Light](/plugins/v2/playground.png)
+再搜索 `Rain`，应得到 **Rainy Afternoon**；搜索 `不存在`，应得到空结果。
 
-_真实 CLI 0.3.5 工作台。示例数据在你的项目源码里，不需要网络。_
+这里的数据来自模板里的数组，没有网络请求。结果中的 `playable: false` 表示它只有歌曲信息，不能播放。
 
-再输入 `Rain` 搜索一次，应该得到 **Rainy Afternoon**。如果你已经看到这个结果，第一个插件就运行成功了。
+## 找到刚才运行的代码
 
-::: tip 为什么演示歌曲不能播放？
-模板只准备了歌曲名称，没有提供真实音频地址。本教程先教会你返回搜索结果；接入真实服务时，再增加[播放解析](./providers#解析播放地址)。
-:::
-
-## 打开代码
-
-用编辑器打开 `my-plugin` 文件夹，你会看到：
+用编辑器打开整个 `my-plugin` 文件夹：
 
 ```text
 my-plugin/
-├── ceru.plugin.json      # 插件信息与功能声明
+├── ceru.plugin.json   # 插件叫什么、有哪些功能、入口文件在哪里
 ├── src/
-│   └── index.ts          # 刚才运行的搜索和问候代码
-└── package.json         # dev、build 等命令
+│   └── index.ts       # 问候动作和搜索函数
+├── package.json      # dev、build 等命令及开发依赖
+└── tsconfig.json     # TypeScript 配置
 ```
 
-打开 `src/index.ts`，找到 `const tracks = [...]`。其中的 Morning、Rain 和 Night，就是刚才搜索到的数据。
+打开 `src/index.ts`，找到 `tracks` 数组。Morning、Rain、Night 就是刚才能搜索到的歌曲。
 
-这一节只需要知道代码在哪里。下一节我们从较短的 `hello` 命令开始修改。
+模板已经实现了一个搜索插件。下一节会把它精简成一个问候命令，然后由你逐步加回搜索和存储，弄清每部分代码的作用。
 
-## 动手试试
+## 没有看到结果时
 
-搜索 `Night`，再搜索一个不存在的名字。观察“有结果”和“没有结果”的区别。
+| 现象 | 检查位置 |
+| --- | --- |
+| 安装依赖失败 | 先看终端最后的错误；确认 Node.js 版本和下载网络 |
+| 工作台没有打开 | 检查终端是否仍在下载 Electron，或是否报告启动错误 |
+| 端口占用 | 关闭之前启动的工作台及开发终端，再运行 dev |
+| 插件未运行或搜索来源未就绪 | 查看工作台日志和终端构建错误，确认运行命令的位置是 my-plugin |
 
-**完成标志：** 工作台保持运行，你能搜索到 Night Walk，也能看到空搜索结果。
+**完成检查：** 你能搜索到 Morning Light，也能找到定义它的 `src/index.ts`。
 
-接下来：[写一个命令 →](./first-command)
-
-::: details 我想直接构建，或者使用其他包管理器
-构建命令是 `npm run build`，输出 `dist/plugin.js`。完整安装步骤在[最后一节](./first-release)，CLI 参数和其他工作流见[脚手架参考](./cli)。
-
-教程统一使用 npm，避免同时引入多种命令。熟悉 pnpm/Yarn 的开发者可使用对应的安装和 scripts 命令，并保持一种锁文件。
-:::
+下一节：[写一个命令](./first-command)。

@@ -7,7 +7,7 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, computed, watch, toRaw, onScopeDispose, type ComputedRef } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
-import { activePluginContributions } from '@renderer/services/pluginState'
+import { contributionsRevision } from '@renderer/services/pluginState'
 import _ from 'lodash'
 import defaultCover from '/default-cover.png'
 import { playSetting } from './playSetting'
@@ -387,23 +387,20 @@ export const useGlobalPlayStatusStore = defineStore(
     })
     onScopeDispose(stopTagListener)
     watch(
-      () =>
-        activePluginContributions.value
-          .filter((item) => item.manifest.contributes?.lyricConverters?.length)
-          .map((item) => item.pluginId)
-          .join(','),
-      (ready) => {
-        if (ready && player.songInfo?.source === 'local' && !player.lyrics.crlyric)
-          void updatePlayerInfo(toRaw(player.songInfo) as SongList, true)
-      }
-    )
-
-    watch(
-      () => localUserStore.userInfo.lastPlaySongId,
-      (id) => {
-        if (!id || String(id) === player.songId) return
+      [
+        () => localUserStore.userInfo.lastPlaySongId,
+        () => localUserStore.list,
+        contributionsRevision
+      ],
+      ([id], previous) => {
+        if (!id) return
         const song = localUserStore.list.find((item) => item.songmid === id)
-        if (song) void updatePlayerInfo(song)
+        if (!song) return
+        // Startup metadata can finish before plugins and their routing are restored.
+        // Retry from the saved selection, even if the first metadata request is still pending.
+        const retryLyrics = previous[2] !== contributionsRevision.value && !player.lyrics.crlyric
+        if (String(id) === player.songId && !retryLyrics) return
+        void updatePlayerInfo(song, retryLyrics)
       },
       { immediate: true }
     )

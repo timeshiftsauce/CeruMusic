@@ -65,7 +65,7 @@ config 的默认值与个性化值如何组合，见[配置覆盖顺序](./confi
 
 ## 服务端高频发行
 
-在后端项目安装 `@shiqianjiang/ceru-plugin-issuer@0.3.5`，复用 PreparedIssuer：
+在后端项目安装 `@shiqianjiang/ceru-plugin-issuer@latest`，复用 PreparedIssuer：
 
 ```ts
 import { readFile } from 'node:fs/promises'

@@ -6,7 +6,7 @@ description: 用插件声明原生歌单、歌曲、账号菜单和扫码弹窗�
 
 # 原生内容与账号菜单
 
-需要 SDK、Core、Issuer、CLI **0.3.5** 契约，以及支持 native Surface 与 <code>playlistSections</code> 的澜音版本。插件提供数据、动作和渲染声明，澜音在现有“歌单”页使用自己的 Vue 组件显示歌单网格、歌曲列表和按钮。歌单详情、导入对话框、播放队列和底部播放器继续使用软件原有功能。
+本页适用于澜音 2.0。插件提供数据、动作和渲染声明，澜音在现有“歌单”页使用自己的 Vue 组件显示歌单网格、歌曲列表和按钮。歌单详情、导入对话框、播放队列和底部播放器继续使用软件原有功能。
 
 账号验证、网络请求、Cookie、会员判断和平台数据转换属于插件。宿主只处理通用协议，不根据插件名称或平台名称插入业务逻辑。
 
@@ -134,7 +134,7 @@ await ctx.ui.navigation.open({ page: 'playlist', sectionId: 'library' })
 
 账号菜单未登录时显示默认头像和“未登录”。已登录项悬停展开二级菜单，可调用已声明的 `logoutAction` 退出登录。扫码页面声明 `presentation: { kind: 'modal', size: 360 }`；Vue 在登录动作成功返回后调用 `SurfaceContext.close()` 自动关闭，逻辑端也可使用 `ctx.ui.closeView(surfaceId)`。
 
-0.3.5 Web Surface 会自动上报内容高度。Vue 根元素使用自然高度，不要设置 <code>height/min-height: 100vh</code>。网易云扫码页面可保持约 360×330，登录摘要约 360×154，状态切换时由宿主自动调整容器。
+Web Surface 会自动上报内容高度。Vue 根元素使用自然高度，不要设置 <code>height/min-height: 100vh</code>。网易云扫码页面可保持约 360×330，登录摘要约 360×154，状态切换时由宿主自动调整容器。
 
 ## 同一音源的多个实现
 

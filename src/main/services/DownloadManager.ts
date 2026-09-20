@@ -17,6 +17,7 @@ log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'lo
 
 import { ConfigManager } from './ConfigManager'
 import { playbackRequestHeaders } from './plugin/playbackRequests'
+import { normalizeLyricFormat } from '@common/lyricFormats'
 
 export default class DownloadManager extends EventEmitter {
   private tasks = new Map<string, DownloadTask>()
@@ -252,6 +253,7 @@ export default class DownloadManager extends EventEmitter {
           const lrc = await this.lyricFetcher(task)
           if (typeof lrc === 'string' && lrc) {
             task.songInfo.lrc = lrc
+            task.songInfo.lyricExportFormat = normalizeLyricFormat(task.tagWriteOptions?.lyricFormat)
             this.saveTasks()
           }
         } catch (error) {

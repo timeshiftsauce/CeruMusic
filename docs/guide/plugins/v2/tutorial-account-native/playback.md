@@ -1,227 +1,174 @@
 ---
 pageClass: plugin-v2-doc
-title: 导航、播放与导入
-description: 把原生卡片动作接到澜音的歌单详情、队列、播放器、导入窗口和 Provider resolve。
+title: 5. 导航、播放与导入
+description: 加入歌曲搜索与解析，并把 Native View 动作接到队列、播放器和导入窗口。
 prev:
   text: 原生歌单区块
   link: /guide/plugins/v2/tutorial-account-native/native-library
 next:
-  text: 替换真实接口并发布
+  text: 验证与真实接口
   link: /guide/plugins/v2/tutorial-account-native/release
 ---
 
-# 导航、播放与导入
+# 5. 导航、播放与导入
 
-Native View 只描述“按钮调用哪个动作”。动作真正执行时，再使用宿主服务。
+上一节已经能打开原生歌单详情，本节补齐歌曲搜索、播放地址、播放按钮和歌单导入。完成后的调用关系如下：
 
-| 用户操作     | 插件动作                             | 宿主 API                                                      | 可见结果                     |
-| ------------ | ------------------------------------ | ------------------------------------------------------------- | ---------------------------- |
-| 定位个人歌单 | <code>library.openSection</code>     | <code>ctx.ui.navigation.open</code>                           | 打开“歌单”页并滚动到插件区块 |
-| 点击歌单     | <code>playlist.open</code>           | <code>ctx.ui.navigation.open</code>                           | 进入澜音原生歌单详情         |
-| 点击播放     | <code>tracks.play</code>             | <code>ctx.queue.replace</code> + <code>ctx.player.play</code> | 更新队列并开始播放           |
-| 点击导入     | <code>playlist.import</code>         | <code>ctx.ui.playlistImport.open</code>                       | 打开澜音已有导入窗口         |
-| 播放器取地址 | Provider <code>tracks.resolve</code> | 返回 <code>ResolveResult</code>                               | 宿主加载实际音频             |
+| 用户操作 | 后台动作或 Provider | 最终结果 |
+| --- | --- | --- |
+| 点击歌单 | `playlist.open` | 打开澜音原生歌单详情 |
+| 点击歌曲或“播放推荐” | `tracks.play` | 替换队列并开始播放 |
+| 播放器读取歌曲 | `tracks.resolve` | 返回可加载的 WAV 地址 |
+| 点击“导入歌单” | `playlist.import` | 打开澜音已有导入窗口 |
+| 导入窗口读取 ID | importer `getTracks` | 分页返回标准歌曲 |
 
-## 1. 打开“歌单”页并定位自己的区块
+本节完整替换 `provider.ts`、`native.ts` 和 Manifest，并新增本地音频服务。
 
-<code>playlistSections</code> 会自动出现在现有“歌单”页。若账号动作、命令或其他入口需要主动带用户过去，传声明过的 <code>sectionId</code>：
+## 1. 完成 Provider
+
+完整替换 `src/provider.ts`：
+
+<details>
+<summary>src/provider.ts 完整内容</summary>
+
+<<< ../../../../public/plugins/v2/tutorial/account-native/src/provider.ts
+
+</details>
+
+这个文件新增三块行为：
+
+1. `tracks.search()` 从演示数据返回标准 `ContentEntity`；
+2. `tracks.resolve()` 验证账号、资源归属和音质，再返回短期音频 URL；
+3. `playlistImporters.register()` 按导入窗口给出的 `value/cursor/limit` 返回一页歌曲。
+
+`tracks.play` 不是 Provider 方法。它先请求 `player.control` 权限，再调用：
 
 ```ts
-ctx.actions.register('library.openSection', async () => {
-  await ctx.ui.navigation.open({
-    page: 'playlist',
-    sectionId: 'tutorial-library'
-  })
-  return null
+const call = { permissionKey: 'playback', operation }
+await ctx.queue.replace(items, call)
+await ctx.player.play(refs[0], call)
+```
+
+`queue.replace()` 需要完整歌曲实体，队列才能立即显示标题、歌手和时长；`player.play()` 再指定第一首歌曲的 ref。用户拒绝权限时，两项服务都不应调用。
+
+## 2. 接上 Native View 动作
+
+完整替换 `src/native.ts`：
+
+<details>
+<summary>src/native.ts 完整内容</summary>
+
+<<< ../../../../public/plugins/v2/tutorial/account-native/src/native.ts
+
+</details>
+
+宿主为不同位置生成的动作输入不同：
+
+| Native View 位置 | 点击时的输入 |
+| --- | --- |
+| `sections[].onOpen` | `{ ref }` |
+| `sections[].onPlay` | `{ ref, refs }` |
+| `sections[].itemActions` | 固定 `input` 与当前 `{ ref }` 合并 |
+| 页面顶部 `actions` | 只使用动作自己的 `input` |
+
+因此 `tracks.play` 同时接受单个 `ref` 和一组 `refs`；`playlist.import` 从当前卡片取得完整歌单 ref，再把 `ref.id` 填入导入窗口。
+
+## 3. 使用最终入口
+
+完整替换 `src/index.ts`：
+
+```ts [src/index.ts]
+import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
+import { createAccount } from './account'
+import { registerNative } from './native'
+import { createCatalog, registerProvider } from './provider'
+
+export default definePlugin(async (ctx) => {
+  const account = await createAccount(ctx)
+  const catalog = createCatalog(ctx, account)
+
+  registerProvider(ctx, account, catalog)
+  registerNative(ctx, account, catalog)
 })
 ```
 
-该调用返回 <code>Promise&lt;void&gt;</code>，无需权限。Host 打开现有“歌单”页，并按调用插件的 ID 与 <code>sectionId</code> 找到区块后滚动定位。<code>sectionId</code> 只能与 <code>page: 'playlist'</code> 一起使用，并且必须出现在本插件的 <code>contributes.playlistSections</code> 中。
+## 4. 完成 Manifest
 
-这个 API 是可选的定位能力。区块的正常显示不依赖它，也不需要 <code>openView('library')</code>。
+完整替换 `ceru.plugin.json`：
 
-## 2. 打开原生歌单详情
+<details>
+<summary>ceru.plugin.json 完整内容</summary>
 
-```ts
-ctx.actions.register('playlist.open', async (input) => {
-  const ref = ownedRef(input.ref, 'playlist')
-  await ctx.ui.navigation.open({
-    page: 'playlist',
-    ref
-  })
-  return null
-})
-```
+<<< ../../../../public/plugins/v2/tutorial/account-native/ceru.plugin.json
 
-<code>navigation.open()</code> 输入：
+</details>
 
-| 字段              | 类型                     | 说明                                |
-| ----------------- | ------------------------ | ----------------------------------- |
-| <code>page</code> | <code>"playlist"</code>  | 打开已有歌单详情页面                |
-| <code>ref</code>  | <code>ResourceRef</code> | 原样保留插件、Provider、连接与 data |
+这里同时完成四项声明：
 
-返回 <code>Promise&lt;void&gt;</code>，不需要权限。打开后，宿主使用同一个 ref 调用当前 Provider 的 <code>playlists.get</code>。
+- Provider 协议增加 `music.search@1` 和 `music.resolve@1`；
+- Native View 用到的每个动作都进入 `commands`；
+- `playlistImporters` 的 ID 与后台注册、打开窗口时的 `importerId` 一致；
+- `playback` 权限把 Manifest key 映射到宿主的 `player.control`。
 
-先验证 ref 属于自己：
+`qualities` 只声明本例真正接受的 `128k` 和 `320k`。平台 ID 与音质 ID 的推荐写法见[平台与音质约定](../source-conventions)，它们是协作约定，不是强制枚举。
 
-```ts
-function ownedRef(value: unknown, kind: 'track' | 'playlist') {
-  assertResourceRef(value)
-  if (
-    value.pluginId !== ctx.plugin.id ||
-    value.providerId !== PROVIDER_ID ||
-    value.connectionId !== CONNECTION_ID ||
-    value.kind !== kind
-  ) {
-    throw new Error('资源不属于当前插件与账号连接')
-  }
-  return value
-}
-```
+## 5. 新增本地音频服务
 
-这一步能阻止别的插件伪造 ID，让当前账号去读取或播放错误资源。
+在工程根目录新建 `mock-audio.mjs`：
 
-## 3. 替换队列并播放
+<details>
+<summary>mock-audio.mjs 完整内容</summary>
 
-先在 Manifest 声明：
+<<< ../../../../public/plugins/v2/tutorial/account-native/mock-audio.mjs{js}
+
+</details>
+
+在 `package.json` 的 `scripts` 中加入：
 
 ```json
-{
-  "key": "playback",
-  "name": "player.control",
-  "reason": "点击原生歌曲时替换播放队列并开始播放"
-}
+"mock": "node mock-audio.mjs"
 ```
 
-动作获得 <code>OperationContext</code> 后，用同一次用户意图请求权限，再构造 <code>ServiceCall</code>：
+这个服务按歌曲 ID 生成一段有声音的 WAV。它只供本地验证，`npm run build` 不会把服务打进 `plugin.js`。
 
-```ts
-ctx.actions.register('tracks.play', async (input, operation) => {
-  const refs = readOwnedTrackRefs(input)
-  const items = refs.map(findTrack).map(trackEntity)
+## 6. 运行本节
 
-  let grant = await ctx.permissions.query({ key: 'playback' })
-  if (grant.status !== 'granted') {
-    grant = await ctx.permissions.request({
-      key: 'playback',
-      intent: operation.userIntent
-    })
-  }
-  if (grant.status !== 'granted') {
-    throw new Error('请允许插件控制播放')
-  }
+第一个终端启动音频服务：
 
-  const call = { permissionKey: 'playback', operation }
-  await ctx.queue.replace(items, call)
-  await ctx.player.play(refs[0], call)
-  return null
-})
+```shell
+npm run mock
 ```
 
-| API                              | 输入                                      | 返回                    | 权限           |
-| -------------------------------- | ----------------------------------------- | ----------------------- | -------------- |
-| <code>permissions.query</code>   | <code>{ key }</code>                      | 当前授权状态            | 无             |
-| <code>permissions.request</code> | key 与可选 userIntent                     | 新授权状态              | 触发宿主授权   |
-| <code>queue.replace</code>       | <code>ContentEntity[]</code>、ServiceCall | <code>QueueState</code> | player.control |
-| <code>player.play</code>         | 首曲 ref、ServiceCall                     | <code>void</code>       | player.control |
+看到以下地址后保持运行：
 
-只把 ref 塞进队列不够。<code>queue.replace</code> 需要完整 <code>ContentEntity[]</code>，这样队列能立即显示标题、歌手和时长；<code>player.play</code> 再指定从哪一首开始。
-
-## 4. 实现 resolve
-
-播放器需要音频时调用：
-
-```ts
-tracks: {
-  async resolve(ref, quality, operation) {
-    operation.signal.throwIfAborted()
-    requireAccount()
-    const track = findOwnedTrack(ref)
-
-    return {
-      ok: true,
-      url: 'http://127.0.0.1:43130/audio/' +
-        encodeURIComponent(track.id) + '.wav',
-      expiresAt: Date.now() + 60_000,
-    }
-  },
-}
+```text
+Mock audio: http://127.0.0.1:43130
 ```
 
-| 参数                   | 说明                                           |
-| ---------------------- | ---------------------------------------------- |
-| <code>ref</code>       | 播放动作留下的完整资源引用                     |
-| <code>quality</code>   | 用户选择的音质；顺序来自 Manifest 的 qualities |
-| <code>operation</code> | 取消信号与截止时间                             |
+第二个终端运行插件：
 
-成功返回 <code>{ ok: true, url, expiresAt?, requestHeaders? }</code>。需要 Cookie 或 Referer 才能读取临时媒体时，使用 <code>requestHeaders</code>；不要把这些头写入 ResourceRef。失败返回：
-
-```ts
-return ctx.playback.failure({
-  code: 'ENTITLEMENT_EXPIRED',
-  message: '当前账号无权播放该音质',
-  retryable: false
-})
+```shell
+npm run typecheck
+npm run build
+npm run dev
 ```
 
-完成版的 <code>npm run mock</code> 在本机生成四秒 WAV，只用于验证调用链。真实平台应返回当前账号有权访问的短期 URL，并准确处理 401、403、404、429、地域限制和会员过期。
+先登录演示账号，再检查：
 
-## 5. 打开澜音的导入窗口
+1. 搜索 `rain` 能返回 `Soft Rain`；
+2. `library · native` 显示歌单和“今日推荐”；
+3. 点击歌单进入原生详情，歌曲能继续分页；
+4. 点击播放时先出现 `player.control` 授权，允许后队列被替换；
+5. `tracks.resolve` 返回的地址能加载 RIFF/WAVE 音频；
+6. 歌单卡片的“导入歌单”打开 `tutorial-playlist` importer，`demo-favorites` 能分批返回四首歌。
 
-Native View 给歌单卡片声明：
+常见错误：
 
-```ts
-itemActions: [{ label: '导入歌单', action: 'playlist.import' }]
-```
+- 搜索来源不出现：Provider 的 `protocols`、激活条件和 `providers.register()` ID 必须一致；
+- 点击播放无反应：检查 `tracks.play` 是否已声明为命令，以及权限 key 是否为 `playback`；
+- 授权被拒后仍修改队列：权限结果不是 `granted` 时应立即抛错；
+- 播放器收到 404：确认 `npm run mock` 仍在运行且端口是 `43130`；
+- 导入窗口提示 importer 不存在：三处 `tutorial-playlist` 必须同名；
+- 其他插件的 ref 能被打开：所有入口都应先调用 `catalog.ownedRef()`。
 
-宿主会把当前卡片的 <code>ref</code> 合入动作输入。后台打开已有导入窗口：
-
-```ts
-ctx.actions.register('playlist.import', async (input) => {
-  const ref = ownedRef(input.ref, 'playlist')
-  await ctx.ui.playlistImport.open({
-    importerId: 'tutorial-playlist',
-    initialValue: ref.id,
-    title: '导入演示歌单'
-  })
-  return null
-})
-```
-
-<code>playlistImport.open</code> 返回 <code>Promise&lt;void&gt;</code>。它只打开窗口；真正取歌由已注册的 importer 完成：
-
-```ts
-ctx.playlistImporters.register('tutorial-playlist', {
-  async getTracks(request, operation) {
-    operation.signal.throwIfAborted()
-    const playlist = findPlaylist(request.value)
-    const offset = Number(request.cursor ?? 0)
-    const items = playlist.trackIds
-      .slice(offset, offset + request.limit)
-      .map(findTrack)
-      .map(trackEntity)
-
-    return {
-      name: playlist.title,
-      items,
-      totalEstimate: playlist.trackIds.length,
-      ...(offset + items.length < playlist.trackIds.length
-        ? { nextCursor: String(offset + items.length) }
-        : {})
-    }
-  }
-})
-```
-
-宿主负责选择目标歌单、去重、持久化和云同步。插件负责把输入链接或 ID 转换成分页的标准歌曲。
-
-## 6. 工作台和桌面分别验证什么？
-
-| 环境       | 能验证                                                        | 仍需在澜音实机检查                                       |
-| ---------- | ------------------------------------------------------------- | -------------------------------------------------------- |
-| CLI 工作台 | 注册、Native View、动作输入、Provider 返回、Surface、权限模拟 | “歌单”页区块定位、真实路由、实际播放器、账号胶囊悬停菜单 |
-| 澜音桌面   | 现有“歌单”页区块、原生详情、真实队列、播放、导入、账号菜单    | 上游平台本身的稳定性                                     |
-
-::: tip 完成标志
-Native View 点击歌单能进入详情；详情自动分页；播放先更新队列再开始；导入按钮打开指定 importer；resolve 返回短期 URL 或结构化错误。
-:::
+下一节：[验证完成版并了解怎样替换真实接口 →](./release)

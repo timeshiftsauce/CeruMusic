@@ -148,6 +148,7 @@ interface CustomAPI {
     onUI: (callback: (request: any) => void) => () => void
     respondUI: (result: any) => Promise<any>
     uiReady: (ready: boolean) => Promise<boolean>
+    publishHostEvent: (event: string, value: unknown, pluginId?: string) => Promise<void>
     onUICancel: (callback: (request: { id: string }) => void) => () => void
     openSurface: (pluginId: string, surfaceId: string) => Promise<any>
     mountSurface: (

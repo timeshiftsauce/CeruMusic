@@ -1,5 +1,5 @@
 <template>
-  <Provider v-if="!$route.path.includes('desktop-lyric')">
+  <Provider v-if="!isAuxiliaryWindow">
     <GlobalBackground />
     <PluginHostBridge />
 
@@ -16,7 +16,7 @@
     <LtChatToast />
   </Provider>
   <router-view v-else />
-  <GlobalContextMenu />
+  <GlobalContextMenu v-if="!isAuxiliaryWindow" />
 </template>
 
 <script setup lang="ts">
@@ -34,6 +34,9 @@ import type { QueuedDeepLink } from '@common/types/deepLink'
 const route = useRoute()
 const router = useRouter()
 const settingsStore = useSettingsStore()
+const isAuxiliaryWindow = /^#\/(?:desktop-lyric|recognition-worker)(?:\/|$)/.test(
+  window.location.hash
+)
 
 // 播放事件属于应用生命周期；刷新后直接进入主界面也必须初始化。
 watch(
@@ -201,6 +204,7 @@ const handleWindowCloseRequest = () => {
 }
 
 onMounted(async () => {
+  if (isAuxiliaryWindow) return
   mounted = true
   unsubDeepLinks = window.api.deepLinks.onChanged(() => {
     void syncDeepLinks()
@@ -221,6 +225,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (isAuxiliaryWindow) return
   mounted = false
   unsubDeepLinks?.()
   appEntryQueue.setReady(false)

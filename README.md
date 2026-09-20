@@ -227,11 +227,13 @@ CeruMuisc/
 
 ## 安装与使用
 
+当前版本使用 Electron 44，提供 Windows x64、macOS 13+（Intel / Apple Silicon）和 Linux x64 构建。Linux 的数据库预编译模块要求 glibc 2.34+，例如 Ubuntu 22.04 及更新版本。不再提供 Windows 32 位安装包，也不再支持 macOS 12 及更早版本和 Linux Unity 专属集成功能。
+
 ### 推荐开发环境
 
 - **IDE**: VS Code 或 WebStorm
-- **Node.js 版本**: 22 及以上
-- **包管理器**: **yarn**
+- **Node.js 版本**: 22.14 及以上（CI 使用 Node 22）
+- **包管理器**: **Yarn 1.22.22**，CI 使用 `yarn install --frozen-lockfile`
 - **项目后端**: 欢迎对接[https://api.ceru.shiqianjiang.cn/api-docs](https://api.ceru.shiqianjiang.cn/api-docs)
 
 ### 项目设置

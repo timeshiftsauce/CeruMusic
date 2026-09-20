@@ -5,7 +5,6 @@ pageClass: plugin-v2-doc
 # 工程配置与 Manifest
 
 ::: tip 桌面扩展
-SDK 0.3.5 增加 <code>playlistSections</code>，并保留 modules.share、Web Surface、commands.description 和 Guest 展示字段，参见[0.3.5 工具链更新](./sdk-upgrade)。构建器、校验器与 Host 仍需处于匹配版本，不能只凭类型检查判断能否运行。
 :::
 
 `ceru.plugin.json` 是构建配置，其中的 `manifest` 会进入发行文件。安装器读取 `exports.manifest` 来了解插件，不先执行后台业务代码。
@@ -95,7 +94,7 @@ SDK 0.3.5 增加 <code>playlistSections</code>，并保留 modules.share、Web S
 
 `modules.surfaces` 中每项至少包含 `{ id, kind: 'schema' | 'web' | 'native', entry }`。Schema entry 指向 JSON 资源；Web entry 指向页面入口；native entry 指向已声明的 render 动作，由宿主原生组件显示结果。Surface 本身没有完整 PluginContext。参见[原生内容与账号菜单](./ui-native)。
 
-Web Surface 还可在这里声明 `title`、`presentation` 和 `lifecycle`。presentation 描述抽屉或 modal 的位置/宽度，lifecycle 指定打开和关闭时调用的动作。0.3.5 起容器会跟随 Web 内容高度；页面根元素不要设置 100vh。完整配置与示例见[页面教程](./surfaces#配套清单)。
+Web Surface 还可在这里声明 `title`、`presentation` 和 `lifecycle`。presentation 描述抽屉或 modal 的位置/宽度，lifecycle 指定打开和关闭时调用的动作。容器会跟随 Web 内容高度；页面根元素不要设置 100vh。完整配置与示例见[页面教程](./surfaces#配套清单)。
 
 `modules.share` 定义可导出的服务端解析工厂及允许导出的配置键，是高级能力；不能直接把后台完整上下文送到服务端。
 
@@ -115,7 +114,7 @@ Web Surface 还可在这里声明 `title`、`presentation` 和 `lifecycle`。pre
 | `settingsPages`     | `id, title, view`                                                              | 插件管理中的设置入口                                   |
 | `guestAdapters`     | `id, format, compatibilityProfile, bootstrap, runtime, projectableProtocols`   | [Guest](./guests)                                      |
 | `menus`             | `id, slot, title, commandId, description?, icon?, when?`                       | SDK 声明；不要假定桌面已挂接全部菜单                   |
-| `uiExtensions`      | `id, slot, mode, view, order?, when?`                                          | SDK/工作台能力；桌面 1.14.1 未接入通用 Slot 组合       |
+| `uiExtensions`      | `id, slot, mode, view, order?, when?`                                          | SDK/工作台能力；桌面 2.0 未接入通用 Slot 组合       |
 | `styles`            | `id, resource, scope, slots?, order?`                                          | `surface / slot / application`；桌面通用样式贡献未接入 |
 
 `homeSections.kind` 为 `playlists / charts / custom`。歌单和排行榜页面使用对应 Provider；新版宿主的 custom 页签用 view 引用插件自己的 Surface。页面内部的内容仍由插件编写，未接入的通用 UI Slot 不因此变成可用。

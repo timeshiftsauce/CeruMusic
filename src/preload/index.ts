@@ -41,10 +41,11 @@ const api = {
     ipcRenderer.send('window-show')
   },
   toggleFullscreen: () => ipcRenderer.send('window-toggle-fullscreen'),
-  /** 监听主进程窗口化全屏状态变化 */
+  /** 监听主进程原生全屏状态变化 */
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => {
     const handler = (_: Electron.IpcRendererEvent, value: boolean) => callback(value)
     ipcRenderer.on('app-fullscreen-changed', handler)
+    ipcRenderer.send('window:request-fullscreen-state')
     return () => ipcRenderer.removeListener('app-fullscreen-changed', handler)
   },
   onMusicCtrl: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => {
@@ -99,6 +100,8 @@ const api = {
     },
     respondUI: (result: any) => ipcRenderer.invoke('plugin:ui-result', result),
     uiReady: (ready: boolean) => ipcRenderer.invoke('plugin:ui-ready', ready),
+    publishHostEvent: (event: string, value: unknown, pluginId?: string) =>
+      ipcRenderer.invoke('plugin:publish-host-event', event, value, pluginId),
     onUICancel: (callback: (request: { id: string }) => void) => {
       const listener = (_event: any, request: { id: string }) => callback(request)
       ipcRenderer.on('plugin:ui-cancel', listener)
@@ -115,13 +118,28 @@ const api = {
       ipcRenderer.on('plugin:surface-state', listener)
       return () => ipcRenderer.removeListener('plugin:surface-state', listener)
     },
-    surfaceAction: (
+    surfaceAction: async (
       pluginId: string,
       surfaceId: string,
       sessionId: string,
       action: string,
       input: unknown
-    ) => ipcRenderer.invoke('plugin:surface-action', pluginId, surfaceId, sessionId, action, input),
+    ) => {
+      const result = await ipcRenderer.invoke(
+        'plugin:surface-action',
+        pluginId,
+        surfaceId,
+        sessionId,
+        action,
+        input
+      )
+      if (result.cancelled) {
+        const error = new Error('插件页面已关闭')
+        error.name = 'AbortError'
+        throw error
+      }
+      return result.value
+    },
     drawerAction: (
       pluginId: string,
       surfaceId: string,

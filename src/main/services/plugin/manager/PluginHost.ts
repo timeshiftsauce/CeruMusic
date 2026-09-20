@@ -1,7 +1,7 @@
-import { readFile } from 'fs/promises'
+import { readFile, stat, writeFile } from 'fs/promises'
 import { join, basename } from 'path'
-import { dialog } from 'electron'
-import { randomUUID } from 'crypto'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, nativeTheme, shell } from 'electron'
+import { createHash, randomUUID } from 'crypto'
 import { PluginCore, readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
 import { NodePluginSandbox } from '@shiqianjiang/ceru-plugin-core/node'
 import { requestNetwork } from '@shiqianjiang/ceru-plugin-core/network'
@@ -40,6 +40,7 @@ import { createWebSurfaceDocument } from '@shiqianjiang/ceru-plugin-core/surface
 import { publishPluginSurface, publishPluginAccountChanged } from '../uiBridge'
 import type { PluginWebDrawerSession, PluginVisibleSession } from '@common/pluginDrawer'
 import { registerPlaybackRequest } from '../playbackRequests'
+import { createShareDescriptor, readShareDescriptor } from '../sharing'
 
 type Logger = Pick<Console, 'log' | 'info' | 'warn' | 'error' | 'debug'>
 type Permission = { key: string; name: any; reason: string; scope?: any }
@@ -55,6 +56,75 @@ const canonical = (value: any): string =>
         '}'
     : JSON.stringify(value)
 const fingerprint = (p: Permission) => p.key + ':' + p.name + ':' + canonical(p.scope ?? {})
+
+const SERVICE_CAPABILITIES = {
+  account: { methods: ['getSession', 'getProfile', 'openLogin'], permissionGroups: ['account'] },
+  app: { methods: ['getInfo', 'openSettings', 'openExternal'], permissionGroups: ['external'] },
+  library: {
+    methods: ['playlists.list', 'playlists.getTracks', 'playlists.import'],
+    permissionGroups: ['libraryRead', 'libraryManage']
+  },
+  player: {
+    methods: ['getState', 'play', 'pause', 'next', 'previous', 'seek', 'setVolume', 'setMode'],
+    permissionGroups: ['playbackRead', 'playbackControl']
+  },
+  queue: {
+    methods: ['get', 'append', 'replace', 'remove', 'reorder'],
+    permissionGroups: ['playbackRead', 'playbackControl']
+  },
+  favorites: {
+    methods: ['contains', 'add', 'remove'],
+    permissionGroups: ['libraryRead', 'libraryManage']
+  },
+  history: { methods: ['list'], permissionGroups: ['playbackRead'] },
+  downloads: {
+    methods: ['list', 'create', 'pause', 'resume', 'cancel', 'retry', 'reveal'],
+    permissionGroups: ['downloads']
+  },
+  files: {
+    methods: ['pick', 'pickDirectory', 'readText', 'readBase64', 'saveText', 'writeText'],
+    permissionGroups: ['files']
+  },
+  clipboard: {
+    methods: ['readText', 'writeText'],
+    permissionGroups: ['clipboardRead', 'clipboardWrite']
+  },
+  localMusic: {
+    methods: ['list', 'scan', 'getTags', 'writeTags'],
+    permissionGroups: ['localMusic']
+  },
+  settings: {
+    methods: ['get', 'update'],
+    permissionGroups: ['settingsRead', 'settingsWrite']
+  },
+  window: { methods: ['control'], permissionGroups: ['window'] },
+  hotkeys: { methods: ['register'], permissionGroups: ['hotkeys'] },
+  sharing: { methods: ['create', 'revoke', 'resolve'], permissionGroups: ['sharing'] },
+  rooms: {
+    methods: ['getState', 'join', 'leave', 'requestTrack'],
+    permissionGroups: ['roomsRead', 'roomsControl']
+  },
+  devices: { methods: ['list', 'select'], permissionGroups: ['devices'] },
+  ai: { methods: ['generate'], permissionGroups: ['ai'] },
+  tasks: { methods: ['schedule', 'cancel'], permissionGroups: ['background'] }
+} as const
+
+const HOST_EVENTS = new Set([
+  'account.changed',
+  'library.changed',
+  'player.changed',
+  'queue.changed',
+  'lyrics.changed',
+  'downloads.changed',
+  'settings.changed',
+  'theme.changed',
+  'rooms.changed',
+  'devices.changed',
+  'permissions.changed'
+])
+
+type PluginFileEntry = { path: string; kind: 'file' | 'directory'; writable: boolean }
+type PluginHotkeyEntry = { accelerator: string; commandId: string }
 
 /** Electron application services around the reusable pure-Node Core runtime. */
 export default class PluginHost {
@@ -87,6 +157,9 @@ export default class PluginHost {
   private promptQueue: Promise<unknown> = Promise.resolve()
   private sockets = new SocketBroker()
   private socketTimer?: ReturnType<typeof setInterval>
+  private fileHandles = new Map<string, PluginFileEntry>()
+  private scheduledTasks = new Map<string, ReturnType<typeof setInterval>>()
+  private registeredHotkeys = new Map<string, PluginHotkeyEntry>()
 
   constructor(
     private pluginCode: string | null = null,
@@ -387,10 +460,15 @@ export default class PluginHost {
     const snapshot = this.core?.snapshot()
     // Expose registration identities only. Never forward the private config/manifest snapshot.
     // Future registry collections remain discoverable without adding another UI whitelist.
-    return Object.fromEntries(Object.entries(snapshot ?? {}).filter(([key, value]) =>
-      key !== 'manifest' && key !== 'config' &&
-      Array.isArray(value) && value.every(item => typeof item === 'string')
-    )) as Record<string, string[]>
+    return Object.fromEntries(
+      Object.entries(snapshot ?? {}).filter(
+        ([key, value]) =>
+          key !== 'manifest' &&
+          key !== 'config' &&
+          Array.isArray(value) &&
+          value.every((item) => typeof item === 'string')
+      )
+    ) as Record<string, string[]>
   }
   private operation() {
     return {
@@ -638,6 +716,28 @@ export default class PluginHost {
           'library.read': '歌单读取',
           'library.write': '歌单修改',
           'account.profile': '账号资料',
+          'player.read': '播放状态读取',
+          'player.control': '播放控制',
+          'downloads.create': '创建下载',
+          'downloads.manage': '下载管理',
+          'files.read': '文件读取',
+          'files.write': '文件写入',
+          'clipboard.read': '剪贴板读取',
+          'clipboard.write': '剪贴板写入',
+          'localMusic.read': '本地音乐读取',
+          'localMusic.write': '本地音乐修改',
+          'settings.read': '设置读取',
+          'settings.write': '设置修改',
+          'window.control': '窗口控制',
+          'hotkeys.register': '全局快捷键',
+          'sharing.publish': '发布分享',
+          'sharing.revoke': '撤销分享',
+          'rooms.read': '一起听状态读取',
+          'rooms.control': '一起听控制',
+          'devices.control': '音频设备控制',
+          'ai.use': 'AI 服务',
+          'background.run': '后台任务',
+          'external.open': '打开外部链接',
           'guests.manage': '子插件管理',
           'guests.run': '子插件运行'
         } as Record<string, string>
@@ -787,18 +887,12 @@ export default class PluginHost {
       return result
     }
     if (method.startsWith('services.capabilities.')) {
-      const entries = ['account', 'library', 'player', 'queue'].map((service) => ({
+      const entries = Object.entries(SERVICE_CAPABILITIES).map(([service, capability]) => ({
         service,
         version: '1.0.0',
         available: true,
-        permissionGroups: [
-          service === 'account' ? 'account' : service === 'library' ? 'libraryRead' : 'playback'
-        ],
-        ...(service === 'player'
-          ? { methods: ['play'] }
-          : service === 'queue'
-            ? { methods: ['replace'] }
-            : {})
+        methods: [...capability.methods],
+        permissionGroups: [...capability.permissionGroups]
       }))
       if (method.endsWith('.list')) return entries
       return (
@@ -810,6 +904,24 @@ export default class PluginHost {
           permissionGroups: []
         }
       )
+    }
+    if (method === 'services.app.getInfo') {
+      return {
+        name: app.getName(),
+        version: app.getVersion(),
+        platform: process.platform,
+        locale: app.getLocale(),
+        theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
+        hostApi: '1.0.0'
+      }
+    }
+    if (method === 'services.app.openExternal') {
+      await this.authorize(data.args?.[1]?.permissionKey, 'external.open')
+      const url = new URL(String(data.args?.[0] ?? ''))
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
+        throw new Error('只能打开 HTTP 或 HTTPS 地址')
+      await shell.openExternal(url.href)
+      return null
     }
     if (method === 'services.account.getSession' || method === 'services.account.getProfile') {
       await this.authorize(data.args?.[0]?.permissionKey, 'account.profile')
@@ -825,14 +937,132 @@ export default class PluginHost {
       )
         throw new Error('插件只能操作自己声明的资源')
     }
-    if (method === 'services.queue.replace' || method === 'services.player.play') {
-      await this.authorize(data.args?.[1]?.permissionKey, 'player.control')
-      if (method === 'services.queue.replace') {
+    if (method.startsWith('services.player.') || method.startsWith('services.queue.')) {
+      const read = method === 'services.player.getState' || method === 'services.queue.get'
+      const callIndex =
+        method === 'services.player.play'
+          ? 1
+          : method === 'services.queue.reorder'
+            ? 2
+            : ['getState', 'pause', 'next', 'previous', 'get'].some((name) =>
+                  method.endsWith('.' + name)
+                )
+              ? 0
+              : 1
+      await this.authorize(
+        data.args?.[callIndex]?.permissionKey,
+        read ? 'player.read' : 'player.control'
+      )
+      if (method === 'services.queue.replace' || method === 'services.queue.append') {
         assertContentPage({ items: data.args?.[0] })
         for (const item of data.args[0]) ownedRef(item.ref, 'track')
-      } else if (data.args?.[0] != null) ownedRef(data.args[0], 'track')
+      } else if (method === 'services.player.play' && data.args?.[0] != null)
+        ownedRef(data.args[0], 'track')
+      else if (method === 'services.queue.remove' || method === 'services.queue.reorder')
+        for (const ref of data.args?.[0] ?? []) ownedRef(ref, 'track')
       return callPluginUI(this.pluginId!, method, data)
     }
+    if (method.startsWith('services.favorites.')) {
+      const write = !method.endsWith('.contains')
+      await this.authorize(data.args?.[1]?.permissionKey, write ? 'library.write' : 'library.read')
+      for (const ref of data.args?.[0] ?? []) ownedRef(ref, 'track')
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method === 'services.history.list') {
+      await this.authorize(data.args?.[1]?.permissionKey, 'player.read')
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method.startsWith('services.downloads.')) {
+      const name = method.slice('services.downloads.'.length)
+      const callIndex = name === 'list' ? 0 : 1
+      await this.authorize(
+        data.args?.[callIndex]?.permissionKey,
+        name === 'create' ? 'downloads.create' : 'downloads.manage'
+      )
+      if (name === 'create') {
+        const request = data.args?.[0] ?? {}
+        if (
+          !Array.isArray(request.tracks) ||
+          request.tracks.length < 1 ||
+          request.tracks.length > 100
+        )
+          throw new Error('一次只能创建 1 到 100 个下载任务')
+        for (const ref of request.tracks) ownedRef(ref, 'track')
+        data.args[0] = {
+          tracks: request.tracks,
+          ...(typeof request.quality === 'string' ? { quality: request.quality } : {}),
+          ...(request.directory
+            ? { internalDirectoryPath: this.fileEntry(request.directory, 'directory').path }
+            : {})
+        }
+      }
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method.startsWith('services.files.')) return this.handleFileService(method, data.args ?? [])
+    if (method === 'services.clipboard.readText') {
+      await this.authorize(data.args?.[0]?.permissionKey, 'clipboard.read')
+      return clipboard.readText()
+    }
+    if (method === 'services.clipboard.writeText') {
+      await this.authorize(data.args?.[1]?.permissionKey, 'clipboard.write')
+      await clipboard.writeText(String(data.args?.[0] ?? ''))
+      return null
+    }
+    if (method.startsWith('services.localMusic.')) {
+      const name = method.slice('services.localMusic.'.length)
+      const callIndex = name === 'writeTags' ? 2 : name === 'scan' ? 1 : 1
+      await this.authorize(
+        data.args?.[callIndex]?.permissionKey,
+        name === 'writeTags' ? 'localMusic.write' : 'localMusic.read'
+      )
+      if (name === 'scan')
+        data = { ...data, args: [this.resolveDirectories(data.args?.[0]), data.args?.[1]] }
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method.startsWith('services.settings.')) {
+      const write = method.endsWith('.update')
+      await this.authorize(
+        data.args?.[1]?.permissionKey,
+        write ? 'settings.write' : 'settings.read'
+      )
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method === 'services.window.control') {
+      await this.authorize(data.args?.[1]?.permissionKey, 'window.control')
+      const win = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed())
+      if (!win) throw new Error('主窗口不可用')
+      const action = data.args?.[0]
+      if (action === 'show') win.show()
+      else if (action === 'minimize') win.minimize()
+      else if (action === 'maximize') win.maximize()
+      else if (action === 'restore') win.restore()
+      else if (action === 'mini-player') return callPluginUI(this.pluginId!, method, data)
+      else throw new Error('不支持的窗口操作')
+      return null
+    }
+    if (method === 'services.hotkeys.register') return this.registerPluginHotkey(data.args ?? [])
+    if (method === 'services.hotkeys.unregister') return this.unregisterPluginHotkey(data.args?.[0])
+    if (method.startsWith('services.sharing.'))
+      return this.handleSharingService(method, data.args ?? [], ownedRef)
+    if (method.startsWith('services.rooms.')) {
+      const name = method.slice('services.rooms.'.length)
+      await this.authorize(
+        data.args?.[name === 'getState' || name === 'leave' ? 0 : 1]?.permissionKey,
+        name === 'getState' ? 'rooms.read' : 'rooms.control'
+      )
+      if (name === 'requestTrack') ownedRef(data.args?.[0], 'track')
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method.startsWith('services.devices.')) {
+      const name = method.slice('services.devices.'.length)
+      await this.authorize(data.args?.[name === 'list' ? 0 : 1]?.permissionKey, 'devices.control')
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method === 'services.ai.generate') {
+      await this.authorize(data.args?.[1]?.permissionKey, 'ai.use')
+      return callPluginUI(this.pluginId!, method, data)
+    }
+    if (method.startsWith('services.tasks.')) return this.handleTaskService(method, data.args ?? [])
     if (method === 'ui.navigation.open') {
       assertNavigationRequest(data, this.getManifest())
       if (data.page === 'playlist' && data.ref) ownedRef(data.ref, 'playlist')
@@ -890,6 +1120,209 @@ export default class PluginHost {
       return callPluginUI(this.pluginId!, method, data)
     throw new Error('当前澜音 Host 尚未接入能力: ' + method)
   }
+
+  private addFileHandle(
+    path: string,
+    kind: 'file' | 'directory',
+    writable: boolean,
+    size?: number
+  ) {
+    const id = randomUUID()
+    this.fileHandles.set(id, { path, kind, writable })
+    return { kind, id, name: basename(path), ...(kind === 'file' && size != null ? { size } : {}) }
+  }
+
+  private fileEntry(handle: any, kind: 'file' | 'directory' = 'file') {
+    if (!handle || handle.kind !== kind || typeof handle.id !== 'string')
+      throw new Error('文件句柄无效')
+    const entry = this.fileHandles.get(handle.id)
+    if (!entry || entry.kind !== kind) throw new Error('文件句柄已失效或不属于此插件')
+    return entry
+  }
+
+  private resolveDirectories(handles: any[]): string[] {
+    if (!Array.isArray(handles)) throw new Error('目录列表无效')
+    return handles.map((handle) => this.fileEntry(handle, 'directory').path)
+  }
+
+  private async handleFileService(method: string, args: any[]) {
+    const name = method.slice('services.files.'.length)
+    if (name === 'pick') {
+      const request = args[0] ?? {}
+      const extensions = Array.isArray(request.extensions)
+        ? request.extensions.map((item: any) => String(item).replace(/^\./, '')).filter(Boolean)
+        : []
+      const result = await dialog.showOpenDialog({
+        title: typeof request.title === 'string' ? request.title : undefined,
+        properties: request.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+        filters: extensions.length ? [{ name: '支持的文件', extensions }] : undefined
+      })
+      if (result.canceled) return []
+      return Promise.all(
+        result.filePaths.map(async (path) =>
+          this.addFileHandle(path, 'file', true, (await stat(path)).size)
+        )
+      )
+    }
+    if (name === 'pickDirectory') {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory']
+      })
+      return result.canceled ? null : this.addFileHandle(result.filePaths[0], 'directory', true)
+    }
+    if (name === 'saveText') {
+      const request = args[0] ?? {}
+      const text = String(request.text ?? '')
+      if (Buffer.byteLength(text) > 16 * 1024 * 1024) throw new Error('写入内容超过 16 MiB 限制')
+      const result = await dialog.showSaveDialog({
+        defaultPath: basename(String(request.suggestedName || 'untitled.txt'))
+      })
+      if (result.canceled || !result.filePath) return null
+      await writeFile(result.filePath, text, 'utf8')
+      return this.addFileHandle(result.filePath, 'file', true, (await stat(result.filePath)).size)
+    }
+    const entry = this.fileEntry(args[0])
+    if (name === 'readText' || name === 'readBase64') {
+      await this.authorize(args[1]?.permissionKey, 'files.read')
+      const buffer = await readFile(entry.path)
+      if (buffer.byteLength > 16 * 1024 * 1024) throw new Error('文件超过 16 MiB 限制')
+      return name === 'readText' ? buffer.toString('utf8') : buffer.toString('base64')
+    }
+    if (name === 'writeText') {
+      await this.authorize(args[2]?.permissionKey, 'files.write')
+      if (!entry.writable) throw new Error('文件句柄不可写')
+      const text = String(args[1] ?? '')
+      if (Buffer.byteLength(text) > 16 * 1024 * 1024) throw new Error('写入内容超过 16 MiB 限制')
+      await writeFile(entry.path, text, 'utf8')
+      return null
+    }
+    throw new Error('不支持的文件操作')
+  }
+
+  private async registerPluginHotkey(args: any[]) {
+    const request = args[0] ?? {}
+    await this.authorize(args[1]?.permissionKey, 'hotkeys.register')
+    if (!/^[a-zA-Z0-9._-]{1,80}$/.test(request.id) || !this.actionIds.has(request.commandId))
+      throw new Error('快捷键声明无效')
+    const accelerator = String(request.accelerator || '')
+    const previous = this.registeredHotkeys.get(request.id)
+    if (previous) globalShortcut.unregister(previous.accelerator)
+    const register = (entry: PluginHotkeyEntry) =>
+      globalShortcut.register(entry.accelerator, () => {
+        const operation = this.operation()
+        void this.sandbox
+          ?.invoke('action', entry.commandId, '', [], operation.signal, operation.id)
+          .catch((error) => this.logger.warn('插件快捷键执行失败:', error))
+      })
+    const tryRegister = (entry: PluginHotkeyEntry) => {
+      try {
+        return register(entry)
+      } catch {
+        return false
+      }
+    }
+    const next = { accelerator, commandId: request.commandId }
+    const registered = tryRegister(next)
+    if (!registered) {
+      if (!previous || !tryRegister(previous)) this.registeredHotkeys.delete(request.id)
+      throw new Error('快捷键已被占用或格式无效')
+    }
+    this.registeredHotkeys.set(request.id, next)
+    return request.id
+  }
+
+  private unregisterPluginHotkey(id: unknown) {
+    const entry = this.registeredHotkeys.get(String(id))
+    if (!entry) return null
+    globalShortcut.unregister(entry.accelerator)
+    this.registeredHotkeys.delete(String(id))
+    return null
+  }
+
+  private async handleSharingService(
+    method: string,
+    args: any[],
+    ownedRef: (ref: unknown, kind: 'track' | 'playlist') => void
+  ) {
+    const name = method.slice('services.sharing.'.length)
+    if (name === 'resolve') {
+      const url = new URL(String(args[0] ?? ''))
+      if (
+        url.protocol !== 'cerumusic:' ||
+        url.hostname !== 'share' ||
+        !url.pathname.startsWith('/')
+      )
+        throw new Error('不是澜音分享链接')
+      return readShareDescriptor(url.pathname.slice(1))
+    }
+    await this.authorize(
+      args[1]?.permissionKey,
+      name === 'revoke' ? 'sharing.revoke' : 'sharing.publish'
+    )
+    if (name === 'create') {
+      ownedRef(args[0]?.track, 'track')
+      const result = createShareDescriptor(args[0])
+      return { id: result.id, url: result.url }
+    }
+    if (name === 'revoke') return null
+    throw new Error('不支持的分享操作')
+  }
+
+  private async handleTaskService(method: string, args: any[]) {
+    const name = method.slice('services.tasks.'.length)
+    await this.authorize(args[1]?.permissionKey, 'background.run')
+    const request = name === 'schedule' ? args[0] : { id: args[0] }
+    if (!/^[a-zA-Z0-9._-]{1,80}$/.test(request.id)) throw new Error('任务 ID 无效')
+    if (name === 'cancel') {
+      const timer = this.scheduledTasks.get(request.id)
+      if (timer) clearInterval(timer)
+      this.scheduledTasks.delete(request.id)
+      return null
+    }
+    if (!this.actionIds.has(request.commandId)) throw new Error('后台任务引用了未注册操作')
+    const intervalMs = Number(request.intervalMs)
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 60_000 || intervalMs > 86_400_000)
+      throw new Error('后台任务间隔必须在 1 分钟到 24 小时之间')
+    const previous = this.scheduledTasks.get(request.id)
+    if (previous) clearInterval(previous)
+    const timer = setInterval(() => {
+      const operation = this.operation()
+      void this.sandbox
+        ?.invoke('action', request.commandId, '', [], operation.signal, operation.id)
+        .catch((error) => this.logger.warn('插件后台任务执行失败:', error))
+    }, intervalMs)
+    this.scheduledTasks.set(request.id, timer)
+    return { id: request.id }
+  }
+
+  async publishHostEvent(event: string, value: unknown): Promise<void> {
+    if (!HOST_EVENTS.has(event)) throw new Error('不支持的插件宿主事件')
+    if (!this.sandbox || this.disposed) return
+    let eventValue = value
+    if (event === 'account.changed') {
+      const account = value as {
+        loggedIn?: boolean
+        subject?: string
+        displayName?: string
+      }
+      const loggedIn = !!account?.loggedIn
+      eventValue = {
+        loggedIn,
+        profile:
+          loggedIn && account.subject
+            ? {
+                id: createHash('sha256')
+                  .update(`${this.pluginId}:${account.subject}`)
+                  .digest('hex'),
+                displayName: String(account.displayName || ''),
+                identityScope: 'plugin'
+              }
+            : null
+      }
+    }
+    await this.sandbox.send('host-event', { event, value: eventValue })
+  }
+
   private event(type: string, data: any) {
     if (type === 'closed' && !this.disposed) {
       this.onDisabled?.(this.pluginId!, '插件运行环境已停止')
@@ -1099,10 +1532,17 @@ export default class PluginHost {
       JSON.stringify(input ?? {}).length > 128 * 1024
     )
       throw new Error('插件页面请求无效')
-    const result = await session.lifecycle.invoke(action, input ?? {})
-    if (session.web.kind === 'native' && action === session.web.renderAction)
-      assertNativeView(result, this.actionIds)
-    return result
+    try {
+      const result = await session.lifecycle.invoke(action, input ?? {})
+      if (session.web.kind === 'native' && action === session.web.renderAction)
+        assertNativeView(result, this.actionIds)
+      return result
+    } catch (error) {
+      // Closing a view aborts its pending calls. Keep this separate from plugin failures.
+      if (this.webSessions.get(sessionId) !== session)
+        throw new DOMException('插件页面已关闭', 'AbortError')
+      throw error
+    }
   }
   async closeDrawer(surfaceId: string, sessionId: string) {
     const web = this.webSessions.get(sessionId)
@@ -1153,6 +1593,12 @@ export default class PluginHost {
     )
     this.disposed = true
     this.guestStore?.dispose()
+    for (const timer of this.scheduledTasks.values()) clearInterval(timer)
+    this.scheduledTasks.clear()
+    for (const { accelerator } of this.registeredHotkeys.values())
+      globalShortcut.unregister(accelerator)
+    this.registeredHotkeys.clear()
+    this.fileHandles.clear()
     clearInterval(this.socketTimer)
     this.sockets.closeAll()
     for (const controllers of this.requests.values())

@@ -4,6 +4,25 @@ directories:
   buildResources: build
 asar: true
 files:
+  - '!dist/**'
+  - '!.git/**'
+  - '!.github/**'
+  - '!.claude/**'
+  - '!.sisyphus/**'
+  - '!.codegraph/**'
+  - '!.workflow/**'
+  - '!.startup-smoke-*/**'
+  - '!.tmp-*/**'
+  - '!temp/**'
+  - '!test-data/**'
+  - '!update-server/**'
+  - '!NVIDIA Corporation/**'
+  - '!*.log'
+  - '!*.log.*'
+  - '!**/*.log'
+  - '!**/*.log.*'
+  - '!**/*.test.*'
+  - '!**/*.spec.*'
   - '!**/.vscode/*'
   - '!src/*'
   - '!website/*'
@@ -28,11 +47,9 @@ win:
     - target: nsis
       arch:
         - x64
-        - ia32
     - target: zip
       arch:
         - x64
-        - ia32
   fileAssociations:
     - ext: cmpl
       name: 澜音播放器（歌单/播放列表）文件
@@ -60,6 +77,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   allowElevation: true
 mac:
+  minimumSystemVersion: '13.0'
   icon: 'resources/icons/icon.icns'
   category: public.app-category.music
   target:

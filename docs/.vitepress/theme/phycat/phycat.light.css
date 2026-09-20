@@ -102,9 +102,9 @@ html {
 }
 
 #app .vp-doc h3:after,
-h4:after,
-h5:after,
-h6:after {
+#app .vp-doc h4:after,
+#app .vp-doc h5:after,
+#app .vp-doc h6:after {
   content: '';
   display: inline-block;
   margin-left: 0.2em;

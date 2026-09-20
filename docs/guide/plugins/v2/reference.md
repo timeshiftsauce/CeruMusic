@@ -4,10 +4,10 @@ pageClass: plugin-v2-doc
 
 # 完整类型参考
 
-本页来自 **SDK 0.3.5 构建验证包 / Issuer 0.3.5** 的实际声明文件。Guest、分享与 Storage 已包含在 SDK 的公开导出中，无需从桌面源码复制这些类型。
+本页汇集 SDK 与 Issuer 的公开类型声明。Guest、分享与 Storage 可从 SDK 导入，无需从桌面源码复制类型。
 
-::: info 安装版本
-本页按正式发布的 SDK 0.3.5 与 Issuer 0.3.5 声明生成。安装与升级方式见 [0.3.5 工具链更新](./sdk-upgrade)。
+::: info 查询方式
+安装依赖见[开发环境与依赖](./sdk-upgrade)。本页用于集中查阅；具体工程的类型提示以已安装依赖的声明文件为准。
 :::
 
 本页适合在写代码时查询参数和返回值。首次开发先从[动手教程](./quick-start)开始；功能能否运行还要看[宿主支持表](./host-services)。
@@ -16,7 +16,7 @@ pageClass: plugin-v2-doc
 
 ## 上下文、账号与原生页面类型
 
-::: details index.d.ts · SDK 0.3.5
+::: details index.d.ts
 
 ```ts
 /// <reference path="./host-modules.d.cts" />
@@ -399,7 +399,7 @@ export declare function defineUISchema(schema: UISchema): UISchema;
 
 :::
 
-::: details manifest.d.ts · SDK 0.3.5
+::: details manifest.d.ts
 
 ```ts
 import type { HostIconName, PermissionName } from './catalog.js';
@@ -610,7 +610,7 @@ export interface PluginManifest {
 
 :::
 
-::: details accounts.d.ts · SDK 0.3.5
+::: details accounts.d.ts
 
 ```ts
 /** Public account presentation. Credentials and platform login flows remain in plugin logic. */
@@ -625,7 +625,7 @@ export declare function assertAccountSummary(value: unknown): asserts value is A
 
 :::
 
-::: details native-view.d.ts · SDK 0.3.5
+::: details native-view.d.ts
 
 ```ts
 import type { ContentEntity, JsonValue, MaybePromise, OperationContext } from './index.js';
@@ -664,7 +664,7 @@ export declare function assertNativeView(value: unknown, actions?: ReadonlySet<s
 
 ## 宿主服务完整签名
 
-::: details services.d.ts · SDK 0.3.5
+::: details services.d.ts
 
 ```ts
 import type { Disposable, JsonObject, JsonValue, IconRef } from './manifest.js';
@@ -1015,7 +1015,7 @@ export type SerializedHostValue = JsonValue | AssetHandle;
 
 :::
 
-::: details navigation.d.ts · SDK 0.3.5
+::: details navigation.d.ts
 
 ```ts
 import type { ResourceRef } from './index.js';
@@ -1036,7 +1036,7 @@ export declare function assertNavigationRequest(value: unknown, manifest?: Plugi
 
 :::
 
-::: details library.d.ts · SDK 0.3.5
+::: details library.d.ts
 
 ```ts
 import type { ContentEntity, OperationContext, Page } from './index.js';
@@ -1106,7 +1106,7 @@ export interface LibraryAPI {
 
 ## 存储类型
 
-::: details storage.d.ts · SDK 0.3.5
+::: details storage.d.ts
 
 ```ts
 import type { JsonValue } from './manifest.js';
@@ -1133,7 +1133,7 @@ export interface PluginStorageAPI {
 
 ## 网络与权限类型
 
-::: details http.d.ts · SDK 0.3.5
+::: details http.d.ts
 
 ```ts
 import type { CredentialRef, OperationContext, PluginContext } from './index.js';
@@ -1186,7 +1186,7 @@ export declare function createHttpClient(ctx: {
 
 :::
 
-::: details sockets.d.ts · SDK 0.3.5
+::: details sockets.d.ts
 
 ```ts
 import type { Disposable, JsonValue } from './manifest.js';
@@ -1218,7 +1218,7 @@ export interface SocketAPI {
 
 :::
 
-::: details permissions.d.ts · SDK 0.3.5
+::: details permissions.d.ts
 
 ```ts
 import type { JsonObject } from './manifest.js';
@@ -1376,7 +1376,7 @@ export interface PermissionGroupResult {
 
 ## 歌词与音质类型
 
-::: details music.d.ts · SDK 0.3.5
+::: details music.d.ts
 
 ```ts
 import type { ContentEntity, ResourceRef, ResolveResult } from './index.js';
@@ -1454,7 +1454,7 @@ export declare function assertLyricsDocument(value: unknown): asserts value is L
 
 :::
 
-::: details lyrics.d.ts · SDK 0.3.5
+::: details lyrics.d.ts
 
 ```ts
 import type { CrLyric } from './music.js';
@@ -1487,7 +1487,7 @@ export interface LyricConverter {
 
 :::
 
-::: details quality.d.ts · SDK 0.3.5
+::: details quality.d.ts
 
 ```ts
 /** Manifest order is authoritative: first is lowest, last is highest. */
@@ -1499,7 +1499,7 @@ export declare function selectQuality(order: readonly string[], available?: read
 
 ## Guest 与分享类型
 
-::: details guests.d.ts · SDK 0.3.5
+::: details guests.d.ts
 
 ```ts
 import type { Disposable, JsonValue } from './manifest.js';
@@ -1550,7 +1550,7 @@ export interface GuestBootstrapAPI {
 
 :::
 
-::: details share.d.ts · SDK 0.3.5
+::: details share.d.ts
 
 ```ts
 import type { JsonObject, MaybePromise } from './manifest.js';
@@ -1613,7 +1613,7 @@ export type ShareResolverEntry<Config = JsonObject> = (context: ShareResolverCon
 
 ## 资源目录
 
-::: details catalog.d.ts · SDK 0.3.5
+::: details catalog.d.ts
 
 ```ts
 /** Stable names for Host-provided resources. Platform names identify icons, not mandatory providers. */
@@ -1638,7 +1638,7 @@ export declare function hostIcon(name: HostIconName): {
 
 ## 工具与模块类型
 
-::: details modules.d.ts · SDK 0.3.5
+::: details modules.d.ts
 
 ```ts
 import type { PluginContext, HostLodash } from './index.js';
@@ -1664,7 +1664,7 @@ export interface PluginModules {
 
 :::
 
-::: details host-library.d.ts · SDK 0.3.5
+::: details host-library.d.ts
 
 ```ts
 import type { LibraryAPI, LibraryPlaylist, PlaylistImportRequest, PlaylistLocation, PlaylistReference } from './library.js';
@@ -1691,7 +1691,7 @@ export declare function createHostLibraryBridge(services: HostLibraryServices): 
 
 :::
 
-::: details host-modules.d.cts · SDK 0.3.5
+::: details host-modules.d.cts
 
 ```ts
 declare module 'ceru' {
@@ -1745,7 +1745,7 @@ declare module '@ceru/legacy-http' {
 
 :::
 
-::: details legacy-http.d.ts · SDK 0.3.5
+::: details legacy-http.d.ts
 
 ```ts
 import type { OperationContext, PluginContext } from './index.js';
@@ -1777,7 +1777,7 @@ export declare function createLegacyHttpBridge(host: PluginContext): {
 
 :::
 
-::: details compat/crypto.d.ts · SDK 0.3.5
+::: details compat/crypto.d.ts
 
 ```ts
 export function createHash(name: any): {
@@ -1819,7 +1819,7 @@ import { Buffer } from 'buffer';
 
 :::
 
-::: details compat/encoding.d.ts · SDK 0.3.5
+::: details compat/encoding.d.ts
 
 ```ts
 declare namespace _default {
@@ -1830,7 +1830,7 @@ export default _default;
 
 :::
 
-::: details compat/zlib.d.ts · SDK 0.3.5
+::: details compat/zlib.d.ts
 
 ```ts
 export function inflate(input: any, callback: any): void;
@@ -1845,7 +1845,7 @@ import { Buffer } from 'buffer';
 
 :::
 
-::: details compat/format.d.ts · SDK 0.3.5
+::: details compat/format.d.ts
 
 ```ts
 export function decodeName(value: any): string;
@@ -1864,7 +1864,7 @@ export function formatMinutesFlexible(seconds: any): string;
 
 用于作者后端和构建工具，不是插件沙箱服务。
 
-::: details @shiqianjiang/ceru-plugin-issuer · 0.3.5
+::: details @shiqianjiang/ceru-plugin-issuer
 
 ```ts
 import { type Writable } from 'node:stream';

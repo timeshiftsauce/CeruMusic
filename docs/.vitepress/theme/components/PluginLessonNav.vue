@@ -4,9 +4,9 @@ withDefaults(defineProps<{ step?: number }>(), { step: 0 })
 const lessons = [
   { title: '运行插件', link: '/guide/plugins/v2/quick-start' },
   { title: '写一个命令', link: '/guide/plugins/v2/first-command' },
-  { title: '理解搜索', link: '/guide/plugins/v2/first-search' },
+  { title: '添加搜索', link: '/guide/plugins/v2/first-search' },
   { title: '保存数据', link: '/guide/plugins/v2/first-storage' },
-  { title: '安装与交付', link: '/guide/plugins/v2/first-release' }
+  { title: '安装到澜音', link: '/guide/plugins/v2/first-release' }
 ]
 </script>
 

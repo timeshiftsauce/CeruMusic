@@ -12,7 +12,6 @@ pageClass: plugin-v2-doc
 | ------------------------------------- | ---------------------------------------- | ------------------------------------------------------- |
 | 创建失败或安装依赖失败                | Node 太旧、registry 或 Electron 下载失败 | Node ≥22.12；检查安装日志与网络                         |
 | 找不到 @ceru/plugin-config            | 类型还未生成                             | 先 build 或 dev，再 typecheck                           |
-| CLI 横幅显示 0.2.5                    | 0.2.6 / 0.3.3 横幅文本未同步             | 用 npm ls 检查实际包版本                                |
 | F5 没启动当前插件                     | 打开父工作区或选错调试配置               | 打开 ceru-plugin.code-workspace，选择正确 Launch/Attach |
 | 端口被占用                            | dev 与 preview 同时运行                  | 关闭旧工作台，或同时更改 port/debug-port                |
 | Provider / Action 未声明              | Manifest 与注册 ID 不一致                | commands 匹配 action，其他注册匹配 id                   |
@@ -24,7 +23,6 @@ pageClass: plugin-v2-doc
 | 工作台请求失败，桌面成功              | 代理限额/保留头/端口限制不同             | 对照 HTTP 限额表，缩减响应并移除保留头                  |
 | HTTP 非 2xx 抛异常                    | create 客户端默认 throwHttpErrors:true   | catch HttpError，或显式关闭并检查 status                |
 | 插件存储超过 10 MiB                   | 全部数据加权限记录超过总额               | 清理已知缓存键，减少保存字段                            |
-| storage 结构化键报 TS 错              | SDK 仍停留在 0.2.4                       | 升级 SDK 与 CLI 到 0.3.5                                |
 | 跨插件读取失败                        | ID 不对、未安装或未共享                  | 检查稳定 ID 与 readableBy                               |
 | Schema 在工作台可见，桌面报无效       | 不是桌面 drawer schema                   | 添加 presentation 与受支持 form 控件                    |
 | 设置按钮无内容                        | settingsPages.view 不匹配 Surface        | 校验 view、Surface id 与资源 entry                      |

@@ -1,7 +1,7 @@
 ---
 pageClass: plugin-v2-doc
-title: 开发 Navidrome 插件
-description: 用 Vue Surface、Action、Storage 和 Provider 接入自己的 Navidrome 音乐库。
+title: 1. 创建 Navidrome 插件
+description: 从 Vue 模板创建工程，先声明连接页、动作和网络权限。
 prev:
   text: HTTP 音源验证
   link: /guide/plugins/v2/tutorial-source/release
@@ -10,92 +10,148 @@ next:
   link: /guide/plugins/v2/tutorial-navidrome/connection
 ---
 
-# 开发 Navidrome 插件
+# 1. 创建 Navidrome 插件
 
-这个项目比普通音源多一层：用户要先在插件自己的 Vue 页面登录，然后澜音才能通过 Provider 搜索、播放和读取歌词。
+这个项目会做一件完整的事：用户先在插件自己的 Vue 页面连接 Navidrome，随后澜音通过插件 Provider 搜索、播放并读取歌词。
 
-<PluginDiagram src="/plugins/v2/navidrome-architecture.svg" alt="Vue Surface 通过 Action 调用插件逻辑，逻辑使用隔离 Storage 和 Navidrome API，并通过 Provider 为澜音提供音乐能力" />
+本教程只使用插件自己的连接记录，不接入澜音账号系统。完成后的调用关系是：
 
-## 完成后是什么样子？
+<PluginDiagram src="/plugins/v2/navidrome-architecture.svg" alt="Vue 页面通过 Action 调用插件逻辑，插件逻辑访问 Navidrome，并通过 Provider 向澜音提供音乐能力" />
 
-![Navidrome 教程插件在工作台中连接成功](/plugins/v2/navidrome-connected.png)
+## 1. 创建 Vue 工程
 
-_实测截图：Vue Surface 已用 demo 账号连接本机 Navidrome 模拟服务。左侧仍是通用工作台，右侧页面完全由插件拥有。_
-
-这个教程版包含：
-
-| 能力                             | 谁负责             |
-| -------------------------------- | ------------------ |
-| 连接表单、错误提示、30 秒轮询    | 插件的 Vue Surface |
-| 认证签名、令牌保存、退出登录     | 插件逻辑           |
-| 权限弹窗、隔离 Storage、页面容器 | 澜音 Host          |
-| 搜索、播放 URL、同步歌词         | Navidrome Provider |
-
-它没有使用澜音账号系统，也没有 `ceru.integrations`、`accounts` 或平台专用页面协议。插件账号完全属于插件。
-
-## 先运行完成版
-
-下载 [Navidrome Vue 教程工程](/plugins/v2/tutorial/ceru-navidrome-vue.zip)，解压后执行：
+新建工程：
 
 ```shell
+npm create ceru-plugin@latest ceru-navidrome -- --template vue --lang ts
+cd ceru-navidrome
 npm install
 ```
 
-终端 A 启动模拟 Navidrome：
+后面四节始终修改这个工程，最终结构如下：
+
+```text
+ceru-navidrome/
+├── ceru.plugin.json
+├── mock-navidrome.mjs
+└── src/
+    ├── model.ts
+    ├── api.ts
+    ├── provider.ts
+    ├── index.ts
+    ├── view.ts
+    └── App.vue
+```
+
+## 2. 声明连接页和动作
+
+先用下面内容完整替换 `ceru.plugin.json`。这一阶段只声明连接页，Provider 会在第 4 节加入。
+
+```json [ceru.plugin.json]
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.navidrome-vue",
+    "name": "Navidrome 教程版",
+    "version": "0.1.0",
+    "description": "用 Vue 连接自己的 Navidrome，并提供搜索、播放与歌词",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "uiSchema": "^1.0.0"
+    },
+    "modules": {
+      "logic": {
+        "entry": "logic.main",
+        "activation": ["onCommand:connection.open"]
+      },
+      "surfaces": [
+        {
+          "id": "connection",
+          "kind": "web",
+          "entry": "view.connection",
+          "title": "连接 Navidrome",
+          "presentation": { "kind": "drawer", "placement": "right", "size": 440 }
+        }
+      ]
+    },
+    "contributes": {
+      "commands": [
+        {
+          "id": "connection.open",
+          "title": "连接 Navidrome",
+          "action": "connection.open",
+          "view": "connection"
+        },
+        { "id": "connection.read", "title": "读取连接状态", "action": "connection.read" },
+        { "id": "connection.save", "title": "保存连接", "action": "connection.save" },
+        { "id": "connection.ping", "title": "测试连接", "action": "connection.ping" },
+        { "id": "connection.logout", "title": "断开连接", "action": "connection.logout" }
+      ],
+      "settingsPages": [
+        { "id": "connection", "title": "Navidrome 连接", "view": "connection" }
+      ]
+    },
+    "permissions": [
+      {
+        "key": "navidrome.http",
+        "name": "network.request",
+        "reason": "访问你设置的 Navidrome 服务器"
+      },
+      {
+        "key": "navidrome.private",
+        "name": "network.private",
+        "optional": true,
+        "reason": "连接本机或局域网中的 Navidrome 服务器"
+      }
+    ],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": {
+    "logic.main": "src/index.ts",
+    "view.connection": "src/view.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js",
+  "framework": "vue"
+}
+```
+
+这里声明了五个页面会调用的 Action。公网服务器需要 `network.request`；本机、NAS 和局域网地址还需要 `network.private`。插件只能请求清单中已有的权限。
+
+页面没有后台定时器、Socket 或其他资源需要插件逻辑清理，因此不声明 `openAction` 和 `closeAction`。后面的 30 秒轮询属于 Vue 组件，组件卸载时自行停止。
+
+## 3. 准备本机模拟服务
+
+把教程提供的 <a href="/plugins/v2/tutorial/navidrome-vue/mock-navidrome.mjs">mock-navidrome.mjs</a> 放到工程根目录，然后给 `package.json` 增加命令：
+
+```shell
+npm pkg set scripts.mock="node mock-navidrome.mjs"
+```
+
+启动它：
 
 ```shell
 npm run mock
 ```
 
-终端 B 启动工作台：
-
-```shell
-npm run dev
-```
-
-在工作台授予两项网络权限，打开 `connection · web` 页面，使用：
+看到以下地址和账号后保持终端运行：
 
 ```text
-地址：http://127.0.0.1:4533
-用户名：demo
-密码：demo
+Mock Navidrome: http://127.0.0.1:4533
+Username: demo  Password: demo
 ```
 
-点击“验证并保存”。出现 `已连接 · 0.54.5-mock` 后，搜索 `Morning`。
+模拟服务只实现本教程需要的 `ping`、`search3`、`stream` 和 `getLyricsBySongId`，不需要真实 Navidrome 服务器。
 
-::: tip 没有 Navidrome 服务器也能完成
-模拟服务实现了本教程使用的 `ping`、`search3`、`stream` 和 `getLyricsBySongId`。最后一节再切换到你的真实服务器。
-:::
+## 本节结果
 
-## 从 Vue 模板开始
+现在工程已经有连接页面、动作名称和最小权限边界。页面仍是模板内容，连接动作会在下一节完整实现；先不要尝试登录。
 
-如果想逐步手写：
+常见错误：
 
-```shell
-npm create ceru-plugin@0.3.5 ceru-navidrome -- --template vue --lang ts
-cd ceru-navidrome
-npm install
-```
+- `mock-navidrome.mjs` 必须位于 `package.json` 同级目录；
+- 端口 4533 被占用时，先停止占用该端口的程序；
+- 不要把真实账号或密码写进 `ceru.plugin.json`。
 
-项目最后会形成这个结构：
-
-```text
-ceru-navidrome/
-├── ceru.plugin.json       # Surface、Action、Provider 与权限
-├── mock-navidrome.mjs     # 可选的本机练习服务器
-└── src/
-    ├── index.ts           # 登录、Storage、HTTP、Provider
-    ├── view.ts            # 挂载 Vue
-    ├── App.vue            # 插件自己的连接页面
-    └── env.d.ts
-```
-
-## 学习路线
-
-<div class="plugin-reading-flow" aria-label="Navidrome 项目学习路线">
-  <a href="./connection">1. 连接与认证</a><span>→</span><a href="./surface">2. Vue 连接页</a><span>→</span><a href="./provider">3. 搜索播放歌词</a><span>→</span><a href="./release">4. 实机安装</a>
-</div>
-
-每章只解决一个问题。你可以先用完成版看到效果，再回到对应文件逐段修改。
-
-下一节：[连接、认证与 Storage →](./connection)
+下一节：[实现连接、认证与 Storage →](./connection)

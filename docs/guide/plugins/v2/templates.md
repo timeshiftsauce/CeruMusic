@@ -4,7 +4,7 @@ pageClass: plugin-v2-doc
 
 # 模板选型
 
-CLI 0.3.5 提供以下 **9 种模板，每种都有 TS / JS 两个变体**。它们是可运行的最小演示，真实服务接入由你完成。
+CLI 提供以下 **9 种模板，每种都有 TS / JS 两个变体**。它们是可运行的最小演示，真实服务接入由你完成。
 
 | 模板                | 适合场景           | 核心文件与演示                     | 注意事项                           |
 | ------------------- | ------------------ | ---------------------------------- | ---------------------------------- |
@@ -38,13 +38,13 @@ npm create ceru-plugin@latest my-react -- --template react --lang js
 
 ## 桌面与工作台的界面差异
 
-工作台能预览 Schema、Web 和 native Surface。0.3.5 的 <code>connected-library</code> 模板通过 <code>playlistSections</code> 把 native Surface 放入澜音现有“歌单”页，并用 <code>navigation.open({ page: 'playlist', sectionId })</code> 定位，不打开个人歌单抽屉。
+工作台能预览 Schema、Web 和 native Surface。<code>connected-library</code> 模板通过 <code>playlistSections</code> 把 native Surface 放入澜音现有“歌单”页，并用 <code>navigation.open({ page: 'playlist', sectionId })</code> 定位，不打开个人歌单抽屉。
 
-澜音 1.14.1 桌面将 Schema Surface 按[抽屉格式](./ui-schema)读取：`presentation.kind: 'drawer'`、表单根节点及支持的控件缺一不可。
+澜音 2.0 桌面将 Schema Surface 按[抽屉格式](./ui-schema)读取：`presentation.kind: 'drawer'`、表单根节点及支持的控件缺一不可。
 
 因此 `connected-library`、`importer`、`guest-adapter` 等模板里的普通设置 Schema，不能不加调整就当作桌面原生抽屉。保持数据能力不变，按抽屉章节补充 presentation、submitAction 与控件声明。
 
-Web Surface 由宿主在通用隔离容器中挂载，可以按 Manifest presentation 配置为抽屉或 modal。0.3.5 会按页面自然内容高度调整容器；根元素避免 100vh。声明了 `uiExtensions` 或全局样式，并不意味着 1.14.1 已在主界面实现所有 Slot，参见[支持状态](./host-services)。
+Web Surface 由宿主在通用隔离容器中挂载，可以按 Manifest presentation 配置为抽屉或 modal。容器会按页面自然内容高度调整容器；根元素避免 100vh。声明了 `uiExtensions` 或全局样式，并不意味着 2.0 已在主界面实现所有 Slot，参见[支持状态](./host-services)。
 
 ## web-dist 支持范围
 

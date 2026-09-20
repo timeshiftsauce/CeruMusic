@@ -10,7 +10,8 @@
     "checkJs": false,
     "lib": ["ES2022", "DOM"],
     "types": [],
-    "jsx": "react-jsx"
+    "jsx": "preserve",
+    "jsxImportSource": "vue"
   },
   "include": ["src", ".ceru-dev/types/**/*.d.ts"]
 }
