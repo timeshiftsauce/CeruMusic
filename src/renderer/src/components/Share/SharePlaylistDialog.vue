@@ -243,9 +243,12 @@ import { ref, computed, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import BaseDialog from '@renderer/components/BaseDialog.vue'
 import shareAPI from '@renderer/api/share'
+import { cloudSongListAPI } from '@renderer/api/cloudSongList'
+import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useAuthStore } from '@renderer/store'
+import { ensureShareResolverUploaded } from './uploadShareResolver'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { sanitizeFileName } from '@renderer/utils/file'
-import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import ShareConsentBar from './ShareConsentBar.vue'
 import {
   renderSharePoster,
@@ -275,10 +278,11 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v)
 })
 
-const localUserStore = LocalUserDetailStore()
 const ttlDays = ref(3)
 const ttlMarks = { 1: '1天', 3: '3天', 5: '5天', 7: '7天' }
 const allowWebPlayback = ref(true)
+const localUserStore = LocalUserDetailStore()
+const authStore = useAuthStore()
 const loading = ref(false)
 const statusText = ref('')
 const statusType = ref<'info' | 'error' | 'success'>('info')
@@ -391,11 +395,6 @@ function handleClose() {
   visible.value = false
 }
 
-function resolvePluginId(): string | null {
-  const pluginId = (localUserStore.userInfo as any)?.pluginId || localUserStore.userSource.pluginId
-  return pluginId || null
-}
-
 function handlePrimaryClick() {
   if (phase.value === 'success') {
     const url = shareResult.value?.url
@@ -490,6 +489,14 @@ function pickTemplate(id: PlaylistPosterTemplate) {
 }
 
 async function doShare() {
+  if (allowWebPlayback.value && !consented.value) {
+    MessagePlugin.warning('请先完成分享协议确认')
+    return
+  }
+  if (!authStore.isAuthenticated) {
+    MessagePlugin.warning('请先登录后再分享')
+    return
+  }
   if (!playlist.value?.meta?.cloudId) {
     MessagePlugin.warning('请先上传到云端后再分享')
     return
@@ -506,29 +513,35 @@ async function doShare() {
     let pluginMd5: string | undefined
     let quality: string | undefined
     if (allowWebPlayback.value) {
-      setStep(1, 'active', '正在检查音源插件...')
-      const pluginId = resolvePluginId()
-      if (!pluginId) {
-        throw new Error('未找到当前音源插件，请先配置音源后再开启网页播放')
+      setStep(1, 'active', '核对歌单音源与播放解析能力...')
+      const sources = new Set<string>()
+      let pos = 0
+      while (true) {
+        const result = await cloudSongListAPI.getSongListDetail(
+          playlist.value.meta.cloudId,
+          'asc',
+          100,
+          pos
+        )
+        for (const song of result.list) sources.add(song.source)
+        pos += result.list.length
+        if (pos >= result.total) break
+        if (!result.list.length || pos > 100000) throw new Error('云端歌单读取不完整，请稍后重试')
       }
-      const codeRes = await window.api.share.getPluginCodeAndMd5(pluginId)
-      if ('error' in codeRes) {
-        throw new Error(codeRes.error)
+      if (!sources.size) throw new Error('云端歌单为空，无法分享')
+      const resolver = await window.api.share.exportPlaylistResolver([...sources])
+      const preferred = localUserStore.userSource?.quality
+      quality =
+        preferred && resolver.qualities.includes(preferred) ? preferred : resolver.qualities[0]
+      pluginMd5 = resolver.md5
+      if (
+        !(await ensureShareResolverUploaded(resolver, (message) => setStep(1, 'active', message)))
+      ) {
+        resetSteps()
+        setStatus('')
+        return
       }
-      pluginMd5 = codeRes.md5
-      quality = (localUserStore.userSource?.quality as string) || '128k'
-      const pre = await shareAPI.precheck({ pluginMd5 })
-      if (!pre?.hasPlugin) {
-        const uploadRes = await shareAPI.uploadPlugin({
-          pluginCode: codeRes.code,
-          md5: codeRes.md5,
-          type: codeRes.type
-        })
-        if (!uploadRes?.ok) {
-          throw new Error(uploadRes?.message || '上传插件失败')
-        }
-      }
-      setStep(1, 'done', '网页播放校验通过')
+      setStep(1, 'done', '网页播放解析模块已就绪')
     } else {
       setStep(1, 'done', '已关闭网页播放，仅生成歌单分享页')
     }

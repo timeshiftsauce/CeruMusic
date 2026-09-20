@@ -1,0 +1,396 @@
+{
+  "passed": true,
+  "checks": [
+    "actual native grid without iframe",
+    "complete playlist ResourceRef",
+    "Electron-compatible structured clone of all native action payloads",
+    "item action import",
+    "native track playback action",
+    "compact native track rows and cover dimensions",
+    "play all action",
+    "state refresh",
+    "account avatar and nickname",
+    "VIP/SVIP/non-member badges",
+    "account menu layout",
+    "account openSurface",
+    "default logged-out avatar",
+    "account modal opens immediately",
+    "close-view and closed event dismiss login modal",
+    "nested logout menu and refreshed account state",
+    "account contribution disappears when plugin is disabled",
+    "native drawer union",
+    "surface cleanup",
+    "inline playlist page contribution without nested scroll or drawer",
+    "playlist section navigation includes trusted installation identity",
+    "playlist section disable closes its surface",
+    "modal resizes only from the active frame session",
+    "updating a plugin remounts the visible surface"
+  ],
+  "columns": 5,
+  "accountBounds": {
+    "top": 95,
+    "bottom": 145.734375,
+    "menuTop": 48,
+    "menuBottom": 157
+  },
+  "screenshots": [
+    "native-preview.png",
+    "native-playback.png",
+    "native-drawer.png",
+    "native-account-modal.png"
+  ],
+  "calls": [
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "mountSurface",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily"
+    },
+    {
+      "method": "surfaceReady",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1"
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "playlist.open",
+      "input": {
+        "ref": {
+          "pluginId": "fixture.plugin",
+          "providerId": "wy",
+          "connectionId": "account-123",
+          "kind": "playlist",
+          "id": "playlist-0",
+          "data": {
+            "opaqueToken": "private-provider-reference",
+            "nested": {
+              "revision": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "playlist.import",
+      "input": {
+        "mode": "picker",
+        "ref": {
+          "pluginId": "fixture.plugin",
+          "providerId": "wy",
+          "connectionId": "account-123",
+          "kind": "playlist",
+          "id": "playlist-0",
+          "data": {
+            "opaqueToken": "private-provider-reference",
+            "nested": {
+              "revision": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "play",
+      "input": {
+        "ref": {
+          "pluginId": "fixture.plugin",
+          "providerId": "wy",
+          "connectionId": "account-123",
+          "kind": "track",
+          "id": "track-1",
+          "data": {
+            "opaqueToken": "private-provider-reference",
+            "nested": {
+              "revision": 2
+            }
+          }
+        },
+        "refs": [
+          {
+            "pluginId": "fixture.plugin",
+            "providerId": "wy",
+            "connectionId": "account-123",
+            "kind": "track",
+            "id": "track-1",
+            "data": {
+              "opaqueToken": "private-provider-reference",
+              "nested": {
+                "revision": 2
+              }
+            }
+          },
+          {
+            "pluginId": "fixture.plugin",
+            "providerId": "wy",
+            "connectionId": "account-123",
+            "kind": "track",
+            "id": "track-2",
+            "data": {
+              "opaqueToken": "private-provider-reference",
+              "nested": {
+                "revision": 2
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "play",
+      "input": {
+        "refs": [
+          {
+            "pluginId": "fixture.plugin",
+            "providerId": "wy",
+            "connectionId": "account-123",
+            "kind": "track",
+            "id": "track-0",
+            "data": {
+              "opaqueToken": "private-provider-reference",
+              "nested": {
+                "revision": 2
+              }
+            }
+          },
+          {
+            "pluginId": "fixture.plugin",
+            "providerId": "wy",
+            "connectionId": "account-123",
+            "kind": "track",
+            "id": "track-1",
+            "data": {
+              "opaqueToken": "private-provider-reference",
+              "nested": {
+                "revision": 2
+              }
+            }
+          },
+          {
+            "pluginId": "fixture.plugin",
+            "providerId": "wy",
+            "connectionId": "account-123",
+            "kind": "track",
+            "id": "track-2",
+            "data": {
+              "opaqueToken": "private-provider-reference",
+              "nested": {
+                "revision": 2
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "openSurface",
+      "pluginId": "fixture-installation",
+      "surfaceId": "account"
+    },
+    {
+      "method": "surfaceReady",
+      "pluginId": "fixture-installation",
+      "surfaceId": "account",
+      "sessionId": "session-2"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "closeDrawer",
+      "pluginId": "fixture-installation",
+      "surfaceId": "account",
+      "sessionId": "session-2"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountLogout",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "accountSummary",
+      "pluginId": "fixture-installation",
+      "id": "account"
+    },
+    {
+      "method": "surfaceReady",
+      "pluginId": "fixture-installation",
+      "surfaceId": "native-drawer",
+      "sessionId": "session-4"
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "native-drawer",
+      "sessionId": "session-4",
+      "action": "render.drawer",
+      "input": {}
+    },
+    {
+      "method": "closeDrawer",
+      "pluginId": "fixture-installation",
+      "surfaceId": "native-drawer",
+      "sessionId": "session-4"
+    },
+    {
+      "method": "closeDrawer",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-1"
+    },
+    {
+      "method": "mountSurface",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily"
+    },
+    {
+      "method": "surfaceReady",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-6"
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-6",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "closeDrawer",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-6"
+    },
+    {
+      "method": "mountSurface",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily"
+    },
+    {
+      "method": "surfaceReady",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-8"
+    },
+    {
+      "method": "surfaceAction",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-8",
+      "action": "render.daily",
+      "input": {}
+    },
+    {
+      "method": "closeDrawer",
+      "pluginId": "fixture-installation",
+      "surfaceId": "daily",
+      "sessionId": "session-8"
+    }
+  ]
+}

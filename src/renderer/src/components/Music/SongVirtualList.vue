@@ -315,6 +315,7 @@
 </template>
 
 <script setup lang="ts">
+import { getQualityDisplayName } from '@common/utils/quality'
 import { ref, computed, onMounted, onUnmounted, nextTick, toRaw, watch } from 'vue'
 import {
   DownloadIcon,
@@ -799,26 +800,6 @@ const formatDuration = (duration: string | number) => {
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = Math.floor(seconds % 60)
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-}
-
-// 获取音质显示名称
-const qualityMap: Record<string, string> = {
-  '128k': '标准',
-  '192k': '高品',
-  '320k': '超高',
-  flac: '无损',
-  flac24bit: '超高解析',
-  hires: 'Hi-Res',
-  atmos: '全景',
-  atmos_plus: '全景Plus',
-  master: '母带'
-}
-
-const getQualityDisplayName = (quality: any) => {
-  if (typeof quality === 'object' && quality.type) {
-    return qualityMap[quality.type] || quality.type
-  }
-  return qualityMap[quality] || quality || ''
 }
 
 const getLocalQualityLabel = (song: Song) => {

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">账号登录的动作和状态流</title>
+  <desc id="desc">用户打开账号菜单，Vue 调用插件后台，后台保存私密会话并广播公开状态，澜音刷新账号菜单和现有歌单页中的插件区块。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7566d8"/></marker>
+  </defs>
+  <style>
+    .bg{fill:#f8fafc}.lane{fill:#fff;stroke:#d9e1ea;stroke-width:2}.title{font:700 24px system-ui,'Microsoft YaHei';fill:#182333}.head{font:700 17px system-ui,'Microsoft YaHei';fill:#182333}.text{font:14px system-ui,'Microsoft YaHei';fill:#566578}.step{fill:#f0edff;stroke:#b8afea}.safe{fill:#e8f7f0;stroke:#9ad7ba}.secret{fill:#fff2e6;stroke:#efc08e}.line{stroke:#7566d8;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+    @media(prefers-color-scheme:dark){.bg{fill:#171a20}.lane{fill:#20252d;stroke:#3b4552}.title,.head{fill:#f2f5f8}.text{fill:#b7c1cd}.step{fill:#292442;stroke:#6659ad}.safe{fill:#19382c;stroke:#347859}.secret{fill:#3a2b1c;stroke:#8a633d}}
+  </style>
+  <rect class="bg" width="1200" height="650" rx="26"/>
+  <text class="title" x="48" y="48">一次扫码登录：调用与数据边界</text>
+  <rect class="lane" x="46" y="78" width="250" height="520" rx="18"/>
+  <rect class="lane" x="330" y="78" width="250" height="520" rx="18"/>
+  <rect class="lane" x="614" y="78" width="250" height="520" rx="18"/>
+  <rect class="lane" x="898" y="78" width="256" height="520" rx="18"/>
+  <text class="head" x="171" y="116" text-anchor="middle">用户 / 账号菜单</text>
+  <text class="head" x="455" y="116" text-anchor="middle">Vue Surface</text>
+  <text class="head" x="739" y="116" text-anchor="middle">插件后台</text>
+  <text class="head" x="1026" y="116" text-anchor="middle">澜音宿主</text>
+  <rect class="step" x="76" y="150" width="190" height="58" rx="12"/><text class="text" x="171" y="184" text-anchor="middle">点击未登录账号</text>
+  <path class="line" d="M266 179H425"/>
+  <rect class="step" x="360" y="232" width="190" height="72" rx="12"/><text class="text" x="455" y="261" text-anchor="middle">invoke(account.start)</text><text class="text" x="455" y="283" text-anchor="middle">开始轮询</text>
+  <path class="line" d="M550 268H709"/>
+  <rect class="secret" x="644" y="328" width="190" height="82" rx="12"/><text class="text" x="739" y="358" text-anchor="middle">验证账号与会员</text><text class="text" x="739" y="380" text-anchor="middle">Cookie → 私有 Storage</text><text class="text" x="739" y="402" text-anchor="middle">不向界面发送</text>
+  <path class="line" d="M739 304V324"/>
+  <rect class="safe" x="644" y="450" width="190" height="86" rx="12"/><text class="text" x="739" y="480" text-anchor="middle">setState</text><text class="text" x="739" y="502" text-anchor="middle">昵称 · 头像 · badge</text><text class="text" x="739" y="524" text-anchor="middle">公开 JSON</text>
+  <path class="line" d="M739 410V446"/>
+  <path class="line" d="M644 493H485V396"/>
+  <rect class="step" x="360" y="334" width="190" height="62" rx="12"/><text class="text" x="455" y="361" text-anchor="middle">动作返回 success</text><text class="text" x="455" y="383" text-anchor="middle">context.close()</text>
+  <path class="line" d="M834 493H995"/>
+  <rect class="safe" x="928" y="450" width="196" height="86" rx="12"/><text class="text" x="1026" y="480" text-anchor="middle">刷新账号菜单</text><text class="text" x="1026" y="502" text-anchor="middle">重新 render 歌单区块</text><text class="text" x="1026" y="524" text-anchor="middle">显示原生内容</text>
+  <text class="text" x="171" y="562" text-anchor="middle">悬停可退出</text>
+  <text class="text" x="455" y="562" text-anchor="middle">关闭即停止轮询</text>
+</svg>

@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
+import { calculateBestQuality } from '@common/utils/quality'
+import PlaylistLoadError from '@renderer/components/Music/PlaylistLoadError.vue'
+import { playlistLoadErrorMessage } from '@renderer/utils/playlist/loadError'
+import { readPluginPlaylistRef } from '@renderer/services/pluginPlaybackBridge'
+import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
+import { pluginQualityOrder, batchQualityChoices } from '@renderer/utils/pluginQuality'
 import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -41,6 +46,7 @@ import { useRoute } from 'vue-router'
 import shareAPI from '@renderer/api/share'
 
 interface MusicItem {
+  pluginResource?: ResourceRef
   singer: string
   name: string
   albumName: string
@@ -71,8 +77,11 @@ const LocalUserDetail = LocalUserDetailStore()
 const songs = ref<MusicItem[]>([])
 const loading = ref(true)
 const loadingMore = ref(false)
+const networkLoadError = ref('')
+let retryNetworkFromStart = true
 const hasMore = ref(true)
 const currentPage = ref(1)
+const networkNextCursor = ref<string | undefined>(undefined)
 const pageSize = 50
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
@@ -271,6 +280,7 @@ const bgImageFromRoute = ref(false)
 
 const fetchPlaylistSongs = async () => {
   try {
+    networkLoadError.value = ''
     loading.value = true
     // 如果已经通过路由加载了背景，则不再重置加载状态
     // 我们在这里完全不重置 bgImageLoaded
@@ -639,6 +649,7 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
     if (reset) {
       currentPage.value = 1
+      networkNextCursor.value = undefined
       hasMore.value = true
       songs.value = []
       loading.value = true
@@ -646,6 +657,7 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       if (!hasMore.value) return
       loadingMore.value = true
     }
+    networkLoadError.value = ''
 
     // 检查是否是排行榜 (ID通常包含 source 前缀且在 leaderboard 列表中)
     // 这里简单通过 ID 格式判断，或者让调用方传入 type
@@ -663,22 +675,45 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       id = id.replace(/^.*__/, '')
       console.log(id)
     }
+    const resource = playlistInfo.value.isLeaderboard
+      ? undefined
+      : readPluginPlaylistRef(route.query.resourceRef, id, playlistInfo.value.source)
     const result = (await window.api.music.requestSdk(
       method as 'getPlaylistDetail' | 'getLeaderboardDetail',
       {
         source: playlistInfo.value.source,
         id,
-        page: currentPage.value
+        page: currentPage.value,
+        ref: resource,
+        cursor: resource ? networkNextCursor.value : undefined
       }
     )) as any
+    if (result?.error) throw new Error(String(result.error))
+    if (!result || !Array.isArray(result.list))
+      throw new Error('音源未返回有效的歌曲列表，请重试或更换音源')
+    if (resource && result.nextCursor && result.nextCursor === networkNextCursor.value)
+      throw new Error('音源返回了重复的分页游标，请重试')
     console.log(result)
     const limit = Number(result?.limit ?? pageSize)
     const apiTotal = Number(result?.total ?? 0)
 
     if (result && Array.isArray(result.list)) {
       const newList = result.list
-      const existed = new Set(songs.value.map((s) => s.songmid))
-      const filtered = newList.filter((item: any) => !existed.has(item.songmid))
+      const identity = (song: MusicItem) => {
+        const resource = song.pluginResource
+        return JSON.stringify(
+          resource
+            ? [resource.pluginId, resource.providerId, resource.connectionId, resource.kind, resource.id]
+            : [song.source, song.songmid]
+        )
+      }
+      const existed = new Set(songs.value.map(identity))
+      const filtered = newList.filter((item: MusicItem) => {
+        const key = identity(item)
+        if (existed.has(key)) return false
+        existed.add(key)
+        return true
+      })
       const appendedCount = filtered.length
 
       if (reset) {
@@ -692,14 +727,14 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
 
       // 如果API返回了歌单详细信息，更新歌单信息
       if (result.info) {
-        // 忽略接口返回的封面，强制使用路由传递的封面
+        // Native plugin navigation may only supply a ResourceRef; use its provider metadata.
         const currentCover = playlistInfo.value.cover
 
         playlistInfo.value = {
           ...playlistInfo.value,
           title: result.info.name || playlistInfo.value.title,
           author: result.info.author || playlistInfo.value.author,
-          cover: currentCover, // 始终保持原有封面（即路由传过来的）
+          cover: currentCover || result.info.img || '',
           total: Number(apiTotal || result.info.total || playlistInfo.value.total || 0),
           desc: result.info.desc || ''
         }
@@ -708,7 +743,10 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       // 更新分页状态
       currentPage.value += 1
       const total = Number(apiTotal || result.info?.total || playlistInfo.value.total || 0)
-      if (total > 0) {
+      if (resource) {
+        networkNextCursor.value = result.nextCursor
+        hasMore.value = Boolean(result.nextCursor)
+      } else if (total > 0) {
         hasMore.value = songs.value.length < total
       } else {
         hasMore.value = appendedCount > 0 && newList.length >= limit
@@ -718,6 +756,8 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
     }
   } catch (error) {
     console.error('获取网络歌单失败:', error)
+    networkLoadError.value = playlistLoadErrorMessage(error)
+    retryNetworkFromStart = reset
     if (reset) songs.value = []
     hasMore.value = false
   } finally {
@@ -726,6 +766,17 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
     } else {
       loadingMore.value = false
     }
+  }
+}
+
+const retryNetworkPlaylist = async () => {
+  if (loading.value || loadingMore.value) return
+  if (retryNetworkFromStart) {
+    loading.value = true
+    await fetchNetworkPlaylistSongs(true)
+  } else {
+    hasMore.value = true
+    await fetchNetworkPlaylistSongs(false)
   }
 }
 
@@ -783,7 +834,7 @@ const handleDownloadBatch = async (batchSongs: any[]) => {
   }
 
   // 1. 收集所有可能的音质选项
-  const allPossibleTypes = QUALITY_ORDER.map((t) => ({ type: t, size: '' }))
+  const allPossibleTypes = batchQualityChoices(batchSongs)
 
   // 2. 弹出音质选择框
   const userQuality = await createQualityDialog(
@@ -800,7 +851,7 @@ const handleDownloadBatch = async (batchSongs: any[]) => {
     // 3. 计算每首歌的最佳匹配音质
     let qualityToUse = userQuality
     if (s.types && s.types.length > 0) {
-      const best = calculateBestQuality(s.types, userQuality)
+      const best = calculateBestQuality(s.types, userQuality, pluginQualityOrder(s.source))
       if (best) qualityToUse = best
     }
 
@@ -1948,7 +1999,15 @@ const filteredMoreActions = computed(() =>
       </div>
 
       <div v-else class="song-list-wrapper">
+        <PlaylistLoadError
+          v-if="networkLoadError"
+          :message="networkLoadError"
+          :has-songs="songs.length > 0"
+          :loading="loadingMore"
+          @retry="retryNetworkPlaylist"
+        />
         <SongVirtualList
+          v-if="!networkLoadError || songs.length"
           ref="songListRef"
           :songs="displaySongs"
           :current-song="currentSong"

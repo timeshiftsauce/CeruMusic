@@ -1,5 +1,13 @@
 <script lang="ts" setup>
-import { ref, onMounted, computed, toRaw, h, nextTick, type Component } from 'vue'
+import {
+  playlistImporters,
+  playlistImportMenus,
+  pluginImportRequest,
+  libraryRevision
+} from '@renderer/services/pluginState'
+import { toAppTrack } from '@common/pluginMusic'
+import PluginPlaylistSections from '@renderer/components/PluginPlaylistSections.vue'
+import { ref, onMounted, computed, toRaw, h, nextTick, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { NIcon, NDropdown } from 'naive-ui'
@@ -14,7 +22,8 @@ import {
   FileExportIcon
 } from 'tdesign-icons-vue-next'
 import { createQualityDialog } from '@renderer/utils/audio/download'
-import { calculateBestQuality, QUALITY_ORDER } from '@common/utils/quality'
+import { calculateBestQuality } from '@common/utils/quality'
+import { pluginQualityOrder, batchQualityChoices } from '@renderer/utils/pluginQuality'
 import songListAPI from '@renderer/api/songList'
 import type { SongList, Songs } from '@common/types/songList'
 import defaultCover from '/default-cover.png'
@@ -632,14 +641,70 @@ const importFromPlaylist = async () => {
 // 网络歌单导入对话框状态
 const showNetworkImportDialog = ref(false)
 const networkPlaylistUrl = ref('')
-const importPlatformType = ref('wy') // 默认选择网易云音乐
+const importPlatformType = ref('')
+const importOwner = ref('')
+const importDialogTitle = ref('导入歌单')
+const availableImporters = computed(() =>
+  playlistImporters.value.filter((item) => item.pluginId === importOwner.value)
+)
+const importMenuBusy = ref(false)
+const importAuth = useAuthStore()
+const visibleImportMenus = computed(() =>
+  playlistImportMenus.value.filter(
+    (item) =>
+      (!item.when?.loggedIn || importAuth.isAuthenticated) &&
+      (!item.when?.kinds?.length || item.when.kinds.includes('playlist'))
+  )
+)
+const selectedImporter = computed(() =>
+  availableImporters.value.find((item) => item.value === importPlatformType.value)
+)
+watch(availableImporters, (importers) => {
+  if (!importers.length) {
+    showNetworkImportDialog.value = false
+    importPlatformType.value = ''
+  } else if (!importers.some((item) => item.value === importPlatformType.value)) {
+    importPlatformType.value = importers[0].value
+  }
+})
+watch(
+  pluginImportRequest,
+  (request) => {
+    if (!request) return
+    const importers = playlistImporters.value.filter((item) => item.pluginId === request.pluginId)
+    const selected = request.importerId
+      ? importers.find((item) => item.id === request.importerId)
+      : importers[0]
+    if (!selected) {
+      pluginImportRequest.value = null
+      MessagePlugin.warning('该歌单导入功能已不可用，请先使用对应插件')
+      return
+    }
+    importOwner.value = request.pluginId
+    importDialogTitle.value = request.title || '导入歌单'
+    importPlatformType.value = selected.value
+    showImportDialog.value = false
+    networkPlaylistUrl.value = request.initialValue || ''
+    showNetworkImportDialog.value = true
+    pluginImportRequest.value = null
+  },
+  { immediate: true }
+)
+watch(libraryRevision, () => {
+  void loadPlaylists()
+})
 
 // 从网络歌单导入
-const importFromNetwork = () => {
-  showImportDialog.value = false
-  showNetworkImportDialog.value = true
-  networkPlaylistUrl.value = ''
-  importPlatformType.value = 'wy' // 重置为默认平台
+const openPluginImport = async (entry: { pluginId: string; id: string }) => {
+  if (importMenuBusy.value) return
+  importMenuBusy.value = true
+  try {
+    await window.api.plugins.openPlaylistImportMenu(entry.pluginId, entry.id)
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error ? error.message : '打开导入方式失败')
+  } finally {
+    importMenuBusy.value = false
+  }
 }
 
 // 确认网络歌单导入
@@ -657,428 +722,67 @@ const confirmNetworkImport = async () => {
 const cancelNetworkImport = () => {
   showNetworkImportDialog.value = false
   networkPlaylistUrl.value = ''
-  importPlatformType.value = 'wy'
+  importPlatformType.value = availableImporters.value[0]?.value || ''
 }
 
-// 为歌单歌曲获取封面图片
-const setPicForPlaylist = async (songs: any[], source: string) => {
-  // 筛选出需要获取封面的歌曲
-  const songsNeedPic = songs.filter((song) => !song.img)
-
-  if (songsNeedPic.length === 0) return
-
-  // 批量请求封面
-  const picPromises = songsNeedPic.map(async (song, index) => {
-    try {
-      const url = await window.api.music.requestSdk('getPic', {
-        source,
-        songInfo: toRaw(song)
-      })
-      return {
-        song,
-        url: typeof url !== 'object' ? url : ''
-      }
-    } catch (e) {
-      console.log('获取封面失败 index' + index, e)
-      return {
-        song,
-        url: ''
-      }
-    }
-  })
-
-  // 等待所有请求完成
-  const results = await Promise.all(picPromises)
-
-  // 更新歌曲封面
-  results.forEach((result) => {
-    result.song.img = result.url
-  })
-}
-
-// 处理网络歌单导入
+// Platform parsing, signatures and pagination are implemented by the selected plugin.
 const handleNetworkPlaylistImport = async (input: string) => {
+  const importer = availableImporters.value.find((item) => item.value === importPlatformType.value)
+  if (!importer) {
+    MessagePlugin.warning('请先使用提供歌单导入功能的插件')
+    return
+  }
+  const loading = await MessagePlugin.loading('正在获取歌单信息...', 0)
+  let createdId: string | undefined
   try {
-    const load1 = MessagePlugin.loading('正在解析歌单链接...', 0)
-
-    let playlistId: string = ''
-    let platformName: string = ''
-
-    if (importPlatformType.value === 'wy') {
-      // 网易云音乐歌单ID解析
-      const playlistIdRegex = /(?:music\.163\.com\/.*[?&]id=|playlist\?id=|playlist\/|id=)(\d+)/i
-      const match = input.match(playlistIdRegex)
-
-      if (match && match[1]) {
-        playlistId = match[1]
-      } else {
-        const numericMatch = input.match(/^\d+$/)
-        if (numericMatch) {
-          playlistId = input
-        } else {
-          MessagePlugin.error('无法识别的网易云音乐歌单链接或ID格式')
-          load1.then((res) => res.close())
-          return
-        }
-      }
-      platformName = '网易云音乐'
-    } else if (importPlatformType.value === 'tx') {
-      // QQ音乐歌单ID解析：优先通过 SDK 解析，失败再回退到正则
-      let parsedId = ''
-      try {
-        const parsed: any = await window.api.music.requestSdk('parsePlaylistId', {
-          source: 'tx',
-          url: input
-        })
-        console.log('QQ音乐歌单解析结果', parsed)
-        if (parsed) parsedId = parsed
-      } catch (e) {}
-
-      if (parsedId) {
-        playlistId = parsedId
-      } else {
-        const qqPlaylistRegexes = [
-          // 标准歌单链接(强烈推荐)
-          /(?:y\.qq\.com\/n\/ryqq\/playlist\/|music\.qq\.com\/.*[?&]id=|playlist[?&]id=)(\d+)/i,
-          // 分享链接格式
-          /(?:i\.y\.qq\.com\/n2\/m\/share\/details\/taoge\.html.*[?&]id=)(\d+)/i,
-          // 其他可能的分享格式 https:\/\/c\d+\.y\.qq\.com\/base\/fcgi-bin\/u\?.*__=([A-Za-z0-9]+)/i,
-          // 手机版链接
-          /(?:i\.y\.qq\.com\/v8\/playsquare\/playlist\.html.*[?&]id=)(\d+)/i,
-          // 通用ID提取 - 匹配 id= 或 &id= 参数
-          /[?&]id=(\d+)/i
-        ]
-
-        let match: RegExpMatchArray | null = null
-        for (const regex of qqPlaylistRegexes) {
-          match = input.match(regex)
-          if (match && match[1]) {
-            playlistId = match[1]
-            break
-          }
-        }
-
-        if (!match || !match[1]) {
-          // 检查是否直接输入的是纯数字ID
-          const numericMatch = input.match(/^\d+$/)
-          if (numericMatch) {
-            playlistId = input
-          } else {
-            MessagePlugin.error('无法识别的QQ音乐歌单链接或ID格式，请检查链接是否正确')
-            load1.then((res) => res.close())
-            return
-          }
-        }
-      }
-      platformName = 'QQ音乐'
-    } else if (importPlatformType.value === 'kw') {
-      // 酷我音乐歌单ID解析
-      const kwPlaylistRegexes = [
-        // 标准歌单链接
-        /(?:kuwo\.cn\/playlist_detail\/|kuwo\.cn\/.*[?&]pid=)(\d+)/i,
-        // 手机版歌单链接（旧格式）
-        /(?:m\.kuwo\.cn\/h5app\/playlist\/|kuwo\.cn\/.*[?&]id=)(\d+)/i,
-        // 手机版歌单链接 (新格式)
-        /m\.kuwo\.cn\/newh5app\/playlist_detail\/(\d+)/i,
-        // 通用ID提取
-        /[?&](?:pid|id)=(\d+)/i
-      ]
-
-      let match: RegExpMatchArray | null = null
-      for (const regex of kwPlaylistRegexes) {
-        match = input.match(regex)
-        if (match && match[1]) {
-          playlistId = match[1]
-          break
-        }
-      }
-
-      if (!match || !match[1]) {
-        const numericMatch = input.match(/^\d+$/)
-        if (numericMatch) {
-          playlistId = input
-        } else {
-          MessagePlugin.error('无法识别的酷我音乐歌单链接或ID格式，请检查链接是否正确')
-          load1.then((res) => res.close())
-          return
-        }
-      }
-      platformName = '酷我音乐'
-    } else if (importPlatformType.value === 'bd') {
-      // 波点音乐歌单ID解析
-      const bdPlaylistRegexes = [
-        // 手机版歌单链接
-        /h5app\.kuwo\.cn\/m\/bodian\/collection\.html.*[?&]playlistId=(\d+)/i,
-        // 通用ID提取
-        /[?&]playlistId=(\d+)/i
-      ]
-
-      let match: RegExpMatchArray | null = null
-      for (const regex of bdPlaylistRegexes) {
-        match = input.match(regex)
-        if (match && match[1]) {
-          playlistId = match[1]
-          break
-        }
-      }
-
-      if (!match || !match[1]) {
-        const numericMatch = input.match(/^\d+$/)
-        if (numericMatch) {
-          playlistId = input
-        } else {
-          MessagePlugin.error('无法识别的波点音乐歌单链接或ID格式，请检查链接是否正确')
-          load1.then((res) => res.close())
-          return
-        }
-      }
-      platformName = '波点音乐'
-    } else if (importPlatformType.value === 'kg') {
-      // 酷狗音乐链接处理 - 传递完整链接给getUserListDetail
-      const kgPlaylistRegexes = [
-        // 标准歌单链接
-        /kugou\.com\/yy\/special\/single\/\d+/i,
-        // 手机版歌单链接 (新格式)
-        /m\.kugou\.com\/songlist\/gcid_[a-zA-Z0-9]+/i,
-        // 手机版链接 (旧格式)
-        /m\.kugou\.com\/.*[?&]id=\d+/i,
-        // 参数链接
-        /kugou\.com\/.*[?&](?:specialid|id)=\d+/i,
-        // 通用酷狗链接
-        /kugou\.com\/.*playlist/i
-      ]
-
-      let isValidLink = false
-      for (const regex of kgPlaylistRegexes) {
-        if (regex.test(input)) {
-          isValidLink = true
-          playlistId = input // 传递完整链接
-          break
-        }
-      }
-
-      if (!isValidLink) {
-        // 检查是否为纯数字ID
-        const numericMatch = input.match(/^\d+$/)
-        if (numericMatch) {
-          playlistId = input
-        } else {
-          MessagePlugin.error('无法识别的酷狗音乐歌单链接或ID格式，请检查链接是否正确')
-          load1.then((res) => res.close())
-          return
-        }
-      }
-      platformName = '酷狗音乐'
-    } else if (importPlatformType.value === 'mg') {
-      // 咪咕音乐歌单ID解析
-      const mgPlaylistRegexes = [
-        // 标准歌单链接
-        /(?:music\.migu\.cn\/.*[?&]id=)(\d+)/i,
-        // 手机版链接
-        /(?:m\.music\.migu\.cn\/.*[?&]id=)(\d+)/i,
-        // 通用ID提取
-        /[?&]id=(\d+)/i
-      ]
-
-      let match: RegExpMatchArray | null = null
-      for (const regex of mgPlaylistRegexes) {
-        match = input.match(regex)
-        if (match && match[1]) {
-          playlistId = match[1]
-          break
-        }
-      }
-
-      if (!match || !match[1]) {
-        const numericMatch = input.match(/^\d+$/)
-        if (numericMatch) {
-          playlistId = input
-        } else {
-          MessagePlugin.error('无法识别的咪咕音乐歌单链接或ID格式，请检查链接是否正确')
-          load1.then((res) => res.close())
-          return
-        }
-      }
-      platformName = '咪咕音乐'
-    } else {
-      MessagePlugin.error('不支持的平台类型')
-      load1.then((res) => res.close())
-      return
-    }
-
-    // 关闭加载提示
-    load1.then((res) => res.close())
-
-    // 获取歌单详情
-    const load2 = MessagePlugin.loading('正在获取歌单信息,请不要离开页面...', 0)
-
-    const getListDetail = async (page: number) => {
-      let detailResult: any
-      try {
-        detailResult = (await window.api.music.requestSdk('getPlaylistDetail', {
-          source: importPlatformType.value,
-          id: playlistId,
-          page: page
-        })) as any
-        console.log('list', detailResult)
-      } catch {
-        MessagePlugin.error(`获取${platformName}歌单详情失败：歌曲信息可能有误`)
-        load2.then((res) => res.close())
-        return
-      }
-
-      if (detailResult.error) {
-        MessagePlugin.error(`获取${platformName}歌单详情失败：` + detailResult.error)
-        load2.then((res) => res.close())
-        return
-      }
-
-      return detailResult
-    }
-
-    let page: number = 1
-    const detailResult = await getListDetail(page)
-    const playlistInfo = detailResult.info
-    let songs: Array<any> = detailResult.list || []
-
-    if (songs.length === 0) {
+    const seen = new Set<string>()
+    const tracks = new Map<string, any>()
+    let cursor: string | undefined
+    let name = importer.title
+    let description = ''
+    let artwork = ''
+    do {
+      const result = await window.api.plugins.importerTracks(importer.pluginId, importer.id, {
+        value: input,
+        cursor,
+        limit: 100
+      })
+      name = result.name || name
+      description = result.playlist?.description || description
+      artwork = result.playlist?.artworkUrl || artwork
+      for (const item of result.items)
+        tracks.set(
+          item.ref.pluginId + ':' + item.ref.providerId + ':' + item.ref.id,
+          toAppTrack(item)
+        )
+      cursor = result.nextCursor
+      if (cursor && seen.has(cursor)) throw new Error('插件返回了重复的分页游标，已停止导入')
+      if (cursor) seen.add(cursor)
+      if (seen.size > 1000 || tracks.size > 100000) throw new Error('歌单过大，请分批导入')
+    } while (cursor)
+    if (!tracks.size) {
       MessagePlugin.warning('该歌单没有歌曲')
-      load2.then((res) => res.close())
       return
     }
-
-    while (true) {
-      if (detailResult.total < songs.length) break
-      page++
-      const { list: songsList } = await getListDetail(page)
-      if (!(songsList && songsList.length)) {
-        break
-      }
-      songs = songs.concat(songsList)
-    }
-
-    // 处理导入结果
-    let successCount = 0
-    let failCount = 0
-
-    // 为酷狗音乐获取封面图片
-    if (importPlatformType.value === 'kg') {
-      load2.then((res) => res.close())
-      const load3 = MessagePlugin.loading('正在获取歌曲封面...')
-      if (songs.length > 100) MessagePlugin.info('歌曲较多，封面获取可能较慢')
-
-      try {
-        await setPicForPlaylist(songs, importPlatformType.value)
-      } catch (error) {
-        console.warn('获取封面失败，但继续导入:', error)
-      }
-
-      load3.then((res) => res.close())
-      const load4 = MessagePlugin.loading('正在创建本地歌单...')
-
-      const createResult = await songListAPI.create(
-        `${playlistInfo.name} (导入)`,
-        playlistInfo.desc
-          ? playlistInfo.desc
-          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
-        importPlatformType.value,
-        {
-          playlistId
-        }
-      )
-
-      const newPlaylistId = createResult.data!.id
-      await songListAPI.updateCover(newPlaylistId, detailResult.info.img)
-
-      if (!createResult.success) {
-        MessagePlugin.error('创建本地歌单失败：' + createResult.error)
-        load4.then((res) => res.close())
-        return
-      }
-
-      const addResult = await songListAPI.addSongs(newPlaylistId, songs)
-      load4.then((res) => res.close())
-
-      if (addResult.success) {
-        const added = (addResult.data && (addResult.data as any).added) ?? songs.length
-        successCount = added
-        failCount = Math.max(0, songs.length - added)
-      } else {
-        successCount = 0
-        failCount = songs.length
-        console.error('批量添加歌曲失败:', addResult.error)
-      }
-      addPlaylistState({
-        id: newPlaylistId,
-        name: `${playlistInfo.name} (导入)`,
-        description: playlistInfo.desc
-          ? playlistInfo.desc
-          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
-        coverImgUrl: detailResult.info.img || 'default-cover',
-        createTime: new Date().toISOString(),
-        updateTime: new Date().toISOString(),
-        source: importPlatformType.value as any,
-        meta: { playlistId }
-      } as SongList)
-    } else {
-      const createResult = await songListAPI.create(
-        `${playlistInfo.name} (导入)`,
-        playlistInfo.desc
-          ? playlistInfo.desc
-          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
-        importPlatformType.value,
-        {
-          playlistId
-        }
-      )
-
-      const newPlaylistId = createResult.data!.id
-      await songListAPI.updateCover(newPlaylistId, detailResult.info.img)
-
-      if (!createResult.success) {
-        MessagePlugin.error('创建本地歌单失败：' + createResult.error)
-        load2.then((res) => res.close())
-        return
-      }
-
-      const addResult = await songListAPI.addSongs(newPlaylistId, songs)
-      load2.then((res) => res.close())
-
-      if (addResult.success) {
-        const added = (addResult.data && (addResult.data as any).added) ?? songs.length
-        successCount = added
-        failCount = Math.max(0, songs.length - added)
-      } else {
-        successCount = 0
-        failCount = songs.length
-        console.error('批量添加歌曲失败:', addResult.error)
-      }
-      addPlaylistState({
-        id: newPlaylistId,
-        name: `${playlistInfo.name} (导入)`,
-        description: playlistInfo.desc
-          ? playlistInfo.desc
-          : `从${platformName}导入 - 原歌单：${playlistInfo.name}`,
-        coverImgUrl: detailResult.info.img || 'default-cover',
-        createTime: new Date().toISOString(),
-        updateTime: new Date().toISOString(),
-        source: importPlatformType.value as any,
-        meta: { playlistId }
-      } as SongList)
-    }
-
-    // 显示导入结果
-    if (successCount > 0) {
-      MessagePlugin.success(
-        `从${platformName}导入完成！成功导入 ${successCount} 首歌曲` +
-          (failCount > 0 ? `，${failCount} 首歌曲导入失败` : '')
-      )
-    } else {
-      MessagePlugin.error('导入失败，没有成功导入任何歌曲')
-    }
+    const created = await songListAPI.create(
+      name + ' (导入)',
+      description || '从' + importer.title + '导入',
+      importer.providerId || 'local',
+      { playlistId: input, pluginId: importer.pluginId, importerId: importer.id }
+    )
+    if (!created.success || !created.data) throw new Error(created.error || '创建歌单失败')
+    createdId = created.data.id
+    const result = await songListAPI.addSongs(createdId, [...tracks.values()])
+    if (!result.success) throw new Error(result.error || '保存歌曲失败')
+    if (artwork) await songListAPI.updateCover(createdId, artwork)
+    createdId = undefined
+    await loadPlaylists()
+    MessagePlugin.success('歌单导入完成，共 ' + tracks.size + ' 首歌曲')
   } catch (error) {
-    console.error('网络歌单导入失败:', error)
-    MessagePlugin.error('导入失败：' + (error instanceof Error ? error.message : '未知错误'))
+    if (createdId) await songListAPI.delete(createdId)
+    MessagePlugin.error(error instanceof Error ? error.message : String(error))
+  } finally {
+    loading.close()
   }
 }
 
@@ -1101,7 +805,7 @@ const downloadPlaylist = async (playlist: SongList) => {
     // 1. 收集所有可能的音质选项
     // 我们使用标准的 QUALITY_ORDER 作为基础，展示所有可能的选项
     // 或者，我们可以收集当前歌单中所有歌曲支持的音质合集
-    const allPossibleTypes = QUALITY_ORDER.map((t) => ({ type: t, size: '' }))
+    const allPossibleTypes = batchQualityChoices(songs)
 
     // 2. 弹出音质选择框
     const userQuality = await createQualityDialog(
@@ -1119,7 +823,7 @@ const downloadPlaylist = async (playlist: SongList) => {
 
       let qualityToUse = userQuality
       if (song.types && song.types.length > 0) {
-        const best = calculateBestQuality(song.types, userQuality)
+        const best = calculateBestQuality(song.types, userQuality, pluginQualityOrder(song.source))
         if (best) qualityToUse = best
       }
 
@@ -1638,7 +1342,7 @@ onDeactivated(() => {
       <!-- 页面标题和操作 -->
       <div class="page-header">
         <div class="header-left">
-          <h2>本地歌单</h2>
+          <h2>歌单</h2>
         </div>
         <div class="header-actions">
           <!-- <t-button theme="default" @click="openMusicFolder">
@@ -1820,6 +1524,7 @@ onDeactivated(() => {
           </t-button>
         </div>
       </div>
+      <PluginPlaylistSections :ready="!loading" />
     </div>
 
     <!-- 创建歌单对话框 -->
@@ -1887,17 +1592,27 @@ onDeactivated(() => {
             <i class="iconfont icon-youjiantou"></i>
           </div>
         </div>
-        <div class="import-option" @click="importFromNetwork">
+        <div
+          v-for="entry in visibleImportMenus"
+          :key="entry.value"
+          :aria-disabled="importMenuBusy"
+          class="import-option"
+          role="button"
+          tabindex="0"
+          @click="openPluginImport(entry)"
+          @keydown.enter="openPluginImport(entry)"
+          @keydown.space.prevent="openPluginImport(entry)"
+        >
           <div class="option-icon">
-            <i class="iconfont icon-wangluo"></i>
+            <t-icon name="internet" />
           </div>
           <div class="option-content">
-            <h4>从网络歌单</h4>
-            <p>导入网易云音乐、QQ音乐等平台歌单</p>
-            <span class="coming-soon">实验性功能</span>
+            <h4>{{ entry.title }}</h4>
+            <p v-if="entry.description">{{ entry.description }}</p>
+            <small class="import-provider">{{ entry.pluginName }}</small>
           </div>
           <div class="option-arrow">
-            <i class="iconfont icon-youjiantou"></i>
+            <t-icon name="chevron-right" />
           </div>
         </div>
       </div>
@@ -1905,137 +1620,54 @@ onDeactivated(() => {
     <!-- 网络歌单导入对话框 -->
     <t-dialog
       v-model:visible="showNetworkImportDialog"
+      :destroy-on-close="false"
+      :lazy="false"
       :cancel-btn="{ content: '取消', variant: 'outline' }"
       :confirm-btn="{ content: '开始导入', theme: 'primary' }"
       :style="{ maxHeight: '80vh' }"
-      header="导入网络歌单"
+      :header="importDialogTitle"
       placement="center"
       width="600px"
       @cancel="cancelNetworkImport"
       @confirm="confirmNetworkImport"
     >
       <div class="network-import-content">
-        <!-- 平台选择 -->
         <div class="platform-selector">
           <label class="form-label">选择导入平台</label>
           <t-radio-group v-model="importPlatformType" variant="primary-filled">
-            <t-radio-button value="wy"> 网易云音乐 </t-radio-button>
-            <t-radio-button value="tx"> QQ音乐 </t-radio-button>
-            <t-radio-button value="kw"> 酷我音乐 </t-radio-button>
-            <t-radio-button value="bd"> 波点音乐 </t-radio-button>
-            <t-radio-button value="kg"> 酷狗音乐 </t-radio-button>
-            <t-radio-button value="mg"> 咪咕音乐 </t-radio-button>
+            <t-radio-button
+              v-for="item in availableImporters"
+              :key="item.value"
+              :value="item.value"
+              >{{ item.title }}</t-radio-button
+            >
           </t-radio-group>
         </div>
-
-        <!-- 内容区域 - 添加过渡动画 -->
         <div class="import-content-wrapper">
-          <transition mode="out-in" name="fade-slide">
-            <div :key="importPlatformType" class="import-content">
-              <div style="margin-bottom: 1em">
-                请输入{{
-                  importPlatformType === 'wy'
-                    ? '网易云音乐'
-                    : importPlatformType === 'tx'
-                      ? 'QQ音乐'
-                      : importPlatformType === 'kw'
-                        ? '酷我音乐'
-                        : importPlatformType === 'bd'
-                          ? '波点音乐'
-                          : importPlatformType === 'kg'
-                            ? '酷狗音乐'
-                            : importPlatformType === 'mg'
-                              ? '咪咕音乐'
-                              : '音乐平台'
-                }}歌单链接或歌单ID，系统将自动识别格式并导入歌单中的所有歌曲到本地歌单。
-              </div>
-              <t-input
-                v-model="networkPlaylistUrl"
-                :placeholder="
-                  importPlatformType === 'wy'
-                    ? '支持链接或ID：https://music.163.com/playlist?id=123456789 或 123456789'
-                    : importPlatformType === 'tx'
-                      ? '支持链接或ID：https://y.qq.com/n/ryqq/playlist/123456789 或 123456789'
-                      : importPlatformType === 'kw'
-                        ? '支持链接或ID：http://www.kuwo.cn/playlist_detail/123456789 或 123456789'
-                        : importPlatformType === 'bd'
-                          ? '支持链接或ID：https://h5app.kuwo.cn/m/bodian/collection.html?playlistId=123456789 或 123456789'
-                          : importPlatformType === 'kg'
-                            ? '手机链接或酷狗码：https://www.kugou.com/yy/special/single/123456789 或 123456789'
-                            : importPlatformType === 'mg'
-                              ? '支持链接或ID：https://music.migu.cn/v3/music/playlist/123456789 或 123456789'
-                              : '请输入歌单链接或ID'
-                "
-                autofocus
-                class="url-input"
-                clearable
-                @enter="confirmNetworkImport"
-              />
-
-              <div class="import-tips">
-                <p class="tip-title">
-                  {{
-                    importPlatformType === 'wy'
-                      ? '网易云音乐'
-                      : importPlatformType === 'tx'
-                        ? 'QQ音乐'
-                        : importPlatformType === 'kw'
-                          ? '酷我音乐'
-                          : importPlatformType === 'bd'
-                            ? '波点音乐'
-                            : importPlatformType === 'kg'
-                              ? '酷狗音乐'
-                              : importPlatformType === 'mg'
-                                ? '咪咕音乐'
-                                : '音乐平台'
-                  }}支持的输入格式：
-                </p>
-                <ul v-if="importPlatformType === 'wy'" class="tip-list">
-                  <li>完整链接：https://music.163.com/playlist?id=123456789</li>
-                  <li>手机链接：https://music.163.com/m/playlist?id=123456789</li>
-                  <li>分享链接：https://y.music.163.com/m/playlist/123456789</li>
-                  <li>纯数字ID：123456789</li>
-                  <li>其他包含ID的网易云链接格式</li>
-                </ul>
-                <ul v-else-if="importPlatformType === 'tx'" class="tip-list">
-                  <li>完整链接：https://y.qq.com/n/ryqq/playlist/123456789</li>
-                  <li>手机链接：https://i.y.qq.com/v8/playsquare/playlist.html?id=123456789</li>
-                  <li>分享链接：https://i.y.qq.com/n2/m/share/details/taoge.html?id=123456789</li>
-                  <li>其他分享：https://c.y.qq.com/base/fcgi-bin/u?__=123456789</li>
-                  <li>纯数字ID：123456789</li>
-                </ul>
-                <ul v-else-if="importPlatformType === 'kw'" class="tip-list">
-                  <li>完整链接：http://www.kuwo.cn/playlist_detail/123456789</li>
-                  <li>手机链接：http://m.kuwo.cn/h5app/playlist/123456789</li>
-                  <li>参数链接：http://www.kuwo.cn/playlist?pid=123456789</li>
-                  <li>纯数字ID：123456789</li>
-                  <li>其他包含ID的酷我音乐链接格式</li>
-                </ul>
-                <ul v-else-if="importPlatformType === 'bd'" class="tip-list">
-                  <li>
-                    手机链接：https://h5app.kuwo.cn/m/bodian/collection.html?playlistId=123456789
-                  </li>
-                  <li>纯数字ID：123456789</li>
-                  <li>其他包含ID的波点音乐链接格式</li>
-                </ul>
-                <ul v-else-if="importPlatformType === 'kg'" class="tip-list">
-                  <li>酷狗码（推荐）：123456789</li>
-                  <li>完整链接：https://www.kugou.com/yy/special/single/123456789</li>
-                  <li>手机版链接：https://m.kugou.com/songlist/gcid_3z9vj0yqz4bz00b</li>
-                  <li>旧版手机链接：https://m.kugou.com/playlist?id=123456789</li>
-                  <li>参数链接：https://www.kugou.com/playlist?specialid=123456789</li>
-                </ul>
-                <ul v-else-if="importPlatformType === 'mg'" class="tip-list">
-                  <li>完整链接：https://music.migu.cn/v3/music/playlist/123456789</li>
-                  <li>手机链接：https://m.music.migu.cn/playlist?id=123456789</li>
-                  <li>参数链接：https://music.migu.cn/playlist?id=123456789</li>
-                  <li>纯数字ID：123456789</li>
-                  <li>其他包含ID的咪咕音乐链接格式</li>
-                </ul>
-                <p class="tip-note">智能识别：系统会自动从输入中提取歌单ID</p>
-              </div>
+          <div class="import-content">
+            <p>
+              {{ selectedImporter?.description || '粘贴歌单链接或 ID，将歌曲导入到本地歌单。' }}
+            </p>
+            <t-input
+              v-model="networkPlaylistUrl"
+              :placeholder="selectedImporter?.placeholder || '请输入歌单链接或 ID'"
+              autofocus
+              clearable
+              class="url-input"
+              @enter="confirmNetworkImport"
+            />
+            <div class="import-tips">
+              <p class="tip-title">支持的输入格式</p>
+              <ul class="tip-list">
+                <li v-for="example in selectedImporter?.examples || []" :key="example.value">
+                  {{ example.label }}：{{ example.value }}
+                </li>
+              </ul>
+              <p v-for="note in selectedImporter?.instructions || []" :key="note" class="tip-note">
+                {{ note }}
+              </p>
             </div>
-          </transition>
+          </div>
         </div>
       </div>
     </t-dialog>
@@ -2201,9 +1833,15 @@ onDeactivated(() => {
       width: 100%;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
+      height: auto;
+      grid-auto-rows: 36px;
+      gap: 4px;
+      padding: 4px;
     }
 
     :deep(.t-radio-button) {
+      min-width: 0;
+      height: 36px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -2835,15 +2473,11 @@ onDeactivated(() => {
       margin: 0;
     }
 
-    .coming-soon {
-      display: inline-block;
-      background: var(--local-warning-bg);
-      color: var(--local-warning-text);
-      padding: 0.125rem 0.5rem;
-      border-radius: 0.25rem;
-      font-size: 0.75rem;
-      font-weight: 500;
-      margin-top: 0.5rem;
+    .import-provider {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--local-text-tertiary);
     }
   }
 

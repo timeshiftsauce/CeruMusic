@@ -26,5 +26,11 @@ export interface UserInfo {
   selectSources?: string
   selectQuality?: string
   sourceQualityMap?: Record<string, string>
+  /** Selected plugin implementation for each provider ID. */
+  sourcePluginMap?: Record<string, string>
+  /** 精确到 Provider 能力的方法实现选择。 */
+  capabilityPluginMap?: Record<string, string>
+  /** 首页区块的实现选择。 */
+  uiPluginMap?: Record<string, string>
   hasGuide?: boolean
 }

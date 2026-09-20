@@ -1,0 +1,62 @@
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.http-source",
+    "name": "本地 HTTP 音源",
+    "version": "0.1.0",
+    "description": "跟随澜音 v2 教程制作的可搜索、播放并显示歌词的音源插件",
+    "author": "Your Name",
+    "license": "MIT",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1"
+    },
+    "config": {
+      "apiOrigin": "http://127.0.0.1:43120"
+    },
+    "modules": {
+      "logic": {
+        "entry": "logic.main",
+        "activation": ["onCommand:source.check", "onProvider:tutorial-source"]
+      }
+    },
+    "contributes": {
+      "commands": [
+        {
+          "id": "source.check",
+          "title": "检查演示音源",
+          "action": "source.check"
+        }
+      ],
+      "providers": [
+        {
+          "id": "tutorial-source",
+          "name": "本地 HTTP 音源",
+          "protocols": ["music.search@1", "music.resolve@1", "music.lyrics@1"],
+          "qualities": ["128k", "320k", "lossless"],
+          "icon": { "kind": "host", "name": "music-note" },
+          "connectionMode": "none"
+        }
+      ]
+    },
+    "permissions": [
+      {
+        "key": "source.http",
+        "name": "network.request",
+        "reason": "访问你配置的音乐服务"
+      },
+      {
+        "key": "source.private",
+        "name": "network.private",
+        "optional": true,
+        "reason": "在教程中访问本机模拟音乐服务"
+      }
+    ],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": {
+    "logic.main": "src/index.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js"
+}

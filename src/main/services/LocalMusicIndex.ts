@@ -87,7 +87,8 @@ function itemToRow(
     hasCover: (item.hasCover ?? (existing ? !!existing.hasCover : false)) ? 1 : 0,
     coverKey: (pick(item.coverKey, existing?.coverKey) as string) || null,
     year: Number(pick(item.year, existing?.year) || 0),
-    lrc: (pick(item.lrc, existing?.lrc) as string | null) ?? null,
+    // null means a lazy scan, while an explicit empty string clears removed lyrics.
+    lrc: typeof item.lrc === 'string' ? item.lrc : (existing?.lrc ?? null),
     types: JSON.stringify(
       (item.types && item.types.length ? item.types : safeJsonParse(existing?.types, [])) || []
     ),

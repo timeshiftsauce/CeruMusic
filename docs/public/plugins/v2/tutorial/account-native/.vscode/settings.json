@@ -1,0 +1,20 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "editor.formatOnSave": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "json.schemas": [
+    {
+      "fileMatch": ["/ceru.plugin.json"],
+      "url": "./node_modules/@shiqianjiang/ceru-plugin-cli/schemas/config.schema.json"
+    }
+  ],
+  "files.exclude": {
+    "**/*.tsbuildinfo": true
+  }
+}

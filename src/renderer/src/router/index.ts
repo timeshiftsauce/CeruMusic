@@ -61,6 +61,11 @@ const appRouter: RouteRecordRaw[] = [
         path: 'profile',
         name: 'profile',
         component: () => import('@renderer/views/user/Profile.vue')
+      },
+      {
+        path: 'community',
+        name: 'community',
+        component: () => import('@renderer/views/community/index.vue')
       }
     ]
   },

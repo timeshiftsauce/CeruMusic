@@ -199,7 +199,7 @@ const handleSearchSelect = async (item: SearchItem) => {
 <template>
   <div class="main-container">
     <!-- 标题栏 -->
-    <div class="header">
+    <div class="header" data-app-titlebar>
       <TitleBarControls title="设置" :show-back="true" :show-account="false">
         <template #extra>
           <div style="flex-shrink: 0">
@@ -235,7 +235,11 @@ const handleSearchSelect = async (item: SearchItem) => {
 
       <!-- 右侧内容面板 -->
       <div class="content-panel">
-        <div ref="contentPanelRef" class="panel-content">
+        <div
+          ref="contentPanelRef"
+          class="panel-content"
+          :class="{ 'panel-content-contained': activeCategory === 'plugins' }"
+        >
           <!-- 设置内容区域 -->
           <KeepAlive>
             <component
@@ -268,6 +272,7 @@ const handleSearchSelect = async (item: SearchItem) => {
 }
 
 .settings-layout {
+  min-height: 0;
   display: flex;
   flex: 1;
   overflow: hidden;
@@ -355,6 +360,8 @@ const handleSearchSelect = async (item: SearchItem) => {
 
 // 右侧内容面板
 .content-panel {
+  min-height: 0;
+  min-width: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -362,6 +369,7 @@ const handleSearchSelect = async (item: SearchItem) => {
   padding: 10px;
 
   .panel-content {
+    min-height: 0;
     flex: 1;
     overflow-y: auto;
     background: var(--settings-main-bg);
@@ -371,6 +379,13 @@ const handleSearchSelect = async (item: SearchItem) => {
     // But for user clicking, smooth is nice.
     // I will keep it for now.
   }
+}
+
+.content-panel .panel-content-contained {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  scroll-behavior: auto;
 }
 
 // 响应式设计

@@ -12,8 +12,14 @@ export const LocalUserDetailStore = defineStore(
     const userInfo = ref<UserInfo>({})
     const initialization = ref(false)
     const isWatchStarted = ref(false) // 防止重复创建 watch
+    function persistUserInfo() {
+      // Available providers are a runtime snapshot, not user preferences.
+      const { supportedSources: _runtimeSources, ...preferences } = userInfo.value
+      localStorage.setItem('userInfo', JSON.stringify(preferences))
+    }
 
     function init(): void {
+      if (initialization.value) return
       const UserInfoLocal = localStorage.getItem('userInfo')
       const ListLocal = localStorage.getItem('songList')
       if (UserInfoLocal) {
@@ -64,11 +70,25 @@ export const LocalUserDetailStore = defineStore(
       watch(
         userInfo,
         (newVal) => {
-          localStorage.setItem('userInfo', JSON.stringify(newVal))
+          const { supportedSources: _runtimeSources, ...preferences } = newVal
+          localStorage.setItem('userInfo', JSON.stringify(preferences))
         },
         {
           deep: true
         }
+      )
+      // Commit deliberate selections immediately, including a close in the same tick.
+      watch(
+        () => [
+          userInfo.value.selectSources,
+          userInfo.value.selectQuality,
+          userInfo.value.sourceQualityMap,
+          userInfo.value.sourcePluginMap,
+          userInfo.value.capabilityPluginMap,
+          userInfo.value.uiPluginMap
+        ],
+        persistUserInfo,
+        { deep: true, flush: 'sync' }
       )
     }
 

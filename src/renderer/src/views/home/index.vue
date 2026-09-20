@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: 'HomeRoot' })
 // import HomeLayout from '@renderer/layout/index.vue'
 // Trigger auto-import regeneration
 </script>

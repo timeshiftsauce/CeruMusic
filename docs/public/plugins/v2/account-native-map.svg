@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">账号与原生音乐插件知识地图</title>
+  <desc id="desc">Manifest 连接账号菜单、Vue 登录、后台会话、现有歌单页中的原生区块、Provider 和宿主服务。</desc>
+  <style>
+    .bg{fill:#f8fafc}.card{fill:#fff;stroke:#d9e1ea;stroke-width:2}.core{fill:#6d5bd0;stroke:#5745bd}.head{font:700 24px system-ui,'Microsoft YaHei';fill:#182333}.label{font:700 18px system-ui,'Microsoft YaHei';fill:#182333}.text{font:15px system-ui,'Microsoft YaHei';fill:#566578}.white{fill:#fff}.line{stroke:#7a6ada;stroke-width:3;fill:none}.dot{fill:#7a6ada}
+    @media(prefers-color-scheme:dark){.bg{fill:#171a20}.card{fill:#20252d;stroke:#3b4552}.head,.label{fill:#f2f5f8}.text{fill:#b7c1cd}.core{fill:#6754ca;stroke:#8e7de5}}
+  </style>
+  <rect class="bg" width="1200" height="680" rx="26"/>
+  <text class="head" x="52" y="55">一个账号音乐插件，由六块能力拼成</text>
+  <text class="text" x="52" y="83">从 Manifest 开始，沿箭头找到每个 API 的调用方和可见结果</text>
+  <path class="line" d="M600 322 C470 322 440 190 350 190"/>
+  <path class="line" d="M600 322 C470 322 440 455 350 455"/>
+  <path class="line" d="M600 322 C730 322 760 190 850 190"/>
+  <path class="line" d="M600 322 C730 322 760 455 850 455"/>
+  <path class="line" d="M600 322 L600 565"/>
+  <circle class="dot" cx="350" cy="190" r="6"/><circle class="dot" cx="350" cy="455" r="6"/>
+  <circle class="dot" cx="850" cy="190" r="6"/><circle class="dot" cx="850" cy="455" r="6"/>
+  <circle class="dot" cx="600" cy="565" r="6"/>
+  <rect class="core" x="470" y="245" width="260" height="154" rx="24"/>
+  <text class="label white" x="600" y="292" text-anchor="middle">ceru.plugin.json</text>
+  <text class="text white" x="600" y="326" text-anchor="middle">entries · surfaces · commands</text>
+  <text class="text white" x="600" y="353" text-anchor="middle">accountItems · playlistSections</text>
+  <text class="text white" x="600" y="380" text-anchor="middle">permissions</text>
+  <rect class="card" x="58" y="120" width="292" height="140" rx="18"/>
+  <text class="label" x="86" y="159">账号菜单</text>
+  <text class="text" x="86" y="191">AccountSummary</text>
+  <text class="text" x="86" y="218">默认头像 → 昵称 / VIP</text>
+  <text class="text" x="86" y="245">悬停调用 logoutAction</text>
+  <rect class="card" x="58" y="385" width="292" height="140" rx="18"/>
+  <text class="label" x="86" y="424">Vue 登录 modal</text>
+  <text class="text" x="86" y="456">invoke 调后台动作</text>
+  <text class="text" x="86" y="483">subscribe 收公开状态</text>
+  <text class="text" x="86" y="510">成功后 context.close</text>
+  <rect class="card" x="850" y="120" width="292" height="140" rx="18"/>
+  <text class="label" x="878" y="159">现有“歌单”页区块</text>
+  <text class="text" x="878" y="191">defineNativeView</text>
+  <text class="text" x="878" y="218">grid 歌单 · list 歌曲</text>
+  <text class="text" x="878" y="245">playlistSections 自动挂载</text>
+  <rect class="card" x="850" y="385" width="292" height="140" rx="18"/>
+  <text class="label" x="878" y="424">Provider</text>
+  <text class="text" x="878" y="456">playlists.get + 分页</text>
+  <text class="text" x="878" y="483">tracks.resolve</text>
+  <text class="text" x="878" y="510">完整 ResourceRef</text>
+  <rect class="card" x="380" y="565" width="440" height="78" rx="18"/>
+  <text class="label" x="600" y="598" text-anchor="middle">澜音宿主服务</text>
+  <text class="text" x="600" y="625" text-anchor="middle">区块定位 · 详情导航 · 队列 · 播放器 · 导入窗口</text>
+</svg>

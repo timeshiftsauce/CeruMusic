@@ -1,3 +1,5 @@
+import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
+
 export interface sdkArg {
   source: string
   [key: string]: any
@@ -11,6 +13,7 @@ export interface SearchArg {
 
 // 单首歌曲的类型定义
 export interface MusicItem {
+  pluginResource?: ResourceRef
   hash?: string
   singer: string
   name: string
@@ -75,6 +78,8 @@ export interface PlaylistResult {
 export interface GetSongListDetailsArg {
   id: string
   page: number
+  ref?: ResourceRef
+  cursor?: string
 }
 
 // 歌单详情信息

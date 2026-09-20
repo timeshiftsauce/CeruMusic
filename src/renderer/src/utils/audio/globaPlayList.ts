@@ -13,6 +13,7 @@ import {
 } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
@@ -40,6 +41,9 @@ let pendingRestoreSongId: number | string | null = null
 let currentPlaybackErrorHandler: ((e: Event) => void) | null = null
 let currentPlaybackPlayingHandler: ((e: Event) => void) | null = null
 let currentPlayRequestId: number = 0
+let selectionSequence = 0
+let pendingSongId: SongList['songmid'] | null = null
+let pendingMetadataController: AbortController | undefined
 
 const AUTO_NEXT_DELAY_MS = 1500
 let pendingAutoNextTimer: ReturnType<typeof setTimeout> | null = null
@@ -54,6 +58,8 @@ const _throttleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const _disabledPlugins = new Set<string>()
 let _unsubscribeThrottle: (() => void) | null = null
 let _unsubscribeDisabled: (() => void) | null = null
+let unsubscribeLocalTags: (() => void) | undefined
+let unsubscribeRestorePosition: (() => void) | undefined
 
 function _isThrottled(): boolean {
   const pluginId = localUserStore.userSource.pluginId
@@ -204,6 +210,7 @@ const playSong = async (
   song: SongList,
   options: { immediate?: boolean; shouldAutoStart?: () => boolean } = {}
 ) => {
+  const selection = ++selectionSequence
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
   crossfadeManager.cancel()
@@ -226,6 +233,7 @@ const playSong = async (
    */
   let isHostInitiatedChange = false
   const lt = await getListenTogetherStore()
+  if (selection !== selectionSequence) return
   if (lt.isInRoom) {
     const remoteSongmid = lt.current.song?.songmid
     const remoteSource = lt.current.song?.source
@@ -288,8 +296,13 @@ const playSong = async (
     })
   }
 
-  // 使用当前时间戳作为请求ID，解决快速切歌的竞态问题
-  const requestId = Date.now()
+  // Monotonic IDs keep rapid clicks distinct, even within one millisecond.
+  const requestId = ++currentPlayRequestId
+  pendingSongId = song.songmid
+  pendingMetadataController?.abort()
+  const metadataController = new AbortController()
+  pendingMetadataController = metadataController
+  isLoadingSong.value = true
   // songInfo 上不存在 requestId 属性，移除该行；requestId 仅通过闭包变量跟踪即可
 
   // 更好的方式：使用闭包变量跟踪是否是最新请求
@@ -304,6 +317,10 @@ const playSong = async (
     if (currentPlayRequestId !== requestId) return
   }
 
+  let preparedMetadata:
+    | Awaited<ReturnType<ReturnType<typeof useGlobalPlayStatusStore>['prepareSong']>>
+    | undefined
+  let metadataCommitted = false
   try {
     isLoadingSong.value = true
     // 清理之前的监听器
@@ -336,13 +353,14 @@ const playSong = async (
       Audio.value.audio.volume = Audio.value.volume / 100
     }
 
-    // 如果切歌了，这里先不更新 UI，等真正开始获取 URL 了再说？
-    // 不，UI 应该立即响应。
-    songInfo.value.name = song.name
-    songInfo.value.singer = song.singer
-    songInfo.value.albumName = song.albumName
-    songInfo.value.img = song.img
-    userInfo.value.lastPlaySongId = song.songmid
+    const metadataStore = useGlobalPlayStatusStore()
+    const preparedPromise = metadataStore
+      .prepareSong(song, metadataController.signal)
+      .then((prepared) => {
+        preparedMetadata = prepared
+        return prepared
+      })
+    preparedPromise.catch(() => {})
     // 注意：SMTC 的 updateMetadata 会在音频准备好后再调用，避免切换时空隙
 
     let urlToPlay = ''
@@ -387,7 +405,6 @@ const playSong = async (
 
             if (!url || typeof url !== 'string' || url.includes('error')) continue
 
-            setUrl(url)
             if (Audio.value.audio) {
               const a = Audio.value.audio
               try {
@@ -395,6 +412,7 @@ const playSong = async (
               } catch {}
               a.removeAttribute('src')
               a.load()
+              setUrl(url)
 
               try {
                 await waitForAudioReady(Audio.value.audio)
@@ -407,13 +425,6 @@ const playSong = async (
                 MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                 playSuccess = true
                 urlToPlay = url
-                // 音频已就绪后再更新 SMTC，避免切换时空隙
-                mediaSessionController.updateMetadata({
-                  title: song.name,
-                  artist: song.singer,
-                  album: song.albumName || '未知专辑',
-                  artworkUrl: song.img || defaultCoverImg
-                })
                 break
               } catch (e) {
                 continue
@@ -488,13 +499,6 @@ const playSong = async (
 
                   MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
                   playSuccess = true
-                  // 音频已就绪后再更新 SMTC，避免切换时空隙
-                  mediaSessionController.updateMetadata({
-                    title: song.name,
-                    artist: song.singer,
-                    album: song.albumName || '未知专辑',
-                    artworkUrl: song.img || defaultCoverImg
-                  })
                   break
                 } catch (e) {
                   continue
@@ -519,6 +523,16 @@ const playSong = async (
 
     if (currentPlayRequestId !== requestId) return
 
+    const prepared = await preparedPromise
+    if (currentPlayRequestId !== requestId) {
+      prepared.dispose()
+      return
+    }
+    // Commit every displayed part before allowing playback to start.
+    metadataStore.commitPrepared(prepared)
+    metadataCommitted = true
+    songInfo.value = { ...song }
+    userInfo.value.lastPlaySongId = song.songmid
     // 音频已就绪后再更新 SMTC，避免切换时空隙
     mediaSessionController.updateMetadata({
       title: song.name,
@@ -628,9 +642,15 @@ const playSong = async (
     tryAutoNext('播放歌曲失败')
     isLoadingSong.value = false
   } finally {
+    if (!metadataCommitted) {
+      metadataController.abort()
+      preparedMetadata?.dispose()
+    }
     // 只有当前请求才能关闭 loading
     if (currentPlayRequestId === requestId) {
       isLoadingSong.value = false
+      pendingSongId = null
+      pendingMetadataController = undefined
     }
     /* 一起听:无论成功/失败/cancel,清掉本地加载标记。
      * 用 IfMatch 版避免误清:用户连续切歌时前一次 finally 不应清掉后一次刚标记的 key。
@@ -737,7 +757,7 @@ const resolveNextSong = ({
 
   if (playMode.value === PlayMode.RANDOM) {
     ensureShuffleOrder()
-    const curId = userInfo.value.lastPlaySongId
+    const curId = pendingSongId ?? userInfo.value.lastPlaySongId
     let idx = shuffleOrder.value.findIndex((id) => id === curId)
     if (idx < 0) idx = -1
     let nextIdx = idx + 1
@@ -752,7 +772,7 @@ const resolveNextSong = ({
   }
 
   const currentIndex = list.value.findIndex(
-    (song) => song.songmid === userInfo.value.lastPlaySongId
+    (song) => song.songmid === (pendingSongId ?? userInfo.value.lastPlaySongId)
   )
   const nextIndex = (currentIndex + 1) % list.value.length
   return list.value[nextIndex] || null
@@ -789,7 +809,7 @@ const playPrevious = async () => {
   if (list.value.length === 0) return
   try {
     const currentIndex = list.value.findIndex(
-      (song) => song.songmid === userInfo.value.lastPlaySongId
+      (song) => song.songmid === (pendingSongId ?? userInfo.value.lastPlaySongId)
     )
     const prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
     if (prevIndex >= 0 && prevIndex < list.value.length) {
@@ -961,14 +981,42 @@ const onGlobalCtrl = (e: any) => {
 }
 
 const initPlayback = async () => {
+  // 先连接播放指令，恢复历史音频或可选 IPC 订阅不能阻断双击播放。
+  initPlaylistEventListeners(localUserStore, playSong)
   if (playbackInstalled) return
   playbackInstalled = true
+  unsubscribeLocalTags = window.api.localMusic.onTagsChanged?.(({ oldSongmid, song }) => {
+    if (songInfo.value.source === 'local' && String(songInfo.value.songmid) === oldSongmid) {
+      songInfo.value = { ...songInfo.value, ...song }
+      void window.api.localMusic.getCoverBase64(song.songmid).then((artworkUrl) => {
+        if (songInfo.value.source !== 'local' || String(songInfo.value.songmid) !== song.songmid)
+          return
+        mediaSessionController.updateMetadata({
+          title: song.name,
+          artist: song.singer,
+          album: song.albumName,
+          artworkUrl: artworkUrl || defaultCoverImg
+        })
+      })
+    }
+  })
 
   if (playMode.value === PlayMode.RANDOM) {
     ensureShuffleOrder(true)
   }
 
-  initPlaylistEventListeners(localUserStore, playSong)
+  unsubscribeRestorePosition = controlAudio.subscribe('canplay', () => {
+    if (
+      pendingRestoreSongId !== userInfo.value.lastPlaySongId ||
+      pendingRestorePosition <= 0 ||
+      !Audio.value.audio
+    )
+      return
+    Audio.value.audio.currentTime = pendingRestorePosition
+    Audio.value.currentTime = pendingRestorePosition
+    pendingRestorePosition = 0
+    pendingRestoreSongId = null
+  })
 
   // 注册插件限流监听（绑定到生命周期，避免重复注册）
   _unsubscribeThrottle = window.api.pluginNotice.onPluginThrottle(
@@ -1033,16 +1081,28 @@ const initPlayback = async () => {
     }
   })
 
+  savePositionInterval = window.setInterval(() => {
+    if (Audio.value.isPlay) {
+      userInfo.value.currentTime = Audio.value.currentTime
+    }
+  }, 1000)
+
   if (userInfo.value.lastPlaySongId && list.value.length > 0) {
+    const restoreSelection = selectionSequence
     const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
     if (lastPlayedSong) {
       // UI 立即更新
       songInfo.value = { ...lastPlayedSong }
       if (!Audio.value.isPlay) {
+        const savedPosition = Math.max(0, Number(userInfo.value.currentTime) || 0)
+        pendingRestorePosition = savedPosition
+        pendingRestoreSongId = lastPlayedSong.songmid
         try {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
+          if (selectionSequence !== restoreSelection || !playbackInstalled) return
           setUrl(url)
+          Audio.value.currentTime = savedPosition
           // SMTC 元数据在音频准备好后再更新，避免切换时空隙
           mediaSessionController.updateMetadata({
             title: lastPlayedSong.name,
@@ -1050,16 +1110,17 @@ const initPlayback = async () => {
             album: lastPlayedSong.albumName || '未知专辑',
             artworkUrl: lastPlayedSong.img || defaultCoverImg
           })
-        } catch {}
-        if (userInfo.value.currentTime) {
-          pendingRestorePosition = userInfo.value.currentTime
-          pendingRestoreSongId = lastPlayedSong.songmid
-          if (Audio.value.audio) {
-            console.log('上次进度', userInfo.value.currentTime)
+          if (savedPosition && Audio.value.audio) {
             await waitForAudioReady(Audio.value.audio)
-            Audio.value.currentTime = userInfo.value.currentTime
-            Audio.value.audio.currentTime = userInfo.value.currentTime
+            if (selectionSequence !== restoreSelection || !playbackInstalled) return
+            Audio.value.currentTime = savedPosition
+            Audio.value.audio.currentTime = savedPosition
+            pendingRestorePosition = 0
+            pendingRestoreSongId = null
           }
+        } catch (error) {
+          // Retain the saved position for a later play attempt; never wait on an empty src.
+          console.warn('恢复上次歌曲失败，已保留播放进度:', error)
         }
       } else {
         // 如果已经在播放，更新 SMTC
@@ -1077,11 +1138,6 @@ const initPlayback = async () => {
       }
     }
   }
-  savePositionInterval = window.setInterval(() => {
-    if (Audio.value.isPlay) {
-      userInfo.value.currentTime = Audio.value.currentTime
-    }
-  }, 1000)
 }
 window.addEventListener('global-music-control', onGlobalCtrl)
 
@@ -1101,6 +1157,10 @@ const uninstallPlayback = () => {
   _unsubscribeThrottle = null
   _unsubscribeDisabled?.()
   _unsubscribeDisabled = null
+  unsubscribeLocalTags?.()
+  unsubscribeLocalTags = undefined
+  unsubscribeRestorePosition?.()
+  unsubscribeRestorePosition = undefined
   _throttleTimers.forEach(clearTimeout)
   _throttleTimers.clear()
   _throttledPlugins.clear()

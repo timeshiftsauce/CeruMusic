@@ -16,6 +16,9 @@ hero:
     - theme: alt
       text: 使用文档
       link: /guide/
+    - theme: alt
+      text: 开发插件 v2
+      link: /guide/plugins/v2/
 
 features:
   - title: 多平台支持

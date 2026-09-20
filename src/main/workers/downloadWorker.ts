@@ -53,7 +53,6 @@ let currentResponseStream: any = null
 // This worker will handle the download of a single song.
 // It receives song information and download options from the main thread.
 
-import { convertLrcFormat, convertToStandardLrc } from '../utils/lrcParser'
 
 const fileLock: Record<string, boolean> = {}
 
@@ -137,7 +136,7 @@ function resolveCoverExt(imgUrl: string, contentType?: string): string {
 }
 
 async function download(task: DownloadTask): Promise<any> {
-  const { url, filePath, songInfo, tagWriteOptions } = task
+  const { url, filePath, songInfo, tagWriteOptions, requestHeaders } = task
   const tempFilePath = filePath + '.temp'
 
   if (fileLock[filePath]) {
@@ -186,7 +185,7 @@ async function download(task: DownloadTask): Promise<any> {
         remainingTime: 0
       })
     } else {
-      const headers: Record<string, string> = {}
+      const headers: Record<string, string> = { ...requestHeaders }
       if (startByte > 0) {
         headers.Range = `bytes=${startByte}-`
       }
@@ -292,13 +291,10 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
       }
     }
 
-    if (tagWriteOptions.downloadLyrics && songInfo?.lrc) {
+    if (tagWriteOptions.downloadLyrics && typeof songInfo?.lrc === 'string' && songInfo.lrc) {
       try {
         const lrcPath = path.join(dirName, `${baseName}.lrc`)
-        const lrcContent =
-          tagWriteOptions.lyricFormat === 'word-by-word'
-            ? convertLrcFormat(songInfo.lrc)
-            : convertToStandardLrc(songInfo.lrc)
+        const lrcContent = songInfo.lrc
         if (lrcContent) {
           await fsPromise.writeFile(lrcPath, lrcContent)
         }
@@ -322,11 +318,8 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
     songFile.tag.performers = artists
     songFile.tag.albumArtists = artists
 
-    if (tagWriteOptions.lyrics && songInfo?.lrc) {
-      songFile.tag.lyrics =
-        tagWriteOptions.lyricFormat === 'word-by-word'
-          ? convertLrcFormat(songInfo.lrc)
-          : convertToStandardLrc(songInfo.lrc)
+    if (tagWriteOptions.lyrics && typeof songInfo?.lrc === 'string' && songInfo.lrc) {
+      songFile.tag.lyrics = songInfo.lrc
     }
 
     if (coverPath && fs.existsSync(coverPath)) {

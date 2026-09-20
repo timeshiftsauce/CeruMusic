@@ -1,13 +1,13 @@
-import { normalizeLyricsToCrLyric } from './lrcParser'
-
 export function readTags(filePath: string, includeLrc = false) {
+  let f: any
   try {
     const taglib = require('node-taglib-sharp')
-    const f = taglib.File.createFromPath(filePath)
+    f = taglib.File.createFromPath(filePath)
     const tag = f.tag
     const props = f.properties
     const title = tag.title || ''
     const album = tag.album || ''
+    const genres = Array.isArray(tag.genres) ? tag.genres : []
     const performers = Array.isArray(tag.performers) ? tag.performers : []
     const hasCover = Array.isArray(tag.pictures) && tag.pictures.length > 0
     const bitrate = props?.audioBitrate || 0
@@ -23,14 +23,14 @@ export function readTags(filePath: string, includeLrc = false) {
       try {
         const raw = tag.lyrics || ''
         if (raw && typeof raw === 'string') {
-          lrc = normalizeLyricsToCrLyric(raw)
+          lrc = raw
         }
       } catch {}
     }
-    f.dispose()
     return {
       title,
       album,
+      genres,
       performers,
       hasCover,
       lrc,
@@ -44,6 +44,7 @@ export function readTags(filePath: string, includeLrc = false) {
     return {
       title: '',
       album: '',
+      genres: [],
       performers: [],
       hasCover: false,
       lrc: null,
@@ -53,5 +54,7 @@ export function readTags(filePath: string, includeLrc = false) {
       channels: 0,
       duration: 0
     }
+  } finally {
+    f?.dispose()
   }
 }

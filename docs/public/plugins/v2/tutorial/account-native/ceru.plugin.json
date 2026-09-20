@@ -1,0 +1,128 @@
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.account-native",
+    "name": "账号与原生歌单教程",
+    "version": "0.1.0",
+    "description": "演示账号菜单、Vue 登录弹窗、原生歌单与宿主播放能力",
+    "author": "Your Name",
+    "license": "MIT",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "libraries": { "vue": "^3.5.0" }
+    },
+    "modules": {
+      "logic": {
+        "entry": "logic.main",
+        "activation": ["onCommand:account.open", "onProvider:tutorial-account"]
+      },
+      "surfaces": [
+        {
+          "id": "account",
+          "kind": "web",
+          "entry": "view.account",
+          "title": "连接演示账号",
+          "presentation": { "kind": "modal", "size": 360 },
+          "lifecycle": { "closeAction": "account.cancel" }
+        },
+        {
+          "id": "library",
+          "kind": "native",
+          "entry": "render.library",
+          "title": "我的演示音乐"
+        }
+      ]
+    },
+    "contributes": {
+      "providers": [
+        {
+          "id": "tutorial-account",
+          "name": "演示账号音乐",
+          "protocols": ["music.search@1", "music.resolve@1", "music.playlists@1"],
+          "qualities": ["128k", "320k"],
+          "icon": { "kind": "host", "name": "music-note" },
+          "connectionMode": "single"
+        }
+      ],
+      "commands": [
+        {
+          "id": "account.open",
+          "title": "连接演示账号",
+          "action": "account.open",
+          "view": "account"
+        },
+        { "id": "account.summary", "title": "读取账号摘要", "action": "account.summary" },
+        { "id": "account.session", "title": "读取公开账号状态", "action": "account.session" },
+        { "id": "account.start", "title": "开始演示登录", "action": "account.start" },
+        { "id": "account.approve", "title": "模拟手机确认", "action": "account.approve" },
+        { "id": "account.poll", "title": "检查演示登录", "action": "account.poll" },
+        { "id": "account.cancel", "title": "取消演示登录", "action": "account.cancel" },
+        { "id": "account.logout", "title": "退出演示账号", "action": "account.logout" },
+        { "id": "render.library", "title": "渲染原生音乐页", "action": "render.library" },
+        { "id": "library.refresh", "title": "刷新原生音乐页", "action": "library.refresh" },
+        {
+          "id": "library.openSection",
+          "title": "定位演示歌单区块",
+          "action": "library.openSection"
+        },
+        { "id": "playlist.open", "title": "打开原生歌单详情", "action": "playlist.open" },
+        { "id": "playlist.import", "title": "导入演示歌单", "action": "playlist.import" },
+        { "id": "tracks.play", "title": "播放演示歌曲", "action": "tracks.play" }
+      ],
+      "accountItems": [
+        {
+          "id": "demo-account",
+          "title": "演示音乐账号",
+          "view": "account",
+          "action": "account.summary",
+          "logoutAction": "account.logout"
+        }
+      ],
+      "playlistSections": [
+        {
+          "id": "tutorial-library",
+          "title": "演示账号歌单",
+          "view": "library",
+          "order": 20
+        }
+      ],
+      "playlistImporters": [
+        {
+          "id": "tutorial-playlist",
+          "title": "演示账号歌单",
+          "providerId": "tutorial-account",
+          "description": "输入 demo-favorites 或 demo-evening",
+          "placeholder": "demo-favorites"
+        }
+      ]
+    },
+    "permissions": [
+      {
+        "key": "playback",
+        "name": "player.control",
+        "reason": "点击原生歌曲时替换播放队列并开始播放"
+      },
+      {
+        "key": "account.network",
+        "name": "network.request",
+        "optional": true,
+        "reason": "换成真实平台接口后请求登录、账号与音乐数据"
+      },
+      {
+        "key": "account.private-network",
+        "name": "network.private",
+        "optional": true,
+        "reason": "开发时连接本机模拟音频服务"
+      }
+    ],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": {
+    "logic.main": "src/index.ts",
+    "view.account": "src/view.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js",
+  "framework": "vue"
+}

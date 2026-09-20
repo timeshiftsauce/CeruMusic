@@ -1,9 +1,10 @@
-import mitt from 'mitt'
+import mitt, { type Emitter } from 'mitt'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-import { calculateBestQuality } from '@common/utils/quality'
+import { calculateBestQuality, getQualityDisplayName } from '@common/utils/quality'
+import { pluginQualityOrder } from '@renderer/utils/pluginQuality'
 
 /**
  * 一起听场景下的"member 点歌"分流 —— addToPlaylistAndPlay/End/replacePlaylist
@@ -108,21 +109,17 @@ type PlaylistEvents = {
   replacePlaylist: SongList[]
 }
 
-// 创建全局事件总线
-const emitter = mitt<PlaylistEvents>()
-
-// 将事件总线挂载到全局
-;(window as any).musicEmitter = emitter
-const qualityMap: Record<string, string> = {
-  '128k': '标准音质',
-  '192k': '高品音质',
-  '320k': '超高品质',
-  flac: '无损音质',
-  flac24bit: '超高解析',
-  hires: '高清臻音',
-  atmos: '全景环绕',
-  master: '超清母带'
+// 热更新时复用同一总线，避免页面发往新总线、播放器仍监听旧总线。
+const playlistWindow = window as Window & { musicEmitter?: Emitter<PlaylistEvents> }
+const emitter = (playlistWindow.musicEmitter ??= mitt<PlaylistEvents>())
+let detachPlaylistListeners: (() => void) | undefined = import.meta.hot?.data
+  .detachPlaylistListeners
+if (import.meta.hot) {
+  import.meta.hot.dispose((data) => {
+    data.detachPlaylistListeners = detachPlaylistListeners
+  })
 }
+
 /**
  * 获取歌曲真实播放URL
  * @param song 歌曲对象
@@ -149,9 +146,10 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
 
-    quality = calculateBestQuality(song.types, quality) || '128k'
+    const order = pluginQualityOrder(song.source)
+    quality = calculateBestQuality(song.types, quality, order) || order.at(-1) || quality
 
-    console.log(`使用音质: ${quality} - ${qualityMap[quality]}`)
+    console.log(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)
     if (!LocalUserDetail.userSource.pluginId) throw new Error('插件都不配就想播放，想的倒挺美呢')
     const urlData = await window.api.music.requestSdk('getMusicUrl', {
       pluginId: LocalUserDetail.userSource.pluginId,
@@ -161,7 +159,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       isCache
     })
 
-    // message.success(`使用音质: ${quality} - ${qualityMap[quality]}`)
+    // message.success(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)
     if (typeof urlData === 'object' && urlData.error) {
       throw new Error(urlData.error)
     } else {
@@ -352,29 +350,32 @@ export function initPlaylistEventListeners(
   localUserStore: any,
   playSongCallback: (song: SongList) => Promise<void>
 ) {
-  // 监听添加到播放列表并播放的事件
-  emitter.on('addToPlaylistAndPlay', async (song: SongList) => {
+  destroyPlaylistEventListeners()
+  const onPlay = async (song: SongList) => {
     await addToPlaylistAndPlay(song, localUserStore, playSongCallback)
-  })
-
-  // 监听添加到播放列表末尾的事件
-  emitter.on('addToPlaylistEnd', async (song: SongList) => {
+  }
+  const onAdd = async (song: SongList) => {
     await addToPlaylistEnd(song, localUserStore)
-  })
-
-  // 监听替换播放列表的事件
-  emitter.on('replacePlaylist', async (songs: SongList[]) => {
+  }
+  const onReplace = async (songs: SongList[]) => {
     await replacePlaylist(songs, localUserStore, playSongCallback)
-  })
+  }
+  emitter.on('addToPlaylistAndPlay', onPlay)
+  emitter.on('addToPlaylistEnd', onAdd)
+  emitter.on('replacePlaylist', onReplace)
+  detachPlaylistListeners = () => {
+    emitter.off('addToPlaylistAndPlay', onPlay)
+    emitter.off('addToPlaylistEnd', onAdd)
+    emitter.off('replacePlaylist', onReplace)
+  }
 }
 
 /**
  * 清理播放列表事件监听器
  */
 export function destroyPlaylistEventListeners() {
-  emitter.off('addToPlaylistAndPlay')
-  emitter.off('addToPlaylistEnd')
-  emitter.off('replacePlaylist')
+  detachPlaylistListeners?.()
+  detachPlaylistListeners = undefined
 }
 
 /**

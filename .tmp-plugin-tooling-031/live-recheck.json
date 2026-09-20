@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-09-20T00:11:23.200Z",
+  "mounted": true,
+  "pluginVersion": "1.2.0",
+  "providers": [
+    "wy"
+  ],
+  "account": {
+    "signedIn": true,
+    "hasNickname": true,
+    "hasAvatar": true,
+    "hasBadge": true,
+    "hasLogout": true
+  },
+  "hasSidebar": false,
+  "playlist": {
+    "native": true,
+    "hasContent": true,
+    "providerId": "wy",
+    "owner": "ceru.netease-account"
+  },
+  "iframeCount": 0
+}

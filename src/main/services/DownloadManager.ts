@@ -16,6 +16,7 @@ import { DownloadStatus, DownloadTask } from '../types/download'
 log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'logs/main.log')
 
 import { ConfigManager } from './ConfigManager'
+import { playbackRequestHeaders } from './plugin/playbackRequests'
 
 export default class DownloadManager extends EventEmitter {
   private tasks = new Map<string, DownloadTask>()
@@ -243,13 +244,13 @@ export default class DownloadManager extends EventEmitter {
       if (
         task.tagWriteOptions &&
         (task.tagWriteOptions.downloadLyrics || task.tagWriteOptions.lyrics) &&
-        !task.songInfo.lrc &&
+        (typeof task.songInfo.lrc !== 'string' || !task.songInfo.lrc) &&
         this.lyricFetcher
       ) {
         try {
           log.info('Fetching lyrics for task:', taskId)
           const lrc = await this.lyricFetcher(task)
-          if (lrc) {
+          if (typeof lrc === 'string' && lrc) {
             task.songInfo.lrc = lrc
             this.saveTasks()
           }
@@ -267,7 +268,7 @@ export default class DownloadManager extends EventEmitter {
       worker.on('error', (error) => this.onWorkerError(taskId, error))
       worker.on('exit', (code) => this.onWorkerExit(taskId, code))
 
-      worker.postMessage(task)
+      worker.postMessage({ ...task, requestHeaders: playbackRequestHeaders(task.url) })
     } catch (error: any) {
       this.initializingTasks.delete(taskId)
       // 若任务在初始化期间被外部暂停（如插件限流触发 pauseAllTasks），

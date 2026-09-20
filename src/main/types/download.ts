@@ -11,6 +11,8 @@ export interface DownloadTask {
   id: string
   songInfo: any
   url: string
+  /** Ephemeral headers attached only to the worker message; never persisted with a task. */
+  requestHeaders?: Record<string, string>
   pluginId?: string
   quality?: string
   filePath: string

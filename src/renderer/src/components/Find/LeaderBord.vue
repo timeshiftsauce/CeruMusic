@@ -27,10 +27,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import LeaderBordCard from '../Card/LeaderBordCard.vue'
+import { contributionsLoaded, contributionsRevision } from '@renderer/services/pluginState'
 
 const boards = ref<any[]>([])
 const loading = ref(true)
@@ -38,25 +39,28 @@ const router = useRouter()
 const localUserStore = LocalUserDetailStore()
 
 const currentSource = computed(() => localUserStore.userSource.source)
+let requestSequence = 0
 
 const fetchBoards = async () => {
+  const request = ++requestSequence
   loading.value = true
   try {
-    const source = localUserStore.userSource.source || 'wy'
-    if (!source) {
-      loading.value = false
+    const source = currentSource.value
+    if (!contributionsLoaded.value || !source) {
+      boards.value = []
       return
     }
     // Using window.api.music.requestSdk which maps to main process service
     const res = await (window as any).api.music.requestSdk('getLeaderboards', { source })
-
-    console.log('Leaderboards fetched:', res)
-    boards.value = res || []
+    if (request !== requestSequence) return
+    if (res?.error) throw new Error(res.error)
+    boards.value = Array.isArray(res) ? res : []
   } catch (error) {
+    if (request !== requestSequence) return
     console.error('Failed to fetch leaderboards:', error)
     boards.value = []
   } finally {
-    loading.value = false
+    if (request === requestSequence) loading.value = false
   }
 }
 
@@ -75,14 +79,16 @@ const handleCardClick = (board: any) => {
 }
 
 watch(
-  () => localUserStore.userSource.source,
+  [currentSource, contributionsLoaded, contributionsRevision],
   () => {
-    fetchBoards()
-  }
+    boards.value = []
+    void fetchBoards()
+  },
+  { immediate: true }
 )
 
-onMounted(() => {
-  fetchBoards()
+onBeforeUnmount(() => {
+  requestSequence++
 })
 </script>
 

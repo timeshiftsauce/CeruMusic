@@ -1,4 +1,5 @@
 export default interface PlayList {
+  pluginResource?: import('@shiqianjiang/ceru-plugin-sdk').ResourceRef
   songmid: string | number
   hash?: string
   singer: string

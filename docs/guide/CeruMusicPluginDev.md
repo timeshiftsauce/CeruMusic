@@ -1,5 +1,9 @@
 # CeruMusic 插件开发指南
 
+::: warning 插件 1.0 历史文档
+本页保留旧版原生插件与 LX 直接兼容 API，适用于使用 v1 Host 的历史桌面版本。澜音 **1.14.1 起**使用插件 v2；新项目请阅读 [v2 开发指南](/guide/plugins/v2/)，已有插件参考 [迁移指南](/guide/plugins/v2/migration)。下文旧全局对象、安装流程与接口不应直接用于 v2。
+:::
+
 ## 概述
 
 CeruMusic 支持两种类型的插件：

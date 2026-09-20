@@ -108,7 +108,7 @@ const LEGAL_DOC_URL =
   'https://ceru.docs.shiqianjiang.cn/#%E6%B3%95%E5%BE%8B%E5%A3%B0%E6%98%8E%E4%B8%8E%E5%85%8D%E8%B4%A3%E6%9D%A1%E6%AC%BE'
 
 const techPluginUpload =
-  '你当前使用的音源插件代码会被上传到澜音服务器，按 md5 全局去重保存。服务器对代码做静态危险代码扫描（拦截 fs / child_process / eval 等越权调用）并在隔离 Worker 中运行，但不审核插件本身的音乐版权合法性。'
+  '当前音源的播放解析模块及所需音源凭据会上传到澜音服务器，按 md5 去重保存，仅用于分享解析。v2 插件的搜索、歌词和界面模块不会随之上传。服务器在隔离 Worker 中调用 musicUrl 获取播放地址，不审核音源本身的音乐版权合法性。'
 const techMetadata =
   '歌曲信息、歌词、热评保存于服务器，按你设置的有效期到期自动删除；过期后链接立即失效。'
 const techAudio =

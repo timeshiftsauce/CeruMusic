@@ -1,0 +1,154 @@
+{
+  "name": "@shiqianjiang/ceru-plugin-sdk",
+  "version": "0.3.1",
+  "description": "Typed authoring contracts for Ceru Music v2 single-file plugins",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b && node scripts/prepare-package.mjs",
+    "prepack": "npm run build"
+  },
+  "exports": {
+    "./quality": {
+      "types": "./dist/quality.d.ts",
+      "default": "./dist/quality.js"
+    },
+    "./lyrics": {
+      "types": "./dist/lyrics.d.ts",
+      "default": "./dist/lyrics.js"
+    },
+    "./guests": {
+      "types": "./dist/guests.d.ts",
+      "import": "./dist/guests.js",
+      "default": "./dist/guests.js"
+    },
+    "./share": {
+      "types": "./dist/share.d.ts",
+      "import": "./dist/share.js",
+      "default": "./dist/share.js"
+    },
+    "./storage": {
+      "types": "./dist/storage.d.ts",
+      "import": "./dist/storage.js",
+      "default": "./dist/storage.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "import": "./dist/manifest.js",
+      "default": "./dist/manifest.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "import": "./dist/catalog.js",
+      "default": "./dist/catalog.js"
+    },
+    "./music": {
+      "types": "./dist/music.d.ts",
+      "import": "./dist/music.js",
+      "default": "./dist/music.js"
+    },
+    "./permissions": {
+      "types": "./dist/permissions.d.ts",
+      "import": "./dist/permissions.js",
+      "default": "./dist/permissions.js"
+    },
+    "./services": {
+      "types": "./dist/services.d.ts",
+      "import": "./dist/services.js",
+      "default": "./dist/services.js"
+    },
+    "./modules": {
+      "types": "./dist/modules.d.ts",
+      "import": "./dist/modules.js",
+      "default": "./dist/modules.js"
+    },
+    "./library": {
+      "types": "./dist/library.d.ts",
+      "import": "./dist/library.js",
+      "default": "./dist/library.js"
+    },
+    "./host-library": {
+      "types": "./dist/host-library.d.ts",
+      "import": "./dist/host-library.js",
+      "default": "./dist/host-library.js"
+    },
+    "./sockets": {
+      "types": "./dist/sockets.d.ts",
+      "import": "./dist/sockets.js",
+      "default": "./dist/sockets.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js",
+      "default": "./dist/http.js"
+    },
+    "./legacy-http": {
+      "types": "./dist/legacy-http.d.ts",
+      "import": "./dist/legacy-http.js",
+      "default": "./dist/legacy-http.js"
+    },
+    "./compat/crypto": {
+      "types": "./dist/compat/crypto.d.ts",
+      "import": "./dist/compat/crypto.js",
+      "default": "./dist/compat/crypto.js"
+    },
+    "./compat/zlib": {
+      "types": "./dist/compat/zlib.d.ts",
+      "import": "./dist/compat/zlib.js",
+      "default": "./dist/compat/zlib.js"
+    },
+    "./compat/encoding": {
+      "types": "./dist/compat/encoding.d.ts",
+      "import": "./dist/compat/encoding.js",
+      "default": "./dist/compat/encoding.js"
+    },
+    "./compat/format": {
+      "types": "./dist/compat/format.d.ts",
+      "import": "./dist/compat/format.js",
+      "default": "./dist/compat/format.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@types/lodash": "^4.17.25",
+    "buffer": "^6.0.3",
+    "crypto-js": "^4.2.0",
+    "fflate": "^0.8.2",
+    "json5": "^2.2.3"
+  },
+  "author": "澜音团队",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CeruMusic/CeruMusic-Plugin-Cli.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/CeruMusic/CeruMusic-Plugin-Cli/issues"
+  },
+  "homepage": "https://github.com/CeruMusic/CeruMusic-Plugin-Cli#readme",
+  "keywords": [
+    "ceru-music",
+    "plugin",
+    "typescript",
+    "electron"
+  ]
+}

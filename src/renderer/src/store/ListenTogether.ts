@@ -1226,7 +1226,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
       ca.Audio.isPlay = false
 
       const songList = songRefToSongList(snapshot.song)
-      globalPlayStatus.updatePlayerInfo(songList)
 
       const mod = await import('@renderer/utils/audio/globaPlayList')
       if (token !== roomSongApplyToken) return

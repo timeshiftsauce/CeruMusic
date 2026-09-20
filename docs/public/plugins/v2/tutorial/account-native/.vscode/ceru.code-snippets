@@ -1,0 +1,55 @@
+{
+  "Host platform icon": {
+    "prefix": "ceru-icon",
+    "body": ["{ kind: 'host', name: 'platform.${1:tx}' }"],
+    "description": "使用宿主平台图标，无需打入插件",
+  },
+  "Host lodash": {
+    "prefix": "ceru-lodash",
+    "body": ["ctx.utils.lodash.${1:uniqBy}(${2:items}, ${3:key})"],
+    "description": "调用宿主的带类型 Lodash 工具",
+  },
+  "Host HTTP client": {
+    "prefix": "ceru-http",
+    "body": [
+      "const http = ctx.http.create({",
+      "  baseURL: '${1:https://example.com}',",
+      "  permissionKey: '${2:api}',",
+      "  requestPermission: true,",
+      "})",
+    ],
+    "description": "使用宿主 Axios 代理；无需将请求库打入插件",
+  },
+  "Permission group": {
+    "prefix": "ceru-permission-group",
+    "body": [
+      "const permission = await ctx.permissions.requestGroup({",
+      "  group: '${1:libraryRead}',",
+      "  intent: operation.userIntent,",
+      "})",
+    ],
+    "description": "一次申请一组用户可理解的能力",
+  },
+  "Grouped music provider": {
+    "prefix": "ceru-provider",
+    "body": [
+      "ctx.providers.register('${1:catalog}', {",
+      "  tracks: { search: ${2:searchTracks}, resolve: ${3:resolveTrack}, lyrics: ${4:getLyrics} },",
+      "  playlists: { search: ${5:searchPlaylists}, categories: ${6:getCategories}, list: ${7:listPlaylists}, get: ${8:getPlaylist} },",
+      "  charts: { list: ${9:listCharts}, getTracks: ${10:getChartTracks} },",
+      "})",
+    ],
+    "description": "注册分组 Provider，返回标准歌曲/歌单/歌词 JSON",
+  },
+  "Source rate limit": {
+    "prefix": "ceru-rate-limit",
+    "body": [
+      "return ctx.playback.failure({",
+      "  code: 'RATE_LIMITED',",
+      "  message: '${1:请稍后重试}',",
+      "  recovery: { mode: 'await-user', maxWaitMs: 60000 }",
+      "})",
+    ],
+    "description": "返回结构化限流结果，由 Host 决定换源与交互",
+  },
+}

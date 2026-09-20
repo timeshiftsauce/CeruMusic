@@ -2,10 +2,187 @@ import { ipcMain } from 'electron'
 import pluginService from '../services/plugin'
 import ManageSongList from '../services/songList/ManageSongList'
 import { pluginLog } from '../logger'
+import { assertPluginUIRequest } from '../services/plugin/uiBridge'
+import { assertAccountSummary } from '@shiqianjiang/ceru-plugin-sdk'
+import {
+  prepareExternalPlugin,
+  commitExternalPlugin,
+  discardExternalPlugin
+} from '../services/plugin/externalInstall'
 
 let isPluginsInitialized = false
 
 export default function InitPluginService() {
+  ipcMain.handle('plugin:external:prepare', (_event, sequence: number) =>
+    prepareExternalPlugin(sequence)
+  )
+  ipcMain.handle('plugin:external:commit', (_event, sequence: number, format?: string) =>
+    commitExternalPlugin(sequence, format)
+  )
+  ipcMain.handle('plugin:external:discard', (_event, sequence: number) =>
+    discardExternalPlugin(sequence)
+  )
+  ipcMain.handle(
+    'plugin:playlist-import-menu',
+    async (_event, pluginId: string, menuId: string) => {
+      const host = pluginService.getPluginById(pluginId)
+      if (!host || host.isDisabled()) throw new Error('请先使用提供此导入方式的插件')
+      const manifest = host.getManifest()
+      const menu = manifest.contributes?.menus?.find(
+        (item: any) => item.id === menuId && item.slot === 'playlist.import'
+      )
+      const command = manifest.contributes?.commands?.find(
+        (item: any) => item.id === menu?.commandId
+      )
+      if (!command || !host.supportsAction(command.action)) throw new Error('插件未注册此导入操作')
+      return host.invokeV2Action(command.action, {})
+    }
+  )
+  ipcMain.handle('plugin:restore-enabled', () => pluginService.restoreEnabledPlugins())
+  ipcMain.handle('plugin:account-summary', async (event, pluginId: string, itemId: string) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw new Error('插件未运行')
+    const item = host.getManifest().contributes?.accountItems?.find((item) => item.id === itemId)
+    if (!item || !host.supportsAction(item.action)) throw new Error('插件未声明此账号展示')
+    const summary = await host.invokeV2Action(item.action, {})
+    assertAccountSummary(summary)
+    return {
+      signedIn: summary.signedIn,
+      displayName: summary.displayName,
+      ...(summary.avatarUrl ? { avatarUrl: summary.avatarUrl } : {}),
+      ...(summary.badge ? { badge: summary.badge } : {})
+    }
+  })
+  ipcMain.handle('plugin:account-logout', async (event, pluginId: string, itemId: string) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw new Error('插件未运行')
+    const item = host.getManifest().contributes?.accountItems?.find((item) => item.id === itemId)
+    if (!item?.logoutAction || !host.supportsAction(item.logoutAction))
+      throw new Error('插件未声明退出账号操作')
+    await host.invokeV2Action(item.logoutAction, {})
+    return null
+  })
+  const guestHost = (pluginId: string) => {
+    const host = pluginService.getPluginById(pluginId)
+    if (!host) throw new Error('兼容环境未安装或已卸载')
+    return host
+  }
+  ipcMain.handle('plugin:guest-import', (_event, pluginId, adapterId, url) =>
+    guestHost(pluginId).importGuest(adapterId, url)
+  )
+  ipcMain.handle('plugin:guest-list', (_event, pluginId) => pluginService.listGuests(pluginId))
+  ipcMain.handle('plugin:guest-select', (_event, pluginId, guestId) =>
+    pluginService.selectGuest(pluginId, guestId)
+  )
+  ipcMain.handle('plugin:guest-remove', (_event, pluginId, guestId) =>
+    pluginService.removeGuest(pluginId, guestId)
+  )
+  ipcMain.handle('plugin:guest-permissions', (_event, pluginId, guestId) =>
+    pluginService.getGuestPermissions(pluginId, guestId)
+  )
+  ipcMain.handle('plugin:guest-set-permissions', (_event, pluginId, guestId, keys) =>
+    pluginService.setGuestPermissions(pluginId, guestId, keys)
+  )
+  ipcMain.handle('plugin:contributions', async () =>
+    (await pluginService.getPluginsList()).map((p) => ({
+      pluginId: p.pluginId,
+      manifest: p.manifest,
+      enabled: p.enabled,
+      requestedEnabled: p.requestedEnabled,
+      order: p.order,
+      providerMethods: p.providerMethods,
+      providerIconUrls: p.providerIconUrls,
+      actionIds: p.actionIds,
+      loadError: p.loadError
+    }))
+  )
+  ipcMain.handle('plugin:guest-update', (_event, pluginId, guestId, url) =>
+    guestHost(pluginId).updateGuest(guestId, url)
+  )
+  ipcMain.handle('plugin:set-active', async (_event, pluginId: string | null) => {
+    try {
+      await pluginService.setActivePlugin(pluginId)
+      let viewError: string | undefined
+      if (pluginId) {
+        try {
+          await pluginService.getPluginById(pluginId)?.openInitialView()
+        } catch (error: any) {
+          viewError = error.message
+        }
+      }
+      return { success: true, viewError }
+    } catch (error: any) {
+      return { error: error?.message || '设置默认插件失败' }
+    }
+  })
+  ipcMain.handle('plugin:set-provider-owner', (_event, source: string, pluginId: string | null) => {
+    pluginService.setProviderOwner(source, pluginId)
+    return true
+  })
+  ipcMain.handle(
+    'plugin:set-capability-owner',
+    (_event, source: string, capability: string, pluginId: string | null) => {
+      pluginService.setCapabilityOwner(source, capability, pluginId)
+      return true
+    }
+  )
+  ipcMain.handle('plugin:set-enabled', async (_event, pluginId: string, enabled: boolean) => {
+    try {
+      const result = await pluginService.setPluginEnabled(pluginId, enabled)
+      if (enabled) {
+        try {
+          await pluginService.getPluginById(pluginId)?.openInitialView()
+        } catch (error: any) {
+          return { ...result, viewError: error.message }
+        }
+      }
+      return result
+    } catch (error: any) {
+      return { error: error?.message || '切换插件状态失败' }
+    }
+  })
+  ipcMain.handle('plugin:open-surface', async (event, pluginId, surfaceId) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host) throw new Error('插件未安装')
+    await host.openSurface(surfaceId)
+  })
+  ipcMain.handle('plugin:drawer-action', (event, pluginId, surfaceId, sessionId, index, values) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw new Error('插件已停止')
+    return host.invokeDrawer(surfaceId, sessionId, index, values)
+  })
+  ipcMain.handle('plugin:mount-surface', (event, pluginId, surfaceId) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw new Error('插件未运行')
+    return host.mountSurface(surfaceId)
+  })
+  ipcMain.handle('plugin:surface-ready', (event, pluginId, surfaceId, sessionId) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw new Error('插件未运行')
+    return host.readySurface(surfaceId, sessionId)
+  })
+  ipcMain.handle(
+    'plugin:surface-action',
+    (event, pluginId, surfaceId, sessionId, action, input) => {
+      assertPluginUIRequest(event)
+      const host = pluginService.getPluginById(pluginId)
+      if (!host || host.isDisabled()) throw new Error('插件未运行')
+      return host.invokeSurfaceAction(surfaceId, sessionId, action, input)
+    }
+  )
+  ipcMain.handle('plugin:drawer-close', (event, pluginId, surfaceId, sessionId) => {
+    assertPluginUIRequest(event)
+    return pluginService.getPluginById(pluginId)?.closeDrawer(surfaceId, sessionId)
+  })
+  ipcMain.handle('plugin:importer-tracks', (_event, pluginId, importerId, input) =>
+    pluginService.invokeV2Importer(pluginId, importerId, input)
+  )
   ipcMain.handle('service-plugin-selectAndAddPlugin', async (_, type): Promise<any> => {
     try {
       return await pluginService.selectAndAddPlugin(type)
@@ -13,6 +190,16 @@ export default function InitPluginService() {
       console.error('Error selecting and adding plugin:', error)
       return { error: error.message }
     }
+  })
+  ipcMain.handle('plugin:update-local', async (_event, pluginId: string) => {
+    try {
+      return await pluginService.selectAndUpdatePlugin(pluginId)
+    } catch (error: any) {
+      return { error: error.message }
+    }
+  })
+  ipcMain.handle('plugin:update-url', async (_event, pluginId: string, url: string) => {
+    return pluginService.downloadAndAddPlugin(url, 'cr', pluginId)
   })
 
   ipcMain.handle(
@@ -41,7 +228,15 @@ export default function InitPluginService() {
 
   ipcMain.handle('service-plugin-getPluginById', async (_, id): Promise<any> => {
     try {
-      return pluginService.getPluginById(id)
+      const host = pluginService.getPluginById(id)
+      return host
+        ? {
+            pluginId: id,
+            pluginInfo: host.getPluginInfo(),
+            supportedSources: host.getSupportedSources(),
+            manifest: host.getManifest()
+          }
+        : null
     } catch (error: any) {
       console.error('Error getting plugin by id:', error)
       return { error: error.message }
@@ -101,6 +296,33 @@ export default function InitPluginService() {
       return { error: error.message }
     }
   })
+
+  ipcMain.handle('service-plugin-getPermissions', async (_, pluginId): Promise<any> => {
+    try {
+      return { data: pluginService.getPermissions(pluginId) }
+    } catch (error: any) {
+      return { error: error.message }
+    }
+  })
+
+  ipcMain.handle('service-plugin-getManifest', async (_, pluginId): Promise<any> => {
+    try {
+      return { data: pluginService.getManifest(pluginId) }
+    } catch (error: any) {
+      return { error: error.message }
+    }
+  })
+
+  ipcMain.handle(
+    'service-plugin-savePermissions',
+    async (_, pluginId, permissions): Promise<any> => {
+      try {
+        return { data: pluginService.savePermissions(pluginId, permissions) }
+      } catch (error: any) {
+        return { error: error.message }
+      }
+    }
+  )
 
   ipcMain.handle('service-plugin-saveConfig', async (_, pluginId, config): Promise<any> => {
     try {

@@ -62,6 +62,8 @@ export class CoverCacheService {
   private lru = new MemoryLRU(50 * 1024 * 1024)
 
   async getCoverByFile(filePath: string, key: string): Promise<string> {
+    // Earlier caches encoded ByteVector as zero bytes instead of image data.
+    key = 'taglib-bytes-v2:' + key
     const mem = this.lru.get(key)
     if (mem) return mem
     const diskKey = md5(key)
@@ -94,19 +96,25 @@ export class CoverCacheService {
   }
 
   private async extractCoverAsDataUrl(filePath: string): Promise<string> {
+    let f: any
     try {
       const taglib = require('node-taglib-sharp')
-      const f = taglib.File.createFromPath(filePath)
+      f = taglib.File.createFromPath(filePath)
       const tag = f.tag
       if (Array.isArray(tag.pictures) && tag.pictures.length > 0) {
-        const buf = tag.pictures[0].data as Buffer
+        const data = tag.pictures[0].data
+        const bytes: Uint8Array =
+          typeof data?.toByteArray === 'function' ? data.toByteArray() : data
+        if (!(bytes instanceof Uint8Array)) return ''
+        const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
         const mime = tag.pictures[0].mimeType || 'image/jpeg'
         const dataUrl = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`
-        f.dispose()
         return dataUrl
       }
-      f.dispose()
-    } catch {}
+    } catch {
+    } finally {
+      f?.dispose()
+    }
     return ''
   }
 }

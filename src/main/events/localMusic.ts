@@ -9,8 +9,8 @@ import { coverCacheService } from '../services/CoverCache'
 import { genId, genCoverKey, genCoverKeyWithMtime, normPath } from '../utils/fileUtils'
 import { readTags } from '../utils/tagUtils'
 import { is } from '@electron-toolkit/utils'
-import wy from '../utils/musicSdk/wy/recognize'
-import getLyric from '../utils/musicSdk/wy/lyric'
+import musicService from '../services/musicSdk/service'
+import pluginService from '../services/plugin'
 import { httpFetch } from '../utils/request'
 
 let workerWindow: BrowserWindow | null = null
@@ -348,6 +348,7 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
         targetFilePath = target
         ext = (path.extname(targetFilePath) || '').toLowerCase()
       } else {
+        await fsp.unlink(backupPath).catch(() => {})
         return {
           success: false,
           code: 'NEED_FIX_EXT',
@@ -361,6 +362,7 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     }
     // 不支持的格式（如 WAV）提前提示
     if (ext === '.wav') {
+      await fsp.unlink(backupPath).catch(() => {})
       return { success: false, message: 'WAV 文件不支持写入封面/歌词标签' }
     }
 
@@ -376,7 +378,7 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     const artists = songInfo?.singer ? [songInfo.singer] : ['未知艺术家']
     songFile.tag.performers = artists
     songFile.tag.albumArtists = artists
-    if (tagWriteOptions?.lyrics && songInfo?.lrc) {
+    if (tagWriteOptions?.lyrics && typeof songInfo?.lrc === 'string') {
       const finalLrc = songInfo.lrc
 
       songFile.tag.lyrics = finalLrc
@@ -402,8 +404,11 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
       } catch {}
     }
     try {
-      if (typeof songInfo?.year === 'number' && songInfo.year > 0) {
-        songFile.tag.year = songInfo.year
+      if (typeof songInfo?.genre === 'string')
+        songFile.tag.genres = songInfo.genre ? [songInfo.genre] : []
+      const year = Number(songInfo?.year)
+      if (songInfo?.year !== undefined && Number.isInteger(year) && year >= 0 && year <= 9999) {
+        songFile.tag.year = year
       }
     } catch {}
     songFile.save()
@@ -434,18 +439,30 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     // If normPath returns null (shouldn't happen here), fallback to empty
     const songmid = genId(normalizedPath || targetFilePath)
 
-    const exists = localMusicIndexService.getSongById(songmid) || ({} as any)
+    const oldSongmid = genId(normPath(filePath) || filePath)
+    const exists =
+      localMusicIndexService.getSongById(songmid) ||
+      localMusicIndexService.getSongById(oldSongmid) ||
+      ({} as any)
+    const savedTags = readTags(targetFilePath, true)
+    const stat = await fsp.stat(targetFilePath)
     const updated = {
       // 原有字段优先保留
       ...exists,
+      songmid,
+      source: 'local',
       path: targetFilePath,
-      url: exists.url || `file://${targetFilePath}`,
-      singer: songInfo?.singer ?? exists.singer ?? '未知艺术家',
-      name: songInfo?.name ?? exists.name ?? '未知曲目',
-      albumName: songInfo?.albumName ?? exists.albumName ?? '未知专辑',
-      year: Number(songInfo?.year ?? exists.year ?? 0) || 0
+      url: `file://${targetFilePath}`,
+      singer: savedTags.performers.join('、') || '未知艺术家',
+      name: savedTags.title || '未知曲目',
+      albumName: savedTags.album || '未知专辑',
+      year: savedTags.year,
+      lrc: savedTags.lrc || '',
+      img: '',
+      hasCover: savedTags.hasCover,
+      coverKey: genCoverKeyWithMtime(targetFilePath, stat.mtimeMs)
     }
-    await localMusicIndexService.upsertSong(updated as any)
+    await localMusicIndexService.upsertSong(updated as any, stat.size, stat.mtimeMs)
     // 如果发生了重命名，移除旧路径对应的索引，避免重复
     if (targetFilePath !== filePath) {
       await localMusicIndexService.removeSongByPath(filePath)
@@ -454,6 +471,10 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
     try {
       const all = localMusicIndexService.getAllSongs()
       ;(_e as any)?.sender?.send?.('local-music:scan-finished', all)
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed())
+          window.webContents.send('local-music:tags-changed', { oldSongmid, song: updated })
+      }
     } catch {}
     return { success: true }
   } catch (e: any) {
@@ -467,7 +488,6 @@ ipcMain.handle('local-music:write-tags', async (_e, payload: any) => {
         .filter((n) => pattern.test(n))
         .map((n) => path.join(dir, n))
         .sort()
-        .pop()
         .pop()
       if (latestBak) {
         try {
@@ -566,6 +586,8 @@ ipcMain.handle('local-music:get-tags', async (_e, songmid: string, includeLyrics
         Array.isArray(tags.performers) && tags.performers.length > 0 ? tags.performers[0] : '',
       albumName: tags.album || '',
       year: tags.year || 0,
+      genre: tags.genres.join('、'),
+      hasCover: tags.hasCover,
       lrc: tags.lrc || ''
     }
   } catch {
@@ -609,15 +631,27 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
     pendingTasks.delete(id)
 
     try {
-      const results = await wy.recognize(fp, duration)
+      const plugins = await pluginService.getPluginsList()
+      const plugin = plugins.find(
+        (p) =>
+          p.enabled &&
+          pluginService
+            .getManifest(p.pluginId)
+            ?.contributes?.commands?.some((c: any) => c.action === 'recognize')
+      )
+      if (!plugin) throw new Error('请安装支持听歌识曲的插件')
+      const source =
+        Object.keys(plugin.supportedSources).find((key) => key === 'wy') ||
+        Object.keys(plugin.supportedSources)[0]
+      const results = await musicService(source).recognize({ fp, duration })
       if (results && results.length > 0) {
         const best = results[0]
 
         // Fetch Lyric
         let lrc = ''
         try {
-          const lrcRes = await getLyric(best.songmid).promise
-          if (lrcRes && lrcRes.lyric) lrc = lrcRes.lyric
+          const lrcRes = await musicService(source).getLyric({ songInfo: best, useFormat: 'lrc' })
+          if (typeof lrcRes === 'string') lrc = lrcRes
         } catch (e) {
           console.error('Fetch lyric failed', e)
         }

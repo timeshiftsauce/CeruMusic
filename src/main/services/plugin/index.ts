@@ -1,25 +1,119 @@
 import fs, { Dirent } from 'fs'
 import path from 'path'
 import fsPromise from 'fs/promises'
-import { randomUUID } from 'crypto'
+import { createHash } from 'crypto'
 import { dialog } from 'electron'
 import { getAppDirPath } from '../../utils/path'
 import axios from 'axios'
 
-import CeruMusicPluginHost from './manager/CeruMusicPluginHost'
-import convertEventDrivenPlugin from './manager/converter-event-driven'
+import CeruMusicPluginHost from './manager/PluginHost'
+import { cancelPluginUI, pluginChanged } from './uiBridge'
 import Logger, { getLog } from './logger'
-import { getPluginConfig, savePluginConfig, deletePluginConfig } from './pluginConfig'
+import {
+  getPluginConfig,
+  savePluginConfig,
+  deletePluginConfig,
+  getPluginPermissions,
+  savePluginPermissions,
+  getPluginStates,
+  savePluginState,
+  deletePluginState,
+  type PluginRuntimeState
+} from './pluginConfig'
+import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
+import { GuestStore } from '@shiqianjiang/ceru-plugin-core/guests'
+import { deletePluginStorage } from './storage'
 
 // 导出类型以解决TypeScript错误
 
 // 存储已加载的插件实例
-const loadedPlugins = {}
+const loadedPlugins: Record<string, CeruMusicPluginHost> = {}
+interface InstalledPlugin {
+  pluginId: string
+  pluginName: string
+  filePath: string
+  manifest: any
+  state: PluginRuntimeState
+  loadError?: string
+}
+const installedPlugins = new Map<string, InstalledPlugin>()
+/** Read/manage persisted children even when their parent runtime is closed. */
+async function withStoredGuests<T>(
+  pluginId: string,
+  work: (store: GuestStore) => Promise<T> | T
+): Promise<T> {
+  const parent = installedPlugins.get(pluginId)
+  if (!parent?.manifest.contributes?.guestAdapters?.length) throw new Error('兼容环境未安装')
+  const store = new GuestStore({
+    root: path.join(getAppDirPath(), 'plugins', 'guests', pluginId),
+    artifact: readPluginArtifact(await fsPromise.readFile(parent.filePath, 'utf8')).artifact,
+    approve: async () => false,
+    authorize: async () => false,
+    request: async () => {
+      throw new Error('兼容环境未运行')
+    },
+    changed: () => pluginChanged(),
+    event: () => {}
+  })
+  try {
+    await store.initialize()
+    return await work(store)
+  } finally {
+    store.dispose()
+  }
+}
+let initialized = false
+let initialization: Promise<any[]> | undefined
+let restoration: Promise<void> | undefined
+let activePluginId: string | null = null
+const providerOwners = new Map<string, string>()
+const capabilityOwners = new Map<string, string>()
+const pluginTransitions = new Map<string, Promise<any>>()
 
 /** 全局限流回调，由 main/index.ts 注入 */
 let _throttleHandler: ((pluginId: string, reason: string, duration?: number) => void) | null = null
 /** 全局禁用回调，由 main/index.ts 注入。插件因崩溃次数过多被永久禁用时触发。 */
 let _disabledHandler: ((pluginId: string, reason: string) => void) | null = null
+
+function runtimeEntries(): [string, CeruMusicPluginHost][] {
+  return [...installedPlugins.values()]
+    .sort((a, b) => a.state.order - b.state.order)
+    .flatMap((item) => {
+      const host = loadedPlugins[item.pluginId]
+      return host && !host.isDisabled()
+        ? ([[item.pluginId, host]] as [string, CeruMusicPluginHost][])
+        : []
+    })
+}
+
+function nextPluginOrder(): number {
+  return Math.max(-1, ...[...installedPlugins.values()].map((item) => item.state.order)) + 1
+}
+
+function clearRuntimeSelections(pluginId: string): void {
+  if (activePluginId === pluginId) activePluginId = null
+  for (const [source, owner] of providerOwners) {
+    if (owner === pluginId) providerOwners.delete(source)
+  }
+  for (const [capability, owner] of capabilityOwners) {
+    if (owner === pluginId) capabilityOwners.delete(capability)
+  }
+}
+
+function createPluginHost(pluginId: string, pluginCode?: string): CeruMusicPluginHost {
+  const host = new CeruMusicPluginHost(pluginCode, new Logger(pluginId))
+  host.pluginId = pluginId
+  host.resolveStorageOwner = (manifestId) => {
+    const matches = [...installedPlugins.values()].filter((item) => item.manifest.id === manifestId)
+    if (matches.length > 1) throw new Error('目标插件 ID 不唯一，无法读取共享数据')
+    return matches[0]?.pluginId
+  }
+  host.onThrottle = _throttleHandler
+  host.onDisabled = (id, reason) => {
+    if (loadedPlugins[id] === host) _disabledHandler?.(id, reason)
+  }
+  return host
+}
 
 const pluginService = {
   /**
@@ -40,8 +134,10 @@ const pluginService = {
    */
   setDisabledHandler(handler: (pluginId: string, reason: string) => void) {
     _disabledHandler = handler
-    for (const host of Object.values(loadedPlugins) as CeruMusicPluginHost[]) {
-      host.onDisabled = handler
+    for (const [pluginId, host] of Object.entries(loadedPlugins)) {
+      host.onDisabled = (id, reason) => {
+        if (id === pluginId && loadedPlugins[id] === host) handler(id, reason)
+      }
     }
   },
 
@@ -69,16 +165,15 @@ const pluginService = {
 
       // 插件格式校验
       if (type === 'cr') {
-        // 澜音格式校验：检查是否包含cerumusic关键字
-        if (!pluginCode.toLowerCase().includes('cerumusic')) {
-          throw new Error('澜音插件格式校验失败：代码有可能不是澜音格式插件')
-        }
+        const parsed = readPluginArtifact(pluginCode)
+        if (parsed.header.manifest.manifestVersion !== 2)
+          throw new Error('澜音插件格式校验失败：只支持 v2 单文件插件')
       } else if (type === 'lx') {
         // 洛雪格式校验：检查是否包含lx关键字
         if (!pluginCode.toLowerCase().includes('lx')) {
           throw new Error('洛雪插件格式校验失败：代码有可能不是标准的洛雪插件')
         }
-        pluginCode = convertEventDrivenPlugin(pluginCode)
+        throw new Error('请通过 LX 兼容插件安装洛雪音源，澜音仅接收 v2 插件')
       }
 
       // 调用现有的添加插件方法
@@ -89,92 +184,91 @@ const pluginService = {
     }
   },
 
-  async addPlugin(pluginCode: string, pluginName: string, targetPluginId?: string) {
+  async addPlugin(pluginCode: string, _pluginName: string, targetPluginId?: string) {
     try {
-      // 首先解析插件信息（在隔离 worker 内验证；用完立即销毁）
-      const tempPluginManager = new CeruMusicPluginHost(pluginCode, new Logger('temp'))
-      let pluginInfo: any
-      try {
-        await tempPluginManager.ensureReady()
-        pluginInfo = tempPluginManager.getPluginInfo()
-      } finally {
-        await tempPluginManager.destroy()
+      // Shared Core performs side-effect-free artifact validation before the
+      // executable code is handed to the isolated worker.
+      const parsed = readPluginArtifact(pluginCode)
+      if (parsed.header.manifest.manifestVersion !== 2) {
+        throw new Error('澜音 v2 插件清单版本不受支持')
       }
-      if (!pluginInfo || !pluginInfo.name || !pluginInfo.version || !pluginInfo.author) {
-        throw new Error('插件信息不完整，必须包含名称、版本和作者信息')
+      const manifest = parsed.header.manifest
+      const pluginInfo = {
+        id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        author: manifest.author || manifest.publisher || '',
+        description: manifest.description
       }
-
-      // 确保插件目录存在
+      const existing = [...installedPlugins.values()].find(
+        (item) => item.manifest.id === manifest.id
+      )
+      const pluginId =
+        existing?.pluginId || createHash('sha256').update(manifest.id).digest('hex').slice(0, 32)
+      if (targetPluginId && targetPluginId !== pluginId)
+        throw new Error('更新插件的清单 ID 与原插件不一致')
+      const oldHost = loadedPlugins[pluginId] as CeruMusicPluginHost | undefined
+      if (!existing) {
+        deletePluginConfig(pluginId)
+        deletePluginConfig(pluginId + '.storage')
+      }
+      const previousVersion = existing?.manifest.version
+      const state = existing?.state ?? { enabled: false, order: nextPluginOrder() }
       const pluginsDir = path.join(getAppDirPath(), 'plugins')
       await fsPromise.mkdir(pluginsDir, { recursive: true })
-
-      let pluginId = targetPluginId || randomUUID().replace(/-/g, '')
-      let isUpdate = false
-
-      if (targetPluginId && loadedPlugins[targetPluginId]) {
-        // 明确指定了要更新的插件
-        isUpdate = true
-      } else {
-        // 检查是否已存在相同名称的插件 (作为后备方案)
-        const existingPlugins = (await this.getPluginsList()) || []
-        const existingPlugin = existingPlugins.find(
-          (plugin) => plugin.pluginInfo.name === pluginInfo.name
-        )
-
-        if (existingPlugin) {
-          if (existingPlugin.pluginInfo.version === pluginInfo.version) {
-            throw new Error(`插件 "${pluginInfo.name} v${pluginInfo.version}" 已存在，不能重复添加`)
-          }
-          // 如果是更新，复用原来的 pluginId，这样前端当前使用的插件不会掉
-          pluginId = existingPlugin.pluginId
-          isUpdate = true
-        }
-      }
-
-      if (isUpdate) {
-        // 卸载旧插件文件
+      const safePluginName = 'plugin.js'
+      const filePath = path.join(pluginsDir, pluginId + '-' + safePluginName)
+      const tempPath = filePath + '.tmp'
+      const backupPath = filePath + '.bak'
+      const installedFiles = (await fsPromise.readdir(pluginsDir)).filter((file) =>
+        file.startsWith(`${pluginId}-`)
+      )
+      const previousPath = installedFiles.length
+        ? path.join(pluginsDir, installedFiles[0])
+        : undefined
+      const ceruPluginManager = oldHost ? createPluginHost(pluginId, pluginCode) : undefined
+      try {
+        await ceruPluginManager?.ensureReady()
+        await fsPromise.writeFile(tempPath, pluginCode)
+        await fsPromise.unlink(backupPath).catch(() => {})
+        if (previousPath) await fsPromise.rename(previousPath, backupPath)
         try {
-          const files = await fsPromise.readdir(pluginsDir)
-          const oldPluginFile = files.find((file) => file.startsWith(`${pluginId}-`))
-          if (oldPluginFile) {
-            await fsPromise.unlink(path.join(pluginsDir, oldPluginFile))
-          }
-        } catch (e) {
-          console.warn('删除旧插件文件失败:', e)
+          await fsPromise.rename(tempPath, filePath)
+        } catch (error) {
+          if (previousPath) await fsPromise.rename(backupPath, previousPath).catch(() => {})
+          throw error
         }
-
-        if (loadedPlugins[pluginId]) {
-          try {
-            await loadedPlugins[pluginId].destroy()
-          } catch (e) {
-            console.warn('销毁旧插件 host 失败:', e)
-          }
-          delete loadedPlugins[pluginId]
-        }
+      } catch (error) {
+        await ceruPluginManager?.destroy()
+        await fsPromise.unlink(tempPath).catch(() => {})
+        throw error
       }
+      await oldHost?.destroy()
+      delete loadedPlugins[pluginId]
 
-      // 生成安全的插件文件名
-      const safePluginName = (pluginName || pluginInfo.name).replace(/[^\w\d-]/g, '_')
-      const filePath = path.join(pluginsDir, `${pluginId}-${safePluginName}`)
-
-      // 写入插件文件
-      await fsPromise.writeFile(filePath, pluginCode)
-
-      // 重新加载插件以确保正确初始化
-      const ceruPluginManager = new CeruMusicPluginHost()
-      ceruPluginManager.pluginId = pluginId
-      ceruPluginManager.onThrottle = _throttleHandler
-      ceruPluginManager.onDisabled = _disabledHandler
-      await ceruPluginManager.loadPlugin(filePath, new Logger(pluginId))
-
-      // 将插件添加到已加载插件列表
-      loadedPlugins[pluginId] = ceruPluginManager
+      installedPlugins.set(pluginId, {
+        pluginId,
+        pluginName: safePluginName,
+        filePath,
+        manifest,
+        state
+      })
+      savePluginState(pluginId, state)
+      if (ceruPluginManager) loadedPlugins[pluginId] = ceruPluginManager
+      await fsPromise.unlink(backupPath).catch(() => {})
+      for (const stale of installedFiles.slice(1)) {
+        await fsPromise.unlink(path.join(pluginsDir, stale)).catch(() => {})
+      }
+      pluginChanged({ type: existing ? 'updated' : 'installed', pluginId })
 
       return {
         pluginId,
         pluginName: safePluginName,
         pluginInfo,
-        supportedSources: ceruPluginManager.getSupportedSources()
+        supportedSources: ceruPluginManager?.getSupportedSources() ?? {},
+        updated: Boolean(existing),
+        previousVersion,
+        version: pluginInfo.version
       }
     } catch (error: any) {
       console.error('添加插件失败:', error)
@@ -189,33 +283,245 @@ const pluginService = {
 
     return loadedPlugins[pluginId]
   },
+  async listGuests(pluginId: string) {
+    return (
+      this.getPluginById(pluginId)?.listGuests() ??
+      withStoredGuests(pluginId, (store) => store.list())
+    )
+  },
+  async selectGuest(pluginId: string, guestId: string | null) {
+    if (guestId) await this.setActivePlugin(pluginId)
+    const host = this.getPluginById(pluginId)
+    if (host) await host.selectGuest(guestId)
+    else await withStoredGuests(pluginId, (store) => store.select(null))
+  },
+  async removeGuest(pluginId: string, guestId: string) {
+    const host = this.getPluginById(pluginId)
+    if (host) await host.removeGuest(guestId)
+    else await withStoredGuests(pluginId, (store) => store.remove(guestId))
+  },
+  async getGuestPermissions(pluginId: string, guestId: string) {
+    return (
+      this.getPluginById(pluginId)?.getGuestPermissions(guestId) ??
+      withStoredGuests(pluginId, (store) => store.permissions(guestId))
+    )
+  },
+  async setGuestPermissions(pluginId: string, guestId: string, keys: string[]) {
+    const host = this.getPluginById(pluginId)
+    if (host) await host.setGuestPermissions(guestId, keys)
+    else await withStoredGuests(pluginId, (store) => store.setPermissions(guestId, keys))
+  },
+
+  async selectAndUpdatePlugin(pluginId: string) {
+    const current = installedPlugins.get(pluginId)
+    if (!current) throw new Error(`插件 ${pluginId} 未找到`)
+    const result = await dialog.showOpenDialog({
+      title: `更新 ${current.manifest.name}`,
+      filters: [{ name: 'Ceru Music v2 插件', extensions: ['js'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || !result.filePaths.length) return { canceled: true }
+    const filePath = result.filePaths[0]
+    return this.addPlugin(
+      await fsPromise.readFile(filePath, 'utf-8'),
+      path.basename(filePath),
+      pluginId
+    )
+  },
+
+  async setPluginEnabled(pluginId: string, enabled: boolean) {
+    const previous = pluginTransitions.get(pluginId) ?? Promise.resolve()
+    const transition = previous
+      .catch(() => undefined)
+      .then(() => pluginService.applyPluginEnabled(pluginId, enabled))
+    pluginTransitions.set(pluginId, transition)
+    try {
+      return await transition
+    } finally {
+      if (pluginTransitions.get(pluginId) === transition) pluginTransitions.delete(pluginId)
+    }
+  },
+
+  async applyPluginEnabled(pluginId: string, enabled: boolean) {
+    const installed = installedPlugins.get(pluginId)
+    if (!installed) throw new Error(`插件 ${pluginId} 未安装`)
+    const running = Boolean(loadedPlugins[pluginId]) && !loadedPlugins[pluginId].isDisabled()
+    if (installed.state.enabled === enabled && running === enabled)
+      return { success: true, enabled }
+
+    if (!enabled) {
+      if (activePluginId === pluginId) activePluginId = null
+      installed.state.enabled = false
+      savePluginState(pluginId, installed.state)
+      cancelPluginUI(pluginId)
+      const host = loadedPlugins[pluginId]
+      delete loadedPlugins[pluginId]
+      clearRuntimeSelections(pluginId)
+      await host?.destroy().catch((error) => console.warn('停止插件失败:', error))
+      pluginChanged({ type: 'state-changed', pluginId, enabled: false })
+      return { success: true, enabled: false }
+    }
+
+    const host = createPluginHost(pluginId)
+    try {
+      await host.loadPlugin(installed.filePath, new Logger(pluginId))
+      loadedPlugins[pluginId] = host
+      installed.state.enabled = true
+      installed.loadError = undefined
+      savePluginState(pluginId, installed.state)
+      pluginChanged({ type: 'state-changed', pluginId, enabled: true })
+      return { success: true, enabled: true }
+    } catch (error: any) {
+      await host.destroy().catch(() => {})
+      installed.loadError = error?.message || String(error)
+      installed.state.enabled = false
+      savePluginState(pluginId, installed.state)
+      throw new Error(`启用插件失败: ${installed.loadError}`)
+    }
+  },
+
+  async setActivePlugin(pluginId: string | null) {
+    if (pluginId) await this.setPluginEnabled(pluginId, true)
+    activePluginId = pluginId
+  },
+
+  setProviderOwner(source: string, pluginId: string | null) {
+    if (!pluginId) {
+      providerOwners.delete(source)
+      return
+    }
+    const host = this.getPluginById(pluginId)
+    if (!host?.supportsV2Provider(source)) throw new Error(`插件 ${pluginId} 未提供 ${source}`)
+    providerOwners.set(source, pluginId)
+  },
+
+  setCapabilityOwner(source: string, capability: string, pluginId: string | null) {
+    const key = `${source}:${capability}`
+    if (!pluginId) {
+      capabilityOwners.delete(key)
+      return
+    }
+    const host = this.getPluginById(pluginId)
+    const supported = capability.startsWith('action:')
+      ? host?.supportsV2Provider(source) && host.supportsAction(capability.slice(7))
+      : host?.supportsV2Provider(source, capability)
+    if (!supported) throw new Error(`插件 ${pluginId} 未实现 ${source} / ${capability}`)
+    capabilityOwners.set(key, pluginId)
+  },
+
+  getV2Provider(
+    source: string,
+    ownerId?: string,
+    method?: string
+  ): { pluginId: string; host: CeruMusicPluginHost } | null {
+    // A ResourceRef names its owner. Never route its private data to a different plugin.
+    if (ownerId) {
+      const owners = runtimeEntries().filter(
+        ([pluginId, host]) => pluginId === ownerId || host.getPluginInfo().id === ownerId
+      )
+      const owner = owners.length === 1 ? owners[0] : undefined
+      return owner?.[1].supportsV2Provider(source, method)
+        ? { pluginId: owner[0], host: owner[1] }
+        : null
+    }
+    if (method) {
+      const configuredId = capabilityOwners.get(`${source}:${method}`)
+      const configured = configuredId ? this.getPluginById(configuredId) : null
+      if (configuredId && configured?.supportsV2Provider(source, method))
+        return { pluginId: configuredId, host: configured }
+    }
+    const sourceOwnerId = providerOwners.get(source)
+    const sourceOwner = sourceOwnerId ? this.getPluginById(sourceOwnerId) : null
+    if (sourceOwnerId && sourceOwner?.supportsV2Provider(source))
+      return sourceOwner.supportsV2Provider(source, method)
+        ? { pluginId: sourceOwnerId, host: sourceOwner }
+        : null
+    for (const [pluginId, host] of runtimeEntries()) {
+      if (host.supportsV2Provider(source, method)) return { pluginId, host }
+    }
+    return null
+  },
+  getV2Action(source: string, action: string, ownerId?: string) {
+    const configuredId = capabilityOwners.get(`${source}:action:${action}`)
+    const candidates = runtimeEntries()
+    const supports = (host: CeruMusicPluginHost) =>
+      host.supportsV2Provider(source) && host.supportsAction(action)
+    if (ownerId) {
+      const owners = candidates.filter(
+        ([pluginId, host]) => pluginId === ownerId || host.getPluginInfo().id === ownerId
+      )
+      const owner = owners.length === 1 ? owners[0] : undefined
+      return owner && supports(owner[1]) ? { pluginId: owner[0], host: owner[1] } : null
+    }
+    const selected = configuredId
+      ? candidates.find(([pluginId, host]) => pluginId === configuredId && supports(host))
+      : undefined
+    if (selected) return { pluginId: selected[0], host: selected[1] }
+    const sourceOwnerId = providerOwners.get(source)
+    const sourceOwner = sourceOwnerId ? this.getPluginById(sourceOwnerId) : null
+    if (sourceOwnerId && sourceOwner?.supportsV2Provider(source))
+      return supports(sourceOwner) ? { pluginId: sourceOwnerId, host: sourceOwner } : null
+    const fallback = candidates.find(([, host]) => supports(host))
+    return fallback ? { pluginId: fallback[0], host: fallback[1] } : null
+  },
+  getLyricConverter(): CeruMusicPluginHost | undefined {
+    return (Object.values(loadedPlugins) as CeruMusicPluginHost[]).find(
+      (host) => !host.isDisabled() && host.getManifest().contributes?.lyricConverters?.length
+    )
+  },
+  getLyricConverters(): CeruMusicPluginHost[] {
+    return (Object.values(loadedPlugins) as CeruMusicPluginHost[]).filter(
+      host => !host.isDisabled() && host.getManifest().contributes?.lyricConverters?.length
+    )
+  },
+
+  async invokeV2Provider(pluginId: string, providerId: string, method: string, args: any[] = []) {
+    const host = this.getPluginById(pluginId)
+    if (!host) throw new Error(`插件 ${pluginId} 未找到`)
+    return host.invokeV2Provider(providerId, method, args)
+  },
+
+  async invokeV2Importer(pluginId: string, importerId: string, input: any) {
+    const host = this.getPluginById(pluginId)
+    if (!host) throw new Error(`插件 ${pluginId} 未找到`)
+    return host.invokeV2Importer(importerId, input)
+  },
 
   async uninstallPlugin(pluginId: string) {
     try {
       const pluginsDir = path.join(getAppDirPath(), 'plugins')
-      const files = await fsPromise.readdir(pluginsDir)
-
-      // 查找匹配的插件文件
-      const pluginFile = files.find((file) => file.startsWith(`${pluginId}-`))
-
-      if (!pluginFile) {
+      const installed = installedPlugins.get(pluginId)
+      if (!installed) {
         throw new Error(`未找到插件ID为 ${pluginId} 的插件文件`)
       }
-
-      // 删除插件文件
-      const pluginPath = path.join(pluginsDir, pluginFile)
-      await fsPromise.unlink(pluginPath)
-
-      // 销毁 worker 后再从已加载列表中移除
-      if (loadedPlugins[pluginId]) {
+      const host = loadedPlugins[pluginId] as CeruMusicPluginHost | undefined
+      cancelPluginUI(pluginId)
+      if (host) {
         try {
-          await loadedPlugins[pluginId].destroy()
+          await host.destroy()
         } catch (e) {
           console.warn('销毁插件 host 失败:', e)
         }
         delete loadedPlugins[pluginId]
       }
+      clearRuntimeSelections(pluginId)
+      installedPlugins.delete(pluginId)
+      const files = await fsPromise.readdir(pluginsDir)
+      await Promise.all(
+        files
+          .filter((file) => file.startsWith(`${pluginId}-`))
+          .map((file) => fsPromise.unlink(path.join(pluginsDir, file)).catch(() => {}))
+      )
 
+      deletePluginConfig(pluginId)
+      deletePluginConfig(pluginId + '.storage')
+      deletePluginStorage(pluginId)
+      deletePluginState(pluginId)
+      const guestsRoot = path.resolve(getAppDirPath(), 'plugins', 'guests')
+      const guestDirectory = path.resolve(guestsRoot, pluginId)
+      if (guestDirectory.startsWith(guestsRoot + path.sep))
+        await fsPromise.rm(guestDirectory, { recursive: true, force: true })
+      pluginChanged({ type: 'uninstalled', pluginId })
       return { success: true, message: '插件卸载成功' }
     } catch (error: any) {
       console.error('卸载插件失败:', error)
@@ -224,6 +530,46 @@ const pluginService = {
   },
 
   async initializePlugins() {
+    if (initialized)
+      return Object.entries(loadedPlugins).map(([pluginId, host]: any) => ({
+        pluginId,
+        pluginInfo: host.getPluginInfo(),
+        supportedSources: host.getSupportedSources()
+      }))
+    if (initialization) return initialization
+    initialization = this.loadInstalledPlugins()
+    try {
+      const result = await initialization
+      initialized = true
+      return result
+    } finally {
+      initialization = undefined
+    }
+  },
+
+  /** Called after the renderer UI bridge is ready; installation alone never activates code. */
+  restoreEnabledPlugins(): Promise<void> {
+    if (restoration) return restoration
+    restoration = (async () => {
+      await this.initializePlugins()
+      const saved = [...installedPlugins.values()]
+        .filter((plugin) => plugin.state.enabled)
+        .sort((a, b) => a.state.order - b.state.order)
+      for (const plugin of saved) {
+        try {
+          await this.setPluginEnabled(plugin.pluginId, true)
+        } catch (error) {
+          console.warn(`恢复插件 ${plugin.manifest.name} 失败:`, error)
+        }
+      }
+    })().catch((error) => {
+      restoration = undefined
+      throw error
+    })
+    return restoration
+  },
+
+  async loadInstalledPlugins() {
     const pluginDirPath = path.join(getAppDirPath(), 'plugins')
 
     // 确保插件目录存在
@@ -237,11 +583,7 @@ const pluginService = {
       files = await fsPromise.readdir(pluginDirPath, { recursive: false, withFileTypes: true })
 
       // 只处理文件，忽略目录
-      files = files.filter((file) => file.isFile())
-
-      if (files.length === 0) {
-        return []
-      }
+      files = files.filter((file) => file.isFile() && file.name.endsWith('.js'))
 
       // 清空已加载的插件（先销毁 worker）
       await Promise.all(
@@ -252,49 +594,44 @@ const pluginService = {
           delete loadedPlugins[key]
         })
       )
-
-      const results = await Promise.all(
-        files.map(async (file) => {
-          try {
-            // 解析插件ID和名称
-            const parts = file.name.split('-')
-            if (parts.length < 2) {
-              console.warn(`跳过无效的插件文件名: ${file.name}`)
-              return null
-            }
-
-            const pluginId = parts[0]
-            const pluginName = parts.slice(1).join('-')
-            const fullPath = path.join(pluginDirPath, file.name)
-
-            // 加载插件
-            const ceruPluginManager = new CeruMusicPluginHost()
-            ceruPluginManager.pluginId = pluginId
-            ceruPluginManager.onThrottle = _throttleHandler
-            ceruPluginManager.onDisabled = _disabledHandler
-            await ceruPluginManager.loadPlugin(fullPath, new Logger(pluginId))
-
-            // 获取插件信息
-            const pluginInfo = ceruPluginManager.getPluginInfo()
-
-            // 存储到已加载插件列表
-            loadedPlugins[pluginId] = ceruPluginManager
-
-            return {
-              pluginId,
-              pluginName,
-              pluginInfo,
-              supportedSources: ceruPluginManager.getSupportedSources()
-            }
-          } catch (error: any) {
-            console.error(`加载插件 ${file.name} 失败:`, error)
-            return null
+      installedPlugins.clear()
+      activePluginId = null
+      providerOwners.clear()
+      capabilityOwners.clear()
+      const states = getPluginStates()
+      const records: InstalledPlugin[] = []
+      let nextOrder = Math.max(-1, ...Object.values(states).map((state) => state.order)) + 1
+      for (const file of files) {
+        try {
+          const parts = file.name.split('-')
+          if (parts.length < 2) {
+            console.warn(`跳过无效的插件文件名: ${file.name}`)
+            continue
           }
-        })
-      )
+          const pluginId = parts[0]
+          const fullPath = path.join(pluginDirPath, file.name)
+          const pluginCode = await fsPromise.readFile(fullPath, 'utf-8')
+          const parsed = readPluginArtifact(pluginCode)
+          const manifest = parsed.header.manifest
+          const state = states[pluginId] ?? { enabled: false, order: nextOrder++ }
+          const record: InstalledPlugin = {
+            pluginId,
+            pluginName: parts.slice(1).join('-'),
+            filePath: fullPath,
+            manifest,
+            state
+          }
+          installedPlugins.set(pluginId, record)
+          savePluginState(pluginId, state)
+          records.push(record)
+        } catch (error: any) {
+          console.error(`读取插件 ${file.name} 失败:`, error)
+        }
+      }
 
-      // 过滤掉加载失败的插件
-      return results.filter((result) => result !== null)
+      // Installation scanning is static. The renderer restores the explicit user selection
+      // after its UI bridge is mounted; no installed plugin runs just because it exists.
+      return this.getPluginsList()
     } catch (err: any) {
       console.error('读取插件目录失败:', err)
       throw new Error(`无法读取插件目录${err.message ? ': ' + err.message : ''}`)
@@ -302,22 +639,51 @@ const pluginService = {
   },
 
   async getPluginsList() {
-    // 如果没有已加载的插件，先尝试初始化
-    if (Object.keys(loadedPlugins).length === 0) {
+    if (!initialized && !initialization) {
       await this.initializePlugins()
     }
 
-    // 返回已加载插件的信息
-    return Object.entries(loadedPlugins).map(([pluginId, manager]) => {
-      const ceruPluginManager = manager as CeruMusicPluginHost
-      return {
-        pluginId,
-        pluginName: pluginId.split('-')[1] || pluginId,
-        pluginInfo: ceruPluginManager.getPluginInfo(),
-        supportedSources: ceruPluginManager.getSupportedSources(),
-        disabled: ceruPluginManager.isDisabled()
-      }
-    })
+    return [...installedPlugins.values()]
+      .sort((a, b) => a.state.order - b.state.order)
+      .map((installed) => {
+        const { pluginId } = installed
+        const host = loadedPlugins[pluginId]
+        const { config: _privateConfig, ...manifest } = host?.getManifest() ?? installed.manifest
+        const supportedSources = Object.fromEntries(
+          (manifest.contributes?.providers ?? []).map((provider: any) => [
+            provider.id,
+            {
+              name: provider.name,
+              qualitys: provider.qualities ?? [],
+              qualities: provider.qualities ?? [],
+              icon: provider.icon,
+              protocols: provider.protocols
+            }
+          ])
+        )
+        return {
+          pluginId,
+          pluginName: installed.pluginName,
+          pluginInfo: {
+            id: manifest.id,
+            name: manifest.name,
+            version: manifest.version,
+            author: manifest.author || manifest.publisher || '',
+            description: manifest.description
+          },
+          supportedSources,
+          manifest,
+          providerMethods: host?.getProviderMethods() ?? {},
+          providerIconUrls: host?.getProviderIconUrls() ?? {},
+          actionIds: host?.getActionIds() ?? [],
+          pluginType: host?.getPluginType() ?? 'music-source',
+          enabled: installed.state.enabled && Boolean(host) && !host?.isDisabled(),
+          requestedEnabled: installed.state.enabled,
+          disabled: !installed.state.enabled || !host || host.isDisabled(),
+          order: installed.state.order,
+          loadError: installed.loadError
+        }
+      })
   },
 
   async downloadAndAddPlugin(url: string, type: 'lx' | 'cr', targetPluginId?: string) {
@@ -332,16 +698,15 @@ const pluginService = {
 
       // 插件格式校验
       if (type === 'cr') {
-        // 澜音格式校验：检查是否包含cerumusic关键字
-        if (!pluginCode.toLowerCase().includes('cerumusic')) {
-          throw new Error('澜音插件格式校验失败：代码中未找到cerumusic关键字')
-        }
+        const parsed = readPluginArtifact(pluginCode)
+        if (parsed.header.manifest.manifestVersion !== 2)
+          throw new Error('澜音插件格式校验失败：只支持 v2 单文件插件')
       } else if (type === 'lx') {
         // 洛雪格式校验：检查是否包含lx关键字
         if (!pluginCode.toLowerCase().includes('lx')) {
           throw new Error('洛雪插件格式校验失败：代码中未找到lx关键字')
         }
-        pluginCode = convertEventDrivenPlugin(pluginCode)
+        throw new Error('请通过 LX 兼容插件安装洛雪音源，澜音仅接收 v2 插件')
       }
 
       // 生成临时文件名
@@ -406,6 +771,32 @@ const pluginService = {
 
   getConfig(pluginId: string) {
     return getPluginConfig(pluginId)
+  },
+
+  getPermissions(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (plugin) return plugin.getGrantedPermissions()
+    if (!installedPlugins.has(pluginId)) throw new Error(`插件 ${pluginId} 未找到`)
+    return getPluginPermissions(pluginId)
+  },
+
+  getManifest(pluginId: string) {
+    const plugin = this.getPluginById(pluginId)
+    if (plugin) return plugin.getManifest()
+    const installed = installedPlugins.get(pluginId)
+    if (!installed) throw new Error(`插件 ${pluginId} 未找到`)
+    return installed.manifest
+  },
+
+  savePermissions(pluginId: string, permissions: string[]) {
+    const plugin = this.getPluginById(pluginId)
+    if (plugin) {
+      plugin.setGrantedPermissions(permissions)
+      return plugin.getGrantedPermissions()
+    }
+    if (!installedPlugins.has(pluginId)) throw new Error(`插件 ${pluginId} 未找到`)
+    savePluginPermissions(pluginId, permissions)
+    return getPluginPermissions(pluginId)
   },
 
   saveConfig(pluginId: string, config: Record<string, any>) {

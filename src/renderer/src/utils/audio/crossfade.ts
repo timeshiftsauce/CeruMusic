@@ -418,10 +418,17 @@ const beginCrossfade = async () => {
   } catch {}
 
   // 开始播放 secondary
+  const prepared = await globalPlayStatus.prepareSong(nextSong)
+  if (_cancelled || _currentNextSong !== nextSong) {
+    prepared.dispose()
+    _beginningInProgress = false
+    return
+  }
   try {
     await secondary.play()
   } catch (e) {
     console.warn('[crossfade] secondary.play() failed', e)
+    prepared.dispose()
     _beginningInProgress = false
     resetState()
     return
@@ -430,6 +437,7 @@ const beginCrossfade = async () => {
     try {
       secondary.pause()
     } catch {}
+    prepared.dispose()
     _beginningInProgress = false
     return
   }
@@ -493,7 +501,7 @@ const beginCrossfade = async () => {
     localUserStore.userInfo.lastPlaySongId = nextSong.songmid as any
   } catch {}
   try {
-    globalPlayStatus.updatePlayerInfo(nextSong)
+    globalPlayStatus.commitPrepared(prepared)
   } catch {}
   try {
     mediaSessionController.updateMetadata({

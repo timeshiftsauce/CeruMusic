@@ -285,3 +285,182 @@ html .vp-doc div[class*='language-'] pre {
 .VPDoc.has-aside .content-container {
   max-width: none !important;
 }
+
+// Keep long API examples inside the v2 document column on narrow screens.
+.plugin-v2-doc .vp-doc div[class*='language-'] {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.plugin-v2-doc .vp-doc table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+// The learning guide uses a quiet reading surface and ordinary heading hierarchy.
+#app .Layout.plugin-v2-doc .vp-doc {
+  background-image: none;
+  font-family: var(--vp-font-family-base);
+  line-height: 1.8;
+  letter-spacing: normal;
+  color: var(--vp-c-text-1);
+  padding: 28px 24px;
+}
+#app .Layout.plugin-v2-doc .content-container {
+  max-width: 800px !important;
+}
+#app .Layout.plugin-v2-doc .vp-doc p {
+  font-family: inherit;
+  line-height: 1.8;
+  letter-spacing: normal;
+  word-spacing: normal;
+  color: var(--vp-c-text-1);
+  margin: 16px 0;
+}
+#app .Layout.plugin-v2-doc .vp-doc h1,
+#app .Layout.plugin-v2-doc .vp-doc h2,
+#app .Layout.plugin-v2-doc .vp-doc h3 {
+  text-align: left;
+  color: var(--vp-c-text-1);
+  background: none;
+  padding: 0;
+  width: auto;
+  border-radius: 0;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+#app .Layout.plugin-v2-doc .vp-doc h1 {
+  font-size: 32px;
+  margin: 0 0 24px;
+}
+#app .Layout.plugin-v2-doc .vp-doc h2 {
+  font-size: 24px;
+  margin: 44px 0 20px;
+  padding-top: 24px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+#app .Layout.plugin-v2-doc .vp-doc h3 {
+  font-size: 20px;
+  margin-top: 32px;
+}
+#app .Layout.plugin-v2-doc .vp-doc h1::before,
+#app .Layout.plugin-v2-doc .vp-doc h1::after,
+#app .Layout.plugin-v2-doc .vp-doc h2::before,
+#app .Layout.plugin-v2-doc .vp-doc h2::after,
+#app .Layout.plugin-v2-doc .vp-doc h3::before,
+#app .Layout.plugin-v2-doc .vp-doc h3::after {
+  content: none;
+}
+#app .Layout.plugin-v2-doc .vp-doc strong,
+#app .Layout.plugin-v2-doc .vp-doc em {
+  color: inherit;
+}
+#app .Layout.plugin-v2-doc .vp-doc p code,
+#app .Layout.plugin-v2-doc .vp-doc li code {
+  font-family: var(--vp-font-family-mono);
+  letter-spacing: normal;
+  color: var(--vp-code-color);
+  background: var(--vp-code-bg);
+}
+#app .Layout.plugin-v2-doc .vp-doc div[class*='language-'] {
+  padding: 0;
+  border-radius: 8px;
+  background: var(--vp-code-block-bg);
+}
+#app .Layout.plugin-v2-doc div[class^='language'] pre {
+  background: transparent;
+  padding: 20px 0;
+}
+#app .Layout.plugin-v2-doc div[class^='language'] pre::before {
+  display: none;
+}
+#app .Layout.plugin-v2-doc div[class^='language'] pre code {
+  margin: 0;
+  padding: 0 24px;
+  line-height: 1.7;
+  font-family: var(--vp-font-family-mono);
+  letter-spacing: normal;
+}
+#app .Layout.plugin-v2-doc .vp-doc .custom-block p {
+  font-size: 14px;
+  margin: 8px 0;
+}
+#app .Layout.plugin-v2-doc .plugin-start-card {
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+}
+#app .Layout.plugin-v2-doc .plugin-start-card > strong {
+  font-size: 20px;
+}
+#app .Layout.plugin-v2-doc .plugin-start-card a {
+  font-weight: 600;
+}
+#app .Layout.plugin-v2-doc .plugin-reading-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  margin: 24px 0;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+  font-size: 14px;
+}
+#app .Layout.plugin-v2-doc .plugin-project-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 22px 0 30px;
+}
+#app .Layout.plugin-v2-doc .plugin-project-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+}
+#app .Layout.plugin-v2-doc .plugin-project-card:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-1px);
+}
+#app .Layout.plugin-v2-doc .plugin-project-card > span {
+  color: var(--vp-c-brand-1);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+#app .Layout.plugin-v2-doc .plugin-project-card > strong {
+  font-size: 19px;
+}
+#app .Layout.plugin-v2-doc .plugin-project-card > p {
+  margin: 0;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+#app .Layout.plugin-v2-doc .vp-doc .plugin-diagram img {
+  margin: 0;
+}
+#app .Layout.plugin-v2-doc .vp-doc figcaption {
+  color: var(--vp-c-text-2);
+}
+@media (max-width: 639px) {
+  #app .Layout.plugin-v2-doc .vp-doc {
+    padding: 24px 20px;
+  }
+  #app .Layout.plugin-v2-doc .vp-doc h1 {
+    font-size: 28px;
+  }
+  #app .Layout.plugin-v2-doc .plugin-project-grid {
+    grid-template-columns: 1fr;
+  }
+}

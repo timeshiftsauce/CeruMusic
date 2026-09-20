@@ -16,3 +16,6 @@ temp/log.txt
 /.idea/
 docs/.vitepress/dist
 docs/.vitepress/cache
+/.plugin-host-smoke.mjs
+
+/.plugin-lifecycle-smoke.mjs
