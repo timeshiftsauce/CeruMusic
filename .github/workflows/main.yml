@@ -85,6 +85,7 @@ jobs:
         env:
           # 暂时发布未签名构建，证书恢复后删除此开关并恢复签名 secrets。
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder@1.2.0'
           # npmmirror may not contain the dmg-builder archive used by this version.
           ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
           NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
@@ -104,6 +105,7 @@ jobs:
         env:
           # 暂时发布未签名构建，证书恢复后删除此开关并恢复签名 secrets。
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder@1.2.0'
           # npmmirror may not contain the dmg-builder archive used by this version.
           ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
           NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
