@@ -75,7 +75,7 @@ export const getCandidateSongs = async (
   const qualityMap = userInfo.sourceQualityMap || {}
   let sources = Object.keys(qualityMap)
   if (sources.length === 0) {
-    sources = ['wy', 'tx', 'kg', 'kw', 'mg']
+    sources = Object.keys(userInfo.supportedSources || {})
   }
   // 移除当前源
   sources = sources.filter((s) => s !== originalSong.source)

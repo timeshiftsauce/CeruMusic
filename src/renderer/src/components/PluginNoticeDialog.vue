@@ -53,12 +53,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, toRaw } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { useRoute } from 'vue-router'
+import { appEntryQueue } from '@renderer/services/entryQueue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { refreshPluginContributions } from '@renderer/services/pluginState'
 
-const route = useRoute()
 const localUserStore = LocalUserDetailStore()
 
 interface DialogNotice {
@@ -67,6 +67,7 @@ interface DialogNotice {
   timestamp: number
   pluginName: string
   pluginId?: string
+  guestId?: string
   dialogType: 'update' | 'info' | 'error' | 'warning' | 'success'
   title: string
   message: string
@@ -85,7 +86,11 @@ interface DialogNotice {
 const visible = ref(false)
 const notice = ref<DialogNotice | null>(null)
 const actionLoading = ref<string | null>(null)
-const noticeQueue = ref<DialogNotice[]>([]) // 通知队列
+const noticeQueue = ref<DialogNotice[]>([])
+let finishQueuedNotice: (() => void) | undefined
+let noticeSequence = 0
+let noticesMounted = true
+const seenUpdates = new Set<string>()
 
 // 计算属性
 const dialogWidth = computed(() => {
@@ -106,39 +111,28 @@ const dialogTitle = computed(() => {
 
 // 显示通知对话框
 const showNotice = (noticeData: DialogNotice) => {
+  if (noticeData.dialogType === 'update') {
+    const key = JSON.stringify([
+      noticeData.pluginId,
+      noticeData.guestId,
+      noticeData.newVersion || noticeData.updateUrl
+    ])
+    if (seenUpdates.has(key)) return
+    seenUpdates.add(key)
+  }
   // 添加到队列
   noticeQueue.value.push(noticeData)
   console.log('[PluginNotice] 添加通知到队列:', noticeData, '队列长度:', noticeQueue.value.length)
 
-  // 如果当前没有显示对话框，立即显示
-  if (!visible.value) {
-    showNextNotice()
-  }
-}
-
-// 显示队列中的下一个通知
-const showNextNotice = () => {
-  // 如果在欢迎页，暂不显示通知
-  if (route.path === '/' || route.name === 'welcome') {
-    console.log('[PluginNotice] 当前在欢迎页，暂缓显示通知')
-    return
-  }
-
-  if (noticeQueue.value.length === 0) {
-    return
-  }
-
-  const nextNotice = noticeQueue.value.shift()
-  if (nextNotice) {
-    notice.value = nextNotice
-    visible.value = true
-    console.log(
-      '[PluginNotice] 显示下一个通知:',
-      nextNotice,
-      '剩余队列长度:',
-      noticeQueue.value.length
-    )
-  }
+  void appEntryQueue.enqueue(`plugin-notice:${++noticeSequence}`, async () => {
+    if (!noticesMounted || !noticeQueue.value.includes(noticeData)) return
+    noticeQueue.value = noticeQueue.value.filter((item) => toRaw(item) !== noticeData)
+    await new Promise<void>((resolve) => {
+      finishQueuedNotice = resolve
+      notice.value = noticeData
+      visible.value = true
+    })
+  })
 }
 
 // 处理操作按钮点击
@@ -153,16 +147,20 @@ const handleAction = async (actionType: string) => {
     if (actionType === 'update' && notice.value.updateUrl) {
       // 尝试内部更新
       try {
-        const result = await window.api.plugins.downloadAndAddPlugin(
-          notice.value.updateUrl,
-          notice.value.pluginType || 'cr',
-          notice.value.pluginId
-        )
+        if (!notice.value.pluginId) throw new Error('更新缺少目标插件')
+        const result: any = notice.value.guestId
+          ? await window.api.plugins.guestUpdate(
+              notice.value.pluginId,
+              notice.value.guestId,
+              notice.value.updateUrl
+            )
+          : await window.api.plugins.updateFromUrl(notice.value.pluginId, notice.value.updateUrl)
 
         if (result && typeof result === 'object' && 'error' in result) {
           throw new Error(result.error)
         }
 
+        await refreshPluginContributions(true)
         MessagePlugin.success(`插件 "${notice.value.pluginName}" 更新成功！`)
         handleClose()
       } catch (err: any) {
@@ -236,26 +234,10 @@ const handleClose = () => {
   notice.value = null
   actionLoading.value = null
 
-  // 延迟一点时间后显示下一个通知，避免对话框切换过快
-  setTimeout(() => {
-    showNextNotice()
-  }, 300)
+  const finish = finishQueuedNotice
+  finishQueuedNotice = undefined
+  setTimeout(() => finish?.(), 200)
 }
-
-// 监听路由变化，离开欢迎页时检查是否有待显示的通知
-watch(
-  () => route.path,
-  (newPath) => {
-    setTimeout(() => {
-      if (newPath !== '/' && route.name !== 'welcome') {
-        if (noticeQueue.value.length > 0 && !visible.value) {
-          console.log('[PluginNotice] 离开欢迎页，开始处理堆积的通知')
-          showNextNotice()
-        }
-      }
-    }, 1000)
-  }
-)
 
 // 监听插件通知事件
 const handlePluginNotice = (noticeData: DialogNotice) => {
@@ -269,6 +251,9 @@ onMounted(() => {
 })
 onUnmounted(() => {
   event()
+  noticesMounted = false
+  finishQueuedNotice?.()
+  finishQueuedNotice = undefined
   // 清空队列
   noticeQueue.value = []
 })

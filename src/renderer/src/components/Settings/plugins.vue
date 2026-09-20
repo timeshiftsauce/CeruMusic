@@ -3,33 +3,36 @@
     <!-- <TitleBarControls title="插件管理" :show-back="true" class="header"></TitleBarControls> -->
     <div class="plugins-container">
       <div class="plugin-actions-hearder">
-        <h2>插件管理</h2>
-
-        <div class="plugin-actions" style="flex-direction: row">
-          <t-button theme="primary" @click="plugTypeDialog = true">
+        <div class="plugins-title-row">
+          <div>
+            <slot name="navigation"><h2>插件管理</h2></slot>
+            <p class="plugins-subtitle">已安装 {{ listedPlugins.length }} 个插件</p>
+          </div>
+          <t-button theme="primary" @click="openInstallDialog">
             <template #icon><t-icon name="add" /></template> 添加插件
           </t-button>
-          <t-dialog
-            :visible="plugTypeDialog"
-            :close-btn="true"
-            attach="body"
-            confirm-btn="下一步"
-            cancel-btn="取消"
-            :on-confirm="showImportMethodDialog"
-            :on-close="() => (plugTypeDialog = false)"
-          >
-            <template #header>请选择你的插件类别</template>
-            <template #body>
-              <p class="local-hint-container" style="margin-bottom: 15px">
-                Tips: 如果插件提供者，有提供澜音插件格式，建议使用澜音格式插件导入奥
-              </p>
-              <t-radio-group v-model="type" variant="primary-filled" default-value="cr">
-                <t-radio-button value="cr">澜音插件</t-radio-button>
-                <t-radio-button value="lx">洛雪插件</t-radio-button>
-              </t-radio-group>
-            </template>
-          </t-dialog>
+        </div>
 
+        <div class="plugin-toolbar">
+          <t-input
+            v-model="pluginSearch"
+            clearable
+            placeholder="搜索插件名称、作者或平台"
+            class="plugin-search"
+          >
+            <template #prefix-icon><t-icon name="search" /></template>
+          </t-input>
+          <t-radio-group v-model="pluginFilter" variant="default-filled" size="small">
+            <t-radio-button value="all">全部 {{ listedPlugins.length }}</t-radio-button>
+            <t-radio-button value="enabled">运行中 {{ enabledPluginCount }}</t-radio-button>
+            <t-radio-button value="disabled">未使用 {{ disabledPluginCount }}</t-radio-button>
+          </t-radio-group>
+          <t-button theme="default" variant="outline" :loading="loading" @click="refreshPlugins">
+            <template #icon><t-icon name="refresh" /></template> 刷新
+          </t-button>
+        </div>
+
+        <div class="plugin-import-dialog-anchor">
           <!-- 导入方式选择对话框 -->
           <t-dialog
             :visible="importMethodDialog"
@@ -41,9 +44,13 @@
             :on-close="() => (importMethodDialog = false)"
             :on-cancel="backToTypeSelection"
           >
-            <template #header>选择导入方式</template>
+            <template #header>添加插件</template>
             <template #body>
               <div class="import-method-container">
+                <div v-if="guestAdapters.length" class="guest-format-picker">
+                  <label>插件格式</label>
+                  <t-select v-model="importFormat" :options="importFormats" />
+                </div>
                 <t-radio-group
                   v-model="importMethod"
                   variant="primary-filled"
@@ -60,22 +67,17 @@
                     size="large"
                     style="margin-top: 15px"
                   />
-                  <p class="hint-text">支持 HTTP/HTTPS 链接，插件文件应为 .js 或 .zip 格式</p>
+                  <p class="hint-text">支持 HTTP/HTTPS 链接，插件文件为单个 .js 文件</p>
                 </div>
 
-                <div v-else class="local-hint-container">
-                  Tips: 点击 "确定" 将从本地文件选择插件文件进行导入
-                </div>
+                <div v-else class="local-hint-container">点击“确定”选择要导入的插件文件</div>
               </div>
             </template>
           </t-dialog>
-          <t-button theme="default" @click="refreshPlugins">
-            <template #icon><t-icon name="refresh" /></template> 刷新
-          </t-button>
         </div>
       </div>
 
-      <div v-if="loading" class="loading">
+      <div v-if="loading && !plugins.length" class="loading">
         <div class="spinner"></div>
         <span>加载中...</span>
       </div>
@@ -89,79 +91,169 @@
         </t-button>
       </div>
 
-      <div v-else-if="plugins.length === 0" class="empty-state">
+      <div v-else-if="listedPlugins.length === 0" class="empty-state">
         <t-icon name="app" style="font-size: 48px" />
         <p>暂无已安装的插件</p>
         <p class="hint">点击"添加插件"按钮来安装新插件</p>
       </div>
 
-      <div v-else class="plugin-list">
+      <div v-else-if="filteredPlugins.length === 0" class="empty-state filtered-empty">
+        <t-icon name="search-error" style="font-size: 40px" />
+        <p>没有匹配的插件</p>
+        <t-button theme="default" variant="outline" @click="clearPluginFilters()"
+          >清除筛选</t-button
+        >
+      </div>
+
+      <div v-else ref="listViewport" class="plugin-list" @scroll="rememberListScroll">
         <div
-          v-for="plugin in plugins"
+          v-for="plugin in filteredPlugins"
           :key="plugin.pluginId"
           class="plugin-item"
-          :class="{ selected: isPluginSelected(plugin.pluginId) }"
+          :class="{ selected: plugin.enabled }"
         >
+          <div
+            class="plugin-mark"
+            :class="{
+              active: plugin.enabled,
+              'is-adapter': plugin.manifest?.contributes?.guestAdapters?.length
+            }"
+            aria-hidden="true"
+          >
+            <svg
+              v-if="!plugin.manifest?.contributes?.guestAdapters?.length"
+              class="plugin-record"
+              viewBox="0 0 80 80"
+              fill="none"
+            >
+              <circle cx="40" cy="40" r="31" fill="currentColor" />
+              <g stroke="white" stroke-opacity=".2">
+                <circle cx="40" cy="40" r="26" />
+                <circle cx="40" cy="40" r="22" />
+                <circle cx="40" cy="40" r="18" />
+                <path
+                  d="M18 27a26 26 0 0 1 18-13M62 53a26 26 0 0 1-18 13"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </g>
+              <circle cx="40" cy="40" r="11" fill="var(--td-brand-color, #ff527c)" />
+              <circle cx="40" cy="40" r="3" fill="white" />
+            </svg>
+            <t-icon v-else name="extension" size="36px" />
+          </div>
           <div class="plugin-info">
-            <h3>
-              {{ plugin.pluginInfo.name }}
+            <div class="plugin-heading">
+              <span
+                class="format-badge"
+                :class="{ 'native-format': !plugin.guest }"
+                :style="
+                  plugin.formatBadge
+                    ? {
+                        backgroundColor: plugin.formatBadge.backgroundColor,
+                        color: plugin.formatBadge.textColor
+                      }
+                    : undefined
+                "
+                >{{ plugin.formatBadge?.label || '澜音' }}</span
+              >
+              <h3>{{ plugin.pluginInfo.name }}</h3>
               <span class="version">{{ plugin.pluginInfo.version }}</span>
-              <span v-if="isPluginSelected(plugin.pluginId)" class="current-tag">当前使用</span>
-              <span v-if="isServicePlugin(plugin)" class="service-tag">服务插件</span>
-              <span v-if="plugin.disabled" class="disabled-tag">已禁用</span>
-            </h3>
-            <p class="author">作者: {{ plugin.pluginInfo.author }}</p>
-            <p class="description">{{ plugin.pluginInfo.description || '无描述' }}</p>
+            </div>
+            <p v-if="plugin.pluginInfo.description" class="description">
+              {{ plugin.pluginInfo.description }}
+            </p>
+            <div class="plugin-details">
+              <span class="author">{{ plugin.pluginInfo.author || '未署名作者' }}</span>
+              <span v-if="plugin.parentPluginName" class="plugin-dependency"
+                >依赖 {{ plugin.parentPluginName }}</span
+              >
+              <span v-if="isServicePlugin(plugin)">服务插件</span>
+            </div>
             <div
               v-if="plugin.supportedSources && Object.keys(plugin.supportedSources).length > 0"
               class="plugin-sources"
             >
-              <span class="source-label">支持的音源:</span>
               <span v-for="source in plugin.supportedSources" :key="source.name" class="source-tag">
                 {{ source.name }}
               </span>
             </div>
+            <div v-if="plugin.loadError" class="plugin-load-error">
+              <t-icon name="error-circle" /> {{ plugin.loadError }}
+            </div>
           </div>
           <div class="plugin-actions">
             <t-button
-              theme="default"
-              size="small"
-              :disabled="loading"
-              @click.stop="viewPluginLogs(plugin.pluginId, plugin.pluginInfo.name)"
+              class="plugin-use-button"
+              :theme="plugin.enabled ? 'default' : 'primary'"
+              :variant="plugin.enabled ? 'outline' : 'base'"
+              :loading="busyPluginId === plugin.pluginId"
+              :disabled="Boolean(busyPluginId) && busyPluginId !== plugin.pluginId"
+              @click="plugin.enabled ? closePlugin(plugin) : selectPlugin(plugin)"
+              >{{ plugin.enabled ? '关闭' : '使用' }}</t-button
             >
-              <template #icon><t-icon name="view-list" /></template> 日志
-            </t-button>
             <t-button
-              v-if="isServicePlugin(plugin)"
               theme="default"
-              size="small"
-              @click.stop="openConfigDialog(plugin)"
+              variant="text"
+              @click="
+                plugin.guest
+                  ? openGuestPermissions(plugin.parentPluginId!, plugin.guest)
+                  : openPermissionsDialog(plugin)
+              "
+              >权限</t-button
+            >
+            <t-button
+              v-if="plugin.enabled && getPluginConfiguration(plugin)"
+              theme="default"
+              variant="text"
+              :title="getPluginConfiguration(plugin)?.title"
+              @click="openPluginConfiguration(plugin)"
             >
               <template #icon><t-icon name="setting" /></template> 配置
             </t-button>
             <t-button
-              v-if="isServicePlugin(plugin)"
+              v-if="plugin.enabled && isServicePlugin(plugin)"
               theme="primary"
               size="small"
               @click.stop="openImportDialog(plugin)"
             >
               <template #icon><t-icon name="download" /></template> 导入歌单
             </t-button>
-            <t-button
-              v-if="!isPluginSelected(plugin.pluginId) && !isServicePlugin(plugin)"
-              theme="primary"
-              size="small"
-              @click="selectPlugin(plugin)"
-            >
-              <template #icon><t-icon name="check" /></template> 使用
-            </t-button>
-            <t-button
-              theme="danger"
-              size="small"
-              @click="uninstallPlugin(plugin.pluginId, plugin.pluginInfo.name)"
-            >
-              <template #icon><t-icon name="delete" /></template> 卸载
-            </t-button>
+            <t-dropdown trigger="click">
+              <t-button theme="default" variant="text" shape="square" aria-label="更多插件操作">
+                <template #icon><t-icon name="ellipsis" /></template>
+              </t-button>
+              <t-dropdown-menu>
+                <t-dropdown-item
+                  @click="
+                    viewPluginLogs(plugin.parentPluginId || plugin.pluginId, plugin.pluginInfo.name)
+                  "
+                  >查看日志</t-dropdown-item
+                >
+                <t-dropdown-item
+                  v-for="page in plugin.enabled
+                    ? plugin.manifest?.contributes?.settingsPages || []
+                    : []"
+                  :key="page.id"
+                  @click="openPluginSettings(plugin.pluginId, page.view)"
+                  >{{ page.title }}</t-dropdown-item
+                >
+                <t-dropdown-item
+                  v-if="plugin.enabled && isServicePlugin(plugin)"
+                  @click="openConfigDialog(plugin)"
+                  >插件配置</t-dropdown-item
+                >
+                <t-dropdown-item
+                  theme="error"
+                  @click="
+                    plugin.guest
+                      ? removeGuest(plugin.parentPluginId!, plugin.guest)
+                      : uninstallPlugin(plugin.pluginId, plugin.pluginInfo.name)
+                  "
+                  >卸载插件</t-dropdown-item
+                >
+              </t-dropdown-menu>
+            </t-dropdown>
           </div>
         </div>
       </div>
@@ -335,6 +427,33 @@
         </template>
       </t-dialog>
 
+      <t-dialog
+        v-model:visible="permissionsDialogVisible"
+        :close-btn="true"
+        attach="body"
+        width="560px"
+        :on-confirm="savePluginPermissionGrants"
+        confirm-btn="保存授权"
+        cancel-btn="取消"
+      >
+        <template #header>{{ permissionsPluginName }} - 权限管理</template>
+        <template #body>
+          <div v-if="permissionGroups.length" class="permission-list">
+            <div v-for="group in permissionGroups" :key="group.id" class="permission-item">
+              <div class="permission-copy">
+                <span class="permission-title">{{ group.title }}</span>
+                <p class="permission-reason">{{ group.description }}</p>
+              </div>
+              <t-switch
+                :value="group.keys.every((key) => permissionSelection.includes(key))"
+                @change="(value) => togglePermissionGroup(group.keys, Boolean(value))"
+              />
+            </div>
+          </div>
+          <t-empty v-else description="该插件没有声明权限" />
+        </template>
+      </t-dialog>
+
       <!-- 导入歌单 -->
       <ImportPlaylist
         v-model:visible="importDialogVisible"
@@ -346,7 +465,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, toRaw, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, nextTick, toRaw, computed } from 'vue'
+import { PERMISSION_GROUPS, permissionGroup } from '@shiqianjiang/ceru-plugin-sdk/permissions'
+import { pluginContributions } from '@renderer/services/pluginState'
+import { refreshPluginContributions } from '@renderer/services/pluginState'
+import type { GuestInfo } from '@shiqianjiang/ceru-plugin-sdk'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import ImportPlaylist from '@renderer/components/ServicePlugin/ImportPlaylist.vue'
@@ -375,12 +498,19 @@ interface PluginConfigField {
 }
 
 interface Plugin {
+  manifest?: import('@shiqianjiang/ceru-plugin-sdk').PluginManifest
   pluginId: string
   pluginName: string
   pluginInfo: PluginInfo
   supportedSources: { [key: string]: PluginSource }
   pluginType?: 'music-source' | 'service'
   disabled?: boolean
+  enabled?: boolean
+  loadError?: string
+  guest?: GuestInfo
+  parentPluginId?: string
+  parentPluginName?: string
+  formatBadge?: { label: string; backgroundColor: string; textColor: string }
 }
 
 // 定义API返回结果的接口
@@ -390,12 +520,135 @@ interface ApiResult {
   [key: string]: any
 }
 
-const plugins = ref<Plugin[]>([])
-const loading = ref(true)
+const plugins = ref<Plugin[]>(
+  pluginContributions.value.map(({ pluginId, manifest, enabled }) => ({
+    enabled,
+    pluginId,
+    pluginName: manifest.name,
+    pluginInfo: {
+      name: manifest.name,
+      version: manifest.version,
+      author: manifest.author || '',
+      description: manifest.description
+    },
+    manifest,
+    supportedSources: Object.fromEntries(
+      (manifest.contributes?.providers || []).map((provider: any) => [
+        provider.id,
+        { name: provider.name, qualitys: provider.qualities || [] }
+      ])
+    )
+  }))
+)
+const loading = ref(!plugins.value.length)
+const listViewport = ref<HTMLElement>()
+let listScrollTop = 0
+let listActive = true
+function rememberListScroll() {
+  if (listActive) listScrollTop = listViewport.value?.scrollTop ?? 0
+}
+onDeactivated(() => {
+  listActive = false
+})
+onActivated(async () => {
+  listActive = false
+  await nextTick()
+  if (listViewport.value) listViewport.value.scrollTop = listScrollTop
+  listActive = true
+})
+const busyPluginId = ref('')
+const pluginSearch = ref('')
+const pluginFilter = ref<'all' | 'enabled' | 'disabled'>('all')
+function clearPluginFilters() {
+  pluginSearch.value = ''
+  pluginFilter.value = 'all'
+}
+const enabledPluginCount = computed(
+  () => listedPlugins.value.filter((plugin) => plugin.enabled).length
+)
+const disabledPluginCount = computed(() => listedPlugins.value.length - enabledPluginCount.value)
+const filteredPlugins = computed(() => {
+  const query = pluginSearch.value.trim().toLowerCase()
+  return listedPlugins.value.filter((plugin) => {
+    if (pluginFilter.value === 'enabled' && !plugin.enabled) return false
+    if (pluginFilter.value === 'disabled' && plugin.enabled) return false
+    if (!query) return true
+    const text = [
+      plugin.pluginInfo.name,
+      plugin.pluginInfo.author,
+      plugin.pluginInfo.description,
+      ...Object.values(plugin.supportedSources || {}).map((source: any) => source.name)
+    ]
+      .join(' ')
+      .toLowerCase()
+    return text.includes(query)
+  })
+})
 const error = ref<string | null>(null)
-const plugTypeDialog = ref(false)
 const importMethodDialog = ref(false)
 const type = ref<'lx' | 'cr'>('cr')
+const importFormat = ref('ceru')
+const guestLists = ref<Record<string, GuestInfo[]>>({})
+const listedPlugins = computed<Plugin[]>(() =>
+  plugins.value.flatMap((parent) => [
+    parent,
+    ...(guestLists.value[parent.pluginId] || []).map((guest) => ({
+      pluginId: `${parent.pluginId}:guest:${guest.id}`,
+      pluginName: guest.name,
+      pluginInfo: {
+        name: guest.name,
+        version: guest.version,
+        author: guest.author || '',
+        description: '提供歌曲播放地址，搜索、歌单和歌词由兼容环境提供。'
+      },
+      guest,
+      parentPluginId: parent.pluginId,
+      parentPluginName: parent.pluginInfo.name,
+      formatBadge: guestFormatBadge(parent, guest),
+      enabled: Boolean(parent.enabled && guest.selected && guest.state !== 'error'),
+      loadError: guest.error,
+      supportedSources: Object.fromEntries(
+        guest.providers.map((provider) => [
+          provider.id,
+          {
+            name: provider.name,
+            type: 'music',
+            qualitys: provider.qualities
+          }
+        ])
+      )
+    }))
+  ])
+)
+function guestFormatBadge(plugin: Plugin, guest: GuestInfo) {
+  const adapter = plugin.manifest?.contributes?.guestAdapters?.find(
+    (item) => item.id === guest.adapterId
+  )
+  return (
+    adapter?.badge ?? {
+      label: adapter?.format || '子插件',
+      backgroundColor: '#64748b',
+      textColor: '#ffffff'
+    }
+  )
+}
+const guestAdapters = computed(() =>
+  pluginContributions.value
+    .filter((item) => item.enabled)
+    .flatMap(({ pluginId, manifest }) =>
+      (manifest.contributes?.guestAdapters || []).map((adapter: any) => ({
+        pluginId,
+        adapterId: adapter.id,
+        label: adapter.title || adapter.format,
+        value: pluginId + ':' + adapter.id
+      }))
+    )
+)
+const importFormats = computed(() => [
+  { label: '澜音插件（v2）', value: 'ceru' },
+  ...guestAdapters.value.map((item) => ({ label: item.label, value: item.value }))
+])
+const permissionsGuestId = ref<string | null>(null)
 const importMethod = ref<'local' | 'online'>('local')
 const onlineUrl = ref('')
 
@@ -442,6 +695,35 @@ const configValues = ref<Record<string, any>>({})
 const configSaving = ref(false)
 const configTesting = ref(false)
 const configTestResult = ref<{ success: boolean; message: string } | null>(null)
+const permissionsDialogVisible = ref(false)
+const permissionsPluginId = ref('')
+const permissionsPluginName = ref('')
+const permissionItems = ref<{ key: string; name?: string; reason?: string }[]>([])
+const permissionSelection = ref<string[]>([])
+const permissionGroups = computed(() => {
+  const groups = new Map<
+    string,
+    { id: string; title: string; description: string; keys: string[] }
+  >()
+  for (const item of permissionItems.value) {
+    const id = permissionGroup(item.name as any) || item.key
+    const group = groups.get(id) || {
+      id,
+      title: PERMISSION_GROUPS[id]?.title || '插件扩展能力',
+      description: '',
+      keys: [] as string[]
+    }
+    group.keys.push(item.key)
+    if (!group.description) group.description = item.reason || ''
+    groups.set(id, group)
+  }
+  return [...groups.values()]
+})
+function togglePermissionGroup(keys: string[], allowed: boolean) {
+  permissionSelection.value = allowed
+    ? [...new Set([...permissionSelection.value, ...keys])]
+    : permissionSelection.value.filter((key) => !keys.includes(key))
+}
 
 // 导入歌单相关
 const importDialogVisible = ref(false)
@@ -450,83 +732,78 @@ const importPluginName = ref('')
 
 // 获取store实例
 const localUserStore = LocalUserDetailStore()
+const openPluginSettings = (pluginId: string, view: string) =>
+  window.api.plugins.openSurface(pluginId, view)
 
-// 检查插件是否被选中
-function isPluginSelected(pluginId: string): boolean {
-  return localUserStore.userInfo.pluginId === pluginId
+function getPluginConfiguration(plugin: Plugin): { title: string; view: string } | undefined {
+  const manifest = plugin.manifest
+  const configuration = (
+    manifest?.contributes?.settingsPages?.[0] ??
+    manifest?.contributes?.commands?.find((command: any) =>
+      manifest.modules?.surfaces?.some(
+        (surface: any) => surface.id === command.view
+      )
+    )
+  )
+  return configuration?.view ? { title: configuration.title, view: configuration.view } : undefined
+}
+function openPluginConfiguration(plugin: Plugin) {
+  const configuration = getPluginConfiguration(plugin)
+  if (configuration) return openPluginSettings(plugin.pluginId, configuration.view)
+  return undefined
 }
 
+// 检查插件是否被选中
 // 选择插件
-function selectPlugin(plugin: Plugin) {
+function syncAfterPluginChange() {
+  // Updating the inventory and routing is background work, not part of the
+  // clicked button's runtime transition (another plugin may be awaiting permission).
+  void getPlugins()
+  void refreshPluginContributions(true).catch((error) => {
+    console.warn('刷新插件贡献失败:', error)
+    MessagePlugin.warning('插件状态已改变，部分界面刷新失败，请点击刷新重试')
+  })
+}
+
+async function selectPlugin(plugin: Plugin) {
+  if (plugin.guest) return useGuest(plugin.parentPluginId!, plugin.guest.id, plugin.pluginId)
+  if (busyPluginId.value) return
+  busyPluginId.value = plugin.pluginId
   try {
-    // 确保store已初始化
-    if (!localUserStore.initialization) {
-      localUserStore.init()
+    const activation = await window.api.plugins.setActive(plugin.pluginId)
+    if (activation?.error) throw new Error(activation.error)
+    plugin.enabled = true
+    plugin.disabled = false
+    if (!localUserStore.initialization) localUserStore.init()
+    localUserStore.userInfo.pluginId = plugin.pluginId
+    localUserStore.userInfo.pluginName = plugin.pluginInfo.name
+    // Using a plugin selects its implementation of each existing source, not a new source.
+    const sources = (plugin.manifest?.contributes?.providers ?? []).map(provider => provider.id)
+    await Promise.all(sources.map(source => window.api.plugins.setProviderOwner(source, plugin.pluginId)))
+    localUserStore.userInfo.sourcePluginMap = {
+      ...(localUserStore.userInfo.sourcePluginMap ?? {}),
+      ...Object.fromEntries(sources.map(source => [source, plugin.pluginId]))
     }
-
-    const { pluginId, pluginInfo, supportedSources: sources } = plugin
-
-    // 检查插件是否提供音源
-    if (!sources || Object.keys(sources).length === 0) {
-      MessagePlugin.warning(`插件 "${pluginInfo.name}" 没有提供可用的音源。`)
-      // 即使没有音源，也可能需要选择该插件（如果插件有其他功能）
-      // 这里我们只更新ID，清空音源相关信息
-      localUserStore.userInfo.pluginId = pluginId
-      localUserStore.userInfo.pluginName = pluginInfo.name
-      localUserStore.userInfo.supportedSources = {}
-      localUserStore.userInfo.selectSources = ''
-      localUserStore.userInfo.selectQuality = ''
-      MessagePlugin.success(`已选择插件: ${pluginInfo.name}`)
-      return
-    }
-
-    // 转换supportedSources格式以匹配UserInfo类型，并添加 `type` 字段
-    const supportedSourcesForStore = sources
-    let selectSources: string
-    // 获取第一个音源作为默认选择
-    if (
-      !(typeof localUserStore.userInfo.selectSources === 'string') ||
-      !sources[localUserStore.userInfo.selectSources as unknown as string]
-    ) {
-      selectSources = Object.keys(sources)[0]
-    } else {
-      selectSources = localUserStore.userInfo.selectSources
-    }
-    let selectQuality: string
-    if (
-      !(typeof localUserStore.userInfo.selectQuality === 'string') ||
-      !sources[localUserStore.userInfo.selectSources as unknown as string] ||
-      !sources[localUserStore.userInfo.selectSources as unknown as string][
-        localUserStore.userInfo.selectQuality as unknown as string
-      ]
-    ) {
-      const qualitys = sources[selectSources].qualitys
-      selectQuality = qualitys[qualitys.length - 1]
-    } else {
-      selectQuality = localUserStore.userInfo.selectQuality
-    }
-
-    // 更新userInfo
-    localUserStore.userInfo.pluginId = pluginId
-    localUserStore.userInfo.pluginName = pluginInfo.name
-    localUserStore.userInfo.supportedSources = supportedSourcesForStore
-    localUserStore.userInfo.selectSources = selectSources
-    localUserStore.userInfo.selectQuality = selectQuality
-
-    MessagePlugin.success(`已选择插件: ${pluginInfo.name}`)
-  } catch (err: any) {
-    console.error('选择插件失败:', err)
-    MessagePlugin.error(`选择插件失败: ${err.message || '未知错误'}`)
+    syncAfterPluginChange()
+    MessagePlugin.success(`已使用 ${plugin.pluginInfo.name}`)
+    if (activation?.viewError) MessagePlugin.warning(`插件已启用，配置页打开失败：${activation.viewError}`)
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '启动插件失败')
+  } finally {
+    busyPluginId.value = ''
   }
 }
 
 // 获取已安装的插件列表
+let inventoryRequest = 0
 async function getPlugins() {
-  loading.value = true
+  const request = ++inventoryRequest
+  loading.value = !plugins.value.length
   error.value = null
 
   try {
     const result = await window.api.plugins.loadAllPlugins()
+    if (request !== inventoryRequest) return
     console.log(result)
     // 检查返回结果是否有错误
     if (result && typeof result === 'object' && 'error' in result) {
@@ -534,18 +811,20 @@ async function getPlugins() {
       error.value = `加载插件失败: ${result.error}`
       plugins.value = []
     } else if (Array.isArray(result)) {
+      const records = await Promise.all(
+        result.map(
+          async (plugin: Plugin) =>
+            [
+              plugin.pluginId,
+              plugin.manifest?.contributes?.guestAdapters?.length
+                ? await window.api.plugins.guestList(plugin.pluginId)
+                : []
+            ] as const
+        )
+      )
+      if (request !== inventoryRequest) return
+      guestLists.value = Object.fromEntries(records)
       plugins.value = result
-      // 异步获取每个插件的类型
-      for (const p of plugins.value) {
-        try {
-          const typeRes = await window.api.plugins.getPluginType(p.pluginId)
-          if (typeRes?.data) {
-            p.pluginType = typeRes.data
-          }
-        } catch {
-          // 旧插件可能不支持，忽略
-        }
-      }
       console.log('插件列表加载完成', result)
     } else {
       // 处理意外的返回格式
@@ -554,24 +833,151 @@ async function getPlugins() {
       error.value = '插件数据格式不正确'
     }
   } catch (err: any) {
+    if (request !== inventoryRequest) return
     console.error('获取插件列表失败:', err)
     error.value = err?.message || '未知错误'
     plugins.value = []
   } finally {
-    loading.value = false
+    if (request === inventoryRequest) loading.value = false
+  }
+}
+
+async function openPermissionsDialog(plugin: Plugin) {
+  permissionsGuestId.value = null
+  permissionsPluginId.value = plugin.pluginId
+  permissionsPluginName.value = plugin.pluginInfo.name
+  try {
+    const [manifestResult, grantedResult] = await Promise.all([
+      window.api.plugins.getManifest(plugin.pluginId),
+      window.api.plugins.getPermissions(plugin.pluginId)
+    ])
+    permissionItems.value = manifestResult?.data?.permissions || []
+    permissionSelection.value = grantedResult?.data || []
+    permissionsDialogVisible.value = true
+  } catch (err: any) {
+    MessagePlugin.error(`读取插件权限失败: ${err.message || '未知错误'}`)
+  }
+}
+
+async function useGuest(pluginId: string, guestId: string | null, rowId: string) {
+  if (busyPluginId.value) return
+  busyPluginId.value = rowId
+  try {
+    await window.api.plugins.guestSelect(pluginId, guestId)
+    if (guestId) localUserStore.userInfo.pluginId = pluginId
+    for (const guest of guestLists.value[pluginId] ?? []) guest.selected = guest.id === guestId
+    if (guestId) {
+      const parent = plugins.value.find((item) => item.pluginId === pluginId)
+      if (parent) parent.enabled = true
+    }
+    syncAfterPluginChange()
+    MessagePlugin.success(guestId ? '已使用插件' : '已关闭插件')
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '切换失败')
+  } finally {
+    busyPluginId.value = ''
+  }
+}
+async function openGuestPermissions(pluginId: string, guest: GuestInfo) {
+  try {
+    permissionsPluginId.value = pluginId
+    permissionsGuestId.value = guest.id
+    permissionsPluginName.value = guest.name
+    permissionItems.value = [
+      {
+        key: 'network',
+        name: 'network.request',
+        reason: '允许此子插件请求在线音乐服务并解析播放地址'
+      },
+      {
+        key: 'network.private',
+        name: 'network.private',
+        reason: '允许此子插件访问本机或局域网接口'
+      }
+    ]
+    permissionSelection.value = await window.api.plugins.guestPermissions(pluginId, guest.id)
+    permissionsDialogVisible.value = true
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '读取权限失败')
+  }
+}
+function removeGuest(pluginId: string, guest: GuestInfo) {
+  const confirmation = DialogPlugin.confirm({
+    header: '移除子插件',
+    body: `确定移除“${guest.name}”及其授权记录吗？`,
+    onConfirm: async () => {
+      try {
+        await window.api.plugins.guestRemove(pluginId, guest.id)
+        confirmation.destroy()
+        await getPlugins()
+        await refreshPluginContributions(true)
+        MessagePlugin.success('已移除')
+      } catch (error: any) {
+        MessagePlugin.error(error.message || '移除失败')
+      }
+    },
+    onClose: () => confirmation.destroy(),
+    onCancel: () => confirmation.destroy()
+  })
+}
+
+async function savePluginPermissionGrants() {
+  try {
+    if (permissionsGuestId.value) {
+      await window.api.plugins.guestSetPermissions(
+        permissionsPluginId.value,
+        permissionsGuestId.value,
+        [...permissionSelection.value]
+      )
+      permissionsDialogVisible.value = false
+      MessagePlugin.success('子插件权限已保存')
+      await getPlugins()
+      return
+    }
+    const result = await window.api.plugins.savePermissions(permissionsPluginId.value, [
+      ...permissionSelection.value
+    ])
+    if (result?.error) throw new Error(result.error)
+    permissionsDialogVisible.value = false
+    MessagePlugin.success('插件权限已保存')
+  } catch (err: any) {
+    MessagePlugin.error(`保存插件权限失败: ${err.message || '未知错误'}`)
   }
 }
 
 // 显示导入方式选择对话框
 function showImportMethodDialog() {
-  plugTypeDialog.value = false
+  if (!importFormats.value.some((item) => item.value === importFormat.value))
+    importFormat.value = 'ceru'
   importMethodDialog.value = true
+}
+
+function openInstallDialog() {
+  showImportMethodDialog()
+}
+
+async function closePlugin(plugin: Plugin) {
+  if (plugin.guest) return useGuest(plugin.parentPluginId!, null, plugin.pluginId)
+  if (busyPluginId.value) return
+  busyPluginId.value = plugin.pluginId
+  try {
+    const result = await window.api.plugins.setEnabled(plugin.pluginId, false)
+    if (result?.error) throw new Error(result.error)
+    plugin.enabled = false
+    plugin.disabled = true
+    if (localUserStore.userInfo.pluginId === plugin.pluginId) localUserStore.userInfo.pluginId = ''
+    syncAfterPluginChange()
+    MessagePlugin.success(`已关闭 ${plugin.pluginInfo.name}`)
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '关闭插件失败')
+  } finally {
+    busyPluginId.value = ''
+  }
 }
 
 // 返回到插件类型选择
 function backToTypeSelection() {
   importMethodDialog.value = false
-  plugTypeDialog.value = true
   onlineUrl.value = '' // 清空在线地址
 }
 
@@ -580,6 +986,24 @@ async function handleImport() {
   try {
     importMethodDialog.value = false
     let result: ApiResult
+    if (importFormat.value !== 'ceru') {
+      const adapter = guestAdapters.value.find((item) => item.value === importFormat.value)
+      if (!adapter) throw new Error('请先安装对应的兼容环境')
+      if (importMethod.value === 'online' && !onlineUrl.value.trim())
+        throw new Error('请输入插件下载地址')
+      const guest = await window.api.plugins.guestImport(
+        adapter.pluginId,
+        adapter.adapterId,
+        importMethod.value === 'online' ? onlineUrl.value.trim() : undefined
+      )
+      if (guest) {
+        await getPlugins()
+        await refreshPluginContributions(true)
+        MessagePlugin.success(`已导入 ${guest.name}`)
+      }
+      onlineUrl.value = ''
+      return
+    }
 
     if (importMethod.value === 'local') {
       // 本地导入：调用文件选择API
@@ -621,9 +1045,9 @@ async function handleImport() {
       await getPlugins()
       // 显示成功消息
       if (result && result.pluginInfo) {
-        MessagePlugin.success(`插件 "${result.pluginInfo.name}" 安装成功！`)
+        MessagePlugin.success(`插件 "${result.pluginInfo.name}" 安装成功，请在列表中点击使用`)
       } else {
-        MessagePlugin.success('插件安装成功！')
+        MessagePlugin.success('插件安装成功，请在列表中点击使用')
       }
     }
 
@@ -775,11 +1199,7 @@ function exportLogs() {
     const safeName = (currentLogPluginName.value || currentLogPluginId.value || 'plugin')
       .replace(/[\\/:*?"<>|]/g, '_')
       .slice(0, 60)
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, '-')
-      .replace('T', '_')
-      .slice(0, 19)
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
     const filename = `${safeName}_${stamp}.log`
 
     const a = document.createElement('a')
@@ -1067,65 +1487,143 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.page {
-  display: flex;
-  flex-direction: column;
-  // height: 100%;
-  // max-height: 100vh;
-  background: var(--plugins-bg);
-  color: var(--plugins-text-primary);
-  overflow: hidden;
-
-  h2 {
-    font-weight: 600;
-    color: var(--plugins-text-primary);
-    margin: 0 0 16px 0;
-  }
+.guest-format-picker {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
 }
-
-.header {
-  -webkit-app-region: drag;
+.guest-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+.guest-row {
   display: flex;
   align-items: center;
-  background-color: var(--plugins-header-bg);
-  padding: 1.5rem;
-  position: sticky;
-  z-index: 1000;
-  top: 0;
-  left: 0;
-  right: 0;
-  border-bottom: 1px solid var(--plugins-border);
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 10px;
+}
+.guest-row p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+.guest-buttons {
+  display: flex;
+  gap: 6px;
   flex-shrink: 0;
 }
-
-.plugins-container {
+.permission-list {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 12px;
+}
+.permission-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.permission-copy {
   flex: 1;
-  padding: 24px;
-  box-sizing: border-box;
+  min-width: 0;
+}
+.permission-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+.permission-reason {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--td-text-color-secondary);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.page {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--td-text-color-primary, #20232b);
+  min-width: 0;
+}
+.plugins-container {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  height: 100%;
   min-height: 0;
-  background: var(--plugins-bg);
+  box-sizing: border-box;
+  padding: 30px 28px;
+  max-width: 1120px;
+  margin-inline: auto;
 }
-
 .plugin-actions-hearder {
-  margin-bottom: 24px;
   flex-shrink: 0;
-
-  h2 {
-    margin-bottom: 16px;
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--plugins-text-primary);
-  }
+  margin-bottom: 24px;
 }
-
-.plugin-actions {
+.plugins-title-row {
   display: flex;
-
-  gap: 12px;
-  margin-top: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+}
+.plugins-title-row h2 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 36px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+}
+.plugins-title-row > :deep(.t-button) {
+  height: 38px;
+  padding-inline: 18px;
+  border-radius: 9px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--td-brand-color) 20%, transparent);
+}
+.plugins-subtitle {
+  margin: 5px 0 0;
+  font-size: 13px;
+  color: var(--td-text-color-secondary, #737985);
+}
+.plugin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 10px;
+  background: var(--td-bg-color-container, #fff);
+  border: 1px solid color-mix(in srgb, var(--td-component-stroke) 70%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgb(28 33 46 / 3%);
+}
+.plugin-search {
+  flex: 1;
+  max-width: 360px;
+  min-width: 160px;
+}
+.plugin-search :deep(.t-input) {
+  border-color: transparent;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 7px;
+}
+.plugin-search :deep(.t-input--focused) {
+  border-color: var(--td-brand-color);
+}
+.plugin-toolbar :deep(.t-radio-group) {
+  border-radius: 7px;
+}
+.plugin-toolbar > :last-child {
+  margin-left: auto;
+}
+.plugin-import-dialog-anchor {
+  height: 0;
 }
 
 .loading {
@@ -1212,160 +1710,211 @@ onMounted(async () => {
 }
 
 .plugin-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   flex: 1;
-  // overflow-y: auto;
-  // overflow-x: hidden;
   min-height: 0;
-  max-height: 100%;
-
-  /* 自定义滚动条 */
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: var(--plugins-bg);
-    border-radius: 3px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: var(--plugins-border);
-    border-radius: 3px;
-
-    &:hover {
-      background: var(--plugins-text-muted);
-    }
-  }
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  align-content: start;
+  padding: 2px 12px 24px 2px;
+  display: grid;
+  gap: 18px;
+  padding-bottom: 12px;
 }
-
 .plugin-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 20px;
-  border-radius: 12px;
-  background-color: var(--plugins-card-bg);
-  box-shadow: var(--plugins-card-shadow);
-  transition: all 0.3s ease;
-  border: 2px solid transparent;
-  position: relative;
-
-  // &:hover {
-  //   box-shadow: var(--plugins-card-shadow-hover);
-  //   transform: translateY(-2px);
-  // }
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 22px;
+  padding: 26px;
+  border: 1px solid color-mix(in srgb, var(--td-component-stroke, #eaecf0) 80%, transparent);
+  border-radius: 16px;
+  background: var(--td-bg-color-container, #fff);
+  box-shadow:
+    0 2px 3px rgb(28 33 46 / 2%),
+    0 10px 28px rgb(28 33 46 / 4%);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
-
 .plugin-item.selected {
-  background-color: var(--plugins-card-selected-bg);
-  border: 2px solid var(--plugins-card-selected-border);
-
-  // &::before {
-  //   content: '';
-  //   position: absolute;
-  //   top: 0;
-  //   left: 0;
-  //   right: 0;
-  //   height: 3px;
-  //   background: linear-gradient(90deg, var(--plugins-card-selected-border), var(--td-brand-color));
-  //   border-radius: 12px 12px 0 0;
-  // }
+  border-color: color-mix(in srgb, var(--td-brand-color) 24%, var(--td-component-stroke));
+  box-shadow:
+    0 2px 3px rgb(28 33 46 / 2%),
+    0 10px 28px color-mix(in srgb, var(--td-brand-color) 7%, transparent);
 }
-
+.plugin-mark {
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  color: #3d4051;
+  background: linear-gradient(
+    145deg,
+    var(--td-bg-color-container),
+    var(--td-bg-color-secondarycontainer)
+  );
+  border: 1px solid color-mix(in srgb, var(--td-component-stroke) 60%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 45%),
+    0 5px 12px rgb(28 33 46 / 5%);
+}
+.plugin-record {
+  width: 72px;
+  height: 72px;
+  filter: drop-shadow(0 3px 2px rgb(28 33 46 / 18%));
+}
+.plugin-mark.is-adapter {
+  color: var(--td-brand-color);
+  background: linear-gradient(145deg, var(--td-bg-color-container), var(--td-brand-color-light));
+}
 .plugin-info {
-  flex: 1;
-  margin-right: 20px;
+  min-width: 0;
 }
-
-.plugin-info h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
+.plugin-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  color: var(--plugins-text-primary);
-  line-height: 1.4;
+  margin-top: 1px;
 }
-
+.plugin-heading h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+.format-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.native-format {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+.guest-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .version {
-  font-size: 12px;
-  color: var(--plugins-text-muted);
-  font-weight: 500;
-  background: var(--plugins-border);
-  padding: 2px 8px;
-  border-radius: 6px;
+  font-size: 11px;
+  color: var(--td-text-color-secondary);
+  white-space: nowrap;
+  border: 1px solid var(--td-component-stroke);
+  padding: 0 6px;
+  border-radius: 5px;
+  line-height: 18px;
 }
-
-.current-tag {
-  background: linear-gradient(135deg, var(--td-brand-color-5), var(--td-brand-color-6));
-  color: white;
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(0, 167, 77, 0.2);
-}
-
-.author {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: var(--plugins-text-secondary);
-}
-
 .description {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  color: var(--plugins-text-secondary);
-  line-height: 1.5;
-  max-width: 500px;
+  margin: 9px 0 8px;
+  max-width: 64ch;
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
 }
-
+.plugin-details {
+  display: flex;
+  gap: 16px;
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+  line-height: 20px;
+}
 .plugin-sources {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-top: 8px;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid color-mix(in srgb, var(--td-component-stroke) 65%, transparent);
 }
-
-.source-label {
-  font-size: 13px;
-  color: var(--plugins-text-muted);
-  font-weight: 500;
-}
-
 .source-tag {
-  background: linear-gradient(135deg, var(--td-brand-color-4), var(--td-brand-color-5));
-  color: white;
-  padding: 4px 10px;
-  border-radius: 12px;
   font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 1px 3px rgba(0, 167, 77, 0.2);
+  color: var(--td-text-color-secondary);
+  line-height: 24px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--td-component-stroke) 70%, transparent);
+  border-radius: 6px;
+  background: var(--td-bg-color-container-hover, #f7f8fa);
 }
-
-.service-tag {
-  background: linear-gradient(135deg, #5b8def, #3a6ed8);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 16px;
+.current-tag {
+  margin-left: 8px;
+  color: var(--td-brand-color);
   font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(58, 110, 216, 0.2);
 }
-
-.disabled-tag {
-  background: linear-gradient(135deg, #e64545, #b51d1d);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 16px;
+.plugin-load-error {
+  margin-top: 10px;
+  color: var(--td-error-color);
   font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(181, 29, 29, 0.25);
+  line-height: 1.6;
+}
+.plugin-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 1px;
+}
+.plugin-actions :deep(.t-button) {
+  border-radius: 7px;
+}
+.plugin-use-button {
+  min-width: 76px;
+  margin-right: 8px;
+}
+.plugin-use-button:deep(.t-button--theme-primary) {
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--td-brand-color) 18%, transparent);
+}
+@media (max-width: 860px) {
+  .plugins-container {
+    padding: 22px 16px;
+  }
+  .plugin-toolbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .plugin-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .plugin-item {
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 16px;
+    padding: 22px;
+  }
+  .plugin-mark {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+  }
+  .plugin-record {
+    width: 56px;
+    height: 56px;
+  }
+  .plugin-actions {
+    grid-column: 2;
+    padding-top: 2px;
+  }
+  .guest-row {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plugin-item {
+    transition: none;
+  }
 }
 
 .config-form {
@@ -1409,13 +1958,6 @@ onMounted(async () => {
       color: #e34d59;
     }
   }
-}
-
-.plugin-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 120px;
 }
 
 /* Moved to global style */
@@ -1771,79 +2313,6 @@ onMounted(async () => {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
-  .plugins-container {
-    padding: 16px;
-  }
-
-  .plugin-item {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 16px;
-
-    .plugin-info {
-      margin-right: 0;
-    }
-
-    .plugin-actions {
-      flex-direction: row;
-      justify-content: flex-end;
-      min-width: auto;
-    }
-  }
-
-  :deep(.log-dialog) {
-    .t-dialog {
-      width: 95% !important;
-      max-width: none !important;
-      max-height: 90vh !important;
-    }
-  }
-
-  .console-container {
-    height: 50vh;
-    max-height: 400px;
-    min-height: 250px;
-  }
-
-  .log-dialog-header {
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px 16px;
-
-    .log-title {
-      order: 1;
-      flex: 1 1 100%;
-      justify-content: center;
-      margin-bottom: 4px;
-    }
-
-    .log-actions {
-      order: 2;
-      margin-right: 0;
-
-      .t-button {
-        padding: 2px 8px;
-        font-size: 11px;
-      }
-    }
-
-    .mac-controls {
-      order: 3;
-    }
-  }
-
-  .console-content {
-    font-size: 12px;
-  }
-
-  .log-entries .log-entry {
-    .log-timestamp {
-      width: 60px;
-      font-size: 10px;
-    }
-  }
-}
 </style>
 
 <style lang="scss">

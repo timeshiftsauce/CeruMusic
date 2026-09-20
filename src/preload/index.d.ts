@@ -8,6 +8,11 @@ import type {
 } from '../common/types/hotkeys'
 // 自定义 API 接口
 interface CustomAPI {
+  deepLinks: {
+    pending: () => Promise<import('../common/types/deepLink').QueuedDeepLink[]>
+    acknowledge: (sequence: number) => Promise<void>
+    onChanged: (callback: () => void) => () => void
+  }
   autoUpdater: any
   minimize: () => void
   maximize: () => void
@@ -25,7 +30,7 @@ interface CustomAPI {
       args: {
         source: any
       } & (MethodParams<T> extends object ? MethodParams<T> : { [key: string]: any })
-    ) => ReturnType<MainApi[T]>
+    ) => Promise<any>
     invoke: (channel: string, ...args: any[]) => Promise<any>
   }
 
@@ -119,6 +124,90 @@ interface CustomAPI {
 
   // 插件管理API
   plugins: {
+    accountLogout: (pluginId: string, itemId: string) => Promise<void>
+    accountSummary: (
+      pluginId: string,
+      itemId: string
+    ) => Promise<import('@shiqianjiang/ceru-plugin-sdk').AccountSummary>
+    onAccountChanged: (callback: (event: { pluginId: string }) => void) => () => void
+    guestImport: (
+      pluginId: string,
+      adapterId: string,
+      url?: string
+    ) => Promise<import('@shiqianjiang/ceru-plugin-sdk').GuestInfo | null>
+    guestList: (pluginId: string) => Promise<import('@shiqianjiang/ceru-plugin-sdk').GuestInfo[]>
+    guestSelect: (pluginId: string, guestId: string | null) => Promise<void>
+    guestUpdate: (
+      pluginId: string,
+      guestId: string,
+      url: string
+    ) => Promise<import('@shiqianjiang/ceru-plugin-sdk').GuestInfo>
+    guestRemove: (pluginId: string, guestId: string) => Promise<void>
+    guestPermissions: (pluginId: string, guestId: string) => Promise<string[]>
+    guestSetPermissions: (pluginId: string, guestId: string, keys: string[]) => Promise<void>
+    onUI: (callback: (request: any) => void) => () => void
+    respondUI: (result: any) => Promise<any>
+    uiReady: (ready: boolean) => Promise<boolean>
+    onUICancel: (callback: (request: { id: string }) => void) => () => void
+    openSurface: (pluginId: string, surfaceId: string) => Promise<any>
+    mountSurface: (
+      pluginId: string,
+      surfaceId: string
+    ) => Promise<import('@common/pluginDrawer').PluginVisibleSession>
+    surfaceReady: (
+      pluginId: string,
+      surfaceId: string,
+      sessionId: string
+    ) => Promise<import('@shiqianjiang/ceru-plugin-sdk').JsonObject>
+    onSurfaceState: (
+      callback: (event: {
+        pluginId: string
+        sessionId: string
+        state?: import('@shiqianjiang/ceru-plugin-sdk').JsonObject
+        closed: boolean
+      }) => void
+    ) => () => void
+    surfaceAction: (
+      pluginId: string,
+      surfaceId: string,
+      sessionId: string,
+      action: string,
+      input: unknown
+    ) => Promise<any>
+    drawerAction: (
+      pluginId: string,
+      surfaceId: string,
+      sessionId: string,
+      index: number,
+      values: Record<string, unknown>
+    ) => Promise<import('@shiqianjiang/ceru-plugin-sdk').JsonObject>
+    closeDrawer: (pluginId: string, surfaceId: string, sessionId: string) => Promise<void>
+    contributions: () => Promise<any[]>
+    prepareExternal: (sequence: number) => Promise<{
+      name: string
+      version: string
+      description: string
+      update: boolean
+      formats: { value: string; label: string }[]
+    }>
+    commitExternal: (sequence: number, format?: string) => Promise<any>
+    discardExternal: (sequence: number) => Promise<void>
+    openPlaylistImportMenu: (pluginId: string, menuId: string) => Promise<unknown>
+    restoreEnabled: () => Promise<void>
+    setActive: (
+      pluginId: string | null
+    ) => Promise<{ success?: boolean; error?: string; viewError?: string }>
+    setProviderOwner: (source: string, pluginId: string | null) => Promise<boolean>
+    setCapabilityOwner: (
+      source: string,
+      capability: string,
+      pluginId: string | null
+    ) => Promise<boolean>
+    setEnabled: (pluginId: string, enabled: boolean) => Promise<any>
+    updateLocal: (pluginId: string) => Promise<any>
+    updateFromUrl: (pluginId: string, url: string) => Promise<any>
+    onChanged: (callback: (change?: any) => void) => () => void
+    importerTracks: (pluginId: string, importerId: string, input: any) => Promise<any>
     selectAndAddPlugin: (type: 'lx' | 'cr') => Promise<any>
     downloadAndAddPlugin: (url: string, type: 'lx' | 'cr', targetPluginId?: string) => Promise<any>
     uninstallPlugin(pluginId: string): ApiResult | PromiseLike<ApiResult>
@@ -126,6 +215,9 @@ interface CustomAPI {
     getPluginType: (pluginId: string) => Promise<any>
     getConfigSchema: (pluginId: string) => Promise<any>
     getConfig: (pluginId: string) => Promise<any>
+    getPermissions: (pluginId: string) => Promise<any>
+    getManifest: (pluginId: string) => Promise<any>
+    savePermissions: (pluginId: string, permissions: string[]) => Promise<any>
     saveConfig: (pluginId: string, config: Record<string, any>) => Promise<any>
     testConnection: (pluginId: string) => Promise<any>
     getPlaylists: (pluginId: string) => Promise<any>
@@ -212,6 +304,7 @@ interface CustomAPI {
   }
 
   localMusic: {
+    getCoverBase64: (trackId: string) => Promise<string>
     [x: string]: any
     selectDirs: () => Promise<string[]>
     scan: (dirs: string[]) => Promise<any[]>
@@ -221,6 +314,13 @@ interface CustomAPI {
       tagWriteOptions: any
     ) => Promise<{ success: boolean; message?: string }>
     getLyric: (songmid: string) => Promise<string>
+    getTags: (
+      songmid: string,
+      includeLyrics?: boolean
+    ) => Promise<import('../common/types/localMusicMetadata').LocalMusicTags | null>
+    onTagsChanged: (
+      callback: (event: import('../common/types/localMusicMetadata').LocalMusicTagsChanged) => void
+    ) => () => void
     onScanProgress: (callback: (processed: number, total: number) => void) => void
     onScanFinished: (callback: (resList: any[]) => void) => void
     removeScanProgress: () => void
@@ -228,18 +328,29 @@ interface CustomAPI {
   }
 
   share: {
+    exportPlaylistResolver: (
+      sources: string[]
+    ) => Promise<{ code: string; md5: string; type: 'cr'; qualities: string[] }>
+    exportResolver: (
+      source: string,
+      song: any
+    ) => Promise<{
+      code: string
+      md5: string
+      type: 'cr'
+      pluginId: string
+      pluginName: string
+      qualities: string[]
+      musicInfo: Record<string, any>
+    }>
+    createDescriptor: (
+      source: string,
+      song: any
+    ) => Promise<{ id: string; url: string; template: string }>
+    readDescriptor: (id: string) => Promise<any>
     getPluginCodeAndMd5: (
       pluginId: string
     ) => Promise<{ code: string; md5: string; type: 'cr' | 'lx' } | { error: string }>
-    onShareOpen: (callback: (payload: { id: string }) => void) => () => void
-    onPlaylistShareOpen: (callback: (payload: { id: string }) => void) => () => void
-    getPending: () => Promise<string[]>
-    getPendingPlaylistShares: () => Promise<string[]>
-  }
-
-  listenTogether: {
-    onShareOpen: (callback: (payload: { code: string }) => void) => () => void
-    getPendingCodes: () => Promise<string[]>
   }
 
   clipboard: {

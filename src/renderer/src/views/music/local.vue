@@ -663,7 +663,7 @@ function onEditorSaved(payload: any) {
   tagEditorSong.value.name = payload.name || tagEditorSong.value.name
   tagEditorSong.value.singer = payload.singer || tagEditorSong.value.singer
   tagEditorSong.value.albumName = payload.albumName || tagEditorSong.value.albumName
-  tagEditorSong.value.lrc = payload.lrc || tagEditorSong.value.lrc
+  if (typeof payload.lrc === 'string') tagEditorSong.value.lrc = payload.lrc
   if (payload.img) {
     tagEditorSong.value.img = payload.img
     tagEditorSong.value.hasCover = true

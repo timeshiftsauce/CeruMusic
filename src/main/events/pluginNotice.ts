@@ -35,6 +35,7 @@ export interface PluginNoticeData {
   timestamp?: number
   pluginName?: string
   pluginId?: string
+  guestId?: string
 }
 
 export interface DialogNotice {
@@ -43,6 +44,7 @@ export interface DialogNotice {
   timestamp: number
   pluginName: string
   pluginId?: string
+  guestId?: string
   dialogType: 'update' | 'info' | 'error' | 'warning' | 'success'
   title: string
   message: string
@@ -119,7 +121,8 @@ export function sendPluginNotice(noticeData: PluginNoticeData, pluginName?: stri
       data: noticeData.data,
       timestamp: noticeData.timestamp || Date.now(),
       pluginName: pluginName || noticeData.pluginName || 'Unknown Plugin',
-      pluginId: noticeData.pluginId
+      pluginId: noticeData.pluginId,
+      guestId: noticeData.guestId
     }
 
     // 根据通知类型处理不同的逻辑

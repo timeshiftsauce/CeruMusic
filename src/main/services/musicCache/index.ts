@@ -3,6 +3,7 @@ import * as fs from 'fs/promises'
 import * as crypto from 'crypto'
 import axios from 'axios'
 import { configManager } from '../ConfigManager'
+import { applyPlaybackRequestHeaders } from '../plugin/playbackRequests'
 
 export class MusicCacheService {
   private cacheIndex: Map<string, string> = new Map()
@@ -173,9 +174,9 @@ export class MusicCacheService {
         url: url,
         responseType: 'stream',
         timeout: 30000,
-        headers: {
+        headers: applyPlaybackRequestHeaders(url, {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        })
       })
 
       const cacheFilePath = this.getCacheFilePath(cacheKey, url)

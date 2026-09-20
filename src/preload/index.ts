@@ -4,6 +4,16 @@ import type { HotkeyConfigPayload } from '@common/types/hotkeys'
 
 // Custom APIs for renderer
 const api = {
+  deepLinks: {
+    pending: (): Promise<import('../common/types/deepLink').QueuedDeepLink[]> =>
+      ipcRenderer.invoke('deeplink:pending'),
+    acknowledge: (sequence: number) => ipcRenderer.invoke('deeplink:ack', sequence),
+    onChanged: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('deeplink:changed', handler)
+      return () => ipcRenderer.removeListener('deeplink:changed', handler)
+    }
+  },
   // 窗口控制方法
   minimize: () => {
     console.log('preload: 发送 window-minimize 事件')
@@ -45,12 +55,101 @@ const api = {
   },
   // 音乐相关方法
   music: {
-    requestSdk: (api: string, args: any) =>
-      ipcRenderer.invoke('service-music-sdk-request', api, args),
+    requestSdk: async (api: string, args: any) => {
+      const result = await ipcRenderer.invoke('service-music-sdk-request', api, args)
+      if (result?.__ceruMusicSdkError === true) throw new Error(String(result.message))
+      return result
+    },
     invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
   },
   //音源插件
   plugins: {
+    accountLogout: (pluginId: string, itemId: string) =>
+      ipcRenderer.invoke('plugin:account-logout', pluginId, itemId),
+    accountSummary: (pluginId: string, itemId: string) =>
+      ipcRenderer.invoke('plugin:account-summary', pluginId, itemId),
+    onAccountChanged: (callback: (event: { pluginId: string }) => void) => {
+      const listener = (_event: any, value: { pluginId: string }) => callback(value)
+      ipcRenderer.on('plugin:account-changed', listener)
+      return () => ipcRenderer.removeListener('plugin:account-changed', listener)
+    },
+    prepareExternal: (sequence: number) => ipcRenderer.invoke('plugin:external:prepare', sequence),
+    commitExternal: (sequence: number, format?: string) =>
+      ipcRenderer.invoke('plugin:external:commit', sequence, format),
+    discardExternal: (sequence: number) => ipcRenderer.invoke('plugin:external:discard', sequence),
+    openPlaylistImportMenu: (pluginId: string, menuId: string) =>
+      ipcRenderer.invoke('plugin:playlist-import-menu', pluginId, menuId),
+    guestImport: (pluginId: string, adapterId: string, url?: string) =>
+      ipcRenderer.invoke('plugin:guest-import', pluginId, adapterId, url),
+    guestList: (pluginId: string) => ipcRenderer.invoke('plugin:guest-list', pluginId),
+    guestSelect: (pluginId: string, guestId: string | null) =>
+      ipcRenderer.invoke('plugin:guest-select', pluginId, guestId),
+    guestUpdate: (pluginId: string, guestId: string, url: string) =>
+      ipcRenderer.invoke('plugin:guest-update', pluginId, guestId, url),
+    guestRemove: (pluginId: string, guestId: string) =>
+      ipcRenderer.invoke('plugin:guest-remove', pluginId, guestId),
+    guestPermissions: (pluginId: string, guestId: string) =>
+      ipcRenderer.invoke('plugin:guest-permissions', pluginId, guestId),
+    guestSetPermissions: (pluginId: string, guestId: string, keys: string[]) =>
+      ipcRenderer.invoke('plugin:guest-set-permissions', pluginId, guestId, keys),
+    onUI: (callback: (request: any) => void) => {
+      const listener = (_event: any, request: any) => callback(request)
+      ipcRenderer.on('plugin:ui', listener)
+      return () => ipcRenderer.removeListener('plugin:ui', listener)
+    },
+    respondUI: (result: any) => ipcRenderer.invoke('plugin:ui-result', result),
+    uiReady: (ready: boolean) => ipcRenderer.invoke('plugin:ui-ready', ready),
+    onUICancel: (callback: (request: { id: string }) => void) => {
+      const listener = (_event: any, request: { id: string }) => callback(request)
+      ipcRenderer.on('plugin:ui-cancel', listener)
+      return () => ipcRenderer.removeListener('plugin:ui-cancel', listener)
+    },
+    openSurface: (pluginId: string, surfaceId: string) =>
+      ipcRenderer.invoke('plugin:open-surface', pluginId, surfaceId),
+    mountSurface: (pluginId: string, surfaceId: string) =>
+      ipcRenderer.invoke('plugin:mount-surface', pluginId, surfaceId),
+    surfaceReady: (pluginId: string, surfaceId: string, sessionId: string) =>
+      ipcRenderer.invoke('plugin:surface-ready', pluginId, surfaceId, sessionId),
+    onSurfaceState: (callback: (event: any) => void) => {
+      const listener = (_event: any, value: any) => callback(value)
+      ipcRenderer.on('plugin:surface-state', listener)
+      return () => ipcRenderer.removeListener('plugin:surface-state', listener)
+    },
+    surfaceAction: (
+      pluginId: string,
+      surfaceId: string,
+      sessionId: string,
+      action: string,
+      input: unknown
+    ) => ipcRenderer.invoke('plugin:surface-action', pluginId, surfaceId, sessionId, action, input),
+    drawerAction: (
+      pluginId: string,
+      surfaceId: string,
+      sessionId: string,
+      index: number,
+      values: Record<string, unknown>
+    ) => ipcRenderer.invoke('plugin:drawer-action', pluginId, surfaceId, sessionId, index, values),
+    closeDrawer: (pluginId: string, surfaceId: string, sessionId: string) =>
+      ipcRenderer.invoke('plugin:drawer-close', pluginId, surfaceId, sessionId),
+    contributions: () => ipcRenderer.invoke('plugin:contributions'),
+    restoreEnabled: () => ipcRenderer.invoke('plugin:restore-enabled'),
+    setActive: (pluginId: string | null) => ipcRenderer.invoke('plugin:set-active', pluginId),
+    setProviderOwner: (source: string, pluginId: string | null) =>
+      ipcRenderer.invoke('plugin:set-provider-owner', source, pluginId),
+    setCapabilityOwner: (source: string, capability: string, pluginId: string | null) =>
+      ipcRenderer.invoke('plugin:set-capability-owner', source, capability, pluginId),
+    setEnabled: (pluginId: string, enabled: boolean) =>
+      ipcRenderer.invoke('plugin:set-enabled', pluginId, enabled),
+    updateLocal: (pluginId: string) => ipcRenderer.invoke('plugin:update-local', pluginId),
+    updateFromUrl: (pluginId: string, url: string) =>
+      ipcRenderer.invoke('plugin:update-url', pluginId, url),
+    onChanged: (callback: (change?: any) => void) => {
+      const listener = (_event: any, change?: any) => callback(change)
+      ipcRenderer.on('plugin:changed', listener)
+      return () => ipcRenderer.removeListener('plugin:changed', listener)
+    },
+    importerTracks: (pluginId: string, importerId: string, input: any) =>
+      ipcRenderer.invoke('plugin:importer-tracks', pluginId, importerId, input),
     selectAndAddPlugin: (type: 'lx' | 'cr') =>
       ipcRenderer.invoke('service-plugin-selectAndAddPlugin', type),
     downloadAndAddPlugin: (url: string, type: 'lx' | 'cr', targetPluginId?: string) =>
@@ -68,6 +167,11 @@ const api = {
     getConfigSchema: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-getConfigSchema', pluginId),
     getConfig: (pluginId: string) => ipcRenderer.invoke('service-plugin-getConfig', pluginId),
+    getPermissions: (pluginId: string) =>
+      ipcRenderer.invoke('service-plugin-getPermissions', pluginId),
+    getManifest: (pluginId: string) => ipcRenderer.invoke('service-plugin-getManifest', pluginId),
+    savePermissions: (pluginId: string, permissions: string[]) =>
+      ipcRenderer.invoke('service-plugin-savePermissions', pluginId, permissions),
     saveConfig: (pluginId: string, config: Record<string, any>) =>
       ipcRenderer.invoke('service-plugin-saveConfig', pluginId, config),
     testConnection: (pluginId: string) =>
@@ -314,6 +418,16 @@ const api = {
 
   // 本地音乐管理
   localMusic: {
+    onTagsChanged: (
+      callback: (event: import('../common/types/localMusicMetadata').LocalMusicTagsChanged) => void
+    ) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        data: import('../common/types/localMusicMetadata').LocalMusicTagsChanged
+      ) => callback(data)
+      ipcRenderer.on('local-music:tags-changed', handler)
+      return () => ipcRenderer.removeListener('local-music:tags-changed', handler)
+    },
     selectDirs: () => ipcRenderer.invoke('local-music:select-dirs'),
     scan: async (dirs: string[]) => {
       const res = await ipcRenderer.invoke('local-music:scan', dirs)
@@ -439,36 +553,17 @@ const api = {
   },
   // 歌曲分享
   share: {
+    exportPlaylistResolver: (sources: string[]) =>
+      ipcRenderer.invoke('share:playlist-resolver:export', sources),
+    exportResolver: (source: string, song: any) =>
+      ipcRenderer.invoke('share:resolver:export', source, song),
+    createDescriptor: (source: string, song: any) =>
+      ipcRenderer.invoke('share:descriptor:create', source, song),
+    readDescriptor: (id: string) => ipcRenderer.invoke('share:descriptor:read', id),
     getPluginCodeAndMd5: (
       pluginId: string
     ): Promise<{ code: string; md5: string; type: 'cr' | 'lx' } | { error: string }> =>
-      ipcRenderer.invoke('service-share-getPluginCodeAndMd5', pluginId),
-    onShareOpen: (callback: (payload: { id: string }) => void) => {
-      const handler = (_: any, payload: { id: string }) => callback(payload)
-      ipcRenderer.on('share-open', handler)
-      return () => ipcRenderer.removeListener('share-open', handler)
-    },
-    onPlaylistShareOpen: (callback: (payload: { id: string }) => void) => {
-      const handler = (_: any, payload: { id: string }) => callback(payload)
-      ipcRenderer.on('playlist-share-open', handler)
-      return () => ipcRenderer.removeListener('playlist-share-open', handler)
-    },
-    /** 拉取并清空主进程缓冲的待处理分享 id（冷启动 / 启动页期间累积） */
-    getPending: (): Promise<string[]> => ipcRenderer.invoke('get-pending-share-ids'),
-    /** 拉取并清空主进程缓冲的待处理歌单分享 id */
-    getPendingPlaylistShares: (): Promise<string[]> =>
-      ipcRenderer.invoke('get-pending-playlist-share-ids')
-  },
-  /* 一起听 deeplink 投递 —— 主进程 cerumusic://lt/<code> 触发时通过 IPC 直推 code,
-   * 配合主进程剪贴板兜底,绕过 renderer navigator.clipboard 的焦点限制。 */
-  listenTogether: {
-    onShareOpen: (callback: (payload: { code: string }) => void) => {
-      const handler = (_: any, payload: { code: string }) => callback(payload)
-      ipcRenderer.on('lt-share-open', handler)
-      return () => ipcRenderer.removeListener('lt-share-open', handler)
-    },
-    /** 拉取并清空主进程缓冲的待处理一起听 code(冷启动期间累积) */
-    getPendingCodes: (): Promise<string[]> => ipcRenderer.invoke('get-pending-lt-codes')
+      ipcRenderer.invoke('service-share-getPluginCodeAndMd5', pluginId)
   },
   clipboard: {
     /** 通过主进程读取系统剪贴板,绕过 renderer 焦点 / 权限限制 */

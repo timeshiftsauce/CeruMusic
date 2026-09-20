@@ -29,16 +29,18 @@
           <div v-if="phase === 'idle'" key="form" class="form-area">
             <div class="form-row">
               <div class="form-label">
-                <span>有效期</span>
-                <Transition name="chip-swap" mode="out-in">
-                  <span :key="ttlDays" class="ttl-chip">
-                    <span class="dot"></span>
-                    到期 <strong>{{ expiryText }}</strong>
-                  </span>
-                </Transition>
+                <span>分享有效期</span>
+                <span class="ttl-chip">{{ ttlDays }} 天 · 到期 {{ expiryText }}</span>
               </div>
               <div class="form-content">
-                <t-slider v-model="ttlDays" :min="1" :max="7" :step="1" :marks="ttlMarks" />
+                <t-slider
+                  v-model="ttlDays"
+                  :min="1"
+                  :max="7"
+                  :step="1"
+                  :marks="ttlMarks"
+                  :label="'${value} 天'"
+                />
               </div>
             </div>
             <ShareConsentBar v-model="consented" />
@@ -231,15 +233,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, toRaw } from 'vue'
 import { storeToRefs } from 'pinia'
-import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import BaseDialog from '@renderer/components/BaseDialog.vue'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import { useAuthStore } from '@renderer/store'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import shareAPI from '@renderer/api/share'
+import { useAuthStore } from '@renderer/store'
+import ShareConsentBar from './ShareConsentBar.vue'
+import { ensureShareResolverUploaded } from './uploadShareResolver'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { sanitizeFileName } from '@renderer/utils/file'
-import ShareConsentBar from './ShareConsentBar.vue'
 import {
   renderSharePoster,
   downloadDataUrl,
@@ -261,16 +264,20 @@ const visible = computed({
 })
 
 const globalPlayStatus = useGlobalPlayStatusStore()
-const { player } = storeToRefs(globalPlayStatus)
-const authStore = useAuthStore()
 const localUserStore = LocalUserDetailStore()
-
 const ttlDays = ref(3)
+const authStore = useAuthStore()
+const consented = ref(false)
+const expiryText = computed(() => {
+  const date = new Date(Date.now() + ttlDays.value * 86400000)
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+})
 const ttlMarks = { 1: '1天', 3: '3天', 5: '5天', 7: '7天' }
+const { player } = storeToRefs(globalPlayStatus)
+
 const loading = ref(false)
 const statusText = ref('')
 const statusType = ref<'info' | 'error' | 'success'>('info')
-const consented = ref(false)
 // 成功生成的分享结果（用于「打开链接 / 再次复制」按钮）
 const shareResult = ref<{ id: string; url: string; template: string } | null>(null)
 
@@ -299,9 +306,9 @@ interface Step {
   state: StepState
 }
 const defaultSteps = (): Step[] => [
-  { title: '核对音源插件', sub: '检查后端是否已存在该插件', state: 'pending' },
+  { title: '准备播放解析模块', sub: '导出并上传当前音源的播放解析能力', state: 'pending' },
   { title: '收集歌曲元数据', sub: '同步歌词、热评与封面信息', state: 'pending' },
-  { title: '生成分享链接', sub: '上传至云端并生成可分享的链接', state: 'pending' }
+  { title: '生成分享链接', sub: '创建可在网页播放的歌曲链接', state: 'pending' }
 ]
 const steps = ref<Step[]>(defaultSteps())
 
@@ -356,13 +363,6 @@ const primaryBtnDisabled = computed(() => {
   if (songInfo.value.source === 'local') return true
   if (!consented.value) return true
   return false
-})
-
-// 到期时间预览
-const expiryText = computed(() => {
-  const d = new Date(Date.now() + ttlDays.value * 24 * 60 * 60 * 1000)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`
 })
 
 watch(visible, (v) => {
@@ -488,273 +488,90 @@ function pickTemplate(id: SongPosterTemplate) {
 }
 
 /** 找到当前歌曲所用的插件 ID */
-function resolvePluginId(): string | null {
-  // 服务插件歌曲
-  const servicePluginId = (songInfo.value as any)?._servicePluginId
-  if (servicePluginId) return servicePluginId
-  // 普通音源插件:从用户配置中拿当前选中插件
-  const pluginId = (localUserStore.userInfo as any)?.pluginId
-  if (pluginId) return pluginId
-  return null
-}
-
-async function ensurePluginUploaded(
-  pluginCode: string,
-  md5: string,
-  type: 'cr' | 'lx'
-): Promise<boolean> {
-  // 1) 先 precheck
-  setStatus('正在检查音源插件...')
-  setStep(0, 'active', '校验音源插件指纹...')
-  const pre = await shareAPI.precheck({ pluginMd5: md5 })
-  if (pre?.hasPlugin) return true
-
-  // 2) 弹确认(zIndex 必须高于 BaseDialog 的 999999)
-  return new Promise((resolve) => {
-    setStep(0, 'active', '需要上传当前音源插件,等待确认...')
-    const confirm = DialogPlugin.confirm({
-      header: '需要上传当前音源插件',
-      body: '为了让分享链接在网页上播放歌曲，需要将您当前使用的音源插件上传到澜音服务端（仅用于分享解析，不会公开）。是否继续？',
-      confirmBtn: '继续上传',
-      cancelBtn: '取消',
-      zIndex: 1000010,
-      onConfirm: async () => {
-        try {
-          setStatus('正在上传音源插件...')
-          setStep(0, 'active', '正在上传插件到云端...')
-          const r = await shareAPI.uploadPlugin({ pluginCode, md5, type })
-          if (r?.ok) {
-            confirm.destroy()
-            resolve(true)
-          } else {
-            setStatus(r?.message || '上传插件失败', 'error')
-            confirm.destroy()
-            resolve(false)
-          }
-        } catch (e: any) {
-          setStatus(e?.message || '上传插件失败', 'error')
-          confirm.destroy()
-          resolve(false)
-        }
-      },
-      onCancel: () => {
-        confirm.destroy()
-        resolve(false)
-      },
-      onClose: () => {
-        confirm.destroy()
-        resolve(false)
-      }
-    })
-  })
-}
-
 async function doShare() {
+  if (!consented.value) {
+    MessagePlugin.warning('请先完成分享协议确认')
+    return
+  }
   if (!authStore.isAuthenticated) {
     MessagePlugin.warning('请先登录后再分享')
     return
   }
-  if (!songInfo.value) return
-  if (songInfo.value.source === 'local') {
-    MessagePlugin.warning('本地歌曲暂不支持分享')
+  if (!songInfo.value || songInfo.value.source === 'local') {
+    MessagePlugin.warning('请选择插件提供的歌曲')
     return
   }
-
   loading.value = true
-  setStatus('准备分享...')
   resetSteps()
-  setStep(0, 'active', '读取当前音源插件...')
-
   try {
-    // 1) 获取插件源码 + md5
-    const pluginId = resolvePluginId()
-    if (!pluginId) {
-      setStep(0, 'error', '未找到当前音源插件')
-      setStatus('未找到当前音源插件，请先选择音源后重试', 'error')
-      loading.value = false
-      return
-    }
-    setStatus('读取插件指纹...')
-    setStep(0, 'active', '解析插件指纹...')
-    const codeRes = await window.api.share.getPluginCodeAndMd5(pluginId)
-    if ('error' in codeRes) {
-      setStep(0, 'error', codeRes.error)
-      setStatus(codeRes.error, 'error')
-      loading.value = false
-      return
-    }
-    const { code, md5, type } = codeRes
-
-    // 2) 确保后端有插件
-    const ok = await ensurePluginUploaded(code, md5, type)
-    if (!ok) {
-      if (statusType.value !== 'error') {
-        setStep(0, 'error', '已取消上传')
-        setStatus('已取消分享', 'info')
-      } else {
-        setStep(0, 'error', statusText.value || '插件上传失败')
-      }
-      loading.value = false
-      return
-    }
-    setStep(0, 'done', '插件已就绪')
-
-    // 3) 准备 hotComments + lyric:
-    //    - 若分享目标 === 当前播放歌曲 → 直接用 store 已有数据
-    //    - 否则 → 通过音源 SDK 主动拉取(避免拿错别的歌的内容)
-    const playing = player.value.songInfo as any
-    const isSameAsPlaying =
-      !!playing &&
-      String(playing.songmid || '') === String(songInfo.value.songmid || '') &&
-      String(playing.source || '') === String(songInfo.value.source || '')
-
-    let hotComments: any[] = []
-    let lyric: any = {}
-
-    setStep(1, 'active', isSameAsPlaying ? '使用当前播放器缓存数据' : '正在拉取歌词与热评...')
-
-    if (isSameAsPlaying) {
-      hotComments = (player.value.comments?.hotList || []).slice(0, 10).map((c: any) => ({
-        userName: c.userName,
-        avatar: c.avatar,
-        text: c.text,
-        likedCount: c.likedCount || 0,
-        timeStr: c.timeStr,
-        location: c.location
-      }))
-
-      const rawLyric = (player.value.lyrics as any)?.raw || {}
-      lyric = {
-        lrc: rawLyric.lrc,
-        yrc: rawLyric.yrc,
-        qrc: rawLyric.qrc,
-        ttml: rawLyric.ttml,
-        trans: rawLyric.trans,
-        format: rawLyric.format
-      }
-      lyricLrc.value = rawLyric.lrc || ''
-    } else {
-      // 主动 SDK 拉取
-      setStatus('正在获取歌词与评论...')
-      const src = songInfo.value.source
-      // 脱响应式以让 IPC 结构化克隆通过
-      const cleanSong = toRaw(songInfo.value)
-
-      setStep(1, 'active', '正在拉取歌词与热评...')
-      const [lyricRes, cmtRes] = await Promise.allSettled([
-        window.api.music.requestSdk('getLyric', {
-          source: src,
-          songInfo: cleanSong,
-          grepLyricInfo: false,
-          useStrictMode: false
-        }),
-        window.api.music.requestSdk('getHotComment', {
-          source: src,
-          songInfo: cleanSong,
-          page: 1,
-          limit: 10
-        })
-      ])
-
-      // 歌词处理
-      if (lyricRes.status === 'fulfilled') {
-        const lyricData: any = lyricRes.value
-        if (lyricData && !lyricData.error) {
-          const cr = lyricData.crlyric || lyricData.cr_lyric || null
-          const std = lyricData.lyric || lyricData.lrc || null
-          const trans = lyricData.tlyric || null
-          let format: string | undefined
-          if (cr) {
-            format = src === 'tx' ? 'qrc' : 'yrc'
-          } else if (std) {
-            format = 'lrc'
-          }
-          lyric = {
-            lrc: std || undefined,
-            yrc: src === 'wy' ? cr || undefined : undefined,
-            qrc: src === 'tx' ? cr || undefined : undefined,
-            ...(cr && src !== 'wy' && src !== 'tx' ? { yrc: cr } : {}),
-            trans: trans || undefined,
-            format
-          }
-          lyricLrc.value = std || ''
-          if (!std && !cr) {
-            setStatus('该歌曲未找到歌词,继续分享...', 'info')
-          }
-        } else if (lyricData?.error) {
-          setStatus(`歌词获取失败:${lyricData.error},继续分享...`, 'info')
-        }
-      } else {
-        console.warn('share: getLyric failed', lyricRes.reason)
-        setStatus(`歌词获取失败:${lyricRes.reason?.message || lyricRes.reason},继续分享...`, 'info')
-      }
-
-      // 热评处理
-      if (cmtRes.status === 'fulfilled') {
-        const cmt: any = cmtRes.value
-        if (cmt?.comments?.length) {
-          hotComments = cmt.comments.slice(0, 10).map((c: any) => ({
-            userName: c.userName,
-            avatar: c.avatar,
-            text: c.text,
-            likedCount: c.likedCount || 0,
-            timeStr: c.timeStr,
-            location: c.location
-          }))
-        }
-      } else {
-        console.warn('share: getHotComment failed', cmtRes.reason)
-        setStatus(`热评获取失败:${cmtRes.reason?.message || cmtRes.reason},继续分享...`, 'info')
-      }
-    }
-    setStep(
-      1,
-      'done',
-      hotComments.length > 0 ? `已收集 ${hotComments.length} 条热评` : '元数据收集完成'
+    const selectedSong = JSON.parse(JSON.stringify(toRaw(songInfo.value)))
+    setStep(0, 'active', '导出当前音源的播放解析模块...')
+    const resolver = await window.api.share.exportResolver(selectedSong.source, selectedSong)
+    const song = { ...selectedSong, ...resolver.musicInfo }
+    delete song.pluginResource
+    const preferred =
+      localUserStore.userInfo.sourceQualityMap?.[song.source] ||
+      localUserStore.userInfo.selectQuality
+    const quality =
+      preferred && resolver.qualities.includes(preferred) ? preferred : resolver.qualities[0]
+    const uploaded = await ensureShareResolverUploaded(resolver, (message) =>
+      setStep(0, 'active', message)
     )
-
-    setStatus('正在生成分享链接...')
-    setStep(2, 'active', '上传至云端...')
+    if (!uploaded) {
+      resetSteps()
+      setStatus('')
+      return
+    }
+    setStep(0, 'done', '服务器播放解析模块已就绪')
+    setStep(1, 'active', '读取歌词...')
+    const current = player.value.songInfo
+    let crlyric =
+      current?.songmid === song.songmid && current?.source === song.source
+        ? player.value.lyrics.crlyric
+        : undefined
+    if (!crlyric) {
+      try {
+        crlyric = (
+          await window.api.music.requestSdk('getLyric', { source: song.source, songInfo: song })
+        )?.crlyric
+      } catch {}
+    }
+    if (crlyric) {
+      try {
+        const exported = await window.api.music.requestSdk('exportLyrics', {
+          source: song.source,
+          document: JSON.parse(JSON.stringify(crlyric)),
+          format: 'lrc'
+        })
+        lyricLrc.value = exported.text
+      } catch {
+        /* Optional lyrics must not prevent a playable share. */
+      }
+    }
+    setStep(1, 'done', '元数据已就绪')
+    setStep(2, 'active', '创建网页分享链接...')
     const result = await shareAPI.create({
-      pluginMd5: md5,
-      source: songInfo.value.source,
+      pluginMd5: resolver.md5,
+      source: song.source,
+      quality,
       ttlDays: ttlDays.value,
       song: {
-        songmid: songInfo.value.songmid,
-        hash: songInfo.value.hash,
-        name: songInfo.value.name,
-        singer: songInfo.value.singer,
-        albumName: songInfo.value.albumName,
-        albumId: songInfo.value.albumId,
-        source: songInfo.value.source,
-        interval: songInfo.value.interval,
-        img: songInfo.value.img,
-        types: songInfo.value.types,
-        _types: songInfo.value._types
+        ...song,
+        songmid: song.songmid ?? song.hash ?? song.id,
+        name: song.name,
+        singer: song.singer,
+        source: song.source
       },
-      lyric,
-      hotComments
+      lyric: lyricLrc.value ? { lrc: lyricLrc.value, format: 'lrc' } : undefined
     })
-
-    if (!result?.template || !result?.url) {
-      setStep(2, 'error', '链接生成失败')
-      setStatus('生成分享失败，请稍后再试', 'error')
-      loading.value = false
-      return
-    }
-
     setStep(2, 'done', '分享链接已生成')
     shareResult.value = result
-    setStatus('分享成功！', 'success')
-
-    // 异步生成海报，不阻塞成功状态
+    setStatus('分享成功，打开链接即可在网页播放', 'success')
     void buildPoster(result)
-  } catch (e: any) {
-    console.error('分享失败', e)
-    // 找到当前 active 的 step,标记为 error
-    const activeIdx = steps.value.findIndex((s) => s.state === 'active')
-    if (activeIdx >= 0) setStep(activeIdx, 'error', e?.message || '分享失败')
-    setStatus(e?.message || '分享失败', 'error')
+  } catch (error: any) {
+    const index = steps.value.findIndex((step) => step.state === 'active')
+    if (index >= 0) setStep(index, 'error', error.message)
+    setStatus(error.message || '分享失败', 'error')
   } finally {
     loading.value = false
   }

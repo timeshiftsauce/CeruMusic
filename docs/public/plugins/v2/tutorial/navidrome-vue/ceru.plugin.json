@@ -1,0 +1,93 @@
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.navidrome-vue",
+    "name": "Navidrome 教程版",
+    "version": "0.1.0",
+    "description": "用 Vue 连接自己的 Navidrome，并提供搜索、播放与歌词",
+    "author": "Your Name",
+    "license": "MIT",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "libraries": { "vue": "^3.5.0" }
+    },
+    "modules": {
+      "logic": {
+        "entry": "logic.main",
+        "activation": ["onCommand:connection.open", "onProvider:navidrome"]
+      },
+      "surfaces": [
+        {
+          "id": "connection",
+          "kind": "web",
+          "entry": "view.connection",
+          "title": "连接 Navidrome",
+          "presentation": { "kind": "drawer", "placement": "right", "size": 440 },
+          "lifecycle": {
+            "openAction": "connection.surface-open",
+            "closeAction": "connection.surface-close"
+          }
+        }
+      ]
+    },
+    "contributes": {
+      "providers": [
+        {
+          "id": "navidrome",
+          "name": "Navidrome",
+          "protocols": ["music.search@1", "music.resolve@1", "music.lyrics@1"],
+          "qualities": ["128k", "192k", "320k", "original"],
+          "icon": { "kind": "host", "name": "server" },
+          "connectionMode": "single"
+        }
+      ],
+      "commands": [
+        {
+          "id": "connection.open",
+          "title": "连接 Navidrome",
+          "action": "connection.open",
+          "view": "connection"
+        },
+        { "id": "connection.read", "title": "读取连接状态", "action": "connection.read" },
+        { "id": "connection.save", "title": "保存连接", "action": "connection.save" },
+        { "id": "connection.ping", "title": "测试连接", "action": "connection.ping" },
+        { "id": "connection.logout", "title": "断开连接", "action": "connection.logout" },
+        {
+          "id": "connection.surface-open",
+          "title": "连接页已打开",
+          "action": "connection.surface-open"
+        },
+        {
+          "id": "connection.surface-close",
+          "title": "连接页已关闭",
+          "action": "connection.surface-close"
+        }
+      ],
+      "settingsPages": [
+        { "id": "connection", "title": "Navidrome 连接", "view": "connection" }
+      ]
+    },
+    "permissions": [
+      {
+        "key": "navidrome.http",
+        "name": "network.request",
+        "reason": "访问你设置的 Navidrome 服务器"
+      },
+      {
+        "key": "navidrome.private",
+        "name": "network.private",
+        "optional": true,
+        "reason": "连接本机或局域网中的 Navidrome 服务器"
+      }
+    ],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": {
+    "logic.main": "src/index.ts",
+    "view.connection": "src/view.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js",
+  "framework": "vue"
+}

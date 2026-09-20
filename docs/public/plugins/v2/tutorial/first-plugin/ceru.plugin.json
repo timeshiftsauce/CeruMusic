@@ -1,0 +1,73 @@
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "example.first-plugin",
+    "name": "我的第一个插件",
+    "version": "0.1.0",
+    "description": "A Ceru Music v2 source plugin",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "uiSchema": "^1.0.0"
+    },
+    "modules": {
+      "logic": {
+        "entry": "logic.main",
+        "activation": ["onCommand:hello", "onProvider:catalog"]
+      }
+    },
+    "contributes": {
+      "commands": [
+        {
+          "id": "hello",
+          "title": "Hello",
+          "action": "hello"
+        }
+      ],
+      "providers": [
+        {
+          "id": "catalog",
+          "name": "我的曲库",
+          "protocols": ["music.search@1", "music.resolve@1"],
+          "icon": {
+            "kind": "host",
+            "name": "music-note"
+          },
+          "connectionMode": "none"
+        }
+      ],
+      "homeSections": [
+        {
+          "id": "catalog-playlists",
+          "title": "歌单",
+          "kind": "playlists",
+          "icon": {
+            "kind": "host",
+            "name": "library"
+          },
+          "providerIds": ["catalog"]
+        }
+      ]
+    },
+    "permissions": [],
+    "dataSchemas": {
+      "config": 1,
+      "state": 1
+    }
+  },
+  "config": {
+    "displayName": "我的曲库",
+    "apiOrigin": "https://music.example.com",
+    "sources": {
+      "demo": {
+        "name": "Demo Source",
+        "qualities": ["320k", "flac"]
+      }
+    }
+  },
+  "entries": {
+    "logic.main": "src/index.ts"
+  },
+  "resources": {},
+  "output": "dist/plugin.js"
+}

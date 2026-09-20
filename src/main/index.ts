@@ -31,17 +31,14 @@ import './events/directorySettings'
 import './events/pluginNotice'
 import initLyricIpc from './events/lyric'
 import { initPluginNotice } from './events/pluginNotice'
+import { bindPluginUIWindow } from './services/plugin/uiBridge'
 import './events/localMusic'
 import fs from 'node:fs'
 import { initHotkeyService } from './services/hotkeys'
 import { deepLinkRouter } from './router'
 import { thumbarService } from './services/thumbarService'
-import {
-  setupDeepLinks,
-  consumePendingShareIds,
-  consumePendingPlaylistShareIds,
-  consumePendingLtCodes
-} from './router/routes'
+import { setupDeepLinks, bufferEarlyDeepLink } from './router/routes'
+import { getPendingDeepLinks, acknowledgeDeepLink, enqueueDeepLink } from './router/pendingLinks'
 
 // Initialize deep link routes
 setupDeepLinks()
@@ -124,6 +121,20 @@ const queueOpenPlaylist = (filePath: string) => {
     pendingPlaylistFiles = []
   }
 }
+function queueOpenPlugin(filePath: string) {
+  if (!/\.js$/i.test(filePath) || !path.isAbsolute(filePath)) return
+  enqueueDeepLink('plugin-file', path.resolve(filePath))
+  mainWindow?.webContents.send('deeplink:changed')
+}
+function handleExternalArguments(argv: string[]) {
+  for (const value of argv) {
+    if (value.startsWith('cerumusic://')) {
+      if (mainWindow) deepLinkRouter.match(mainWindow, value)
+      else bufferEarlyDeepLink(value)
+    } else if (/\.(cmpl|cpl)$/i.test(value)) queueOpenPlaylist(value)
+    else if (/\.js$/i.test(value)) queueOpenPlugin(value)
+  }
+}
 process.on('unhandledRejection', (reason: any) => {
   console.error('Unhandled Rejection:', reason?.message || reason)
 })
@@ -156,14 +167,7 @@ if (!gotTheLock) {
       if (!mainWindow.isVisible()) mainWindow.show()
       mainWindow.focus()
     }
-    const argPath = argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
-    if (argPath) queueOpenPlaylist(argPath)
-
-    // 处理 Deep Link (Windows/Linux)
-    const protocolUrl = argv?.find((arg) => arg.startsWith('cerumusic://'))
-    if (protocolUrl && mainWindow) {
-      deepLinkRouter.match(mainWindow, protocolUrl)
-    }
+    handleExternalArguments(argv.slice(process.defaultApp ? 2 : 1))
   })
 }
 
@@ -423,36 +427,13 @@ function toggleAppFullScreen(win: BrowserWindow | null): void {
 
 import { downloadManager } from './services/DownloadManager'
 import pluginService from './services/plugin/index'
-import musicSdkService from './services/musicSdk/service'
+import musicSdkService, { resolveDownloadUrl } from './services/musicSdk/service'
 import { musicCacheService } from './services/musicCache'
+import { applyPlaybackRequestHeaders } from './services/plugin/playbackRequests'
 
 function setupDownloadManager() {
   // Setup URL Fetcher for lazy loading
-  downloadManager.setUrlFetcher(async (task) => {
-    if (!task.pluginId || !task.songInfo || !task.quality) {
-      throw new Error('Task missing required info for fetching URL')
-    }
-
-    const usePlugin = pluginService.getPluginById(task.pluginId)
-    if (!usePlugin) throw new Error('Plugin not found')
-
-    const source = task.songInfo.source
-    const songId = `${task.songInfo.name}-${task.songInfo.singer}-${source}-${task.quality}`
-
-    // Check cache
-    const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
-    if (cachedUrl) return cachedUrl
-
-    // Fetch from plugin
-    const originalUrl = await usePlugin.getMusicUrl(source, task.songInfo, task.quality)
-    if (typeof originalUrl === 'object')
-      throw new Error('Failed to get URL: ' + JSON.stringify(originalUrl))
-
-    // Cache result
-    musicCacheService.cacheMusic(songId, originalUrl).catch(console.error)
-
-    return originalUrl
-  })
+  downloadManager.setUrlFetcher(resolveDownloadUrl)
 
   // Setup Lyric Fetcher for lazy loading
   downloadManager.setLyricFetcher(async (task) => {
@@ -471,8 +452,8 @@ function setupDownloadManager() {
 
     let lyric: string | null = null
 
-    // 2. Fallback to built-in SDK if no lyric found yet and source is supported
-    if (!lyric && ['wy', 'kw', 'tx', 'mg', 'kg'].includes(source)) {
+    // Lyrics are provided by the installed v2 source plugin.
+    if (!lyric) {
       try {
         const api = musicSdkService(source)
         const result = await api.getLyric({
@@ -480,7 +461,7 @@ function setupDownloadManager() {
           useFormat: task.tagWriteOptions?.lyricFormat || 'lrc'
         })
 
-        if (result && !result.error) {
+        if (result && !(result as any).error) {
           if (typeof result === 'string') {
             lyric = result
           } else {
@@ -502,10 +483,10 @@ function setupDownloadManager() {
             }
           }
         } else if (result && (result as any).error) {
-          console.warn(`Built-in SDK getLyric error for ${source}:`, (result as any).error)
+          console.warn(`Plugin getLyric error for ${source}:`, (result as any).error)
         }
       } catch (error) {
-        console.warn(`Built-in SDK getLyric exception for ${source}:`, error)
+        console.warn(`Plugin getLyric exception for ${source}:`, error)
       }
     }
 
@@ -613,6 +594,7 @@ function createWindow(): void {
 
   // Create the browser window.
   mainWindow = new BrowserWindow(defaultOptions)
+  bindPluginUIWindow(mainWindow)
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
   initHotkeyService(mainWindow)
@@ -874,17 +856,14 @@ app.whenReady().then(async () => {
     callback(true)
   })
 
-  // GitCode 防盗链：去掉对 gitcode.com 请求的 Referer
+  // Plugins may declare headers for an exact, short-lived media URL. The values
+  // stay in the main process and are never exposed to the renderer.
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
     (details, callback) => {
-      const referer = details.requestHeaders['Referer'] || details.requestHeaders['referer']
-      const baseUrl = new URL(details.url).origin
-      if (referer) {
-        details.requestHeaders['Referer'] = baseUrl
-        details.requestHeaders['referer'] = baseUrl
-      }
-      callback({ requestHeaders: details.requestHeaders })
+      callback({
+        requestHeaders: applyPlaybackRequestHeaders(details.url, details.requestHeaders)
+      })
     }
   )
 
@@ -901,6 +880,9 @@ app.whenReady().then(async () => {
 
   // 注册插件禁用处理器：插件因崩溃次数过多被永久禁用时通知渲染进程
   pluginService.setDisabledHandler((pluginId, reason) => {
+    void pluginService.setPluginEnabled(pluginId, false).catch((error) => {
+      console.warn(`保存插件 ${pluginId} 的停用状态失败:`, error)
+    })
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('plugin-disabled', { pluginId, reason })
     }
@@ -927,16 +909,7 @@ app.whenReady().then(async () => {
     initAutoUpdateForWindow(mainWindow)
     lyricWindow.create()
     initLyricIpc(mainWindow)
-    const startArg = process.argv?.find((a) => /\.(cmpl|cpl)$/i.test(a))
-    if (startArg) queueOpenPlaylist(startArg)
-    // 冷启动 deep-link（Windows / Linux）：进程参数中包含 cerumusic:// 协议链接
-    const startProtocolUrl = process.argv?.find(
-      (a) => typeof a === 'string' && a.startsWith('cerumusic://')
-    )
-    if (startProtocolUrl) {
-      console.log('[deep-link] 冷启动检测到协议链接:', startProtocolUrl)
-      deepLinkRouter.match(mainWindow, startProtocolUrl)
-    }
+    handleExternalArguments(process.argv.slice(process.defaultApp ? 2 : 1))
     mainWindow.webContents.on('did-finish-load', () => {
       // 页面加载完成后分发并清空队列
       pendingPlaylistFiles.forEach((p) => mainWindow!.webContents.send('open-playlist-file', p))
@@ -960,7 +933,8 @@ app.whenReady().then(async () => {
 // macOS 双击文件打开
 app.on('open-file', (event, filePath) => {
   event.preventDefault()
-  queueOpenPlaylist(filePath)
+  if (/\.js$/i.test(filePath)) queueOpenPlugin(filePath)
+  else queueOpenPlaylist(filePath)
 })
 
 // macOS Deep Link
@@ -968,7 +942,7 @@ app.on('open-url', (event, url) => {
   event.preventDefault()
   if (mainWindow) {
     deepLinkRouter.match(mainWindow, url)
-  }
+  } else bufferEarlyDeepLink(url)
 })
 
 // 读取文件内容供渲染层解析
@@ -988,19 +962,9 @@ ipcMain.handle('get-pending-open-playlist-files', async () => {
   return list
 })
 
-// 查询并清空待处理的分享 DeepLink id 队列（冷启动 / 启动页阶段缓冲的事件）
-ipcMain.handle('get-pending-share-ids', async () => {
-  return consumePendingShareIds()
-})
-
-// 查询并清空待处理的歌单分享 DeepLink id 队列
-ipcMain.handle('get-pending-playlist-share-ids', async () => {
-  return consumePendingPlaylistShareIds()
-})
-
-// 查询并清空待处理的一起听 DeepLink code 队列
-ipcMain.handle('get-pending-lt-codes', async () => {
-  return consumePendingLtCodes()
+ipcMain.handle('deeplink:pending', () => getPendingDeepLinks())
+ipcMain.handle('deeplink:ack', (_event, sequence: number) => {
+  if (Number.isSafeInteger(sequence)) acknowledgeDeepLink(sequence)
 })
 
 /* 主进程剪贴板读取 —— 比 renderer 的 navigator.clipboard.readText() 更可靠:

@@ -1,0 +1,56 @@
+[
+  {
+    "tag": "DIV",
+    "class": "t-dialog t-dialog__modal-default plugin-native-modal t-dialog--default t-dialog--center",
+    "style": "width: min(420px, 100vw);",
+    "height": "450px",
+    "minHeight": "auto",
+    "maxHeight": "none",
+    "position": "relative"
+  },
+  {
+    "tag": "DIV",
+    "class": "t-dialog__header",
+    "style": null,
+    "height": "24px",
+    "minHeight": "0px",
+    "maxHeight": "none",
+    "position": "static"
+  },
+  {
+    "tag": "DIV",
+    "class": "t-dialog__header-content",
+    "style": null,
+    "height": "24px",
+    "minHeight": "auto",
+    "maxHeight": "none",
+    "position": "static"
+  },
+  {
+    "tag": "DIV",
+    "class": "t-dialog__body",
+    "style": null,
+    "height": "360px",
+    "minHeight": "0px",
+    "maxHeight": "none",
+    "position": "static"
+  },
+  {
+    "tag": "DIV",
+    "class": "plugin-web-surface",
+    "style": null,
+    "height": "360px",
+    "minHeight": "0px",
+    "maxHeight": "none",
+    "position": "relative"
+  },
+  {
+    "tag": "IFRAME",
+    "class": "",
+    "style": null,
+    "height": "360px",
+    "minHeight": "0px",
+    "maxHeight": "none",
+    "position": "static"
+  }
+]

@@ -7,13 +7,22 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter, useRoute } from 'vue-router'
 import { useSearchStore } from '@renderer/store'
 import { GuideStep } from 'tdesign-vue-next'
+import {
+  homeSections,
+  activePluginContributions,
+  contributionsLoaded,
+  pluginRestorationComplete,
+  startupHomeAvailable,
+  providerIconUrls
+} from '@renderer/services/pluginState'
 
 let stopWatchEffect: (() => void) | null = null
 
 onMounted(() => {
   const LocalUserDetail = LocalUserDetailStore()
   stopWatchEffect = watchEffect(() => {
-    source.value = sourceicon[LocalUserDetail.userSource.source || 'wy']
+    const key = LocalUserDetail.userSource.source || ''
+    source.value = sourceicon[key] || key
   })
   // Listen for global hotkey to open audio output selector
   // Note: Logic moved to App.vue to support global toggle and prevent duplicate listeners.
@@ -44,12 +53,19 @@ const sourceicon = {
   all: 'all'
 }
 const source = ref('kugouyinle')
+const currentProviderIcon = computed(
+  () => providerIconUrls.value[LocalUserDetailStore().userSource.source || '']
+)
+const sourceFallbackLabel = computed(() => {
+  const store = LocalUserDetailStore()
+  return store.userInfo.supportedSources?.[store.userSource.source || '']?.name?.slice(0, 1) || '音'
+})
 interface MenuItem {
   name: string
   icon: string
   path: string
 }
-const menuList: MenuItem[] = [
+const baseMenuList: MenuItem[] = [
   {
     name: '发现',
     icon: 'icon-faxian',
@@ -66,6 +82,11 @@ const menuList: MenuItem[] = [
     path: '/home/local'
   },
   {
+    name: '社区',
+    icon: 'icon-shijian',
+    path: '/home/community'
+  },
+  {
     name: '下载',
     icon: 'icon-xiazai',
     path: '/home/download'
@@ -76,16 +97,37 @@ const menuList: MenuItem[] = [
   //   path: '/home/recent'
   // }
 ]
+const menuList = computed(() =>
+  baseMenuList.filter((item) => item.path !== '/home/find' || startupHomeAvailable.value)
+)
+const pluginPages = computed(() =>
+  activePluginContributions.value.flatMap(({ pluginId, manifest }) =>
+    (manifest.contributes?.sidebarItems || []).map((page: any) => ({ ...page, pluginId }))
+  )
+)
 const menuActive = ref(0)
 const router = useRouter()
 const route = useRoute()
+watch(
+  [contributionsLoaded, pluginRestorationComplete, homeSections, startupHomeAvailable],
+  ([ready, restored, sections]) => {
+    if (
+      ready &&
+      restored &&
+      !sections.length &&
+      !startupHomeAvailable.value &&
+      route.path === '/home/find'
+    )
+      void router.replace('/home/local')
+  }
+)
 const source_list_show = ref(false)
 
 // 监听路由变化，更新激活的菜单项
 watch(
   () => route.path,
   (newPath) => {
-    const index = menuList.findIndex((item) => newPath.startsWith(item.path))
+    const index = menuList.value.findIndex((item) => newPath.startsWith(item.path))
     menuActive.value = index
   },
   { immediate: true }
@@ -102,15 +144,7 @@ const hasPluginData = computed(() => {
 })
 
 // 音源名称映射
-const sourceNames = {
-  wy: '网易云音乐',
-  kg: '酷狗音乐',
-  mg: '咪咕音乐',
-  tx: 'QQ音乐',
-  kw: '酷我音乐',
-  git: 'GitCode',
-  all: '聚合搜索'
-}
+const openPluginPage = (page: any) => window.api.plugins.openSurface(page.pluginId, page.view)
 
 // 动态音源列表数据，基于supportedSources
 const sourceList = computed(() => {
@@ -121,13 +155,10 @@ const sourceList = computed(() => {
 
   const list = Object.keys(supportedSources).map((key) => ({
     key,
-    name: sourceNames[key] || key,
-    icon: sourceicon[key] || key
+    name: supportedSources[key].name || key,
+    icon: sourceicon[key] || key,
+    iconUrl: providerIconUrls.value[key]
   }))
-  // 当支持的音源 ≥ 2 个时，在顶部插入"聚合"选项
-  if (list.length >= 2) {
-    list.unshift({ key: 'all', name: sourceNames.all, icon: sourceicon.all })
-  }
   return list
 })
 
@@ -172,7 +203,7 @@ const handleMaskClick = () => {
 
 const handleClick = (index: number): void => {
   menuActive.value = index
-  router.push(menuList[index].path)
+  router.push(menuList.value[index].path)
 }
 
 // 导航历史前进后退功能
@@ -346,6 +377,15 @@ function checkGuide() {
             <i :class="`iconfont ${item.icon} nav-icon`"></i>
             {{ item.name }}
           </t-button>
+          <t-button
+            v-for="page in pluginPages"
+            :key="page.pluginId + page.id"
+            variant="text"
+            block
+            class="nav-button"
+            @click="openPluginPage(page)"
+            >{{ page.title }}</t-button
+          >
         </nav>
       </div>
     </t-aside>
@@ -354,7 +394,7 @@ function checkGuide() {
       <t-content>
         <div class="content">
           <!-- Header -->
-          <div class="header">
+          <div class="header" data-app-titlebar>
             <t-button shape="circle" theme="default" class="nav-btn" @click="goBack">
               <i class="iconfont icon-xiangzuo"></i>
             </t-button>
@@ -365,7 +405,18 @@ function checkGuide() {
             <div class="search-container">
               <div class="search-input">
                 <div class="source-selector" @click="toggleSourceList">
-                  <span v-if="source === 'all'" class="source-fallback">聚</span>
+                  <img
+                    v-if="currentProviderIcon"
+                    :src="currentProviderIcon"
+                    class="icon provider-logo"
+                    alt=""
+                  />
+                  <span v-else-if="source === 'all'" class="source-fallback">聚</span>
+                  <span
+                    v-else-if="!Object.values(sourceicon).includes(source)"
+                    class="source-fallback"
+                    >{{ sourceFallbackLabel }}</span
+                  >
                   <svg v-else class="icon" aria-hidden="true">
                     <use :xlink:href="`#icon-${source}`"></use>
                   </svg>
@@ -385,7 +436,16 @@ function checkGuide() {
                         :class="{ active: source === item.icon }"
                         @click="selectSource(item.key)"
                       >
-                        <span v-if="item.key === 'all'" class="source-fallback">聚</span>
+                        <img
+                          v-if="item.iconUrl"
+                          :src="item.iconUrl"
+                          class="source-icon provider-logo"
+                          alt=""
+                        />
+                        <span v-else-if="item.key === 'all'" class="source-fallback">聚</span>
+                        <span v-else-if="!sourceicon[item.key]" class="source-fallback">{{
+                          item.name.slice(0, 1)
+                        }}</span>
                         <svg v-else class="source-icon" aria-hidden="true">
                           <use :xlink:href="`#icon-${item.icon}`"></use>
                         </svg>
@@ -397,7 +457,8 @@ function checkGuide() {
                 <t-input
                   ref="inputRef"
                   v-model="SearchStore.value"
-                  placeholder="搜索音乐、歌手"
+                  :disabled="!hasPluginData"
+                  :placeholder="hasPluginData ? '搜索音乐、歌手' : '安装音源插件后搜索在线音乐'"
                   style="width: 100%"
                   @enter="handleKeyDown"
                   @focus="SearchStore.setFocus(true)"
@@ -417,7 +478,7 @@ function checkGuide() {
                 </t-input>
                 <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
-              <t-tooltip content="听歌识曲（Beta）" placement="bottom">
+              <t-tooltip v-if="hasPluginData" content="听歌识曲（Beta）" placement="bottom">
                 <t-button
                   shape="circle"
                   theme="default"
@@ -488,6 +549,12 @@ function checkGuide() {
 .icon {
   width: 1.5rem;
   height: 1.5rem;
+}
+.provider-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .sidebar {

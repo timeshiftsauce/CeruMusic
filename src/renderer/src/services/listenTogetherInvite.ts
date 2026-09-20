@@ -2,7 +2,7 @@
  * 一起听 · 邀请入口统一调度
  *
  * 触发来源(共用一份对话框 + 去重逻辑):
- *  1. 主进程 deeplink (cerumusic://lt/<code>) → IPC `lt-share-open`
+ *  1. 主进程 deeplink (cerumusic://lt/<code>) → 应用入口 FIFO
  *  2. 应用启动 / 窗口重新聚焦时主动读剪贴板
  *  3. 用户手动复制分享文案后切到发现页(onActivated 触发)
  *
@@ -14,6 +14,7 @@
  */
 
 import { h } from 'vue'
+import { appEntryQueue } from './entryQueue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { extractCodeFromShareText } from '@renderer/components/ListenTogether/parts/shareTextHelper'
 import { getRoomPreview, resolveRoom } from '@renderer/api/listenTogether'
@@ -50,13 +51,23 @@ async function readClipboardText(): Promise<string> {
   }
 }
 
+/** All clipboard entry points join the same FIFO as deep links. */
+export async function tryShowListenTogetherInvite(
+  source: InviteTriggerSource,
+  explicitCode?: string | null
+): Promise<void> {
+  const code = explicitCode?.toUpperCase() || extractCodeFromShareText(await readClipboardText())
+  if (!code || dismissedCodes.has(code)) return
+  return appEntryQueue.enqueue(`invite:${code}`, () => showListenTogetherInvite(source, code))
+}
+
 /**
  * 提取 / 校验 code 并弹出加入对话框
  *
  * @param source 触发来源(目前仅用于日志区分)
  * @param explicitCode deeplink 路径直接传入的 code;省一次剪贴板读
  */
-export async function tryShowListenTogetherInvite(
+export async function showListenTogetherInvite(
   source: InviteTriggerSource,
   explicitCode?: string | null
 ): Promise<void> {
@@ -86,35 +97,45 @@ export async function tryShowListenTogetherInvite(
         return
       }
       dismissedCodes.add(code)
-      const dialog = DialogPlugin.confirm({
-        header: '加入一起听需要登录',
-        body: () =>
-          h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
-            h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
-              '检测到剪贴板里有一起听房间口令'
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          dialog.destroy()
+          resolve()
+        }
+        const dialog = DialogPlugin.confirm({
+          header: '加入一起听需要登录',
+          body: () =>
+            h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
+              h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
+                source === 'deeplink' ? '收到一起听房间邀请' : '检测到剪贴板里有一起听房间口令'
+              ]),
+              h(
+                'div',
+                {
+                  style: 'font-size: 16px; font-weight: 600; color: var(--td-text-color-primary);'
+                },
+                [preview.name]
+              ),
+              h(
+                'div',
+                {
+                  style: 'font-size: 12px; color: var(--td-text-color-secondary); margin-top: 6px;'
+                },
+                [`房间口令 #${preview.code}#`]
+              )
             ]),
-            h(
-              'div',
-              {
-                style: 'font-size: 16px; font-weight: 600; color: var(--td-text-color-primary);'
-              },
-              [preview.name]
-            ),
-            h(
-              'div',
-              {
-                style: 'font-size: 12px; color: var(--td-text-color-secondary); margin-top: 6px;'
-              },
-              [`房间口令 #${preview.code}#`]
-            )
-          ]),
-        confirmBtn: '去登录',
-        cancelBtn: '稍后',
-        onConfirm: () => {
-          dialog.hide()
-          void auth.login()
-        },
-        onClose: () => dialog.hide()
+          confirmBtn: '去登录',
+          cancelBtn: '稍后',
+          onConfirm: () => {
+            dialog.hide()
+            void auth
+              .login()
+              .catch((error) => MessagePlugin.error(error?.message || '登录失败'))
+              .finally(finish)
+          },
+          onClose: finish,
+          onCancel: finish
+        })
       })
       return
     }
@@ -142,49 +163,58 @@ export async function tryShowListenTogetherInvite(
 
     dismissedCodes.add(code)
     const modeLabel = preview.mode === 'intimate' ? '亲密模式' : '多人房间'
-    const dialog = DialogPlugin.confirm({
-      header: '加入一起听',
-      body: () =>
-        h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
-          h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
-            source === 'deeplink' ? '来自分享链接的一起听邀请' : '朋友邀请你加入一起听房间'
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        dialog.destroy()
+        resolve()
+      }
+      const dialog = DialogPlugin.confirm({
+        header: '加入一起听',
+        body: () =>
+          h('div', { style: 'line-height: 1.7; max-width: 360px;' }, [
+            h('div', { style: 'color: var(--td-text-color-secondary); margin-bottom: 8px;' }, [
+              source === 'deeplink' ? '来自分享链接的一起听邀请' : '朋友邀请你加入一起听房间'
+            ]),
+            h(
+              'div',
+              {
+                style:
+                  'font-size: 18px; font-weight: 700; color: var(--td-text-color-primary); margin-bottom: 6px;'
+              },
+              [preview.name]
+            ),
+            h(
+              'div',
+              {
+                style: 'font-size: 12px; color: var(--td-text-color-secondary);'
+              },
+              [`${modeLabel} · 最多 ${preview.maxMembers} 人`]
+            ),
+            h(
+              'div',
+              {
+                style:
+                  'margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; letter-spacing: 3px; color: var(--td-text-color-primary);'
+              },
+              [`#${preview.code}#`]
+            )
           ]),
-          h(
-            'div',
-            {
-              style:
-                'font-size: 18px; font-weight: 700; color: var(--td-text-color-primary); margin-bottom: 6px;'
-            },
-            [preview.name]
-          ),
-          h(
-            'div',
-            {
-              style: 'font-size: 12px; color: var(--td-text-color-secondary);'
-            },
-            [`${modeLabel} · 最多 ${preview.maxMembers} 人`]
-          ),
-          h(
-            'div',
-            {
-              style:
-                'margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; letter-spacing: 3px; color: var(--td-text-color-primary);'
-            },
-            [`#${preview.code}#`]
-          )
-        ]),
-      confirmBtn: '立即加入',
-      cancelBtn: '稍后',
-      onConfirm: async () => {
-        dialog.hide()
-        try {
-          await lt.resolveAndJoin(preview!.code)
-          lt.openOverlay()
-        } catch (e: any) {
-          MessagePlugin.error(e?.message || '加入失败,请稍后重试')
-        }
-      },
-      onClose: () => dialog.hide()
+        confirmBtn: '立即加入',
+        cancelBtn: '稍后',
+        onConfirm: async () => {
+          dialog.hide()
+          try {
+            await lt.resolveAndJoin(preview!.code)
+            lt.openOverlay()
+          } catch (e: any) {
+            MessagePlugin.error(e?.message || '加入失败,请稍后重试')
+          } finally {
+            finish()
+          }
+        },
+        onClose: finish,
+        onCancel: finish
+      })
     })
   } finally {
     running = false

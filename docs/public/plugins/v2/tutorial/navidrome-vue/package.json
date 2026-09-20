@@ -1,0 +1,24 @@
+{
+  "name": "ceru-navidrome-vue-tutorial",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "mock": "node mock-navidrome.mjs",
+    "dev": "ceru-plugin dev",
+    "build": "ceru-plugin build",
+    "typecheck": "tsc --noEmit",
+    "validate": "ceru-plugin validate dist/plugin.js",
+    "preview": "ceru-plugin preview dist/plugin.js"
+  },
+  "dependencies": {
+    "@shiqianjiang/ceru-plugin-sdk": "0.3.5"
+  },
+  "devDependencies": {
+    "@shiqianjiang/ceru-plugin-cli": "0.3.5",
+    "electron": "^44.4.2",
+    "prettier": "^3.6.2",
+    "typescript": "~5.9.3",
+    "vue": "3.5.43"
+  }
+}

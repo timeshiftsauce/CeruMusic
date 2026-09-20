@@ -49,6 +49,7 @@
             <div class="progress-track">
               <div class="progress-bar" :style="{ width: progressWidth }"></div>
             </div>
+            <t-button v-if="startupError" variant="text" @click="prepareStartup">重新加载</t-button>
           </div>
         </div>
       </div>
@@ -60,9 +61,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { startupHomeAvailable, refreshPluginContributions } from '@renderer/services/pluginState'
 import { useRouter } from 'vue-router'
-import { initPlayback } from '@renderer/utils/audio/globaPlayList'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
@@ -76,8 +77,7 @@ const version = ref('1.0.0')
 const loadingText = ref('正在初始化核心服务...')
 const loadingPercent = ref(0)
 
-// 保存定时器ID以便清理
-let timer: number | null = null
+const startupError = ref(false)
 
 const progressWidth = computed(() => `${loadingPercent.value}%`)
 
@@ -88,7 +88,8 @@ const features = showNewYear.value
   ? ['岁岁长安', '功不唐捐', '马年吉祥', '马越新程']
   : ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
 
-onMounted(async () => {
+async function prepareStartup() {
+  startupError.value = false
   // 获取版本号
   try {
     const appVersion = await window.electron.ipcRenderer.invoke('get-app-version')
@@ -97,71 +98,27 @@ onMounted(async () => {
     console.warn('Failed to get app version:', error)
   }
 
-  const startTime = Date.now()
-
-  // 模拟进度条动画
-  let progress = 0
-  timer = window.setInterval(() => {
-    if (progress < 70) {
-      progress += Math.random() * 5
-      if (progress > 70) progress = 70
-      loadingPercent.value = Math.floor(progress)
-    }
-  }, 100)
-
-  // 模拟加载步骤提示
-  setTimeout(() => (loadingText.value = '加载插件系统...'), 500)
-
+  loadingText.value = '读取插件列表...'
+  loadingPercent.value = 15
   try {
     await window.electron.ipcRenderer.invoke('service-plugin-initialize-system')
+    loadingText.value = '恢复已启用插件和首页...'
+    loadingPercent.value = 35
+    await refreshPluginContributions()
   } catch (e) {
     console.error('Plugin init failed', e)
-    loadingText.value = '初始化遇到问题'
-  }
-
-  const endTime = Date.now()
-  const duration = endTime - startTime
-
-  // 动态计算等待时间
-  let waitTime = 0
-  if (duration < 2000) {
-    waitTime = 2000 - duration
-  } else {
-    waitTime = 1000
+    loadingText.value = '插件恢复失败，请重新加载'
+    startupError.value = true
+    return
   }
   loadingPercent.value = 80
-  loadingText.value = '加载歌曲资源...'
-
-  initPlayback()
-    .catch((e) => console.error('initPlayback failed', e))
-    .finally(() => {
-      setTimeout(() => {
-        if (timer) {
-          clearInterval(timer)
-          timer = null
-        }
-        loadingPercent.value = 100
-        loadingText.value = '准备就绪...'
-        setTimeout(() => {
-          router.replace('/home').then(() => {
-            if (settings.value.autoUpdate) {
-              setTimeout(() => {
-                checkForUpdates()
-              }, 2000)
-            }
-          })
-        }, 200)
-      }, waitTime)
-    })
-})
-
-// 清理定时器，防止路由快速切换时内存泄漏
-onUnmounted(() => {
-  if (timer) {
-    clearInterval(timer)
-    timer = null
-  }
-})
+  loadingText.value = '准备首页...'
+  loadingPercent.value = 100
+  loadingText.value = '准备就绪'
+  await router.replace(startupHomeAvailable.value ? '/home/find' : '/home/local')
+  if (settings.value.autoUpdate) void checkForUpdates()
+}
+onMounted(prepareStartup)
 </script>
 
 <style scoped>

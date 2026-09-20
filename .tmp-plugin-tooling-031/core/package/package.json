@@ -1,0 +1,78 @@
+{
+  "name": "@shiqianjiang/ceru-plugin-core",
+  "version": "0.3.1",
+  "description": "Ceru Music v2 plugin Core runtime and Host adapter boundary",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./sockets": {
+      "types": "./dist/socket-broker.d.ts",
+      "default": "./dist/socket-broker.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./network": {
+      "types": "./dist/network.d.ts",
+      "default": "./dist/network.js"
+    },
+    "./electron": {
+      "types": "./dist/electron.d.ts",
+      "import": "./dist/electron.js",
+      "default": "./dist/electron.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./guests": {
+      "types": "./dist/guest-store.d.ts",
+      "default": "./dist/guest-store.js"
+    },
+    "./surface": {
+      "types": "./dist/surface.d.ts",
+      "default": "./dist/surface.js"
+    },
+    "./surface-document": {
+      "types": "./dist/surface-document.d.ts",
+      "default": "./dist/surface-document.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "license": "MIT AND AGPL-3.0-only",
+  "author": "澜音团队",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3",
+    "ws": "^8.21.3",
+    "axios": "^1.13.2",
+    "@shiqianjiang/ceru-plugin-issuer": "0.3.1",
+    "@shiqianjiang/ceru-plugin-sdk": "0.3.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CeruMusic/CeruMusic-Plugin-Cli.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "ceru-music",
+    "plugin",
+    "core",
+    "electron"
+  ]
+}

@@ -1,9 +1,16 @@
 <script setup lang="ts">
+import { getQualityDisplayName } from '@common/utils/quality'
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { TreeRoundDotIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
 import fonts from '@renderer/assets/icon_font/icons'
+import {
+  providerIconUrls,
+  providerImplementations,
+  selectProviderImplementation
+} from '@renderer/services/pluginState'
 
 const emit = defineEmits(['switch-category'])
 
@@ -28,6 +35,20 @@ const currentSourceQualities = computed(() => {
   if (!hasPluginData.value || !userInfo.value.selectSources) return []
   const selectedSource = userInfo.value.supportedSources?.[userInfo.value.selectSources]
   return selectedSource?.qualitys || []
+})
+const currentProviderOptions = computed(() =>
+  providerImplementations.value
+    .filter((item) => item.providerId === userInfo.value.selectSources)
+    .map((item) => ({ label: item.pluginName, value: item.pluginId }))
+)
+const currentProviderPlugin = computed({
+  get: () => userInfo.value.sourcePluginMap?.[userInfo.value.selectSources || ''] || '',
+  set: (pluginId: string) => {
+    if (userInfo.value.selectSources)
+      void selectProviderImplementation(userInfo.value.selectSources, pluginId).catch((error) =>
+        MessagePlugin.error(error?.message || '切换音源插件失败，已保留原选择')
+      )
+  }
 })
 
 const qualitySliderValue = ref(0)
@@ -92,8 +113,8 @@ watch(
       if (index !== -1) {
         qualitySliderValue.value = index
       } else {
-        console.log('当前音质不在支持列表中，选择默认音质')
-        userInfo.value.selectQuality = qualities[qualities.length - 1]
+        // Rendering a partial provider list must not overwrite a saved preference.
+        qualitySliderValue.value = Math.max(0, qualities.length - 1)
       }
     }
   },
@@ -130,23 +151,7 @@ const onQualityChange = (value: any) => {
   }
 }
 
-const getQualityDisplayName = (quality: string) => {
-  const qualityMap: Record<string, string> = {
-    low: '标准',
-    standard: '高品质',
-    high: '超高品质',
-    lossless: '无损',
-    '128k': '标准 128K',
-    '192k': '高品质 192K',
-    '320k': '超高品质 320K',
-    flac: '无损 FLAC',
-    flac24bit: '高解析度无损',
-    hires: '高清臻音',
-    atmos: '沉浸环绕声',
-    master: '超清母带'
-  }
-  return qualityMap[quality] || quality
-}
+
 
 const getQualityDescription = (quality: string) => {
   const descriptions: Record<string, string> = {
@@ -161,6 +166,7 @@ const getQualityDescription = (quality: string) => {
     flac24bit: '更饱满清晰的高解析度音质，最高192kHz/24bit',
     hires: '声音听感加强，96kHz/24bit',
     atmos: '沉浸式空间环绕音感，最高5.1声道',
+    atmos_plus: '音源提供的增强环绕音质',
     master: '母带级音质,192kHz/24bit'
   }
   return descriptions[quality] || '自定义音质设置'
@@ -199,7 +205,14 @@ const goPlugin = () => {
             @click="selectSource(key as string)"
           >
             <div class="source-icon">
-              <component :is="fonts[key]" style="font-size: 2em"></component>
+              <img
+                v-if="providerIconUrls[key]"
+                :src="providerIconUrls[key]"
+                :alt="source.name"
+                class="provider-logo"
+              />
+              <component v-else-if="fonts[key]" :is="fonts[key]" style="font-size: 2em" />
+              <span v-else>{{ (source.name || String(key)).slice(0, 1) }}</span>
             </div>
             <div class="source-info">
               <div class="source-name">{{ source.name }}</div>
@@ -213,6 +226,11 @@ const goPlugin = () => {
       </div>
 
       <div v-if="currentSourceQualities.length > 0" id="music-quality" class="setting-group">
+        <template v-if="currentProviderOptions.length > 1">
+          <h3>平台实现</h3>
+          <t-select v-model="currentProviderPlugin" :options="currentProviderOptions" />
+          <p class="quality-hint">同一平台由多个插件提供时，可在这里指定当前使用的实现。</p>
+        </template>
         <h3>音质选择</h3>
         <div class="quality-slider-container">
           <t-slider
@@ -381,6 +399,12 @@ const goPlugin = () => {
       align-items: center;
       justify-content: center;
       color: var(--settings-text-secondary);
+
+      .provider-logo {
+        width: 1.75rem;
+        height: 1.75rem;
+        object-fit: contain;
+      }
     }
 
     .source-info {

@@ -1,13 +1,14 @@
 <template>
   <Provider v-if="!$route.path.includes('desktop-lyric')">
     <GlobalBackground />
+    <PluginHostBridge />
 
     <router-view v-slot="{ Component }">
       <Transition
         :enter-active-class="`animate__animated animate__fadeIn  pagesApp`"
         :leave-active-class="`animate__animated animate__fadeOut pagesApp`"
       >
-        <component :is="Component" />
+        <KeepAlive include="HomeRoot"><component :is="Component" /></KeepAlive>
       </Transition>
     </router-view>
 
@@ -19,146 +20,170 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
+import { onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
 import shareAPI from '@renderer/api/share'
+import PluginHostBridge from '@renderer/components/PluginHostBridge.vue'
+import { appEntryQueue } from '@renderer/services/entryQueue'
+import { showListenTogetherInvite } from '@renderer/services/listenTogetherInvite'
+import { showExternalPluginInstall } from '@renderer/services/externalPluginInstall'
+import type { QueuedDeepLink } from '@common/types/deepLink'
 
 const route = useRoute()
 const router = useRouter()
 const settingsStore = useSettingsStore()
-// 启动页路由是 '/'(welcome)；其它路由（/home/*, /settings 等）视为应用就绪
-// 排除桌面歌词与识别 worker 这种独立窗口
-const isAppReady = computed(() => {
-  const p = route.path || ''
-  if (p === '/' || p === '') return false
-  if (p.startsWith('/desktop-lyric')) return false
-  if (p.startsWith('/recognition-worker')) return false
-  return true
-})
 
-interface DeepLinkQueueOptions {
-  label: string
-  handler: (id: string) => Promise<void>
-}
-
-function createDeepLinkQueue({ label, handler }: DeepLinkQueueOptions) {
-  const pending = ref<string[]>([])
-  const processed = new Set<string>()
-
-  const handle = async (id: string) => {
-    if (!id || processed.has(id)) return
-    processed.add(id)
-    try {
-      await handler(id)
-    } finally {
-      processed.delete(id)
-    }
-  }
-
-  const enqueueOrHandle = (id: string) => {
-    if (!id) return
-    if (isAppReady.value) {
-      handle(id)
-    } else if (!pending.value.includes(id)) {
-      pending.value.push(id)
-    }
-  }
-
-  const flush = async (parallel = true) => {
-    if (!pending.value.length) return
-    const ids = pending.value.splice(0)
-    console.log(`[${label}] flush:`, ids)
-    if (parallel) await Promise.all(ids.map(handle))
-    else for (const id of ids) await handle(id)
-  }
-
-  return { pending, enqueueOrHandle, flush }
-}
-
-const songShareQueue = createDeepLinkQueue({
-  label: 'share',
-  handler: async (id) => {
-    console.log('[share] 处理分享 id:', id)
-    MessagePlugin.info(`正在打开分享：${id}`)
-    try {
-      const detail = await shareAPI.getById(id)
-      if (!detail || !detail.song) {
-        MessagePlugin.error('分享已失效或已过期')
-        return
-      }
-      const song: any = {
-        ...detail.song,
-        source: (detail.song as any).source || detail.source
-      }
-      const emitter = (window as any).musicEmitter
-      if (!emitter) {
-        MessagePlugin.error('播放器未就绪，请稍候重试')
-        return
-      }
-      emitter.emit('addToPlaylistAndPlay', song)
-    } catch (e: any) {
-      console.error('打开分享失败', e)
-      MessagePlugin.error(
-        '打开分享失败：' + (e?.response?.data?.message || e?.message || '未知错误')
-      )
-    }
-  }
-})
-
-const playlistShareQueue = createDeepLinkQueue({
-  label: 'playlist-share',
-  handler: async (id) => {
-    console.log('[playlist-share] 处理歌单分享 id:', id)
-    MessagePlugin.info(`正在打开歌单分享：${id}`)
-    try {
-      const detail = await shareAPI.getPlaylistById(id, 0)
-      if (!detail?.playlist) {
-        MessagePlugin.error('歌单分享不存在或已失效')
-        return
-      }
-      await router.push({
-        name: 'list',
-        params: { id },
-        query: {
-          title: detail.playlist.name,
-          author: detail.username || 'share',
-          cover: detail.playlist.cover || '',
-          total: String(detail.playlist.total || 0),
-          source: 'share',
-          type: 'playlist_share',
-          description: detail.playlist.describe || '',
-          cloudId: detail.playlist.id,
-          meta: JSON.stringify({
-            cloudId: detail.playlist.id,
-            playlistShareId: detail.id,
-            sourceShare: true,
-            canPlay: detail.canPlay,
-            playExpiresAt: detail.playExpiresAt,
-            openInAppScheme: detail.openInAppScheme
-          })
-        }
+// 播放事件属于应用生命周期；刷新后直接进入主界面也必须初始化。
+watch(
+  () => route.path,
+  (path) => {
+    if (!path.startsWith('/home') && path !== '/settings') return
+    void import('@renderer/utils/audio/globaPlayList')
+      .then(({ initPlayback }) => initPlayback())
+      .catch((error) => {
+        console.error('初始化播放器失败:', error)
+        MessagePlugin.error('播放器初始化失败，请重新打开软件后重试')
       })
-    } catch (e: any) {
-      console.error('打开歌单分享失败', e)
-      MessagePlugin.error(
-        '打开歌单分享失败：' + (e?.response?.data?.message || e?.message || '未知错误')
-      )
+  },
+  { immediate: true, flush: 'post' }
+)
+
+async function openSongShare(id: string) {
+  console.log('[share] 处理分享 id:', id)
+  MessagePlugin.info(`正在打开分享：${id}`)
+  try {
+    let detail: any
+    if (id.startsWith('v2_')) {
+      const descriptor = await window.api.share.readDescriptor(id)
+      const registry = await window.api.plugins.contributions()
+      const installed = registry.find((item) => item.manifest.id === descriptor.track.pluginId)
+      if (!installed) {
+        MessagePlugin.warning('请先安装分享歌曲所需的插件：' + descriptor.track.pluginId)
+        return
+      }
+      detail = {
+        source: descriptor.track.providerId,
+        song: {
+          songmid: descriptor.track.id,
+          name: descriptor.title,
+          singer: descriptor.artists.join('、'),
+          source: descriptor.track.providerId,
+          pluginResource: descriptor.track,
+          albumName: '',
+          albumId: '',
+          types: [],
+          _types: {},
+          lrc: null
+        }
+      }
+    } else detail = await shareAPI.getById(id)
+    if (!detail || !detail.song) {
+      MessagePlugin.error('分享已失效或已过期')
+      return
     }
+    const song: any = {
+      ...detail.song,
+      source: (detail.song as any).source || detail.source
+    }
+    const [{ addToPlaylistAndPlay }, { playSong }, { LocalUserDetailStore }] = await Promise.all([
+      import('@renderer/utils/playlist/playlistManager'),
+      import('@renderer/utils/audio/globaPlayList'),
+      import('@renderer/store/LocalUserDetail')
+    ])
+    await addToPlaylistAndPlay(song, LocalUserDetailStore(), playSong)
+  } catch (e: any) {
+    console.error('打开分享失败', e)
+    MessagePlugin.error('打开分享失败：' + (e?.response?.data?.message || e?.message || '未知错误'))
   }
-})
+}
 
-watch(isAppReady, (ready) => {
-  if (!ready) return
-  songShareQueue.flush(true)
-  // router.push 互斥，串行处理避免覆盖
-  playlistShareQueue.flush(false)
-})
+async function openPlaylistShare(id: string) {
+  console.log('[playlist-share] 处理歌单分享 id:', id)
+  MessagePlugin.info(`正在打开歌单分享：${id}`)
+  try {
+    const detail = await shareAPI.getPlaylistById(id, 0)
+    if (!detail?.playlist) {
+      MessagePlugin.error('歌单分享不存在或已失效')
+      return
+    }
+    await router.push({
+      name: 'list',
+      params: { id },
+      query: {
+        title: detail.playlist.name,
+        author: detail.username || 'share',
+        cover: detail.playlist.cover || '',
+        total: String(detail.playlist.total || 0),
+        source: 'share',
+        type: 'playlist_share',
+        description: detail.playlist.describe || '',
+        cloudId: detail.playlist.id,
+        meta: JSON.stringify({
+          cloudId: detail.playlist.id,
+          playlistShareId: detail.id,
+          sourceShare: true,
+          canPlay: detail.canPlay,
+          playExpiresAt: detail.playExpiresAt,
+          openInAppScheme: detail.openInAppScheme
+        })
+      }
+    })
+  } catch (e: any) {
+    console.error('打开歌单分享失败', e)
+    MessagePlugin.error(
+      '打开歌单分享失败：' + (e?.response?.data?.message || e?.message || '未知错误')
+    )
+  }
+}
 
-let unsubShareOpen: (() => void) | null = null
-let unsubPlaylistShareOpen: (() => void) | null = null
+let unsubDeepLinks: (() => void) | undefined
 let unsubCloseRequest: (() => void) | null = null
+let mounted = false
+let inbox: Promise<void> = Promise.resolve()
+const received = new Set<number>()
+let inboxReady = false
+let enteredHome = false
+function updateQueueReady() {
+  if (route.path.startsWith('/home/')) enteredHome = true
+  const interactive = route.path.startsWith('/home/') || route.path.startsWith('/settings')
+  appEntryQueue.setReady(mounted && inboxReady && enteredHome && interactive)
+}
+async function handleDeepLink(item: QueuedDeepLink) {
+  try {
+    if (item.kind === 'song-share') await openSongShare(item.value)
+    else if (item.kind === 'playlist-share') await openPlaylistShare(item.value)
+    else if (item.kind === 'listen-together') await showListenTogetherInvite('deeplink', item.value)
+    else await showExternalPluginInstall(item.sequence)
+  } finally {
+    await window.api.deepLinks.acknowledge(item.sequence)
+  }
+}
+function syncDeepLinks() {
+  inbox = inbox
+    .catch(() => {})
+    .then(async () => {
+      const links = await window.api.deepLinks.pending()
+      if (!mounted) return
+      for (const item of links.sort((a, b) => a.sequence - b.sequence)) {
+        if (received.has(item.sequence)) continue
+        received.add(item.sequence)
+        void appEntryQueue.enqueue(`deeplink:${item.sequence}`, () => handleDeepLink(item))
+      }
+      inboxReady = true
+      await nextTick()
+      updateQueueReady()
+    })
+    .catch((error) => console.warn('读取外部链接队列失败:', error))
+  return inbox
+}
+watch(
+  () => route.path,
+  () => {
+    void nextTick().then(updateQueueReady)
+  }
+)
 
 // 处理 Ctrl+W / Alt+F4 的关闭请求，模拟点击关闭按钮行为
 const handleWindowCloseRequest = () => {
@@ -176,29 +201,17 @@ const handleWindowCloseRequest = () => {
 }
 
 onMounted(async () => {
+  mounted = true
+  unsubDeepLinks = window.api.deepLinks.onChanged(() => {
+    void syncDeepLinks()
+  })
+  void syncDeepLinks()
   // 启动时把窗口标题置为软件名(若 PlayMusic 后续挂载且有歌,会立刻覆盖为"歌名 - 歌手")
   try {
     ;(window as any).api?.app?.setTitle?.('澜音 Ceru Music')
     ;(window as any).api?.app?.setProgress?.(-1)
   } catch (e) {
     console.warn('[app] init title/progress failed', e)
-  }
-
-  if (window?.api?.share?.onShareOpen) {
-    unsubShareOpen = window.api.share.onShareOpen(({ id }) => songShareQueue.enqueueOrHandle(id))
-  }
-  if (window?.api?.share?.onPlaylistShareOpen) {
-    unsubPlaylistShareOpen = window.api.share.onPlaylistShareOpen(({ id }) =>
-      playlistShareQueue.enqueueOrHandle(id)
-    )
-  }
-  try {
-    const ids = (await window?.api?.share?.getPending?.()) || []
-    for (const id of ids) songShareQueue.enqueueOrHandle(id)
-    const playlistIds = (await window?.api?.share?.getPendingPlaylistShares?.()) || []
-    for (const id of playlistIds) playlistShareQueue.enqueueOrHandle(id)
-  } catch (e) {
-    console.warn('[share] 拉取待处理分享 id 失败', e)
   }
 
   // 监听主进程发送的关闭请求（Ctrl+W / Alt+F4）
@@ -208,10 +221,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  unsubShareOpen?.()
-  unsubShareOpen = null
-  unsubPlaylistShareOpen?.()
-  unsubPlaylistShareOpen = null
+  mounted = false
+  unsubDeepLinks?.()
+  appEntryQueue.setReady(false)
   unsubCloseRequest?.()
   unsubCloseRequest = null
 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getQualityDisplayName } from '@common/utils/quality'
 import {
   ref,
   computed,
@@ -825,22 +826,6 @@ const setPlaybackRate = (rate: number) => {
 }
 
 // 音质切换相关
-const qualityDisplayMap: Record<string, string> = {
-  low: '标准',
-  standard: '高品质',
-  high: '超高品质',
-  lossless: '无损',
-  '128k': '标准 128K',
-  '192k': '高品质 192K',
-  '320k': '超高品质 320K',
-  flac: '无损 FLAC',
-  flac24bit: '高解析度无损',
-  hires: '高清臻音',
-  atmos: '沉浸环绕声',
-  master: '超清母带'
-}
-
-const getQualityDisplayName = (quality: string) => qualityDisplayMap[quality] || quality
 
 // 当前歌曲是否支持音质切换（来自插件音源、且非 service 插件直链）
 const canSwitchQuality = computed(() => {

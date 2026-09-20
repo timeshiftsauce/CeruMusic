@@ -1,14 +1,25 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch, WatchHandle } from 'vue'
 import { useRouter } from 'vue-router'
+import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
+import { openPluginPlaylist } from '@renderer/services/pluginPlaybackBridge'
+import { MessagePlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
 import LeaderBord from '@renderer/components/Find/LeaderBord.vue'
-import { ChevronDownIcon, PlayCircleIcon } from 'tdesign-icons-vue-next'
-import { useSettingsStore } from '@renderer/store/Settings'
+import PluginSurface from '@renderer/components/PluginSurface.vue'
+import { ChevronDownIcon } from 'tdesign-icons-vue-next'
+import PlaylistGrid from '@renderer/components/Music/PlaylistGrid.vue'
 import { tryShowListenTogetherInvite } from '@renderer/services/listenTogetherInvite'
+import {
+  homeSections,
+  pluginRestorationComplete,
+  contributionsLoaded,
+  contributionsRevision
+} from '@renderer/services/pluginState'
 
 interface Playlist {
+  pluginResource?: ResourceRef
   id: string
   title: string
   description: string
@@ -34,7 +45,29 @@ type CacheEntry = {
   noMore: boolean
 }
 
-const settingsStore = useSettingsStore()
+const playlistSection = computed(() =>
+  homeSections.value.find((section) => section.kind === 'playlists')
+)
+const chartSection = computed(() => homeSections.value.find((section) => section.kind === 'charts'))
+const customSections = computed(() =>
+  homeSections.value
+    .filter((section) => section.kind === 'custom' && section.view)
+    .map((section) => ({ ...section, key: `${section.pluginId}:${section.id}` }))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+)
+const homeTab = ref('')
+watch(
+  [customSections, playlistSection, chartSection],
+  ([tabs, playlists, charts]) => {
+    const keys = [
+      ...tabs.map((tab) => tab.key),
+      ...(playlists ? ['songlist'] : []),
+      ...(charts ? ['leaderboard'] : [])
+    ]
+    if (!keys.includes(homeTab.value)) homeTab.value = keys[0] || ''
+  },
+  { immediate: true }
+)
 const router = useRouter()
 const LocalUserDetail = LocalUserDetailStore()
 const { userSource } = storeToRefs(LocalUserDetail)
@@ -63,6 +96,8 @@ const categoryCache = new Map<string, CacheEntry>()
 const showMore = ref<boolean>(false)
 
 let watchSource: WatchHandle | null = null
+let catalogGeneration = 0
+let listRequest = 0
 
 const cacheKey = computed(() => `${userSource.value.source || 'wy'}::${activeTagId.value || 'hot'}`)
 
@@ -79,14 +114,19 @@ const mapItem = (item: any): Playlist => ({
   author: item.author,
   total: item.total,
   time: item.time,
-  source: item.source
+  source: item.source,
+  pluginResource: item.pluginResource
 })
 
 const fetchTags = async (): Promise<void> => {
+  if (!contributionsLoaded.value || !playlistSection.value || !userSource.value.source) return
+  const generation = catalogGeneration
   try {
     const res = await window.api.music.requestSdk('getPlaylistTags', {
-      source: userSource.value.source || 'wy'
+      source: userSource.value.source
     })
+    if (generation !== catalogGeneration) return
+    if (res?.error) throw new Error(res.error)
     tags.value = res?.tags || []
     hotTag.value = res?.hotTag || []
     if (!activeGroupName.value) activeGroupName.value = tags.value[0]?.name || ''
@@ -96,19 +136,26 @@ const fetchTags = async (): Promise<void> => {
 }
 
 const fetchCategoryPlaylists = async (reset = false): Promise<void> => {
-  if (loadingMore.value) return
+  if (!contributionsLoaded.value || !playlistSection.value || !userSource.value.source) {
+    loading.value = false
+    return
+  }
+  if (loadingMore.value && !reset) return
+  const request = ++listRequest
+  const key = cacheKey.value
   if (reset) {
     page.value = 1
     noMore.value = false
     error.value = ''
     // 命中缓存
-    const cached = categoryCache.get(cacheKey.value)
+    const cached = categoryCache.get(key)
     if (cached) {
       recommendPlaylists.value = cached.list
       page.value = cached.page
       total.value = cached.total
       noMore.value = cached.noMore
       loading.value = false
+      loadingMore.value = false
       return
     }
     loading.value = true
@@ -117,12 +164,14 @@ const fetchCategoryPlaylists = async (reset = false): Promise<void> => {
   loadingMore.value = true
   try {
     const res = await window.api.music.requestSdk('getCategoryPlaylists', {
-      source: userSource.value.source || 'wy',
+      source: userSource.value.source,
       sortId: 'hot',
       tagId: activeTagId.value,
       page: page.value,
       limit: limit.value
     })
+    if (request !== listRequest) return
+    if (res?.error) throw new Error(res.error)
     const rawList = Array.isArray(res?.list) ? res.list : []
     const mapped: Playlist[] = rawList.map(mapItem)
     total.value = res?.total || 0
@@ -132,7 +181,7 @@ const fetchCategoryPlaylists = async (reset = false): Promise<void> => {
     noMore.value = loadedCount >= total.value || mapped.length === 0
     if (!noMore.value) page.value += 1
 
-    categoryCache.set(cacheKey.value, {
+    categoryCache.set(key, {
       list: recommendPlaylists.value.slice(),
       page: page.value,
       total: total.value,
@@ -140,11 +189,14 @@ const fetchCategoryPlaylists = async (reset = false): Promise<void> => {
     })
     error.value = ''
   } catch (e) {
+    if (request !== listRequest) return
     console.error('获取分类歌单失败:', e)
     if (!recommendPlaylists.value.length) error.value = '获取分类歌单失败,请稍后重试'
   } finally {
-    loading.value = false
-    loadingMore.value = false
+    if (request === listRequest) {
+      loading.value = false
+      loadingMore.value = false
+    }
   }
 }
 
@@ -170,6 +222,16 @@ const onScroll = (e: Event): void => {
 }
 
 const playPlaylist = (playlist: Playlist): void => {
+  if (playlist.pluginResource) {
+    void openPluginPlaylist(router, playlist.pluginResource, {
+      title: playlist.title,
+      author: playlist.author,
+      cover: playlist.cover,
+      total: playlist.total,
+      description: playlist.description
+    }).catch((error) => MessagePlugin.error(error instanceof Error ? error.message : String(error)))
+    return
+  }
   router.push({
     name: 'list',
     params: { id: playlist.id },
@@ -190,20 +252,33 @@ const onDocClick = (e: MouseEvent): void => {
 
 onMounted(() => {
   watchSource = watch(
-    userSource,
+    [() => userSource.value.source, playlistSection, contributionsLoaded, contributionsRevision],
     () => {
+      catalogGeneration++
+      listRequest++
+      categoryCache.clear()
+      loadingMore.value = false
+      recommendPlaylists.value = []
       tags.value = []
+      hotTag.value = []
       activeGroupName.value = ''
       activeTagId.value = ''
       activeCategoryName.value = '热门'
-      fetchTags().then(() => fetchCategoryPlaylists(true))
+      if (!contributionsLoaded.value || !playlistSection.value) {
+        loading.value = !contributionsLoaded.value
+        return
+      }
+      void fetchTags()
+      void fetchCategoryPlaylists(true)
     },
-    { deep: true, immediate: true }
+    { immediate: true }
   )
   document.addEventListener('click', onDocClick)
 })
 
 onUnmounted(() => {
+  catalogGeneration++
+  listRequest++
   if (watchSource) {
     watchSource()
     watchSource = null
@@ -238,8 +313,39 @@ onDeactivated(() => {
       <p>探索最新最热的音乐内容</p>
     </header>
 
-    <n-tabs type="segment" animated class="find-tabs" default-value="songlist" size="small">
-      <n-tab-pane name="songlist" tab="歌单" class="songlist-tab-pane">
+    <div
+      v-if="!homeSections.length && !pluginRestorationComplete"
+      class="home-restoring"
+      role="status"
+      aria-live="polite"
+    >
+      <t-loading size="28px" />
+      <p>正在加载首页内容…</p>
+    </div>
+    <t-empty
+      v-else-if="!homeSections.length"
+      description="使用提供首页的插件后，可浏览歌单和排行榜。"
+    />
+    <n-tabs v-else type="segment" animated class="find-tabs" v-model:value="homeTab" size="small">
+      <n-tab-pane
+        v-for="tab in customSections"
+        :key="tab.key"
+        :name="tab.key"
+        :tab="tab.title"
+        class="find-tab-pane plugin-tab-pane"
+      >
+        <PluginSurface
+          v-if="homeTab === tab.key"
+          :plugin-id="tab.pluginId"
+          :surface-id="tab.view"
+        />
+      </n-tab-pane>
+      <n-tab-pane
+        v-if="playlistSection"
+        name="songlist"
+        :tab="playlistSection.title"
+        class="songlist-tab-pane"
+      >
         <div ref="songlistScrollRef" class="scroll-container" @scroll.passive="onScroll">
           <n-back-top
             v-if="backTop"
@@ -337,37 +443,12 @@ onDeactivated(() => {
             </div>
 
             <!-- 列表 -->
-            <div v-else-if="recommendPlaylists.length" class="playlist-grid">
-              <article
-                v-for="playlist in recommendPlaylists"
-                :key="`${playlist.source || ''}-${playlist.id}`"
-                class="playlist-card"
-                :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
-                :style="{ '--cover-url': `url('${playlist.cover}')` }"
-                @click="playPlaylist(playlist)"
-              >
-                <div class="playlist-cover">
-                  <s-image :src="playlist.cover" class="playlist-cover-image" />
-                  <span v-if="userSource.source === 'all' && playlist.source" class="source-badge">
-                    {{ playlist.source }}
-                  </span>
-                  <div class="cover-overlay">
-                    <PlayCircleIcon class="play-icon" />
-                  </div>
-                </div>
-                <div class="playlist-info">
-                  <h4 class="playlist-title">{{ playlist.title }}</h4>
-                  <p class="playlist-desc">{{ playlist.description }}</p>
-                  <div class="playlist-meta">
-                    <span class="play-count">
-                      <i class="iconfont icon-bofang"></i>
-                      {{ playlist.playCount }}
-                    </span>
-                    <span v-if="playlist.total" class="song-count">{{ playlist.total }}首</span>
-                  </div>
-                </div>
-              </article>
-            </div>
+            <PlaylistGrid
+              v-else-if="recommendPlaylists.length"
+              :items="recommendPlaylists"
+              :show-source="userSource.source === 'all'"
+              @open="(index) => playPlaylist(recommendPlaylists[index])"
+            />
 
             <!-- 空 -->
             <div v-else-if="!loading" class="state-container">
@@ -387,7 +468,12 @@ onDeactivated(() => {
         </div>
       </n-tab-pane>
 
-      <n-tab-pane name="leaderboard" tab="排行榜" class="find-tab-pane">
+      <n-tab-pane
+        v-if="chartSection"
+        name="leaderboard"
+        :tab="chartSection.title"
+        class="find-tab-pane"
+      >
         <leader-bord ref="leaderboardRef" />
       </n-tab-pane>
     </n-tabs>
@@ -395,6 +481,7 @@ onDeactivated(() => {
 </template>
 
 <style lang="scss" scoped>
+@use '@renderer/components/Music/playlistGrid.scss';
 .find-container {
   padding-top: 1rem;
   padding-bottom: 0;
@@ -407,6 +494,7 @@ onDeactivated(() => {
 
   :deep(.find-tabs) {
     flex: 1;
+    min-height: 0;
     overflow: hidden;
     & > *,
     .find-tab-pane {
@@ -417,6 +505,8 @@ onDeactivated(() => {
     }
     .n-tabs-pane-wrapper {
       padding: 0;
+      flex: 1;
+      min-height: 0;
       .find-tab-pane {
         height: 100%;
         overflow-y: auto;
@@ -426,11 +516,16 @@ onDeactivated(() => {
         overflow: hidden;
         padding: 0 !important;
       }
+      .plugin-tab-pane {
+        min-height: 0;
+        overflow: hidden;
+      }
     }
   }
 }
 
 .page-header {
+  flex-shrink: 0;
   margin: 0 2rem 1rem;
 
   h2 {
@@ -447,6 +542,25 @@ onDeactivated(() => {
   p {
     color: var(--find-text-secondary);
     font-size: 0.85rem;
+  }
+}
+
+.home-restoring {
+  flex: 1;
+  min-height: 0;
+  margin: 0 2rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-radius: 12px;
+  background: var(--td-bg-color-container-hover);
+  color: var(--td-text-color-secondary);
+  p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
   }
 }
 
@@ -589,245 +703,6 @@ onDeactivated(() => {
     font-size: 12px;
     color: var(--find-text-muted);
     letter-spacing: 0.5px;
-  }
-}
-
-/* ======= 网格 ======= */
-.playlist-grid {
-  display: grid;
-  gap: 1.25rem;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-
-  @media (max-width: 480px) {
-    gap: 0.75rem;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-  @media (min-width: 481px) and (max-width: 768px) {
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  }
-  @media (min-width: 769px) and (max-width: 1024px) {
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  }
-  @media (min-width: 1200px) {
-    gap: 1.5rem;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  }
-}
-
-/* ======= 卡片 ======= */
-.playlist-card {
-  position: relative;
-  background: var(--find-card-bg);
-  border-radius: 14px;
-  overflow: hidden;
-  cursor: pointer;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 16px rgba(0, 0, 0, 0.04);
-  transition:
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.25s ease;
-
-  &.custom-bg {
-    background-color: var(--td-bg-color-component);
-    backdrop-filter: blur(8px);
-
-    .playlist-info {
-      background-color: rgba(var(--td-bg-color-container-rgb), 0.2);
-      backdrop-filter: blur(4px);
-    }
-  }
-
-  &:hover {
-    transform: translateY(-3px);
-    box-shadow:
-      0 6px 24px rgba(0, 0, 0, 0.12),
-      var(--find-card-shadow-hover);
-
-    .playlist-cover-image {
-      transform: scale(1.06);
-    }
-    .cover-overlay {
-      opacity: 1;
-    }
-    .playlist-info::before {
-      opacity: 1;
-    }
-    .playlist-info {
-      color: #fff;
-      .playlist-title,
-      .playlist-desc,
-      .playlist-meta,
-      .playlist-meta * {
-        color: #fff;
-      }
-      .song-count {
-        background: rgba(255, 255, 255, 0.16);
-      }
-    }
-  }
-
-  &:active {
-    transform: translateY(-1px);
-  }
-}
-
-.playlist-cover {
-  position: relative;
-  aspect-ratio: 1;
-  overflow: hidden;
-  background: var(--td-bg-color-secondarycontainer);
-
-  .playlist-cover-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    user-select: none;
-    -webkit-user-drag: none;
-    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .source-badge {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    z-index: 2;
-    padding: 3px 8px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(10px) saturate(160%);
-    -webkit-backdrop-filter: blur(10px) saturate(160%);
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-    pointer-events: none;
-  }
-
-  .cover-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      180deg,
-      transparent 45%,
-      rgba(0, 0, 0, 0.18) 75%,
-      rgba(0, 0, 0, 0.5) 100%
-    );
-    opacity: 0;
-    transition: opacity 0.25s ease;
-    display: flex;
-    align-items: flex-end;
-    justify-content: flex-end;
-    padding: 12px;
-    pointer-events: none;
-    z-index: 1;
-
-    .play-icon {
-      font-size: 36px;
-      color: #fff;
-      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
-      transform: translateY(4px);
-      transition: transform 0.25s ease;
-    }
-  }
-}
-
-.playlist-card:hover .cover-overlay .play-icon {
-  transform: translateY(0);
-}
-
-.playlist-info {
-  position: relative;
-  padding: 14px 14px 16px;
-  background: var(--find-card-info-bg);
-  transition: color 0.3s ease;
-  z-index: 0;
-
-  // GPU-only "themed" hover backdrop using cover image
-  // 默认不挂 filter/transform,避免每张卡都建立合成层;只在 hover 时启用
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: var(--cover-url);
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    filter: blur(40px) brightness(0.55) saturate(1.6);
-    transform: scale(1.6);
-    opacity: 0;
-    transition: opacity 0.35s ease;
-    z-index: -1;
-    pointer-events: none;
-  }
-
-  .playlist-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--find-text-primary);
-    margin-bottom: 0.4rem;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-height: 2.8rem;
-    transition: color 0.3s ease;
-  }
-
-  .playlist-desc {
-    font-size: 0.82rem;
-    color: var(--find-text-secondary);
-    margin-bottom: 0.65rem;
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    min-height: 2.5rem;
-    transition: color 0.3s ease;
-  }
-
-  .playlist-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--find-meta-border);
-    transition:
-      color 0.3s ease,
-      border-color 0.3s ease;
-  }
-
-  .play-count {
-    font-size: 0.75rem;
-    color: var(--find-text-muted);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-weight: 500;
-    transition: color 0.3s ease;
-
-    .iconfont {
-      font-size: 0.875rem;
-      opacity: 0.85;
-    }
-  }
-
-  .song-count {
-    font-size: 0.72rem;
-    color: var(--find-text-muted);
-    font-weight: 500;
-    background: var(--find-song-count-bg);
-    padding: 0.125rem 0.5rem;
-    border-radius: 0.375rem;
-    transition:
-      color 0.3s ease,
-      background-color 0.3s ease;
   }
 }
 

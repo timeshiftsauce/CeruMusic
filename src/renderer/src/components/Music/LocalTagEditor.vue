@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, reactive } from 'vue'
+import { ref, watch, reactive, onBeforeUnmount } from 'vue'
+import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { useMessage, useDialog } from 'naive-ui'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 
@@ -31,32 +32,40 @@ const searchKeyword = ref('')
 const searchResults = ref<any[]>([])
 const searching = ref(false)
 
-// Initialize form when song changes or modal opens
+let metadataLoad = 0
+onBeforeUnmount(() => {
+  metadataLoad++
+})
 watch(
-  () => props.show,
-  (val) => {
-    if (val && props.song) {
-      // Reset form
-      formModel.name = props.song.name || ''
-      formModel.singer = props.song.singer || ''
-      formModel.albumName = props.song.albumName || ''
-      formModel.year = props.song.year || ''
-      formModel.genre = props.song.genre || ''
-      formModel.img = props.song.img || ''
-      formModel.lrc = props.song.lrc || ''
-
-      // Load full lyrics
-      const api = (window as any).api
-      api.localMusic.getLyric(props.song.songmid).then((lrc: string) => {
-        if (lrc) formModel.lrc = lrc
-      })
-
-      // Initialize search keyword
-      searchKeyword.value = props.song.name || ''
-      searchResults.value = []
-      activeTab.value = 'edit'
+  () => [props.show, props.song?.songmid] as const,
+  async ([show, id]) => {
+    const request = ++metadataLoad
+    if (!show || id == null) return
+    loading.value = true
+    Object.assign(formModel, {
+      name: '',
+      singer: '',
+      albumName: '',
+      year: '',
+      genre: '',
+      lrc: '',
+      img: ''
+    })
+    searchKeyword.value = props.song.name || ''
+    searchResults.value = []
+    activeTab.value = 'edit'
+    try {
+      const metadata = await readLocalMusicMetadata(String(id))
+      if (request !== metadataLoad) return
+      Object.assign(formModel, metadata, { year: metadata.year ? String(metadata.year) : '' })
+    } catch (error) {
+      if (request === metadataLoad)
+        message.error(error instanceof Error ? error.message : '读取标签失败')
+    } finally {
+      if (request === metadataLoad) loading.value = false
     }
-  }
+  },
+  { immediate: true }
 )
 
 const handleClose = () => {
@@ -106,7 +115,7 @@ const urlToBase64 = (url: string): Promise<string | null> => {
 }
 
 const handleSave = async () => {
-  if (!props.song?.path) return
+  if (!props.song?.path || loading.value) return
   saving.value = true
   try {
     const api = (window as any).api
@@ -278,7 +287,7 @@ const applyResult = async (item: any) => {
       const lyricRes = await (window as any).api.music.requestSdk('getLyric', {
         source: item.source,
         songInfo: toRaw(item),
-        useFormat: lyricFormat.value === 'word-by-word' ? 'word-by-word' : null
+        useFormat: lyricFormat.value === 'word-by-word' ? 'word-by-word' : 'lrc'
       })
 
       if (typeof lyricRes === 'string') {

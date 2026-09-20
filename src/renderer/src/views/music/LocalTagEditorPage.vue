@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, reactive, toRaw } from 'vue'
+import { ref, reactive, toRaw, onActivated, onDeactivated } from 'vue'
+import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { useMessage, useDialog } from 'naive-ui'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { useRoute, useRouter } from 'vue-router'
-import { convertLrcFormat, convertToStandardLrc } from '@renderer/utils/lrcParser'
+import { pluginContributions } from '@renderer/services/pluginState'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,7 +37,22 @@ const handleBack = () => {
   router.back()
 }
 
+let metadataLoad = 0
+onDeactivated(() => {
+  metadataLoad++
+})
 onActivated(async () => {
+  const request = ++metadataLoad
+  loading.value = true
+  Object.assign(formModel, {
+    name: '',
+    singer: '',
+    albumName: '',
+    year: '',
+    genre: '',
+    lrc: '',
+    img: ''
+  })
   const mid = route.query.id as string
   if (!mid) {
     message.error('参数错误')
@@ -51,29 +67,13 @@ onActivated(async () => {
     // Here we assume we can fetch by id or need to pass path.
     // Ideally we fetch full info by ID
     const songList = await api.localMusic.getList()
-    const song = songList.find((s: any) => s.songmid === mid)
+    const song = songList.find((s: any) => String(s.songmid) === mid)
 
     if (song) {
       songPath.value = song.path
-      formModel.name = song.name || ''
-      formModel.singer = song.singer || ''
-      formModel.albumName = song.albumName || ''
-      formModel.year = song.year || ''
-      formModel.genre = song.genre || ''
-      formModel.img = song.img || ''
-
-      // Load lyrics
-      api.localMusic.getLyric(mid).then((lrc: string) => {
-        console.log('原始歌词:', lrc)
-        if (lrc) formModel.lrc = convertLrcFormat(lrc)
-      })
-
-      // Load cover if not present (lazy load)
-      if (!formModel.img && song.hasCover) {
-        api.localMusic.getCoverBase64(mid).then((img: string) => {
-          if (img) formModel.img = img
-        })
-      }
+      const metadata = await readLocalMusicMetadata(mid)
+      if (request !== metadataLoad) return
+      Object.assign(formModel, metadata, { year: metadata.year ? String(metadata.year) : '' })
 
       searchKeyword.value = song.name || ''
     } else {
@@ -81,8 +81,10 @@ onActivated(async () => {
       router.back()
     }
   } catch (e) {
-    message.error('加载失败')
-    router.back()
+    if (request !== metadataLoad) return
+    message.error(e instanceof Error ? e.message : '加载失败')
+  } finally {
+    if (request === metadataLoad) loading.value = false
   }
 })
 
@@ -129,7 +131,7 @@ const urlToBase64 = (url: string): Promise<string | null> => {
 }
 
 const handleSave = async () => {
-  if (!songPath.value) return
+  if (!songPath.value || loading.value) return
   saving.value = true
   try {
     const api = (window as any).api
@@ -196,7 +198,17 @@ const handleSearch = async () => {
   searchResults.value = []
 
   try {
-    const sources = ['wy', 'tx', 'kg', 'kw', 'mg']
+    const sources = [
+      ...new Set(
+        pluginContributions.value
+          .filter((item) => item.enabled)
+          .flatMap(({ manifest }) =>
+            (manifest.contributes?.providers || [])
+              .filter((p: any) => p.protocols.includes('music.search@1'))
+              .map((p: any) => p.id)
+          )
+      )
+    ]
     const all: any[] = []
     const searchPromises = sources.map(async (src) => {
       try {
@@ -287,25 +299,22 @@ const applyResult = async (item: any) => {
         songInfo: toRaw(item)
       })
 
-      if (typeof lyricRes === 'string') {
-        formModel.lrc = convertToStandardLrc(lyricRes)
-        activeTab.value = 'edit'
-        message.success('已应用元数据，请检查后保存')
-      } else if (lyricRes && typeof lyricRes === 'object') {
-        const w2wRaw = (lyricRes as any).crlyric || (lyricRes as any).cr_lyric || ''
-        const stdRaw = (lyricRes as any).lyric || (lyricRes as any).lrc || ''
-
-        if (w2wRaw) {
-          lyricChoiceData.value = {
-            standard: convertToStandardLrc(stdRaw || w2wRaw),
-            wordByWord: convertLrcFormat(w2wRaw)
-          }
-          showLyricChoice.value = true
-        } else {
-          formModel.lrc = convertToStandardLrc(stdRaw)
-          activeTab.value = 'edit'
-          message.success('已应用元数据，请检查后保存')
-        }
+      if (lyricRes?.error) throw new Error(lyricRes.error)
+      if (lyricRes?.crlyric) {
+        const [standard, wordByWord] = await Promise.all([
+          window.api.music.requestSdk('exportLyrics', {
+            source: item.source,
+            document: lyricRes.crlyric,
+            format: 'lrc'
+          }),
+          window.api.music.requestSdk('exportLyrics', {
+            source: item.source,
+            document: lyricRes.crlyric,
+            format: 'enhanced-lrc'
+          })
+        ])
+        lyricChoiceData.value = { standard: standard.text, wordByWord: wordByWord.text }
+        showLyricChoice.value = true
       }
     } catch (e) {
       console.warn('获取歌词失败', e)

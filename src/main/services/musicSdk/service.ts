@@ -13,34 +13,129 @@ import {
   GetAlbumDetailArg
 } from './type'
 import pluginService from '../plugin/index'
-import musicSdk from '../../utils/musicSdk/index'
+import { assertResourceRef, retargetTrackRef } from '@shiqianjiang/ceru-plugin-sdk'
+import { toAppTrack } from '@common/pluginMusic'
+import { parseLocalLrc } from '@common/localLyrics'
+import { resolveLocalLyrics } from '../localLyrics'
+import { localMusicIndexService } from '../LocalMusicIndex'
+import { readTags } from '../../utils/tagUtils'
 import { musicCacheService } from '../musicCache'
 import download from '../../utils/downloadSongs'
 
+const v2Track = toAppTrack
+
+/** Queued/batch downloads use the same current provider routing and cache as playback. */
+export async function resolveDownloadUrl(task: {
+  pluginId?: string
+  songInfo?: GetMusicUrlArg['songInfo']
+  quality?: string
+}): Promise<string> {
+  if (!task.songInfo || !task.quality) throw new Error('Task missing song or quality')
+  const result = await main(task.songInfo.source).getMusicUrl({
+    pluginId: task.pluginId ?? '', songInfo: task.songInfo, quality: task.quality
+  })
+  if (typeof result !== 'string') throw new Error(result.error)
+  return result
+}
+
+function v2Page(result: any): any {
+  const items = Array.isArray(result?.items) ? result.items : []
+  return {
+    list: items.map((item: any) =>
+      item?.ref?.kind === 'track'
+        ? v2Track(item)
+        : {
+            id: item?.ref?.id,
+            name: item?.title || '',
+            author: item?.playlist?.author || item?.subtitle || '',
+            total: item?.playlist?.trackCount || 0,
+            desc: item?.playlist?.description || '',
+            img: item?.playlist?.artworkUrl || '',
+            source: item?.ref?.providerId,
+            pluginResource: item?.ref
+          }
+    ),
+    total: result?.totalEstimate ?? items.length,
+    limit: items.length || 20,
+    nextCursor: result?.nextCursor,
+    info: {
+      name: result.name || '',
+      img: result.playlist?.artworkUrl || '',
+      author: result.playlist?.author || '',
+      desc: result.playlist?.description || ''
+    }
+  }
+}
+
 function main(source: string = 'wy') {
-  if (source === 'all') return aggregateMain()
-  const Api = musicSdk[source]
+  if (source === 'all') throw new Error('v2 模式不支持内置聚合音源，请安装提供多个 Provider 的插件')
+  const requireV2 = (method?: string) => {
+    const provider = pluginService.getV2Provider(source, undefined, method)
+    if (!provider) throw new Error(`未安装提供「${source}」的音源插件，请先安装插件`)
+    return provider
+  }
+  const optionalAction = async (action: string, songInfo: any, input: any, fallback: any) => {
+    const resource = songInfo?.pluginResource
+    if (resource) assertResourceRef(resource)
+    const provider = pluginService.getV2Action(
+      resource?.providerId || source,
+      action,
+      resource?.pluginId
+    )
+    if (!provider) return fallback
+    return provider.host.invokeV2Action(action, { ...input, source: resource?.providerId || source })
+  }
   return {
     async search({ keyword, page = 1, limit = 30 }: SearchArg) {
-      return (await Api.musicSearch.search(keyword, page, limit)) as Promise<SearchResult>
+      const provider = requireV2('tracks.search')
+      const result = await provider.host.invokeV2Provider(source, 'tracks.search', [
+        {
+          query: keyword,
+          kinds: ['track'],
+          filters: {},
+          cursor: page > 1 ? String(page) : undefined,
+          limit
+        }
+      ])
+      return v2Page(result) as SearchResult
     },
 
     async tipSearch({ keyword }: { keyword: string }) {
-      if (!Api.tipSearch?.search) {
-        // 如果音乐源没有实现tipSearch方法，返回空结果
+      const provider = pluginService.getV2Action(source, 'search.tips')
+      if (!provider) return [] as TipSearchResult
+      try {
+        const result = await provider.host.invokeV2Action('search.tips', { source, query: keyword })
+        return result as TipSearchResult
+      } catch {
         return [] as TipSearchResult
       }
-      return (await Api.tipSearch.search(keyword)) as Promise<TipSearchResult>
     },
 
-    async getMusicUrl({ pluginId, songInfo, quality, isCache }: GetMusicUrlArg) {
+    async getMusicUrl({ songInfo, quality, isCache }: GetMusicUrlArg) {
       try {
-        const usePlugin = pluginService.getPluginById(pluginId)
-        if (!pluginId || !usePlugin) return { error: '请配置音源来播放歌曲' }
-
-        const currentSource = songInfo.source || source
-        // 生成歌曲唯一标识
-        const songId = `${songInfo.name}-${songInfo.singer}-${currentSource}-${quality}`
+        const resource = songInfo.pluginResource
+        if (resource) {
+          assertResourceRef(resource)
+          if (resource.kind !== 'track') throw new Error('只能播放歌曲资源')
+        }
+        const currentSource = resource?.providerId || songInfo.source || source
+        const provider = pluginService.getV2Provider(
+          currentSource,
+          resource?.scope === 'provider' ? undefined : resource?.pluginId,
+          'tracks.resolve'
+        )
+        if (!provider) throw new Error('请先安装提供该音源的插件')
+        const effectiveRef = resource
+          ? retargetTrackRef(resource, provider.host.getPluginInfo().id)
+          : undefined
+        // Resolve selection first: changing playback implementations must also change the cache.
+        const songId = JSON.stringify([
+          provider.pluginId,
+          currentSource,
+          effectiveRef?.connectionId ?? null,
+          effectiveRef?.id ?? songInfo.hash ?? songInfo.songmid ?? `${songInfo.name}-${songInfo.singer}`,
+          quality
+        ])
 
         // 先检查缓存（isCache !== false 时）
         if (isCache !== false) {
@@ -51,10 +146,11 @@ function main(source: string = 'wy') {
         }
 
         // 没有缓存时才发起网络请求
-        const originalUrl =
-          source === 'git'
-            ? await Api.getMusicUrl(songInfo, quality)
-            : await usePlugin.getMusicUrl(currentSource, songInfo, quality)
+        const originalUrl = await provider.host.getMusicUrl(
+          currentSource,
+          effectiveRef ? { ...songInfo, pluginResource: effectiveRef } : songInfo,
+          quality
+        )
         // 按需异步缓存，不阻塞返回
         if (isCache !== false) {
           musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
@@ -65,97 +161,56 @@ function main(source: string = 'wy') {
         return originalUrl
       } catch (e: any) {
         return {
-          error: '获取歌曲失败 ' + e.error || e
+          error: '获取歌曲失败 ' + (e.message || e.error || String(e))
         }
       }
     },
 
     async getPic({ songInfo }: GetMusicPicArg) {
       try {
-        return await Api.getPic(songInfo)
+        const resource = songInfo.pluginResource
+        if (resource) assertResourceRef(resource)
+        const currentSource = resource?.providerId || songInfo.source || source
+        const provider = pluginService.getV2Action(currentSource, 'artwork.get', resource?.pluginId)
+        return songInfo.img || (await provider?.host.getPic(currentSource, songInfo))
       } catch (e: any) {
         return {
-          error: '获取歌曲失败 ' + e.error || e
+          error: '获取歌曲失败 ' + (e.message || e.error || String(e))
         }
       }
     },
 
-    async getLyric({
-      songInfo,
-      grepLyricInfo = false,
-      useStrictMode = true,
-      useFormat = null
-    }: GetLyricArg) {
+    async getLyric({ songInfo, useFormat = null }: GetLyricArg): Promise<any> {
       try {
-        const res = await Api.getLyric(songInfo).promise
-        if (!res) return null as any
-        // 主进程统一歌词选择逻辑：根据 lyricFormat 决定返回逐字或标准歌词
-        if (useFormat !== null) {
-          if (source == 'tx') return res.lyric || res.lrc || null
-          const preferWordByWord = useFormat === 'word-by-word'
-          // 标准与逐字字段兼容
-          const cr = (res as any).crlyric || (res as any).cr_lyric || null
-          const std = (res as any).lyric || (res as any).lrc || null
-
-          let picked: string | null = null
-          if (preferWordByWord) {
-            picked = (cr as any) || (std as any) || null
-          } else {
-            picked = (std as any) || (cr as any) || null
-          }
-          return picked
-        } else {
-          if (grepLyricInfo) {
-            const grepKeyRaw = [
-              '作曲',
-              '作词',
-              '编曲',
-              '制作人',
-              '专辑',
-              '时间',
-              '时长',
-              '发行',
-              'OP',
-              'SP',
-              '词',
-              '曲',
-              '吉他',
-              '贝斯',
-              '录音',
-              '混音',
-              '出品',
-              '演唱',
-              '和声',
-              '弦乐',
-              '企划',
-              '录音室',
-              '鼓',
-              '弦',
-              '弦乐部分'
-            ]
-            const grepKey = grepKeyRaw.map((key) => `.*${key.split('').join('.*')}.*`)
-            const regex = new RegExp(`^.*(${grepKey.join('|')})[:：]\s*(.+)(\n)*$`, 'gm')
-            // 匹配带冒号的行（含时间戳前缀）
-            const pureLyric = (lyric: string[]) => {
-              return lyric.filter((line) => {
-                const raw = line.replace(/\[.*]/g, '')
-                // console.log('raw', raw, !raw.includes(':') && !raw.includes('：'))
-                return !raw.includes(':') && !raw.includes('：')
-              })
-            }
-
-            const lyric = {}
-            for (const key in res) {
-              if (!useStrictMode) {
-                lyric[key] = res[key]?.replace(regex, '') || ''
-              } else {
-                lyric[key] = pureLyric(res[key]?.split('\n') || []).join('\n') || ''
-              }
-            }
-            return lyric
-          }
-          return res
+        const resource = songInfo.pluginResource
+        if (resource) {
+          assertResourceRef(resource)
+          if (resource.kind !== 'track') throw new Error('只能获取歌曲资源的歌词')
         }
+        const currentSource = resource?.providerId || songInfo.source || source
+        const provider = pluginService.getV2Provider(
+          currentSource,
+          resource?.scope === 'provider' ? undefined : resource?.pluginId,
+          'tracks.lyrics'
+        )
+        if (!provider) throw new Error('请安装这首歌曲所需的插件')
+        const res = await provider.host.invokeV2Provider(currentSource, 'tracks.lyrics', [
+          resource ? retargetTrackRef(resource, provider.host.getPluginInfo().id) : {
+            pluginId: provider.host.getPluginInfo().id,
+            providerId: currentSource,
+            kind: 'track',
+            id: String(songInfo.songmid || songInfo.hash || (songInfo as any).id),
+            data: { song: songInfo }
+          }
+        ])
+        if (useFormat !== null)
+          return (
+            await provider.host.convertLyrics('export', {
+              document: res,
+              format: useFormat === 'word-by-word' ? 'enhanced-lrc' : 'lrc'
+            })
+          ).text
+        return { crlyric: res }
       } catch (e: any) {
         return {
           error: '获取歌词失败 ' + (e.error || e.message || e)
@@ -164,40 +219,102 @@ function main(source: string = 'wy') {
     },
 
     async getHotSonglist() {
-      return (await Api.songList.getList(Api.songList.sortList[0].id, '', 1)) as PlaylistResult
+      const provider = requireV2('playlists.list')
+      return v2Page(
+        await provider.host.invokeV2Provider(source, 'playlists.list', [
+          { pluginId: provider.pluginId, providerId: source, kind: 'playlist-category', id: 'hot' },
+          '1'
+        ])
+      ) as PlaylistResult
+    },
+    async parseLyrics({ text, track }: { text: string; track: any }): Promise<any> {
+      if (source === 'local') {
+        const song = localMusicIndexService.getSongById(String(track?.id ?? ''))
+        if (song?.path) return resolveLocalLyrics({
+          audioPath: song.path,
+          embedded: readTags(song.path, true).lrc || '',
+          track: { pluginId: 'local.library', providerId: 'local', kind: 'track', id: String(track.id) },
+          converters: pluginService.getLyricConverters().flatMap(host =>
+            (host.getManifest().contributes?.lyricConverters ?? []).map((converter: any) => ({
+              formats: converter.formats,
+              parse: (request: import('@shiqianjiang/ceru-plugin-sdk').LyricParseRequest) =>
+                host.convertLyrics('parse', request, converter.id, 3000)
+            }))
+          )
+        })
+        const local = parseLocalLrc(text, track)
+        if (local) return local
+      }
+      const converter = pluginService.getLyricConverter()
+      if (!converter) throw new Error('内嵌歌词已读取，请先使用支持歌词转换的插件后重试')
+      return converter.convertLyrics('parse', { text, format: 'auto', track })
+    },
+    async exportLyrics({
+      document,
+      format
+    }: {
+      document: any
+      format: 'lrc' | 'enhanced-lrc' | 'yrc'
+    }): Promise<any> {
+      const converter = pluginService.getLyricConverter()
+      if (!converter) throw new Error('请安装歌词转换插件')
+      return converter.convertLyrics('export', { document, format })
     },
 
     async getPlaylistTags() {
-      return await Api.songList.getTags()
+      const provider = requireV2('playlists.categories')
+      const result = await provider.host.invokeV2Provider(source, 'playlists.categories', [])
+      const groups = new Map<string, any[]>()
+      const hotTag: any[] = []
+      for (const item of result.items) {
+        const group = item.extensions?.group || '分类'
+        const tag = { id: item.ref.id, name: item.title }
+        if (item.extensions?.hot) hotTag.push(tag)
+        const list = groups.get(group) ?? []
+        list.push(tag)
+        groups.set(group, list)
+      }
+      return { tags: [...groups].map(([name, list]) => ({ name, list })), hotTag }
     },
 
     async getCategoryPlaylists({
-      sortId = Api.songList.sortList[0].id,
+      sortId = '',
       tagId = '',
       page = 1,
-      limit = Api.songList.limit_list
+      limit = 30
     }: {
       sortId?: string
       tagId?: string
       page?: number
       limit?: number
     }) {
-      const res =
-        source === 'wy'
-          ? await Api.songList.getList(sortId, tagId, page, limit)
-          : await Api.songList.getList(sortId, tagId, page)
-      return {
-        category: { id: tagId || 'hot', name: tagId || '热门' },
-        ...res
-      }
+      const provider = requireV2('playlists.list')
+      const res = await provider.host.invokeV2Provider(source, 'playlists.list', [
+        {
+          pluginId: provider.host.getPluginInfo().id,
+          providerId: source,
+          kind: 'playlist-category',
+          id: tagId || 'hot',
+          data: { sortId, limit }
+        },
+        String(page)
+      ])
+      return { category: { id: tagId || 'hot', name: tagId || '热门' }, ...v2Page(res) }
     },
 
-    async getPlaylistDetail({ id, page }: GetSongListDetailsArg) {
-      // 酷狗音乐特殊处理：直接调用getUserListDetail
-      if (source === 'kg' && /https?:\/\//.test(id)) {
-        return (await Api.songList.getUserListDetail(id, page)) as PlaylistDetailResult
+    async getPlaylistDetail({ id, page, ref, cursor }: GetSongListDetailsArg) {
+      if (ref) {
+        assertResourceRef(ref)
+        if (ref.kind !== 'playlist' || ref.id !== id || ref.providerId !== source)
+          throw new Error('歌单资源与请求不匹配')
       }
-      return (await Api.songList.getListDetail(id, page)) as PlaylistDetailResult
+      const provider = pluginService.getV2Provider(source, ref?.pluginId, 'playlists.get')
+      if (!provider) throw new Error('未安装提供此歌单的插件，请先安装并启用原插件')
+      const res = await provider.host.invokeV2Provider(source, 'playlists.get', [
+        ref ?? { pluginId: provider.host.getPluginInfo().id, providerId: source, kind: 'playlist', id },
+        ref ? cursor : String(page)
+      ])
+      return v2Page(res) as PlaylistDetailResult
     },
 
     async downloadSingleSong({
@@ -251,7 +368,9 @@ function main(source: string = 'wy') {
 
     async parsePlaylistId({ url }: { url: string }) {
       try {
-        return await Api.songList.handleParseId(url)
+        const provider = pluginService.getV2Action(source, 'playlist.parse')
+        if (!provider) throw new Error('未安装歌单链接解析能力')
+        return await provider.host.invokeV2Action('playlist.parse', { source, url })
       } catch (e: any) {
         return {
           error: '解析歌单链接失败 ' + (e.error || e.message || e)
@@ -261,7 +380,12 @@ function main(source: string = 'wy') {
 
     async getPlaylistDetailById(id: string, page: number = 1) {
       try {
-        return await Api.songList.getListDetail(id, page)
+        const provider = requireV2('playlists.get')
+        const result = await provider.host.invokeV2Provider(source, 'playlists.get', [
+          { pluginId: provider.pluginId, providerId: source, kind: 'playlist', id },
+          String(page)
+        ])
+        return v2Page(result)
       } catch (e: any) {
         return {
           error: '获取歌单详情失败 ' + (e.error || e.message || e)
@@ -269,132 +393,78 @@ function main(source: string = 'wy') {
       }
     },
     async searchPlaylist({ keyword, page = 1, limit = 30 }: SearchArg) {
-      return (await Api.songList.search(keyword, page, limit)) as PlaylistResult
+      const provider = requireV2('playlists.search')
+      const result = await provider.host.invokeV2Provider(source, 'playlists.search', [
+        {
+          query: keyword,
+          kinds: ['playlist'],
+          filters: {},
+          cursor: page > 1 ? String(page) : undefined,
+          limit
+        }
+      ])
+      return v2Page(result) as PlaylistResult
     },
 
     async getLeaderboards() {
-      if (Api.leaderboard && Api.leaderboard.getBoards) {
-        const res = await Api.leaderboard.getBoards()
-        return res.list
-      }
-      return []
+      const provider = requireV2('charts.list')
+      const result = await provider.host.invokeV2Provider(source, 'charts.list', [])
+      return (result?.items || []).map((item: any) => ({
+        id: item.ref?.id,
+        board_id: item.ref?.id,
+        name: item.title,
+        pic: item.chart?.artworkUrl,
+        update_frequency: item.chart?.updateFrequency,
+        source: item.ref.providerId
+      }))
     },
 
     async getLeaderboardDetail({ id, page }: { id: string; page: number }) {
-      if (Api.leaderboard && Api.leaderboard.getList) {
-        return (await Api.leaderboard.getList(id, page)) as PlaylistDetailResult
-      }
-      return { list: [], total: 0 } as unknown as PlaylistDetailResult
+      const provider = requireV2('charts.getTracks')
+      const result = await provider.host.invokeV2Provider(source, 'charts.getTracks', [
+        { pluginId: provider.pluginId, providerId: source, kind: 'chart', id },
+        String(page)
+      ])
+      return v2Page(result) as PlaylistDetailResult
     },
     // 热门评论
     async getHotComment({ songInfo, page = 1, limit = 100 }: GetCommentArg) {
-      return await Api.comment.getHotComment(songInfo, page, limit)
+      return optionalAction('comments.hot', songInfo, {
+        source,
+        song: songInfo,
+        page,
+        limit
+      }, { source, comments: [], total: 0, page, limit, maxPage: 0 })
     },
     // 最新评论
     async getComment({ songInfo, page = 1, limit = 20 }: GetCommentArg) {
-      return await Api.comment.getComment(songInfo, page, limit)
+      return optionalAction('comments.get', songInfo, {
+        source,
+        song: songInfo,
+        page,
+        limit
+      }, { source, comments: [], total: 0, page, limit, maxPage: 0 })
     },
     // 听歌识曲
     async recognize({ fp, duration }: { fp: string; duration: number }) {
-      if (source === 'wy' && Api.recognize) {
-        return await Api.recognize.recognize(fp, duration)
-      }
-      return []
+      const provider = pluginService.getV2Action(source, 'recognize')
+      if (!provider) throw new Error('未安装听歌识曲能力')
+      return await provider.host.invokeV2Action('recognize', { source, fp, duration })
     },
     // 获取专辑列表
     async getAlbumList({ songInfo, page = 1, limit = 10 }: GetAlbumDetailArg) {
-      return await Api.singer.getAlbumList(songInfo.albumId, page, limit)
+      const resource = songInfo.pluginResource
+      if (resource) assertResourceRef(resource)
+      const currentSource = resource?.providerId || songInfo.source || source
+      const provider = pluginService.getV2Action(currentSource, 'album.list', resource?.pluginId)
+      if (!provider) throw new Error('未安装专辑列表能力')
+      return await provider.host.invokeV2Action('album.list', {
+        source: currentSource,
+        song: songInfo,
+        page,
+        limit
+      })
     }
   }
 }
-
-function aggregateMain() {
-  const Agg = (musicSdk as any).aggregate
-  const notSupported = (name: string) => {
-    throw new Error(`聚合模式下请选择具体音源 (${name})`)
-  }
-  return {
-    async search({ keyword, page = 1, limit = 30 }: SearchArg) {
-      return (await Agg.search(keyword, page, limit)) as Promise<SearchResult>
-    },
-    async tipSearch(_: { keyword: string }) {
-      return (await Agg.tipSearch(_.keyword)) as Promise<TipSearchResult>
-    },
-    async getMusicUrl(_: GetMusicUrlArg): Promise<any> {
-      return notSupported('getMusicUrl')
-    },
-    async getPic(_: GetMusicPicArg): Promise<any> {
-      return notSupported('getPic')
-    },
-    async getLyric(_: GetLyricArg): Promise<any> {
-      return notSupported('getLyric')
-    },
-    async getHotSonglist() {
-      const res = await Agg.getCategoryPlaylists({ tagId: '', page: 1 })
-      return res as PlaylistResult
-    },
-    async getPlaylistTags() {
-      return await Agg.getPlaylistTags()
-    },
-    async getCategoryPlaylists({
-      sortId = '',
-      tagId = '',
-      page = 1,
-      limit
-    }: {
-      sortId?: string
-      tagId?: string
-      page?: number
-      limit?: number
-    }) {
-      const res = await Agg.getCategoryPlaylists({ sortId, tagId, page, limit })
-      return {
-        category: { id: tagId || 'hot', name: tagId || '热门' },
-        ...res
-      }
-    },
-    async getPlaylistDetail(_: GetSongListDetailsArg): Promise<any> {
-      return notSupported('getPlaylistDetail')
-    },
-    async downloadSingleSong(_: DownloadSingleSongArgs): Promise<any> {
-      return notSupported('downloadSingleSong')
-    },
-    async downloadBatchSongs(_: { tasks: DownloadSingleSongArgs[] }): Promise<any> {
-      return notSupported('downloadBatchSongs')
-    },
-    async parsePlaylistId(_: { url: string }): Promise<any> {
-      return notSupported('parsePlaylistId')
-    },
-    async getPlaylistDetailById(_id: string, _page: number = 1): Promise<any> {
-      return notSupported('getPlaylistDetailById')
-    },
-    async searchPlaylist({ keyword, page = 1, limit = 30 }: SearchArg) {
-      return (await Agg.searchPlaylist(keyword, page, limit)) as PlaylistResult
-    },
-    async getLeaderboards() {
-      return await Agg.getLeaderboards()
-    },
-    async getLeaderboardDetail(_: { id: string; page: number }): Promise<any> {
-      return notSupported('getLeaderboardDetail')
-    },
-    async getHotComment(_: GetCommentArg): Promise<any> {
-      return notSupported('getHotComment')
-    },
-    async getComment(_: GetCommentArg): Promise<any> {
-      return notSupported('getComment')
-    },
-    async recognize(_: { fp: string; duration: number }) {
-      return [] as any[]
-    },
-    async getAlbumList(_: GetAlbumDetailArg): Promise<any> {
-      return notSupported('getAlbumList')
-    }
-  }
-}
-
 export default main
-// main('wy')
-//   .getAlbumList({ songInfo: { albumId: '250748750' } as any, page: 1, limit: 10 })
-//   .then((res) => {
-//     console.log(res)
-//   })

@@ -1,0 +1,29 @@
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "example.counter",
+    "name": "计数页面",
+    "version": "0.1.0",
+    "engines": { "hostApi": "^2.0.0", "logicRuntime": "ceru-js@1" },
+    "modules": {
+      "logic": { "entry": "logic.main" },
+      "surfaces": [
+        {
+          "id": "counter",
+          "kind": "web",
+          "entry": "ui.counter",
+          "title": "计数页面",
+          "presentation": { "kind": "drawer", "placement": "right", "size": 480 }
+        }
+      ]
+    },
+    "contributes": {
+      "commands": [{ "id": "increment", "title": "计数 +1", "action": "counter.increment" }],
+      "settingsPages": [{ "id": "counter", "title": "计数页面", "view": "counter" }]
+    },
+    "permissions": []
+  },
+  "entries": { "logic.main": "src/index.ts", "ui.counter": "src/view.ts" },
+  "resources": {},
+  "output": "dist/plugin.js"
+}

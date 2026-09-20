@@ -8,7 +8,7 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   main: {
     resolve: {
       alias: {
@@ -19,8 +19,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          downloadWorker: resolve(__dirname, 'src/main/workers/downloadWorker.ts'),
-          pluginWorker: resolve(__dirname, 'src/main/services/plugin/manager/pluginWorker.ts')
+          downloadWorker: resolve(__dirname, 'src/main/workers/downloadWorker.ts')
         },
         output: {
           entryFileNames: '[name].js',
@@ -46,6 +45,8 @@ export default defineConfig({
     }
   },
   renderer: {
+    // Contract-only ESM stays live when the plugin SDK is upgraded during development.
+    optimizeDeps: { exclude: ['@shiqianjiang/ceru-plugin-sdk'] },
     build: {
       chunkSizeWarningLimit: 1000,
       minify: 'terser',
@@ -139,7 +140,7 @@ export default defineConfig({
             'naive-ui': ['useDialog', 'useMessage', 'useNotification', 'useLoadingBar']
           }
         ],
-        dts: true
+        dts: command === 'serve'
       }),
       Components({
         resolvers: [
@@ -148,7 +149,7 @@ export default defineConfig({
           }),
           NaiveUiResolver()
         ],
-        dts: true
+        dts: command === 'serve'
       })
     ],
     base: './',
@@ -164,4 +165,4 @@ export default defineConfig({
       }
     }
   }
-})
+}))

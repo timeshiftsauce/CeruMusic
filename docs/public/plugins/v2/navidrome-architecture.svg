@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">Navidrome Vue 插件的界面、逻辑、存储和服务关系</title>
+  <desc id="desc">Vue Surface 通过 Action 调用插件逻辑；逻辑保存登录令牌、访问 Navidrome API 并注册 Provider；澜音通过 Provider 搜索、播放和显示歌词。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6d8d78"/></marker>
+    <style>
+      .title{font:700 30px Inter,"Microsoft YaHei",sans-serif;fill:#173b28}.sub{font:15px Inter,"Microsoft YaHei",sans-serif;fill:#617067}.box{fill:#f7faf8;stroke:#b8cbbd;stroke-width:2}.green{fill:#e2f2e7;stroke:#5f9d72}.blue{fill:#eef4f8;stroke:#7a9db3}.label{font:700 18px Inter,"Microsoft YaHei",sans-serif;fill:#21392a}.body{font:14px Inter,"Microsoft YaHei",sans-serif;fill:#526159}.tag{font:700 12px Inter,"Microsoft YaHei",sans-serif;fill:#34764b;letter-spacing:.08em}.arrow{stroke:#6d8d78;stroke-width:3;fill:none;marker-end:url(#arrow)}.dash{stroke-dasharray:7 7}
+    </style>
+  </defs>
+  <rect width="1200" height="650" rx="24" fill="#fff"/>
+  <text x="64" y="64" class="title">Navidrome 插件由谁负责什么？</text>
+  <text x="64" y="94" class="sub">账号与业务留在插件里，宿主只提供通用边界和音乐入口。</text>
+
+  <rect x="70" y="160" width="260" height="142" rx="18" class="green"/>
+  <text x="96" y="197" class="tag">PLUGIN UI</text><text x="96" y="232" class="label">Vue Surface</text>
+  <text x="96" y="258" class="body">连接表单 · 状态 · 30 秒轮询</text><text x="96" y="280" class="body">页面关闭时清理定时器</text>
+
+  <rect x="470" y="160" width="260" height="142" rx="18" class="green"/>
+  <text x="496" y="197" class="tag">PLUGIN LOGIC</text><text x="496" y="232" class="label">Action + Provider</text>
+  <text x="496" y="258" class="body">登录 · 签名 · 搜索 · 播放 · 歌词</text><text x="496" y="280" class="body">统一处理权限、取消和错误</text>
+
+  <rect x="870" y="160" width="260" height="142" rx="18" class="blue"/>
+  <text x="896" y="197" class="tag">YOUR SERVER</text><text x="896" y="232" class="label">Navidrome API</text>
+  <text x="896" y="258" class="body">ping · search3 · stream</text><text x="896" y="280" class="body">getLyricsBySongId</text>
+
+  <path d="M330 230H460" class="arrow"/><text x="359" y="214" class="body">invoke</text>
+  <path d="M730 230H860" class="arrow"/><text x="758" y="214" class="body">HTTP</text>
+
+  <rect x="270" y="414" width="260" height="128" rx="18" class="box"/>
+  <text x="296" y="451" class="tag">HOST STORAGE</text><text x="296" y="486" class="label">隔离 Storage</text>
+  <text x="296" y="512" class="body">仅在“记住登录”时保存令牌与盐</text>
+
+  <rect x="670" y="414" width="260" height="128" rx="18" class="box"/>
+  <text x="696" y="451" class="tag">CERU MUSIC</text><text x="696" y="486" class="label">搜索 / 播放 / 歌词</text>
+  <text x="696" y="512" class="body">通过标准 Provider 使用插件能力</text>
+
+  <path d="M530 302v80c0 30-34 32-78 32" class="arrow dash"/>
+  <path d="M670 478H600c-54 0-70-43-70-96" class="arrow dash"/>
+  <path d="M670 478H590c-60 0-60-176-20-176" class="arrow"/>
+  <text x="548" y="584" class="body">密码不写入状态、Storage 或日志；Surface 不能直接访问网络与存储。</text>
+</svg>

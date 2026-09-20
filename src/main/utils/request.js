@@ -1,6 +1,4 @@
 import axios from 'axios'
-import { bHh } from './musicSdk/options'
-import { deflateRaw } from 'zlib'
 import { HttpsProxyAgent, HttpProxyAgent } from 'hpagent'
 
 // 常量定义
@@ -10,7 +8,6 @@ const DEFAULT_USER_AGENT =
 const debugRequest = false
 
 const httpsRxp = /^https:/
-const regx = /(?:\d\w)+/g
 
 // 代理配置对象
 let proxy = {
@@ -153,13 +150,6 @@ export const cancelHttp = (requestObj) => {
  * 处理deflateRaw压缩
  * @param {Buffer} data - 数据
  */
-const handleDeflateRaw = (data) =>
-  new Promise((resolve, reject) => {
-    deflateRaw(data, (err, buf) => {
-      if (err) return reject(err)
-      resolve(buf)
-    })
-  })
 
 /**
  * 核心数据获取函数
@@ -184,23 +174,6 @@ const fetchData = async (url, method = 'get', options = {}) => {
 
   const requestHeaders = Object.assign({}, defaultHeaders, headers)
 
-  // 处理特殊头部
-  if (requestHeaders[bHh]) {
-    const path = url.replace(/^https?:\/\/[\w.:]+\//, '/')
-    let s = Buffer.from(bHh, 'hex').toString()
-    s = s.replace(s.substr(-1), '')
-    s = Buffer.from(s, 'base64').toString()
-    const v = process.versions.app
-      .split('-')[0]
-      .split('.')
-      .map((n) => (n.length < 3 ? n.padStart(3, '0') : n))
-      .join('')
-    const v2 = process.versions.app.split('-')[1] || ''
-    requestHeaders[s] =
-      !s ||
-      `${(await handleDeflateRaw(Buffer.from(JSON.stringify(`${path}${v}`.match(regx), null, 1).concat(v)).toString('base64'))).toString('hex')}&${parseInt(v)}${v2}`
-    delete requestHeaders[bHh]
-  }
 
   // 处理请求数据
   let requestData = data || body || form || formData

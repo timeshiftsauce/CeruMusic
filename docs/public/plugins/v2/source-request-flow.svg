@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">HTTP 音源插件的一次请求流程</title>
+  <desc id="desc">用户在澜音发起搜索、播放或歌词请求，Provider 经权限和 HTTP 客户端访问音乐服务，再将平台数据转换为澜音标准数据。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0l10 5-10 5z" fill="#73947e"/></marker>
+    <style>
+      .title{font:700 30px Inter,"Microsoft YaHei",sans-serif;fill:#173b28}.sub{font:15px Inter,"Microsoft YaHei",sans-serif;fill:#617067}.box{fill:#f7faf8;stroke:#b7cbbd;stroke-width:2}.accent{fill:#e3f3e8;stroke:#69a37b}.label{font:700 18px Inter,"Microsoft YaHei",sans-serif;fill:#21392a}.body{font:14px Inter,"Microsoft YaHei",sans-serif;fill:#526159}.tag{font:700 13px Inter,"Microsoft YaHei",sans-serif;fill:#2f7547}.arrow{stroke:#73947e;stroke-width:3;fill:none;marker-end:url(#arrow)}.rail{stroke:#d8e4db;stroke-width:2;stroke-dasharray:7 7}
+    </style>
+  </defs>
+  <rect width="1200" height="560" rx="24" fill="#fff"/>
+  <text x="64" y="64" class="title">一次搜索，经过哪些地方？</text>
+  <text x="64" y="94" class="sub">三条音乐能力共用同一套权限、取消和错误处理。</text>
+
+  <rect x="62" y="152" width="210" height="132" rx="18" class="box"/>
+  <text x="86" y="192" class="tag">01 · 用户操作</text><text x="86" y="226" class="label">澜音</text>
+  <text x="86" y="252" class="body">输入关键词 / 点击播放</text>
+
+  <rect x="342" y="152" width="220" height="132" rx="18" class="accent"/>
+  <text x="366" y="192" class="tag">02 · 插件逻辑</text><text x="366" y="226" class="label">Provider</text>
+  <text x="366" y="252" class="body">search · resolve · lyrics</text>
+
+  <rect x="632" y="152" width="220" height="132" rx="18" class="box"/>
+  <text x="656" y="192" class="tag">03 · 宿主边界</text><text x="656" y="226" class="label">权限 + HTTP</text>
+  <text x="656" y="252" class="body">授权、超时、取消、限额</text>
+
+  <rect x="922" y="152" width="216" height="132" rx="18" class="box"/>
+  <text x="946" y="192" class="tag">04 · 你的服务</text><text x="946" y="226" class="label">Music API</text>
+  <text x="946" y="252" class="body">JSON、音频、歌词</text>
+
+  <path d="M272 218H332" class="arrow"/><path d="M562 218H622" class="arrow"/><path d="M852 218H912" class="arrow"/>
+  <path d="M1030 304v70H452v-80" class="arrow"/><text x="664" y="362" class="body">响应回到插件，先转换数据，再交给澜音</text>
+
+  <line x1="62" y1="430" x2="1138" y2="430" class="rail"/>
+  <text x="72" y="470" class="tag">SEARCH</text><text x="72" y="500" class="body">远端歌曲 → ContentEntity</text>
+  <text x="432" y="470" class="tag">RESOLVE</text><text x="432" y="500" class="body">ResourceRef → 可播放 URL</text>
+  <text x="792" y="470" class="tag">LYRICS</text><text x="792" y="500" class="body">远端歌词 → CrLyric（毫秒）</text>
+</svg>

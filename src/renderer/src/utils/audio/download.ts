@@ -2,6 +2,7 @@ import { NotifyPlugin, MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { toRaw, h } from 'vue'
+import { pluginQualityOrder } from '@renderer/utils/pluginQuality'
 import {
   getQualityDisplayName,
   buildQualityFormats,
@@ -40,10 +41,11 @@ export function createQualityDialog(
 
     // 获取歌曲支持的音质列表
     const availableQualities = buildQualityFormats(types)
-    const qualityOptions = [...availableQualities]
+    const order = Array.isArray(songInfoOrTypes) ? availableQualities.map(item => item.type) : pluginQualityOrder(songInfoOrTypes.source)
+    const qualityOptions = availableQualities.filter((item) => !order.length || order.includes(item.type))
 
     // 按音质优先级排序（高→低）
-    qualityOptions.sort((a, b) => compareQuality(a.type, b.type))
+    qualityOptions.sort((a, b) => compareQuality(a.type, b.type, order))
 
     const dialog = DialogPlugin.confirm({
       header: title,
@@ -189,7 +191,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     let quality = selectedQuality as string
 
     // 检查选择的音质是否超出歌曲支持的最高音质
-    const calculatedQuality = calculateBestQuality(songInfo.types, quality)
+    const calculatedQuality = calculateBestQuality(songInfo.types, quality, pluginQualityOrder(songInfo.source))
     if (calculatedQuality && calculatedQuality !== quality) {
       quality = calculatedQuality
       MessagePlugin.warning(`所选音质不可用，已自动调整为: ${getQualityDisplayName(quality)}`)

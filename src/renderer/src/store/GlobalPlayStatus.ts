@@ -1,12 +1,15 @@
 import { defineStore } from 'pinia'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { analyzeImageColors, Color } from '@renderer/utils/color/colorExtractor'
-import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
+import { toPlayerLyrics } from '@common/pluginMusic'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
+import { reactive, computed, watch, toRaw, onScopeDispose, type ComputedRef } from 'vue'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
+import { activePluginContributions } from '@renderer/services/pluginState'
 import _ from 'lodash'
-import defaultCover from '@renderer/assets/images/song.jpg'
+import defaultCover from '/default-cover.png'
 import { playSetting } from './playSetting'
 
 interface Player {
@@ -34,6 +37,7 @@ interface Player {
   singer: ComputedRef<string>
   // 歌词
   lyrics: {
+    crlyric?: import('@shiqianjiang/ceru-plugin-sdk').CrLyric
     lines: LyricLine[]
     trans?: string
     source?: string
@@ -87,11 +91,16 @@ export interface CommentResponse {
   maxPage: number
 }
 
-async function getBlobUrlFromUrl(url: string): Promise<string> {
+async function getBlobUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
   if (!url) return ''
   if (/^(data:|blob:|file:)/i.test(url)) return url
   try {
-    const response = await fetch(url)
+    const response = await fetch(url, {
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+        : AbortSignal.timeout(15000)
+    })
+    if (!response.ok) return ''
     const blob = await response.blob()
     return URL.createObjectURL(blob)
   } catch (e) {
@@ -198,378 +207,206 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     })
 
-    // 同步 userInfo.lastPlaySongId
+    let currentBlobUrl: string | null = null
+    let metadataRevision = 0
+    const lyricWarnings = new Map<string, number>()
+    function reportLocalLyricError(id: string, error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn('本地歌词转换失败:', message)
+      if (Date.now() - (lyricWarnings.get(id) ?? 0) < 10000) return
+      lyricWarnings.set(id, Date.now())
+      void MessagePlugin.warning(`本地歌词无法显示：${message}`)
+    }
+    const keyOf = (song: any) => String(song?.source) + ':' + String(song?.songmid)
+    const withDeadline = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        return await Promise.race([
+          task.catch(() => fallback),
+          new Promise<T>((resolve) => {
+            timer = setTimeout(() => resolve(fallback), 20000)
+          })
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+
+    async function prepareSong(song: SongList, signal?: AbortSignal) {
+      const clean = JSON.parse(JSON.stringify(toRaw(song))) as SongList
+      const localMetadata =
+        clean.source === 'local'
+          ? readLocalMusicMetadata(String(clean.songmid)).then((metadata) => {
+              Object.assign(clean, metadata)
+              return metadata
+            })
+          : undefined
+      const coverSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
+        : AbortSignal.timeout(20000)
+      const loadCover = async () => {
+        let url = clean.img
+        if (clean.source === 'local') url = (await localMetadata)?.img || ''
+        else if (!url) {
+          const value = await window.api.music.requestSdk('getPic', {
+            source: clean.source,
+            songInfo: clean
+          })
+          if (typeof value === 'string') url = value
+        }
+        coverSignal.throwIfAborted()
+        if (!url) return defaultCover
+        const cover = await getBlobUrlFromUrl(url, coverSignal)
+        if (signal?.aborted) {
+          if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
+          signal.throwIfAborted()
+        }
+        return cover || defaultCover
+      }
+      const loadLyrics = async () => {
+        if (clean.source === 'local') {
+          const text = (await localMetadata)?.lrc || ''
+          const parsed = await window.api.music.requestSdk('parseLyrics', {
+            source: 'local',
+            text,
+            track: {
+              pluginId: 'local.library',
+              providerId: 'local',
+              kind: 'track',
+              id: String(clean.songmid)
+            }
+          })
+          if (!parsed) return undefined
+          if (parsed.error || parsed.format !== 'crlyric')
+            throw new Error(parsed?.error || '没有可用的歌词转换结果，请检查歌词转换插件')
+          return parsed
+        }
+        const result = await window.api.music.requestSdk('getLyric', {
+          source: clean.source,
+          songInfo: clean,
+          grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
+          useStrictMode: playSettingStore.getStrictGrep
+        })
+        return result?.crlyric
+      }
+      const [cover, crlyric] = await Promise.all([
+        withDeadline(loadCover(), defaultCover),
+        withDeadline<import('@shiqianjiang/ceru-plugin-sdk').CrLyric | undefined>(
+          loadLyrics().catch((error) => {
+            if (clean.source === 'local' && !signal?.aborted)
+              reportLocalLyricError(String(clean.songmid), error)
+            throw error
+          }),
+          undefined
+        )
+      ])
+      const dispose = () => {
+        if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
+      }
+      if (signal?.aborted) {
+        dispose()
+        signal.throwIfAborted()
+      }
+      // Decode and analyse before committing metadata so the background changes with the cover.
+      const colors = await withDeadline(analyzeImageColors(cover), null)
+      if (signal?.aborted) {
+        dispose()
+        signal.throwIfAborted()
+      }
+      return {
+        song: clean,
+        cover,
+        crlyric,
+        colors,
+        lines: crlyric ? sanitizeLyricLines(toPlayerLyrics(crlyric)) : [],
+        dispose
+      }
+    }
+
+    function commitPrepared(prepared: Awaited<ReturnType<typeof prepareSong>>) {
+      metadataRevision++
+      if (currentBlobUrl && currentBlobUrl !== prepared.cover) URL.revokeObjectURL(currentBlobUrl)
+      currentBlobUrl = prepared.cover.startsWith('blob:') ? prepared.cover : null
+      player.songInfo = prepared.song
+      player.songId = String(prepared.song.songmid)
+      player.cover = prepared.cover
+      player.lyrics.crlyric = prepared.crlyric
+      player.lyrics.lines = prepared.lines
+      player.lyrics.raw = {}
+      player.isLoading = false
+      const color = prepared.colors
+      if (color) {
+        const { dominantColor, useBlackText } = color
+        const base = useBlackText ? '0, 0, 0' : '255, 255, 255'
+        player.coverDetail = {
+          ColorObject: dominantColor,
+          mainColor: `rgba(${dominantColor.r},${dominantColor.g},${dominantColor.b},1)`,
+          lightMainColor: `rgba(${Math.round(255 - (255 - dominantColor.r) * 0.2)},${Math.round(255 - (255 - dominantColor.g) * 0.2)},${Math.round(255 - (255 - dominantColor.b) * 0.2)},.9)`,
+          contrastColor: `rgba(${base},.6)`,
+          textColor: `rgba(${base},.6)`,
+          hoverColor: `rgba(${base},1)`,
+          playBg: 'rgba(255,255,255,.2)',
+          playBgHover: 'rgba(255,255,255,.33)',
+          useBlackText
+        }
+      } else
+        player.coverDetail = {
+          mainColor: 'var(--td-brand-color-5)',
+          lightMainColor: 'rgba(255, 255, 255, 0.9)',
+          contrastColor: 'var(--player-text-idle)',
+          textColor: 'var(--player-text-idle)',
+          hoverColor: 'var(--player-text-hover-idle)',
+          playBg: 'var(--player-btn-bg-idle)',
+          playBgHover: 'var(--player-btn-bg-hover-idle)',
+          useBlackText: false
+        }
+      updateCommon(prepared.song)
+    }
+
+    async function updatePlayerInfo(song: SongList, force = false) {
+      if (!force && keyOf(player.songInfo) === keyOf(song)) return
+      const revision = ++metadataRevision
+      player.isLoading = true
+      const prepared = await prepareSong(song)
+      if (revision !== metadataRevision) {
+        prepared.dispose()
+        return
+      }
+      commitPrepared(prepared)
+    }
+
+    const stopTagListener = window.api.localMusic.onTagsChanged(({ oldSongmid, song }) => {
+      localUserStore.list = localUserStore.list.map((item) =>
+        item.source === 'local' && String(item.songmid) === oldSongmid ? { ...item, ...song } : item
+      )
+      if (String(localUserStore.userInfo.lastPlaySongId) === oldSongmid)
+        localUserStore.userInfo.lastPlaySongId = song.songmid
+      if (player.songInfo?.source === 'local' && String(player.songInfo.songmid) === oldSongmid) {
+        void updatePlayerInfo({ ...toRaw(player.songInfo), ...song } as SongList, true)
+      }
+    })
+    onScopeDispose(stopTagListener)
+    watch(
+      () =>
+        activePluginContributions.value
+          .filter((item) => item.manifest.contributes?.lyricConverters?.length)
+          .map((item) => item.pluginId)
+          .join(','),
+      (ready) => {
+        if (ready && player.songInfo?.source === 'local' && !player.lyrics.crlyric)
+          void updatePlayerInfo(toRaw(player.songInfo) as SongList, true)
+      }
+    )
+
     watch(
       () => localUserStore.userInfo.lastPlaySongId,
-      (newId) => {
-        if (newId && newId !== player.songId) {
-          player.songId = newId
-          const song = localUserStore.list.find((s: any) => s.songmid === newId)
-          if (song) {
-            updatePlayerInfo(song)
-          }
-        }
+      (id) => {
+        if (!id || String(id) === player.songId) return
+        const song = localUserStore.list.find((item) => item.songmid === id)
+        if (song) void updatePlayerInfo(song)
       },
       { immediate: true }
     )
-
-    // 记录当前的 Blob URL 以便清理
-    let currentBlobUrl: string | null = null
-
-    // 监听 songInfo 变化，处理封面
-    watch(
-      () => player.songInfo?.img,
-      async (newImg) => {
-        // 清理旧的 Blob URL
-        if (currentBlobUrl) {
-          URL.revokeObjectURL(currentBlobUrl)
-          currentBlobUrl = null
-        }
-
-        // 本地歌曲无 img 但有 hasCover 时,走 IPC 按需拉取,避免列表外播放时封面缺失
-        const info: any = player.songInfo
-        if (
-          !newImg &&
-          info?.source === 'local' &&
-          info?.hasCover &&
-          info?.songmid &&
-          (window as any)?.api?.localMusic?.getCoverBase64
-        ) {
-          const targetId = String(info.songmid)
-          ;(window as any).api.localMusic
-            .getCoverBase64(targetId)
-            .then((data: string) => {
-              if (
-                data &&
-                player.songInfo &&
-                String(player.songInfo.songmid) === targetId &&
-                !player.songInfo.img
-              ) {
-                player.songInfo.img = data
-              }
-            })
-            .catch(() => {})
-        }
-
-        // 处理封面 Blob URL
-        const coverUrl = newImg ? newImg : defaultCover
-        console.log('coverUrl', coverUrl)
-
-        if (coverUrl.startsWith('http')) {
-          const blobUrl = await getBlobUrlFromUrl(coverUrl)
-          if (blobUrl) {
-            currentBlobUrl = blobUrl
-            player.cover = blobUrl
-          } else {
-            player.cover = coverUrl
-          }
-        } else {
-          player.cover = coverUrl
-        }
-      },
-      { immediate: true }
-    )
-    // 监听 cover 变化，提取颜色
-    watch(
-      () => player.cover,
-      async (newCover) => {
-        if (!newCover) return
-        try {
-          const { dominantColor, useBlackText } = await analyzeImageColors(newCover)
-          player.coverDetail.ColorObject = dominantColor
-          player.coverDetail.mainColor = `rgba(${dominantColor.r},${dominantColor.g},${dominantColor.b},1)`
-
-          // 计算文字对比色
-          const baseTextColor = useBlackText ? '0, 0, 0' : '255, 255, 255'
-          player.coverDetail.textColor = `rgba(${baseTextColor}, 0.6)`
-          player.coverDetail.hoverColor = `rgba(${baseTextColor}, 1)`
-          player.coverDetail.contrastColor = player.coverDetail.textColor // 复用
-
-          player.coverDetail.playBg = 'rgba(255,255,255,0.2)'
-          player.coverDetail.playBgHover = 'rgba(255,255,255,0.33)'
-
-          // 计算 lightMainColor (偏白主题色)
-          let r = dominantColor.r
-          let g = dominantColor.g
-          let b = dominantColor.b
-          // 适度向白色偏移
-          r = Math.min(255, r + (255 - r) * 0.8)
-          g = Math.min(255, g + (255 - g) * 0.8)
-          b = Math.min(255, b + (255 - b) * 0.8)
-          player.coverDetail.lightMainColor = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, 0.9)`
-          player.coverDetail.useBlackText = useBlackText
-          console.log('useBlackText', player.coverDetail.useBlackText)
-        } catch (e) {
-          console.error('颜色提取失败', e)
-          // 恢复默认
-          resetColors()
-        }
-      }
-    )
-
-    function resetColors() {
-      player.coverDetail.mainColor = 'var(--td-brand-color-5)'
-      player.coverDetail.lightMainColor = 'rgba(255, 255, 255, 0.9)'
-      player.coverDetail.contrastColor = 'var(--player-text-idle)'
-      player.coverDetail.textColor = 'var(--player-text-idle)'
-      player.coverDetail.hoverColor = 'var(--player-text-hover-idle)'
-      player.coverDetail.playBg = 'var(--player-btn-bg-idle)'
-      player.coverDetail.playBgHover = 'var(--player-btn-bg-hover-idle)'
-    }
-
-    // 监听歌曲ID变化，获取歌词, 评论
-    type RawLyricFormat = 'lrc' | 'yrc' | 'qrc' | 'ttml'
-    const setRawLyric = (format: RawLyricFormat, text: string, trans?: string) => {
-      player.lyrics.raw = {
-        ...(player.lyrics.raw || {}),
-        [format]: text,
-        format,
-        ...(trans !== undefined ? { trans } : {})
-      }
-    }
-    watch(
-      [() => player.songId, () => player.songInfo?.songmid],
-      async ([newId], _oldArgs, onCleanup) => {
-        if (!newId || !player.songInfo) {
-          player.lyrics.lines = []
-          player.lyrics.raw = {}
-          return
-        }
-        player.isLoading = true
-        // 切换歌曲时重置原始歌词缓存
-        player.lyrics.raw = {}
-
-        // 竞态与取消控制
-        let active = true
-        const abort = new AbortController()
-        onCleanup(() => {
-          active = false
-          abort.abort()
-        })
-
-        const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(player.songInfo)))
-        updateCommon(getCleanSongInfo())
-
-        const parseCrLyricBySource = (source: string, text: string): LyricLine[] => {
-          return source === 'tx' ? (parseQrc(text) as any) : (parseYrc(text) as any)
-        }
-
-        const mergeTranslation = (base: LyricLine[], tlyric?: string): LyricLine[] => {
-          if (!tlyric || base.length === 0) return base
-
-          const translated = parseLrc(tlyric)
-          if (!translated || translated.length === 0) return base
-
-          const joinWords = (line: LyricLine) => (line.words || []).map((w) => w.word).join('')
-
-          const translatedSorted = translated.slice().sort((a, b) => a.startTime - b.startTime)
-
-          const baseTolerance = 300
-          const ratioTolerance = 0.4
-
-          if (base.length > 0) {
-            const firstBase = base[0]
-            const firstDuration = Math.max(1, firstBase.endTime - firstBase.startTime)
-            const firstTol = Math.min(baseTolerance, firstDuration * ratioTolerance)
-
-            let anchorIndex: number | null = null
-            let bestDiff = Number.POSITIVE_INFINITY
-            for (let i = 0; i < translatedSorted.length; i++) {
-              const diff = Math.abs(translatedSorted[i].startTime - firstBase.startTime)
-              if (diff <= firstTol && diff < bestDiff) {
-                bestDiff = diff
-                anchorIndex = i
-              }
-            }
-
-            if (anchorIndex !== null) {
-              let j = anchorIndex
-              for (let i = 0; i < base.length && j < translatedSorted.length; i++, j++) {
-                const bl = base[i]
-                const tl = translatedSorted[j] as LyricLine
-                if (tl.words[0].word === '//' || !bl.words[0].word) continue
-                const text = joinWords(tl)
-                if (text) bl.translatedLyric = text
-              }
-              return base
-            }
-          }
-          return base
-        }
-
-        try {
-          const source = (player.songInfo as any).source || 'kg'
-          let parsedLyrics: LyricLine[] = []
-
-          if (source === 'wy' || source === 'tx') {
-            const sdkPromise = (async () => {
-              try {
-                const lyricData = await window.api.music.requestSdk('getLyric', {
-                  source,
-                  songInfo: getCleanSongInfo(),
-                  grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
-                  useStrictMode: playSettingStore.getStrictGrep
-                })
-                console.log('平台 Lyrics 获取成功')
-
-                if (!active) return null
-
-                let lyrics: null | LyricLine[] = null
-                if (lyricData?.crlyric) {
-                  lyrics = parseCrLyricBySource(source, lyricData.crlyric)
-                  // 缓存原始歌词字符串
-                  setRawLyric(source === 'tx' ? 'qrc' : 'yrc', lyricData.crlyric, lyricData?.tlyric)
-                } else if (lyricData?.lyric) {
-                  lyrics = parseLrc(lyricData.lyric) as any
-                  setRawLyric('lrc', lyricData.lyric, lyricData?.tlyric)
-                }
-                lyrics = mergeTranslation(lyrics as any, lyricData?.tlyric)
-
-                if (!lyrics || lyrics.length === 0) {
-                  return null
-                }
-                return lyrics
-              } catch (err: any) {
-                throw new Error(`SDK request failed: ${err.message}`)
-              }
-            })()
-
-            try {
-              const response = await fetch(
-                `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
-                {
-                  signal: abort.signal
-                }
-              )
-
-              if (!active) return
-
-              if (!response.ok) {
-                throw new Error(`TTML request failed with status ${response.status}`)
-              }
-
-              const res = await response.text()
-
-              if (!res || res.length < 100) {
-                throw new Error('ttml 无歌词')
-              }
-
-              const ttmlLyrics = parseTTML(res).lines
-
-              if (!ttmlLyrics || ttmlLyrics.length === 0) {
-                throw new Error('TTML 解析为空')
-              }
-
-              parsedLyrics = ttmlLyrics as LyricLine[]
-              // 缓存原始 TTML 字符串
-              setRawLyric('ttml', res)
-
-              sdkPromise.catch(() => {})
-            } catch (ttmlError: any) {
-              if (!active || (ttmlError && ttmlError.name === 'AbortError')) {
-                return
-              }
-
-              try {
-                const sdkLyrics = await sdkPromise
-                if (sdkLyrics) {
-                  parsedLyrics = sdkLyrics
-                } else {
-                  parsedLyrics = []
-                }
-              } catch (sdkError) {
-                parsedLyrics = []
-              }
-            }
-          } else if (source !== 'local') {
-            // 服务插件歌曲（如 navidrome）：优先使用歌曲自带的 lrc 字段
-            const servicePluginId = (player.songInfo as any)._servicePluginId as string | undefined
-            console.log('[歌词] 非本地歌曲, source:', source, 'servicePluginId:', servicePluginId)
-            if (servicePluginId) {
-              // 通过服务插件异步获取歌词（类似 wy/kg）
-              try {
-                const lyricResult = await window.api.plugins.getServiceLyric(
-                  servicePluginId,
-                  getCleanSongInfo()
-                )
-                console.log('[歌词] 服务插件歌词返回:', lyricResult)
-                if (!active) return
-
-                const lyricText = lyricResult?.data?.lyric
-                if (lyricText) {
-                  if (/^\[(\d+),\d+\]/.test(lyricText) || /\(\d+,\d+,\d+\)/.test(lyricText)) {
-                    parsedLyrics = parseYrc(lyricText) as any
-                    setRawLyric('yrc', lyricText)
-                  } else {
-                    parsedLyrics = parseLrc(lyricText) as any
-                    setRawLyric('lrc', lyricText)
-                  }
-                } else {
-                  parsedLyrics = []
-                }
-              } catch {
-                parsedLyrics = []
-              }
-            } else {
-              // 没有自带歌词也没有服务插件ID，尝试通过音源SDK获取
-              try {
-                const lyricData = await window.api.music.requestSdk('getLyric', {
-                  source,
-                  songInfo: getCleanSongInfo(),
-                  grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
-                  useStrictMode: playSettingStore.getStrictGrep
-                })
-                console.log('平台 Lyrics 获取成功', lyricData)
-                if (!active) return
-
-                if (lyricData?.crlyric) {
-                  parsedLyrics = parseCrLyricBySource(source, lyricData.crlyric)
-                  setRawLyric(source === 'tx' ? 'qrc' : 'yrc', lyricData.crlyric, lyricData?.tlyric)
-                } else if (lyricData?.lyric) {
-                  parsedLyrics = parseLrc(lyricData.lyric) as LyricLine[]
-                  setRawLyric('lrc', lyricData.lyric, lyricData?.tlyric)
-                }
-
-                parsedLyrics = mergeTranslation(parsedLyrics, lyricData?.tlyric)
-              } catch {
-                parsedLyrics = []
-              }
-            }
-          } else {
-            let text = (player.songInfo as any).lrc as string | null
-            if (!text) {
-              text = await window.api.music.invoke(
-                'local-music:get-lyric',
-                (player.songInfo as any).songmid
-              )
-            }
-
-            if (text && (/^\[(\d+),\d+\]/.test(text) || /\(\d+,\d+,\d+\)/.test(text))) {
-              parsedLyrics = text ? (parseYrc(text) as any) : []
-              if (text) setRawLyric('yrc', text)
-            } else {
-              parsedLyrics = text ? (parseLrc(text) as any) : []
-              if (text) setRawLyric('lrc', text)
-            }
-          }
-          if (!active) return
-          player.lyrics.lines = parsedLyrics.length > 0 ? sanitizeLyricLines(parsedLyrics) : []
-        } catch (error) {
-          console.error('获取歌词失败:', error)
-          if (!active) return
-          player.lyrics.lines = []
-        } finally {
-          if (active) player.isLoading = false
-        }
-      },
-      { immediate: true }
-    )
-
-    function updatePlayerInfo(songInfo: SongList) {
-      // 避免重复更新
-      if (player.songInfo?.songmid === songInfo.songmid) return
-      player.songInfo = songInfo
-    }
 
     async function fetchComments(page = 1, type: 'hot' | 'latest' = 'hot') {
       const currentSongInfo = toRaw(player.songInfo)
@@ -590,6 +427,7 @@ export const useGlobalPlayStatusStore = defineStore(
         })
 
         console.log('评论获取成功', res)
+        if (keyOf(player.songInfo) !== keyOf(currentSongInfo)) return
 
         if (type === 'hot') {
           if (page === 1) {
@@ -626,8 +464,6 @@ export const useGlobalPlayStatusStore = defineStore(
     }
 
     function updateCommon(songInfo: SongList) {
-      const knownSources = ['wy', 'tx', 'mg', 'kg', 'kw', 'bd']
-      if (songInfo.source === 'local' || !knownSources.includes(songInfo.source)) return
       // Reset comments
       player.comments.hotList = []
       player.comments.latestList = []
@@ -637,6 +473,7 @@ export const useGlobalPlayStatusStore = defineStore(
       player.comments.latestPage = 0
       player.comments.latestTotal = 0
       player.comments.latestMaxPage = 0
+      if (songInfo.source === 'local') return
 
       // 同时获取热门和最新评论
       fetchComments(1, 'hot')
@@ -645,11 +482,13 @@ export const useGlobalPlayStatusStore = defineStore(
 
     return {
       player,
+      prepareSong,
+      commitPrepared,
       updatePlayerInfo,
       fetchComments
     }
   },
   {
-    persist: true
+    persist: false
   }
 )

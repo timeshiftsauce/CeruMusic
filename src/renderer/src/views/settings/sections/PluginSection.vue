@@ -1,33 +1,35 @@
 <template>
-  <div class="settings-section">
-    <!-- <div class="setting-group">
-      <h3>插件管理</h3>
-      <p>管理和配置应用插件，扩展音乐播放器功能</p>
-      <t-button theme="primary" @click="goPlugin">
-        <TreeRoundDotIcon style="margin-right: 0.5em" />
-        打开插件管理
-      </t-button>
-    </div> -->
-    <div id="plugin-settings">
-      <plugins />
-    </div>
+  <div id="plugin-settings" class="plugin-section">
+    <KeepAlive>
+      <component :is="tab === 'installed' ? Plugins : PluginRoutingPanel">
+        <template #navigation>
+          <t-tabs v-model="tab" class="plugin-view-tabs" size="large" aria-label="插件设置页面">
+            <t-tab-panel value="installed" label="插件管理" />
+            <t-tab-panel value="routing" label="能力分配" />
+          </t-tabs>
+        </template>
+      </component>
+    </KeepAlive>
   </div>
 </template>
-
-<style lang="scss" scoped>
-.settings-section {
-  animation: fadeInUp 0.4s ease-out;
-  animation-fill-mode: both;
+<script setup lang="ts">
+import { ref } from 'vue'
+import Plugins from '@renderer/components/Settings/plugins.vue'
+import PluginRoutingPanel from '@renderer/components/Settings/PluginRoutingPanel.vue'
+const tab = ref('installed')
+</script>
+<style scoped>
+.plugin-section {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.plugin-view-tabs {
+  background: transparent;
+}
+.plugin-view-tabs :deep(.t-tabs__content) {
+  display: none;
 }
 </style>
