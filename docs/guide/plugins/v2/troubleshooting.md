@@ -4,7 +4,7 @@ pageClass: plugin-v2-doc
 
 # 故障排查
 
-先记录：澜音版本、CLI/SDK 版本、模板类型、失败阶段、可脱敏的错误信息，以及是否仅在工作台或桌面发生。
+先记录：澜音版本（2.0）、模板类型、失败阶段、可脱敏的错误信息，以及是否仅在工作台或桌面发生。需要复现工具链问题时，再附上工程锁文件和 `npm ls` 输出。
 
 ## 按现象定位
 
@@ -27,7 +27,9 @@ pageClass: plugin-v2-doc
 | Schema 在工作台可见，桌面报无效       | 不是桌面 drawer schema                   | 添加 presentation 与受支持 form 控件                    |
 | 设置按钮无内容                        | settingsPages.view 不匹配 Surface        | 校验 view、Surface id 与资源 entry                      |
 | Surface 白屏                          | 打包入口/资源错误、运行时异常            | 看控制台，使用成品 preview 检查                         |
-| 尚未接入能力 / host-not-connected     | SDK 契约没有宿主实现                     | 对照支持表，不以类型检查代替运行检查                    |
+| 尚未接入能力 / host-not-connected     | 当前 Host 没有该服务或方法               | 先查 `ctx.capabilities.get(service)` 的 `available` 和 `methods`，再检查权限与登录状态 |
+| 播放器控制被拒绝                       | 没有 player.control 或歌曲不属于当前队列  | 先申请播放权限；播放指定歌曲前确认资源归属并将歌曲加入当前队列 |
+| queue 操作失败                         | revision 过期、一起听中或引用不属于插件  | 读取最新队列 revision；提交完整队列；不要改写其他插件的 ResourceRef |
 | 更新返回 queued:true                  | 只是加入更新通知                         | 等待宿主后续交互，不提示“安装完成”                      |
 | 签名 verified-untrusted               | 没配置可信发布者公钥                     | 使用真实可信公钥验证，不能自动信任文件附带公钥          |
 
@@ -36,7 +38,7 @@ pageClass: plugin-v2-doc
 1. **构建**：`npm run build`，解决类型与入口错误。
 2. **静态校验**：`npm run validate`，检查清单和成品格式。
 3. **成品预览**：`npm run preview`，排除源码开发环境依赖。
-4. **桌面安装**：用隔离演示数据复现，核对权限和支持版本。
+4. **桌面安装**：在澜音 2.0 用隔离演示数据复现，核对权限、能力和资源归属。
 5. **缩小示例**：回到最小模板，只加入导致失败的改动。
 
 ## 提交可复现问题

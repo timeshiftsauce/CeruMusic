@@ -68,9 +68,10 @@ VS Code 调试：
 
 完整顺序见[签名与个性化发行](./issuance)。
 
-## 判断实际安装版本
+## 检查本地工程依赖
 
 ```shell
 npm ls @shiqianjiang/ceru-plugin-cli @shiqianjiang/ceru-plugin-sdk
-npm view create-ceru-plugin version dist.integrity
 ```
+
+`npm ls` 用来确认当前工程实际解析到的 CLI 和 SDK。构建时以锁文件和本地安装结果为准；不需要通过远程仓库查询“最新版本”来决定教程步骤。

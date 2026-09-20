@@ -134,7 +134,7 @@ await ctx.ui.navigation.open({ page: 'playlist', sectionId: 'library' })
 
 账号菜单未登录时显示默认头像和“未登录”。已登录项悬停展开二级菜单，可调用已声明的 `logoutAction` 退出登录。扫码页面声明 `presentation: { kind: 'modal', size: 360 }`；Vue 在登录动作成功返回后调用 `SurfaceContext.close()` 自动关闭，逻辑端也可使用 `ctx.ui.closeView(surfaceId)`。
 
-Web Surface 会自动上报内容高度。Vue 根元素使用自然高度，不要设置 <code>height/min-height: 100vh</code>。网易云扫码页面可保持约 360×330，登录摘要约 360×154，状态切换时由宿主自动调整容器。
+Web Surface 会自动上报内容高度。Vue 根元素使用自然高度，不要设置 <code>height/min-height: 100vh</code>；内容变化时由宿主自动调整容器。
 
 ## 同一音源的多个实现
 
