@@ -4,7 +4,6 @@
     "id": "example.first-plugin",
     "name": "我的第一个插件",
     "version": "0.1.0",
-    "description": "A Ceru Music v2 source plugin",
     "engines": {
       "hostApi": "^2.0.0",
       "logicRuntime": "ceru-js@1",
@@ -14,60 +13,32 @@
       "logic": {
         "entry": "logic.main",
         "activation": ["onCommand:hello", "onProvider:catalog"]
-      }
+      },
+      "surfaces": [
+        { "id": "counter", "kind": "schema", "entry": "schema.counter" }
+      ]
     },
     "contributes": {
       "commands": [
-        {
-          "id": "hello",
-          "title": "Hello",
-          "action": "hello"
-        }
+        { "id": "hello", "title": "问候一次", "action": "hello" }
       ],
       "providers": [
         {
           "id": "catalog",
           "name": "我的曲库",
           "protocols": ["music.search@1", "music.resolve@1"],
-          "icon": {
-            "kind": "host",
-            "name": "music-note"
-          },
           "connectionMode": "none"
         }
       ],
-      "homeSections": [
-        {
-          "id": "catalog-playlists",
-          "title": "歌单",
-          "kind": "playlists",
-          "icon": {
-            "kind": "host",
-            "name": "library"
-          },
-          "providerIds": ["catalog"]
-        }
+      "settingsPages": [
+        { "id": "counter", "title": "问候计数", "view": "counter" }
       ]
     },
-    "permissions": [],
-    "dataSchemas": {
-      "config": 1,
-      "state": 1
-    }
+    "permissions": []
   },
-  "config": {
-    "displayName": "我的曲库",
-    "apiOrigin": "https://music.example.com",
-    "sources": {
-      "demo": {
-        "name": "Demo Source",
-        "qualities": ["320k", "flac"]
-      }
-    }
+  "entries": { "logic.main": "src/index.ts" },
+  "resources": {
+    "schema.counter": { "path": "ui/counter.json", "type": "json" }
   },
-  "entries": {
-    "logic.main": "src/index.ts"
-  },
-  "resources": {},
   "output": "dist/plugin.js"
 }

@@ -7,16 +7,14 @@
 - `ctx.ui.setState/closeView`
 - `defineNativeView`、原生歌单网格和歌曲列表
 - `contributes.playlistSections` 将个人歌单放入澜音现有“歌单”页
-- `navigation.open({ page: 'playlist', sectionId })` 定位插件自己的区块
 - `Provider.playlists.get` 分页与 `tracks.resolve`
 - 原生详情、播放队列、播放器和歌单导入
 
 登录流程完全是本地模拟，不会连接网易云或其他真实平台。项目仅用来学习通用插件 API。
 
-此示例使用 0.3.5 契约。它不会增加侧边栏按钮，也不会用抽屉承载个人歌单；启用后请在澜音现有侧边栏“歌单”页查看插件区块。Web Surface 会按内容自动调整高度，页面根元素不要设置 `height` 或 `min-height: 100vh`。
+它不会增加侧边栏按钮，也不会用抽屉承载个人歌单；启用后请在澜音现有侧边栏“歌单”页查看插件区块。Web Surface 会按内容自动调整高度。
 
 ```shell
-npm view @shiqianjiang/ceru-plugin-cli version
 npm ci
 npm run mock
 ```

@@ -19,52 +19,53 @@ const pluginSidebar = {
       items: [
         {
           text: '入门 · 第一个插件',
-          collapsed: true,
+          collapsed: false,
           items: [
-            { text: '1. 快速上手', link: '/guide/plugins/v2/quick-start' },
+            { text: '1. 运行插件', link: '/guide/plugins/v2/quick-start' },
             { text: '2. 写一个命令', link: '/guide/plugins/v2/first-command' },
-            { text: '3. 理解搜索', link: '/guide/plugins/v2/first-search' },
+            { text: '3. 添加搜索', link: '/guide/plugins/v2/first-search' },
             { text: '4. 保存数据', link: '/guide/plugins/v2/first-storage' },
-            { text: '5. 安装与交付', link: '/guide/plugins/v2/first-release' }
+            { text: '5. 安装到澜音', link: '/guide/plugins/v2/first-release' }
           ]
         },
         {
           text: '项目一 · HTTP 音源',
-          collapsed: false,
+          collapsed: true,
           items: [
-            { text: '先运行完整项目', link: '/guide/plugins/v2/tutorial-source/' },
-            { text: '实现 Provider', link: '/guide/plugins/v2/tutorial-source/provider' },
-            { text: '验证与真实服务', link: '/guide/plugins/v2/tutorial-source/release' }
+            { text: '1. 连通 HTTP 音源', link: '/guide/plugins/v2/tutorial-source/' },
+            { text: '2. 搜索与分页', link: '/guide/plugins/v2/tutorial-source/provider' },
+            { text: '3. 播放与歌词', link: '/guide/plugins/v2/tutorial-source/playback' },
+            { text: '4. 安装与更换服务', link: '/guide/plugins/v2/tutorial-source/release' }
           ]
         },
         {
           text: '项目二 · Navidrome',
-          collapsed: false,
+          collapsed: true,
           items: [
-            { text: '先运行完整项目', link: '/guide/plugins/v2/tutorial-navidrome/' },
-            { text: '连接与认证', link: '/guide/plugins/v2/tutorial-navidrome/connection' },
-            { text: 'Vue 连接页', link: '/guide/plugins/v2/tutorial-navidrome/surface' },
-            { text: '搜索、播放与歌词', link: '/guide/plugins/v2/tutorial-navidrome/provider' },
-            { text: '验证与实机安装', link: '/guide/plugins/v2/tutorial-navidrome/release' }
+            { text: '1. 创建工程', link: '/guide/plugins/v2/tutorial-navidrome/' },
+            { text: '2. 连接、认证与保存', link: '/guide/plugins/v2/tutorial-navidrome/connection' },
+            { text: '3. 完成 Vue 连接页', link: '/guide/plugins/v2/tutorial-navidrome/surface' },
+            { text: '4. 搜索、播放与歌词', link: '/guide/plugins/v2/tutorial-navidrome/provider' },
+            { text: '5. 验证并安装', link: '/guide/plugins/v2/tutorial-navidrome/release' }
           ]
         },
         {
           text: '项目三 · 账号与原生音乐库',
-          collapsed: false,
+          collapsed: true,
           items: [
-            { text: '先运行完整项目', link: '/guide/plugins/v2/tutorial-account-native/' },
-            { text: '工程与 Manifest', link: '/guide/plugins/v2/tutorial-account-native/manifest' },
-            { text: 'Vue 登录与账号', link: '/guide/plugins/v2/tutorial-account-native/login' },
+            { text: '1. 创建账号插件', link: '/guide/plugins/v2/tutorial-account-native/' },
+            { text: '2. 最小账号入口', link: '/guide/plugins/v2/tutorial-account-native/manifest' },
+            { text: '3. Vue 登录与账号', link: '/guide/plugins/v2/tutorial-account-native/login' },
             {
-              text: '现有歌单页区块',
+              text: '4. 原生歌单区块',
               link: '/guide/plugins/v2/tutorial-account-native/native-library'
             },
             {
-              text: '导航、播放与导入',
+              text: '5. 导航、播放与导入',
               link: '/guide/plugins/v2/tutorial-account-native/playback'
             },
             {
-              text: '真实接口与发布',
+              text: '6. 验证与真实接口',
               link: '/guide/plugins/v2/tutorial-account-native/release'
             }
           ]
@@ -87,6 +88,7 @@ const pluginSidebar = {
       collapsed: true,
       items: [
         { text: 'Provider 与标准数据', link: '/guide/plugins/v2/providers' },
+        { text: '音源命名约定（推荐）', link: '/guide/plugins/v2/source-conventions' },
         { text: '歌词与音质', link: '/guide/plugins/v2/lyrics' },
         { text: '歌单导入', link: '/guide/plugins/v2/playlist-import' },
         { text: 'HTTP 请求', link: '/guide/plugins/v2/http' },
@@ -112,7 +114,7 @@ const pluginSidebar = {
       items: [
         { text: '脚手架与 CLI', link: '/guide/plugins/v2/cli' },
         { text: '版本与兼容', link: '/guide/plugins/v2/compatibility' },
-        { text: '0.3.5 工具链更新', link: '/guide/plugins/v2/sdk-upgrade' },
+        { text: '开发环境与依赖', link: '/guide/plugins/v2/sdk-upgrade' },
         { text: '构建与发布', link: '/guide/plugins/v2/publishing' },
         { text: '签名与个性化发行', link: '/guide/plugins/v2/issuance' },
         { text: '从 v1 迁移', link: '/guide/plugins/v2/migration' },

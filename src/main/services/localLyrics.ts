@@ -7,7 +7,8 @@ import {
   type LyricInputFormat,
   type LyricParseRequest
 } from '@shiqianjiang/ceru-plugin-sdk'
-import { parseLocalLrc } from '../../common/localLyrics'
+import { parseLocalLyrics, detectLyricFormat } from '../../common/localLyrics'
+import { reservedLyricExtensions } from '../../common/lyricFormats'
 
 export interface LocalLyricConverter {
   formats: readonly LyricInputFormat[]
@@ -15,25 +16,21 @@ export interface LocalLyricConverter {
 }
 
 const MAX_BYTES = 2 * 1024 * 1024
-const extensions: Record<string, LyricInputFormat> = {
+const extensions: Record<string, string> = {
   '.lrc': 'lrc',
   '.ttml': 'ttml',
   '.qrc': 'qrc',
   '.krc': 'krc',
   '.yrc': 'yrc',
+  '.lys': 'lys',
+  '.lyl': 'lyl',
+  '.lqe': 'lqe',
+  '.spl': 'spl',
+  '.eslrc': 'eslrc',
   '.txt': 'plain'
 }
 // Prefer the built-in format when multiple same-name sidecars exist.
 const priority = Object.keys(extensions)
-
-function embeddedFormat(text: string): LyricInputFormat {
-  if (/<(?:[\w.-]+:)?tt(?:\s|>)/i.test(text) || /<\?xml\b/i.test(text)) return 'ttml'
-  if (/\bLyricContent\s*=|<QrcInfos\b/i.test(text)) return 'qrc'
-  if (/^\s*\[\d+,\d+\].*<\d+,\d+,\d+>/m.test(text)) return 'krc'
-  if (/^\s*\[\d+,\d+\].*\(\d+,\d+,\d+\)/m.test(text)) return 'yrc'
-  if (/^\s*\[\d+:\d+(?:\.\d+)?\]/m.test(text)) return 'lrc'
-  return 'auto'
-}
 
 function usable(value: CrLyric, track: ResourceRef): CrLyric | undefined {
   assertLyricsDocument(value)
@@ -75,19 +72,30 @@ export async function resolveLocalLyrics(options: {
   converters: readonly LocalLyricConverter[]
 }): Promise<CrLyric | null> {
   const { audioPath, embedded, track, converters } = options
-  async function parse(text: string, format: LyricInputFormat): Promise<CrLyric | undefined> {
+  async function parse(text: string, hint: string): Promise<CrLyric | undefined> {
     if (!text.trim() || Buffer.byteLength(text, 'utf8') > MAX_BYTES) return
-    if (format === 'lrc' || format === 'enhanced-lrc' || format === 'auto') {
-      try {
-        const result = parseLocalLrc(text, track)
-        if (result) {
-          const document = usable(result, track)
-          if (document) return document
-        }
-      } catch {
-        /* A malformed embedded lyric must not block sidecar fallback. */
+    try {
+      const result = parseLocalLyrics(text, track, hint)
+      if (result) {
+        const document = usable(result, track)
+        if (document) return document
       }
+    } catch {
+      /* A malformed embedded lyric must not block sidecar fallback. */
     }
+    const detected = detectLyricFormat(text)
+    const candidateFormat = detected === 'auto' ? hint : detected
+    const format: LyricInputFormat = [
+      'lrc',
+      'enhanced-lrc',
+      'yrc',
+      'qrc',
+      'krc',
+      'ttml',
+      'plain'
+    ].includes(candidateFormat)
+      ? (candidateFormat as LyricInputFormat)
+      : 'auto'
     const candidates = converters
       .filter((c) => c.formats.includes(format) || c.formats.includes('auto'))
       .sort((a, b) => Number(b.formats.includes(format)) - Number(a.formats.includes(format)))
@@ -101,7 +109,7 @@ export async function resolveLocalLyrics(options: {
     }
     return undefined
   }
-  const inner = await parse(embedded, embeddedFormat(embedded))
+  const inner = await parse(embedded, 'auto')
   if (inner) return inner
   const stem = basename(audioPath, extname(audioPath))
   const directory = dirname(audioPath)
@@ -112,13 +120,17 @@ export async function resolveLocalLyrics(options: {
         (entry) =>
           entry.isFile() &&
           basename(entry.name, extname(entry.name)) === stem &&
-          extensions[extname(entry.name).toLowerCase()]
+          !reservedLyricExtensions.includes(extname(entry.name).slice(1).toLowerCase())
       )
       .map((entry) => entry.name)
       .sort(
         (a, b) =>
-          priority.indexOf(extname(a).toLowerCase()) - priority.indexOf(extname(b).toLowerCase()) ||
-          a.localeCompare(b)
+          (priority.includes(extname(a).toLowerCase())
+            ? priority.indexOf(extname(a).toLowerCase())
+            : 999) -
+            (priority.includes(extname(b).toLowerCase())
+              ? priority.indexOf(extname(b).toLowerCase())
+              : 999) || a.localeCompare(b)
       )
   } catch {
     return null
@@ -127,7 +139,7 @@ export async function resolveLocalLyrics(options: {
     try {
       const document = await parse(
         await readSidecar(join(directory, file)),
-        extensions[extname(file).toLowerCase()]
+        extensions[extname(file).toLowerCase()] || 'auto'
       )
       if (document) return document
     } catch {

@@ -4,7 +4,7 @@ pageClass: plugin-v2-doc
 
 # Storage：隔离存储与共享读取
 
-**适用：澜音 1.14.1 桌面与工具链 0.3.5。** 工作台将本插件数据持久化到工程的 `.ceru-dev/storage`，同样限制为 10 MiB，支持读取自己的字符串键与结构化键。跨插件读取与共享授权需要正式安装 Host，下文的共享规则指澜音桌面。
+**适用：澜音 2.0 桌面与开发工作台。** 工作台将本插件数据持久化到工程的 `.ceru-dev/storage`，同样限制为 10 MiB，支持读取自己的字符串键与结构化键。跨插件读取与共享授权需要正式安装 Host，下文的共享规则指澜音桌面。
 
 ## 先保存一个偏好
 
@@ -20,7 +20,7 @@ const quality = await ctx.storage.get('quality')
 
 ## 容量与生命周期
 
-下面的完整记录格式、共享权限计量和卸载规则指澜音桌面。0.3.3 工作台也按 UTF-8 JSON 字节限制为 10 MiB，但使用自己的开发存储结构，不保存桌面的共享授权；两个环境的结构开销不必相同。
+下面的完整记录格式、共享权限计量和卸载规则指澜音桌面。工作台也按 UTF-8 JSON 字节限制为 10 MiB，但使用自己的开发存储结构，不保存桌面的共享授权；两个环境的结构开销不必相同。
 
 每个插件安装实例可使用 **10 MiB = 10,485,760 字节**。额度按完整存储记录的 `JSON.stringify` 结果转为 **UTF-8** 后计算，包含：
 
@@ -36,7 +36,6 @@ const quality = await ctx.storage.get('quality')
 | 同一插件正常更新       | 保留；作者负责自己的数据迁移   |
 | 卸载插件               | 清除                           |
 | 删除一个键             | 同时删除该键的共享权限         |
-| 首次写入旧格式私有数据 | 写入新格式成功后迁移旧记录     |
 | 读取公开键             | 不复制到读取者，不占读取者额度 |
 
 ## 基础 API
@@ -77,16 +76,15 @@ JSON 通道不能保存函数、BigInt、循环引用、类实例语义、Date �
 新键默认私有。只有数据所属插件可以修改数据与读取策略。
 
 ```ts
-// 以下 storage 使用下一节提供的桌面扩展类型。
-await storage.set(
+await ctx.storage.set(
   { key: 'summary', readableBy: ['example.dashboard'] },
   { tracks: 120, updatedAt: Date.now() }
 )
 
-await storage.set({ key: 'publicInfo', readableBy: '*' }, { version: 1 })
+await ctx.storage.set({ key: 'publicInfo', readableBy: '*' }, { version: 1 })
 
 // example.dashboard 中：目标为数据所属插件的 Manifest ID。
-const summary = await storage.get({
+const summary = await ctx.storage.get({
   pluginId: 'example.library',
   key: 'summary'
 })
@@ -103,51 +101,15 @@ const summary = await storage.get({
 撤回示例：
 
 ```ts
-const value = await storage.get('summary')
-await storage.set({ key: 'summary', readableBy: [] }, value)
+const value = await ctx.storage.get('summary')
+await ctx.storage.set({ key: 'summary', readableBy: [] }, value)
 ```
 
 后续读取立即按新策略检查，但已经交给其他插件的旧副本无法收回。目标停用后仍可读取其开放数据；读取不会启动目标插件。跨插件仅支持 get，set/delete 即使带对方 pluginId 也会被拒绝。
 
-## TypeScript 扩展类型
+## TypeScript 类型
 
-**SDK 0.3.3 起已内置下面这些签名**，当前可直接使用 0.3.5 的 `ctx.storage` 或从 SDK 导入 `PluginStorageAPI`。安装方式见 [0.3.5 工具链更新](./sdk-upgrade)。
-
-::: details 继续使用 SDK 0.2.4 的兼容声明
-
-SDK **0.2.4** 只声明字符串键，并将 get 的空值写为 undefined；桌面实现是 null。将下面代码保存为工程的 `src/desktop-storage.ts`，不需要引用澜音内部源码路径：
-
-```ts
-import type { JsonValue, PluginContext } from '@shiqianjiang/ceru-plugin-sdk'
-
-export type ReadKey = string | { key: string; pluginId?: string }
-export type WriteKey = string | { key: string; pluginId?: string; readableBy?: '*' | string[] }
-
-export interface DesktopStorage {
-  get<T extends JsonValue = JsonValue>(key: ReadKey): Promise<T | null>
-  set(key: WriteKey, value: JsonValue): Promise<void>
-  delete(key: ReadKey): Promise<void>
-}
-
-export function desktopStorage(ctx: PluginContext): DesktopStorage {
-  return ctx.storage as unknown as DesktopStorage
-}
-```
-
-```ts
-import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
-import { desktopStorage } from './desktop-storage'
-
-export default definePlugin(async (ctx) => {
-  const storage = desktopStorage(ctx)
-  const visits = await storage.get<number>('visits')
-  await storage.set('visits', (visits ?? 0) + 1)
-})
-```
-
-这个类型适配只描述已存在的桌面协议，不会给工作台补充该能力。需要同时运行的代码可使用 `value == null` / `??` 处理开发环境的空值差异。
-
-:::
+直接使用 `ctx.storage` 即可获得类型提示。需要给独立函数标注类型时，可从 SDK 导入 `PluginStorageAPI`，无需额外的桌面类型适配。
 
 ## 写入失败怎么处理
 

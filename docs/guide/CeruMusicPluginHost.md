@@ -5,7 +5,7 @@ layout: doc
 # CeruMusicPluginHost 使用文档
 
 ::: warning 插件 1.0 历史 Host
-本页记录旧版 CeruMusicPluginHost，保留原内容和链接供旧工程查阅。澜音 **1.14.1 起**的插件 v2 使用新的 Core/Host 架构，请从 [v2 开发指南](/guide/plugins/v2/) 和 [宿主支持表](/guide/plugins/v2/host-services)开始。
+本页记录 v1 的 CeruMusicPluginHost，适用于澜音 **1.14.1 等使用 v1 的版本**。澜音 **2.0 起**使用插件 v2，请从 [v2 开发指南](/guide/plugins/v2/) 和 [宿主支持表](/guide/plugins/v2/host-services)开始。
 :::
 
 ## 概述

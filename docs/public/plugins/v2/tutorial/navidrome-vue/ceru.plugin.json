@@ -10,7 +10,7 @@
     "engines": {
       "hostApi": "^2.0.0",
       "logicRuntime": "ceru-js@1",
-      "libraries": { "vue": "^3.5.0" }
+      "uiSchema": "^1.0.0"
     },
     "modules": {
       "logic": {
@@ -23,11 +23,7 @@
           "kind": "web",
           "entry": "view.connection",
           "title": "连接 Navidrome",
-          "presentation": { "kind": "drawer", "placement": "right", "size": 440 },
-          "lifecycle": {
-            "openAction": "connection.surface-open",
-            "closeAction": "connection.surface-close"
-          }
+          "presentation": { "kind": "drawer", "placement": "right", "size": 440 }
         }
       ]
     },
@@ -37,7 +33,7 @@
           "id": "navidrome",
           "name": "Navidrome",
           "protocols": ["music.search@1", "music.resolve@1", "music.lyrics@1"],
-          "qualities": ["128k", "192k", "320k", "original"],
+          "qualities": ["128k", "320k", "original"],
           "icon": { "kind": "host", "name": "server" },
           "connectionMode": "single"
         }
@@ -52,17 +48,7 @@
         { "id": "connection.read", "title": "读取连接状态", "action": "connection.read" },
         { "id": "connection.save", "title": "保存连接", "action": "connection.save" },
         { "id": "connection.ping", "title": "测试连接", "action": "connection.ping" },
-        { "id": "connection.logout", "title": "断开连接", "action": "connection.logout" },
-        {
-          "id": "connection.surface-open",
-          "title": "连接页已打开",
-          "action": "connection.surface-open"
-        },
-        {
-          "id": "connection.surface-close",
-          "title": "连接页已关闭",
-          "action": "connection.surface-close"
-        }
+        { "id": "connection.logout", "title": "断开连接", "action": "connection.logout" }
       ],
       "settingsPages": [
         { "id": "connection", "title": "Navidrome 连接", "view": "connection" }

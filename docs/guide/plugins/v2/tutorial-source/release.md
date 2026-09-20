@@ -1,69 +1,98 @@
 ---
 pageClass: plugin-v2-doc
-title: 验证并接入真实音源
-description: 验证 HTTP 音源项目，并安全替换成你有权访问的真实音乐服务。
+title: 安装与更换服务
 prev:
-  text: 实现音源 Provider
-  link: /guide/plugins/v2/tutorial-source/provider
+  text: 播放与歌词
+  link: /guide/plugins/v2/tutorial-source/playback
 next:
   text: 开发 Navidrome 插件
   link: /guide/plugins/v2/tutorial-navidrome/
 ---
 
-# 验证并接入真实音源
+# 4. 安装与更换服务
 
-先证明教程工程本身正确，再替换服务。这样出现问题时，你能判断错误来自插件还是 API。
+这一节把同一个工程构建成单文件插件，检查它在成品工作台和澜音中的行为。先保留本机服务，确认整条流程可用后再换自己的 API。
 
-## 完成四项检查
+## 构建和预览成品
 
-保持 mock 服务运行，在另一个终端执行：
+在工程根目录执行：
 
 ```shell
 npm run typecheck
 npm run build
 npm run validate
+```
+
+看到 Valid Ceru v2 artifact 后，产物是 **dist/plugin.js**。先用 Ctrl+C 停止之前的插件 dev 服务，保留模拟服务，再执行：
+
+```shell
 npm run preview
 ```
 
-你应看到 `Valid Ceru v2 artifact`，产物位于 `dist/plugin.js`。在成品预览中再次检查：
+这次工作台加载构建文件。重新授予所需权限，搜索 Morning 并点击“调用解析”，再执行 source.test 查看分页与歌词，应与上一节一致。
 
-- 搜索 `Morning` 返回一首歌。
-- 搜索不存在的关键词返回空数组，而不是异常。
-- resolve 返回 `ok: true` 和 `http://127.0.0.1:43120/...`。
-- lyrics 返回 `format: "crlyric"`、`version: 1` 和毫秒时间。
+若源码修改后成品没有变化，需要重新 build；preview 不会替你把源码构建成新成品。
 
-## 换成你的服务
+## 安装到澜音 2.0
 
-只替换三层，不必重写插件结构：
+桌面步骤需要**澜音 2.0** 的开发构建或正式版本。1.14.1 使用 v1，不能安装本教程的插件。
 
-| 位置                        | 替换什么                 | 保留什么                                       |
-| --------------------------- | ------------------------ | ---------------------------------------------- |
-| `manifest.config.apiOrigin` | 你的 HTTPS API 根地址    | 完整协议和固定可信域名                         |
-| `src/api.ts`                | 上游响应类型与字段映射   | 标准 `ContentEntity`、`ResourceRef`、`CrLyric` |
-| `src/index.ts`              | 路径、查询参数和认证引用 | operation、权限检查、分页与错误恢复            |
+1. 保持本机 mock 服务运行。
+2. 进入澜音的**设置 → 插件管理 → 添加插件 → 本地导入**，选择 dist/plugin.js。
+3. 在“本地 HTTP 音源”中点击**使用**，按提示授予网络访问权限。
+4. 进入搜索页，选择“本地 HTTP 音源”，搜索 Morning。
+5. 播放 Morning Light，打开歌词界面，检查两行歌词。
 
-如果服务使用 API Key、Cookie 或刷新令牌，不要写进 Manifest、ref、日志或普通共享 Storage。使用宿主凭据能力，并让播放 URL 尽量短期有效。公开互联网服务优先使用 HTTPS。
+工作台与澜音的授权各自保存，工作台已授予不代表桌面已授予。本插件没有配置抽屉，搜索页就是它的使用入口。
 
-## 发布前检查
+**这里交付的 plugin.js 不包含模拟服务。** 它仍访问本机 43120 端口，停止 mock 后就不能搜索或播放。把这个文件发送给别人，也不会自动在对方电脑上启动服务。
+
+| 现象                   | 检查                                                               |
+| ---------------------- | ------------------------------------------------------------------ |
+| 搜索没有本地 HTTP 音源 | 是否已启用插件、安装了本节重新构建的文件                           |
+| 搜索提示权限错误       | 桌面是否授予 HTTP 和本机网络两项权限                               |
+| 解析成功但没有声音     | 直接打开播放 URL，检查 mock 服务和音量；解析成功不等于音频请求成功 |
+| 工作台能搜索，桌面失败 | 检查桌面授权，确认运行 mock 与澜音的是同一台电脑                   |
+| 歌词一闪而过           | 演示音仅 2.2 秒，可在工作台查看完整歌词返回值                      |
+
+## 换成自己的服务
+
+完成本机练习后，按以下顺序更换。这里只说明修改位置，具体字段取决于你有权访问的 API。
+
+接入常见平台时，可以采用[平台与音质的推荐命名](../source-conventions)，例如 QQ 音乐用 tx、网易云音乐用 wy。这些约定不强制，也不要求声明所有推荐音质。
+
+| 文件             | 修改内容                                                                |
+| ---------------- | ----------------------------------------------------------------------- |
+| ceru.plugin.json | 把 manifest.config.apiOrigin 换成服务根地址；音质声明与服务实际能力一致 |
+| src/network.ts   | 确认 baseURL 的路径前缀，本例固定使用 /v1/；调整本机权限检查            |
+| src/api.ts       | 修改 ApiTrack、SearchResponse 和 toTrack，映射上游字段                  |
+| src/catalog.ts   | 修改搜索路径、参数、分页方式和播放 URL 获取方式                         |
+| src/lyrics.ts    | 转换服务的歌词格式和时间单位                                            |
+
+如果服务完全位于公网 HTTPS 地址，删除清单中的 source.private 权限、network.ts 的 allowLocal 函数及其返回项，以及 index.ts、catalog.ts 中的 api.allowLocal 调用。保留 source.http 和 HTTP 客户端的授权检查。若服务在局域网，仍需要 network.private。
+
+真实服务通常要求先请求接口，再取得短期播放链接，不能照搬本例的拼接路径。resolve 应返回服务给出的 URL；若同时给出了过期时间，填写 expiresAt，单位是 Unix 毫秒。需要额外请求头时查看[播放解析参考](../providers)。
+
+先接搜索，确认歌曲字段与分页正确，再接播放和歌词。对需要登录的服务，继续阅读[连接与认证](../tutorial-navidrome/connection)，不要把 API Key、Cookie 或令牌写进清单或歌曲 ref。
+
+## 对照工程
+
+[下载完成版](/plugins/v2/tutorial/ceru-http-source.zip)用于检查遗漏，目录与前三节一致：
 
 ```text
-□ 我有权访问并分发这个音乐服务的结果
-□ 搜索结果不含上游完整响应和秘密字段
-□ ResourceRef 能辨认当前插件、Provider 与连接
-□ 空结果、401、404、429、超时和取消都有明确行为
-□ 音质顺序与 Manifest 声明一致
-□ 时间统一为毫秒
-□ npm run typecheck / build / validate 全部通过
+ceru-http-source/
+├── ceru.plugin.json
+├── mock-server.mjs
+├── package.json
+├── tsconfig.json
+└── src/
+    ├── index.ts
+    ├── network.ts
+    ├── api.ts
+    ├── catalog.ts
+    └── lyrics.ts
 ```
 
-HTTP 工作台与桌面的超时、请求体、响应体限制不同，正式接入前核对 [HTTP 限额表](../http#当前资源限制)。
+解压后运行 npm install，在两个终端分别执行 node mock-server.mjs、npm run dev，即可对照正文调试。
 
-## 小练习
-
-在 mock 数据中添加第四首歌，并让 `/v1/tracks` 支持按专辑搜索。无需修改 Provider，因为它只依赖 API 响应契约。
-
-**完成标志：** 新歌曲能搜索、播放、显示歌词，构建后的 `dist/plugin.js` 也有相同行为。
-
-项目源码：[下载完成版](/plugins/v2/tutorial/ceru-http-source.zip) · <a href="/plugins/v2/tutorial/http-source/README.md">查看目录</a>
-
-接下来可以学习带登录与独立界面的项目：[开发 Navidrome 插件 →](../tutorial-navidrome/)
+**完成检查：** 构建后的插件能在澜音 2.0 中搜索、播放并显示歌词；同时能解释停止本机服务后为什么请求会失败。

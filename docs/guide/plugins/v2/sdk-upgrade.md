@@ -1,57 +1,51 @@
 ---
 pageClass: plugin-v2-doc
-title: 0.3.5 工具链更新
+title: 开发环境与依赖
 ---
 
-# 0.3.5 工具链更新
+# 开发环境与依赖
 
-SDK、Core、Issuer、CLI 和 create-ceru-plugin 统一使用 **0.3.5**。此版在 0.3.3 的原生内容、账号菜单、登录弹窗自动关闭、播放请求头和浏览器服务调用基础上，新增“歌单”页插件区块、区块导航定位和 Web Surface 自动内容高度。主程序也需要更新到包含这些能力的构建。
+开发插件需要 **Node.js 22.12 或更高版本**。用户安装成品插件时不需要 Node.js。
 
-截至 **2026-09-20（Asia/Shanghai）** 本次核验，SDK、Core、Issuer、CLI 和 create-ceru-plugin 的 npm `latest` 均为 **0.3.5**，registry integrity 与下载 tarball 已通过核验。公开 create 包也已从空目录生成 `connected-library` 和 `vue` 工程，并完成安装、类型检查、构建和 validate。下面的命令可直接使用正式 registry 包。
+## 新建工程
 
-## 安装
+首次开发推荐从音乐数据模板开始：
 
 ```shell
-npm create ceru-plugin@0.3.5 my-library -- --template connected-library --lang ts
-cd my-library
+npm create ceru-plugin@latest my-plugin -- --template source --lang ts
+cd my-plugin
 npm install
 npm run dev
 ```
 
-已有工程升级：
+创建工具会生成工程配置、源码和依赖声明。跟着[入门教程](./quick-start)继续即可；需要 Vue、React 或其他起点时，查看[模板列表](./templates)。
+
+## 工程里的开发依赖
+
+| 依赖 | 作用 |
+| --- | --- |
+| `@shiqianjiang/ceru-plugin-sdk` | 提供插件 API 类型和 definePlugin 等辅助函数 |
+| `@shiqianjiang/ceru-plugin-cli` | 提供 dev、build、validate、preview 命令 |
+
+使用脚手架生成的依赖配置，并提交 `package-lock.json`，让其他人能复现同一套环境。克隆已有工程时优先执行 `npm ci` 安装锁文件记录的依赖。
+
+Core 供宿主加载和运行插件，Issuer 用于校验、签名及发行。普通插件工程不需要手动安装这两个包。
+
+## 检查工程
 
 ```shell
-npm install --save-exact @shiqianjiang/ceru-plugin-sdk@0.3.5
-npm install --save-dev --save-exact @shiqianjiang/ceru-plugin-cli@0.3.5
-npm run typecheck
 npm run build
+npm run typecheck
 npm run validate
+npm run preview
 ```
 
-如果测试或自建宿主直接依赖 Core、Issuer，也同步到 0.3.5。正式项目使用注册表版本，无需本地工具链目录或临时 tgz。
+build 会生成配置类型和 `dist/plugin.js`；typecheck 检查源码类型；validate 检查成品格式；preview 加载成品供你实际操作。
 
-::: info 帮助横幅
-0.3.3 CLI 的帮助横幅可能仍显示 0.2.5；0.3.4 已修复该显示。用 <code>npm ls @shiqianjiang/ceru-plugin-cli</code> 确认实际包版本。
-:::
+排查依赖问题时，用下面的命令查看工程实际安装的包：
 
-## 页面与账号
+```shell
+npm ls @shiqianjiang/ceru-plugin-sdk @shiqianjiang/ceru-plugin-cli
+```
 
-| 能力             | 用法                                                       |
-| ---------------- | ---------------------------------------------------------- |
-| 原生歌单和歌曲   | `kind: 'native'` + `defineNativeView`，由宿主组件渲染      |
-| 现有“歌单”页区块 | `contributes.playlistSections` 引用 native Surface         |
-| 定位插件区块     | `navigation.open({ page: 'playlist', sectionId })`         |
-| 插件 Vue / React | `kind: 'web'`，框架打包到插件产物                          |
-| 页面调用逻辑     | `SurfaceContext.invoke(action, input)`                     |
-| 状态刷新         | `ctx.ui.setState(surfaceId, state)`                        |
-| 登录弹窗         | `presentation: { kind: 'modal', size: 360 }`               |
-| Web 页面高度     | 使用自然内容高度，避免根元素 `height/min-height: 100vh`    |
-| 页面主动关闭     | 登录动作成功返回后调用 `SurfaceContext.close()`            |
-| 逻辑关闭页面     | `ctx.ui.closeView(surfaceId)`                              |
-| 账号胶囊菜单     | `contributes.accountItems`，摘要动作与可选 `logoutAction`  |
-| 完整资源归属     | ResourceRef 保留插件、平台、连接及数据，原生详情与播放沿用 |
-| 同平台实现选择   | 网易云提供者使用 `wy`，插件自身 ID 单独标识                |
-
-完整项目教程见[账号与原生音乐库](./tutorial-account-native/)。API 摘要见[原生内容与账号菜单](./ui-native)和[Web / Vue / React](./surfaces)。平台接口、登录、Cookie 与会员判断仍在插件中，宿主提供通用渲染和服务。
-
-升级同时修复浏览器沙箱跨线程传递 AbortSignal 的错误，保留操作取消语义；Core 的 `/guests`、`/surface`、`/surface-document` 入口均随包公开。
+软件与插件格式的对应关系见[版本与兼容](./compatibility)，命令参数见[脚手架与 CLI](./cli)。

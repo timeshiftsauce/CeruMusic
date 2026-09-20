@@ -1,0 +1,33 @@
+{
+  "manifest": {
+    "manifestVersion": 2,
+    "id": "tutorial.settings-drawer",
+    "name": "设置抽屉",
+    "version": "0.1.0",
+    "description": "原生配置页教程",
+    "engines": {
+      "hostApi": "^2.0.0",
+      "logicRuntime": "ceru-js@1",
+      "uiSchema": "^1.0.0"
+    },
+    "modules": {
+      "logic": { "entry": "logic.main" },
+      "surfaces": [{ "id": "settings", "kind": "schema", "entry": "schema.settings" }]
+    },
+    "contributes": {
+      "commands": [
+        { "id": "settings.load", "title": "读取设置", "action": "settings.load" },
+        { "id": "settings.save", "title": "保存设置", "action": "settings.save" },
+        { "id": "settings.reset", "title": "恢复默认值", "action": "settings.reset" }
+      ],
+      "settingsPages": [{ "id": "settings", "title": "插件设置", "view": "settings" }]
+    },
+    "permissions": [],
+    "dataSchemas": { "config": 1, "state": 1 }
+  },
+  "entries": { "logic.main": "src/index.ts" },
+  "resources": {
+    "schema.settings": { "path": "ui/settings.json", "type": "json" }
+  },
+  "output": "dist/plugin.js"
+}

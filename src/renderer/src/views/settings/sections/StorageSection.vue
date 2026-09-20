@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { lyricFormats, normalizeLyricFormat, lyricFileExtension } from '@common/lyricFormats'
+import type { TagWriteOptions } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
 import DirectorySettings from '@renderer/components/Settings/DirectorySettings.vue'
@@ -44,15 +46,37 @@ const updateFilenameTemplate = () => {
 }
 
 // Tag options logic
-const tagWriteOptions = ref({
+const tagWriteOptions = ref<TagWriteOptions>({
   basicInfo: settings.value.tagWriteOptions?.basicInfo ?? true,
   cover: settings.value.tagWriteOptions?.cover ?? true,
   lyrics: settings.value.tagWriteOptions?.lyrics ?? true,
   downloadLyrics: settings.value.tagWriteOptions?.downloadLyrics ?? false,
-  lyricFormat: settings.value.tagWriteOptions?.lyricFormat ?? 'word-by-word'
+  lyricFormat: normalizeLyricFormat(settings.value.tagWriteOptions?.lyricFormat) ?? 'enhanced-lrc',
+  lyricExtensionMode: settings.value.tagWriteOptions?.lyricExtensionMode ?? 'auto',
+  lyricExtension: settings.value.tagWriteOptions?.lyricExtension ?? 'lrc'
 })
 
+const extensionPreview = computed(() => {
+  try {
+    return { value: lyricFileExtension(tagWriteOptions.value), error: '' }
+  } catch (error) {
+    return { value: '', error: (error as Error).message }
+  }
+})
+const extensionPresets = ['lrc', 'ttml', 'qrc', 'yrc', 'lys', 'lyl', 'lqe', 'txt']
+const extensionChoice = ref(
+  extensionPresets.includes(tagWriteOptions.value.lyricExtension || '')
+    ? tagWriteOptions.value.lyricExtension!
+    : 'custom'
+)
+const changeExtensionPreset = () => {
+  if (extensionChoice.value !== 'custom')
+    tagWriteOptions.value.lyricExtension = extensionChoice.value
+  updateTagWriteOptions()
+}
+
 const updateTagWriteOptions = () => {
+  if (extensionPreview.value.error) return
   settingsStore.updateSettings({
     tagWriteOptions: { ...tagWriteOptions.value }
   })
@@ -180,19 +204,57 @@ const getTagOptionsStatus = () => {
           <t-checkbox v-model="tagWriteOptions.downloadLyrics" @change="updateTagWriteOptions">
             单独下载歌词文件
           </t-checkbox>
-          <p class="option-desc">在下载歌曲的同时，在相同目录下保存一个独立的LRC歌词文件</p>
+          <p class="option-desc">在音频文件所在目录保存同名歌词文件</p>
         </div>
 
         <div class="tag-option lyric-format-options">
-          <t-radio-group
+          <label>歌词导出格式</label>
+          <t-select
             v-model="tagWriteOptions.lyricFormat"
+            :options="lyricFormats.map(({ value, label }) => ({ value, label }))"
             :disabled="!tagWriteOptions.lyrics && !tagWriteOptions.downloadLyrics"
             @change="updateTagWriteOptions"
+          />
+          <p class="option-desc">
+            内嵌与外置歌词使用同一格式；标准 LRC 和 LYL 仅保留逐行时间，TTML
+            可保留翻译、音译及对唱信息。
+          </p>
+        </div>
+        <div class="tag-option lyric-format-options">
+          <label>外置歌词文件后缀</label>
+          <t-radio-group
+            v-model="tagWriteOptions.lyricExtensionMode"
+            :disabled="!tagWriteOptions.downloadLyrics"
+            @change="updateTagWriteOptions"
           >
-            <t-radio-button value="lrc">标准LRC歌词</t-radio-button>
-            <t-radio-button value="word-by-word">逐字歌词</t-radio-button>
+            <t-radio-button value="auto">跟随导出格式</t-radio-button>
+            <t-radio-button value="custom">指定后缀</t-radio-button>
           </t-radio-group>
-          <p class="option-desc">选择写入或下载的歌词格式</p>
+          <template v-if="tagWriteOptions.lyricExtensionMode === 'custom'">
+            <t-select
+              v-model="extensionChoice"
+              :disabled="!tagWriteOptions.downloadLyrics"
+              :options="[
+                ...extensionPresets.map((value) => ({ value, label: '.' + value })),
+                { value: 'custom', label: '自定义' }
+              ]"
+              @change="changeExtensionPreset"
+            />
+            <t-input
+              v-if="extensionChoice === 'custom'"
+              v-model="tagWriteOptions.lyricExtension"
+              :disabled="!tagWriteOptions.downloadLyrics"
+              placeholder="输入后缀，例如 lyrics"
+              @change="updateTagWriteOptions"
+            />
+          </template>
+          <p v-if="extensionPreview.error" class="option-desc" role="alert">
+            {{ extensionPreview.error }}
+          </p>
+          <p v-else class="option-desc">
+            文件示例：歌曲名.{{ extensionPreview.value }}。修改后缀不会改变歌词内容；逐字 LRC
+            默认使用 .lrc。
+          </p>
         </div>
       </div>
 
@@ -321,6 +383,11 @@ const getTagOptionsStatus = () => {
   }
 
   .lyric-format-options {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    max-width: 580px;
     padding-top: 1rem;
     margin-top: 1rem;
     border-top: 1px solid var(--settings-group-border);

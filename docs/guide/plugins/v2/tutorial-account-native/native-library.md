@@ -1,234 +1,168 @@
 ---
 pageClass: plugin-v2-doc
-title: 原生歌单区块
-description: 用 playlistSections 把 Native View 挂进澜音现有“歌单”页，并为详情提供分页数据。
+title: 4. 原生歌单区块
+description: 声明 playlists Provider，并把 Native View 挂到澜音现有“歌单”页。
 prev:
-  text: Vue 登录与账号状态
+  text: Vue 登录与账号
   link: /guide/plugins/v2/tutorial-account-native/login
 next:
   text: 导航、播放与导入
   link: /guide/plugins/v2/tutorial-account-native/playback
 ---
 
-# 原生歌单区块
+# 4. 原生歌单区块
 
-<code>contributes.playlistSections</code> 把插件内容放进澜音现有侧边栏“歌单”页，与本地歌单、云歌单并列。它不会打开抽屉，也不会增加“我的歌单”侧边栏按钮。
+本节在已登录账号上增加两张歌单。它们进入澜音现有的“歌单”页：插件返回数据和动作名称，澜音负责渲染网格与详情页。
 
-区块引用一个 native Surface。native Surface 不提供 DOM，也不运行插件框架；后台动作返回 <code>NativeView</code>，澜音用自己的 Vue 组件渲染标题、按钮、歌单网格与歌曲列表。
+本节会新增 `data.ts`、`provider.ts`、`native.ts`，并替换 `account.ts`、`index.ts` 和 Manifest。播放与导入留到下一节。
 
 ```text
-插件 render 动作          澜音原生组件
-{                        ┌──────────────────────┐
-  type: "page",    ───→  │ 我的音乐  [播放全部] │
-  actions: [...],        │ □ 歌单  □ 歌单       │
-  sections: [...]        │ ≡ 歌曲  ▶            │
-}                        └──────────────────────┘
+playlistSections
+  └─ library (native Surface)
+       └─ render.library (返回 NativeView)
+            └─ playlist.open
+                 └─ navigation.open({ ref })
+                      └─ Provider playlists.get(ref, cursor)
 ```
 
-推荐和歌单因此不是 iframe 或 WebView。只有上一节的自定义登录页需要 Web Surface 和 Vue。
+## 1. 准备演示数据
 
-## 1. 让现有“歌单”页挂载 Native View
+新建 `src/data.ts`。文件包含四首歌曲、两张歌单、固定 Provider/连接 ID，以及分页游标校验。
 
-Manifest 中的连接关系如下：
+<<< ../../../../public/plugins/v2/tutorial/account-native/src/data.ts
 
-```json
-{
-  "modules": {
-    "surfaces": [{ "id": "library", "kind": "native", "entry": "render.library" }]
-  },
-  "contributes": {
-    "playlistSections": [
-      { "id": "tutorial-library", "title": "演示账号歌单", "view": "library", "order": 20 }
-    ]
-  }
+`PAGE_SIZE = 2` 是为了让四首歌在开发时一定经过两页。真实接口的游标可能不是数字，应该把上游返回值原样放进 `nextCursor`。
+
+## 2. 让账号模块提供当前会话
+
+完整替换 `src/account.ts`：
+
+<<< ../../../../public/plugins/v2/tutorial/account-native/src/account.ts
+
+与上一节相比，动作行为没有改变。新增的 `AccountController` 让歌单模块只能读取当前会话、公开摘要和登录检查；它拿不到页面组件。
+
+## 3. 建立歌单 Provider
+
+新建 `src/provider.ts`。本节只注册 `music.playlists@1` 所需的列表与详情方法。
+
+<details>
+<summary>src/provider.ts 本节完整内容</summary>
+
+```ts [src/provider.ts]
+import {
+  assertResourceRef,
+  type ContentEntity,
+  type PluginContext,
+  type ResourceRef
+} from '@shiqianjiang/ceru-plugin-sdk'
+import type { AccountController } from './account'
+import {
+  CONNECTION_ID,
+  cursorOffset,
+  fault,
+  PAGE_SIZE,
+  playlists,
+  PROVIDER_ID,
+  tracks,
+  type PlaylistRecord,
+  type TrackRecord
+} from './data'
+
+export type Catalog = {
+  resource(kind: 'track' | 'playlist', id: string): ResourceRef
+  trackEntity(track: TrackRecord): ContentEntity
+  playlistEntity(playlist: PlaylistRecord): ContentEntity
+  ownedRef(value: unknown, kind: 'track' | 'playlist'): ResourceRef
 }
-```
 
-调用链是 <code>playlistSections[].view → surfaces[].id → surfaces[].entry → commands[].action → actions.register()</code>。Host 进入“歌单”页时自动挂载该 Surface。<code>view</code> 必须指向 native Surface；若 ID 不匹配，区块不会显示。
+export function createCatalog(ctx: PluginContext, account: AccountController): Catalog {
+  const resource = (kind: 'track' | 'playlist', id: string): ResourceRef => ({
+    pluginId: ctx.plugin.id,
+    providerId: PROVIDER_ID,
+    connectionId: CONNECTION_ID,
+    kind,
+    id,
+    data: { catalog: 'tutorial-v1' }
+  })
 
-## 2. 返回最小 NativeView
-
-把 native Surface 的 <code>entry</code> 同名动作注册为：
-
-```ts
-import { defineNativeView } from '@shiqianjiang/ceru-plugin-sdk'
-
-ctx.effects.add(
-  ctx.actions.register(
-    'render.library',
-    defineNativeView(async () => ({
-      type: 'page',
-      title: '我的演示音乐',
-      description: '内容由插件提供，界面由澜音渲染',
-      actions: [],
-      sections: []
-    }))
-  )
-)
-```
-
-<code>defineNativeView</code> 会验证结果只含可克隆 JSON，并检查页、分区、动作和 <code>ContentEntity</code>。函数输入是当前 Surface 的 JSON 输入与 <code>OperationContext</code>，返回 <code>NativeView</code>。
-
-| NativeView 字段          | 类型                             | 作用               |
-| ------------------------ | -------------------------------- | ------------------ |
-| <code>type</code>        | 固定 <code>"page"</code>         | 选择原生页面协议   |
-| <code>title</code>       | 可选字符串                       | 页面标题           |
-| <code>description</code> | 可选字符串                       | 标题下说明         |
-| <code>actions</code>     | <code>NativeViewAction[]</code>  | 页面级按钮         |
-| <code>sections</code>    | <code>NativeViewSection[]</code> | 一个或多个内容分区 |
-
-## 3. 未登录时给出可行动的空区块
-
-```ts
-if (!session) {
-  return {
-    type: 'page',
-    title: '演示音乐',
-    description: '连接演示账号后查看原生歌单与歌曲。',
-    actions: [{ label: '连接账号', action: 'account.open', primary: true }],
-    sections: []
-  }
-}
-```
-
-宿主点击按钮后调用 <code>account.open</code>，后台执行 <code>ctx.ui.openView('account')</code> 打开登录 modal。这里打开的是账号 Web Surface；个人歌单 native Surface 始终由“歌单”页挂载，不调用 <code>openView('library')</code>。
-
-## 4. 用 grid 和 list 组合区块
-
-```ts
-return {
-  type: 'page',
-  title: '我的演示音乐',
-  actions: [
-    {
-      label: '播放推荐',
-      action: 'tracks.play',
-      input: { refs: recommendedRefs },
-      primary: true
-    },
-    { label: '刷新', action: 'library.refresh' }
-  ],
-  sections: [
-    {
-      id: 'playlists',
-      title: '我的歌单',
-      layout: 'grid',
-      items: playlistItems,
-      onOpen: 'playlist.open',
-      itemActions: [{ label: '导入歌单', action: 'playlist.import' }]
-    },
-    {
-      id: 'tracks',
-      title: '今日推荐',
-      layout: 'list',
-      items: trackItems,
-      onPlay: 'tracks.play'
-    }
-  ]
-}
-```
-
-| 字段                      | 宿主何时调用       | 动作输入                                |
-| ------------------------- | ------------------ | --------------------------------------- |
-| 页面 <code>actions</code> | 点击顶部按钮       | 固定 <code>input</code>                 |
-| <code>onOpen</code>       | 点击歌单或内容卡片 | <code>{ ref }</code>                    |
-| <code>onPlay</code>       | 点击单曲播放       | <code>{ ref, refs }</code>              |
-| <code>itemActions</code>  | 点击卡片更多操作   | 固定 input 与当前 <code>ref</code> 合并 |
-
-这些 action 都要出现在 <code>contributes.commands</code>，并由后台注册。
-
-## 5. ContentEntity 是宿主看得懂的音乐数据
-
-歌曲至少需要：
-
-```ts
-const item: ContentEntity = {
-  ref: resource('track', track.id),
-  title: track.title,
-  subtitle: track.artist,
-  playable: true,
-  durationMs: track.durationMs,
-  capabilities: ['play'],
-  metadata: {
-    artists: [track.artist],
-    album: { title: track.album },
+  const trackEntity = (track: TrackRecord): ContentEntity => ({
+    ref: resource('track', track.id),
+    title: track.title,
+    subtitle: track.artist,
+    playable: true,
     durationMs: track.durationMs,
-    qualities: ['128k', '320k']
+    capabilities: ['play'],
+    metadata: {
+      artists: [track.artist],
+      album: { title: track.album },
+      durationMs: track.durationMs,
+      qualities: ['128k', '320k']
+    }
+  })
+
+  const playlistEntity = (playlist: PlaylistRecord): ContentEntity => ({
+    ref: resource('playlist', playlist.id),
+    title: playlist.title,
+    subtitle: playlist.description,
+    capabilities: ['open'],
+    playlist: {
+      description: playlist.description,
+      author: account.getSession()?.displayName ?? '演示账号',
+      trackCount: playlist.trackIds.length
+    }
+  })
+
+  const ownedRef = (value: unknown, kind: 'track' | 'playlist') => {
+    assertResourceRef(value)
+    if (
+      value.pluginId !== ctx.plugin.id ||
+      value.providerId !== PROVIDER_ID ||
+      value.connectionId !== CONNECTION_ID ||
+      value.kind !== kind
+    ) throw fault('资源不属于当前插件与账号连接', 'NOT_FOUND')
+    return value
   }
+
+  return { resource, trackEntity, playlistEntity, ownedRef }
 }
-```
 
-歌单使用 <code>playlist</code>：
-
-```ts
-const item: ContentEntity = {
-  ref: resource('playlist', playlist.id),
-  title: playlist.title,
-  capabilities: ['open', 'import'],
-  playlist: {
-    description: playlist.description,
-    author: session.displayName,
-    trackCount: playlist.trackIds.length
-  }
-}
-```
-
-时长统一使用毫秒。<code>capabilities</code> 是字符串数组；它不自动注册动作，动作仍由 Native View 显式连接。
-
-## 6. ResourceRef 必须保持完整
-
-```ts
-const resource = (kind: 'track' | 'playlist', id: string): ResourceRef => ({
-  pluginId: ctx.plugin.id,
-  providerId: 'tutorial-account',
-  connectionId: 'demo-user',
-  kind,
-  id,
-  data: { catalog: 'tutorial-v1' }
-})
-```
-
-| 字段                                | 用途                                  |
-| ----------------------------------- | ------------------------------------- |
-| <code>pluginId</code>               | 找回提供这个资源的插件                |
-| <code>providerId</code>             | 找回音源实现                          |
-| <code>connectionId</code>           | 区分同一插件中的账号或连接            |
-| <code>kind</code> / <code>id</code> | 说明资源类型与平台 ID                 |
-| <code>data</code>                   | 可选、插件自有、可持久化的非敏感 JSON |
-
-不要只把 <code>id</code> 传给导航或播放。也不要把 Cookie、临时播放 URL、整个上游响应放进 <code>data</code>。
-
-::: info JSON 类型边界
-<code>ResourceRef</code> 在运行时是合法 JSON，但 TypeScript 接口没有 JSON 索引签名。把 <code>ResourceRef[]</code> 放进 <code>NativeViewAction.input</code> 时，需要在这一处转换为 <code>JsonValue</code>。不要用 <code>any</code> 扩散到整个 Provider。
-:::
-
-```ts
-input: {
-  refs: recommendedRefs,
-} as unknown as JsonValue
-```
-
-## 7. 给原生歌单详情实现 playlists.get
-
-点击歌单进入原生详情后，宿主会调用 Provider 的 <code>playlists.get(ref, cursor, operation)</code>：
-
-```ts
-ctx.effects.add(
-  ctx.providers.register('tutorial-account', {
+export function registerPlaylistProvider(
+  ctx: PluginContext,
+  account: AccountController,
+  catalog: Catalog
+) {
+  ctx.effects.add(ctx.providers.register(PROVIDER_ID, {
     playlists: {
+      async list(_resource, cursor, operation) {
+        operation.signal.throwIfAborted()
+        account.requireAccount()
+        const offset = cursorOffset(cursor)
+        const items = playlists.slice(offset, offset + PAGE_SIZE).map(catalog.playlistEntity)
+        return {
+          items,
+          totalEstimate: playlists.length,
+          ...(offset + items.length < playlists.length
+            ? { nextCursor: String(offset + items.length) }
+            : {})
+        }
+      },
       async get(ref, cursor, operation) {
         operation.signal.throwIfAborted()
-        requireAccount()
-        const playlist = findOwnedPlaylist(ref)
-        const offset = cursor === undefined ? 0 : Number(cursor)
+        account.requireAccount()
+        const id = catalog.ownedRef(ref, 'playlist').id
+        const playlist = playlists.find((item) => item.id === id)
+        if (!playlist) throw fault('歌单不存在', 'NOT_FOUND')
+
+        const offset = cursorOffset(cursor)
         const items = playlist.trackIds
-          .slice(offset, offset + 2)
-          .map(findTrack)
-          .map(trackEntity)
+          .slice(offset, offset + PAGE_SIZE)
+          .map((trackId) => tracks.find((item) => item.id === trackId))
+          .filter((item): item is TrackRecord => !!item)
+          .map(catalog.trackEntity)
 
         return {
           name: playlist.title,
-          playlist: playlistEntity(playlist).playlist,
+          playlist: catalog.playlistEntity(playlist).playlist,
           items,
           totalEstimate: playlist.trackIds.length,
           ...(offset + items.length < playlist.trackIds.length
@@ -237,34 +171,166 @@ ctx.effects.add(
         }
       }
     }
-  })
-)
+  }))
+}
 ```
 
-| 参数                   | 含义                         | 本例                                 |
-| ---------------------- | ---------------------------- | ------------------------------------ |
-| <code>ref</code>       | 用户打开的完整歌单引用       | 验证 plugin/provider/connection/kind |
-| <code>cursor</code>    | 上一页返回的不透明游标       | 用字符串保存下一条 offset            |
-| <code>operation</code> | 取消信号、截止时间、用户意图 | 请求前后检查 <code>signal</code>     |
+</details>
 
-返回 <code>items</code> 和可选 <code>nextCursor</code>。没有下一页时省略 <code>nextCursor</code>，不要返回空字符串。真实平台游标无需转成页码，原样保存和传回即可。
+每个 `ResourceRef` 都保留 `pluginId/providerId/connectionId/kind/id`。`ownedRef()` 在查数据前验证归属，避免把别的插件或别的账号连接的 ID 当成本插件资源。Cookie、播放 URL 和平台原始响应不能放进 `ResourceRef.data`。
 
-## 8. 刷新原生区块
+## 4. 返回 Native View
 
-Native View 本身没有组件 state。刷新动作更新公开 Surface state，已挂载区块随后再次执行 render：
+新建 `src/native.ts`：
 
-```ts
-ctx.actions.register('library.refresh', async () => {
-  await ctx.ui.setState('library', {
-    account: publicAccount(),
-    changedAt: Date.now()
-  })
-  return null
+```ts [src/native.ts]
+import { defineNativeView, type PluginContext } from '@shiqianjiang/ceru-plugin-sdk'
+import type { AccountController } from './account'
+import { playlists } from './data'
+import type { Catalog } from './provider'
+
+export function registerLibrary(
+  ctx: PluginContext,
+  account: AccountController,
+  catalog: Catalog
+) {
+  ctx.effects.add(ctx.actions.register('render.library', defineNativeView(async () => {
+    const session = account.getSession()
+    if (!session) {
+      return {
+        type: 'page',
+        title: '演示音乐',
+        description: '连接演示账号后查看原生歌单。',
+        actions: [{ label: '连接账号', action: 'account.open', primary: true }],
+        sections: []
+      }
+    }
+
+    return {
+      type: 'page',
+      title: '我的演示音乐',
+      description: session.displayName,
+      actions: [{ label: '刷新', action: 'library.refresh' }],
+      sections: [{
+        id: 'playlists',
+        title: '我的歌单',
+        layout: 'grid',
+        items: playlists.map(catalog.playlistEntity),
+        onOpen: 'playlist.open'
+      }]
+    }
+  })))
+
+  ctx.effects.add(ctx.actions.register('library.refresh', async () => {
+    await ctx.ui.setState('library', {
+      account: account.publicAccount(),
+      changedAt: Date.now()
+    })
+    return null
+  }))
+
+  ctx.effects.add(ctx.actions.register('playlist.open', async (input) => {
+    const value = input && typeof input === 'object' && !Array.isArray(input) ? input : undefined
+    const ref = catalog.ownedRef(value?.ref, 'playlist')
+    await ctx.ui.navigation.open({ page: 'playlist', ref })
+    return null
+  }))
+}
+```
+
+Native Surface 没有自己的 DOM。`render.library` 返回普通 JSON，宿主点击 `onOpen` 对应的歌单时，把 `{ ref }` 传给 `playlist.open`；导航打开详情页后，再用同一个 ref 调用 `playlists.get()`。
+
+完整替换 `src/index.ts`：
+
+```ts [src/index.ts]
+import { definePlugin } from '@shiqianjiang/ceru-plugin-sdk'
+import { createAccount } from './account'
+import { registerLibrary } from './native'
+import { createCatalog, registerPlaylistProvider } from './provider'
+
+export default definePlugin(async (ctx) => {
+  const account = await createAccount(ctx)
+  const catalog = createCatalog(ctx, account)
+  registerPlaylistProvider(ctx, account, catalog)
+  registerLibrary(ctx, account, catalog)
 })
 ```
 
-render 应只读取缓存或状态并返回页面。不要在每次 render 中无条件调用 <code>setState</code>，否则会形成刷新循环。
+## 5. 声明 Provider 和区块
 
-::: tip 完成标志
-未登录时“歌单”页中的插件区块只有“连接账号”；登录后显示歌单网格和歌曲列表；打开歌单时 Provider 分两页返回歌曲；刷新按钮不会产生循环 render。
-:::
+在 Manifest 中做三处修改。
+
+给 `modules.logic.activation` 加上 Provider 激活条件，并在 `surfaces` 末尾加入 native Surface：
+
+```json
+"activation": ["onCommand:account.open", "onProvider:tutorial-account"]
+```
+
+```json
+{
+  "id": "library",
+  "kind": "native",
+  "entry": "render.library",
+  "title": "我的演示音乐"
+}
+```
+
+在 `contributes` 中加入 Provider、三个命令和歌单区块：
+
+```json
+"providers": [
+  {
+    "id": "tutorial-account",
+    "name": "演示账号音乐",
+    "protocols": ["music.playlists@1"],
+    "qualities": ["128k", "320k"],
+    "icon": { "kind": "host", "name": "music-note" },
+    "connectionMode": "single"
+  }
+],
+"playlistSections": [
+  {
+    "id": "tutorial-library",
+    "title": "演示账号歌单",
+    "view": "library",
+    "order": 20
+  }
+]
+```
+
+把下列命令追加到原有 `commands` 数组：
+
+```json
+{ "id": "render.library", "title": "渲染原生音乐页", "action": "render.library" },
+{ "id": "library.refresh", "title": "刷新原生音乐页", "action": "library.refresh" },
+{ "id": "playlist.open", "title": "打开原生歌单详情", "action": "playlist.open" }
+```
+
+这里的两条引用必须一致：
+
+```text
+playlistSections[].view = "library" → surfaces[].id = "library"
+surfaces[].entry = "render.library" → commands[].action → actions.register()
+```
+
+## 6. 运行本节
+
+```shell
+npm run typecheck
+npm run build
+npm run dev
+```
+
+先按上一节登录，再打开工作台的 `library · native`。应看到两张歌单；点击一张歌单会发起原生导航；详情请求第一页返回两首歌和 `nextCursor: "2"`，第二页不再返回游标。
+
+安装到澜音 2.0 后，区块位于软件已有的“歌单”页。插件不需要新增侧边栏按钮，也不要对 native Surface 调用 `openView('library')`。
+
+常见错误：
+
+- 区块不显示：检查 `playlistSections[].view` 是否指向 `kind: "native"` 的 Surface；
+- 点击歌单提示动作不存在：`onOpen`、Manifest 命令和后台注册必须同名；
+- 详情第二页重复第一页：必须使用传入的 `cursor`，不要固定从 0 开始；
+- `DataCloneError`：返回值只能包含普通 JSON，不要放函数、类实例或 Vue 响应式对象；
+- 未登录仍能读歌单：在 Provider 的入口调用 `account.requireAccount()`。
+
+下一节：[加入播放、搜索与歌单导入 →](./playback)

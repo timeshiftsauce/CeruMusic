@@ -13,9 +13,10 @@ export default function download(
   url: string,
   tagWriteOptions: any,
   pluginId?: string,
-  quality?: string
+  quality?: string,
+  directory?: string
 ): any {
-  const downloadDir = getDownloadDirectory()
+  const downloadDir = directory || getDownloadDirectory()
   const fileExtension = getFileExtension(url, quality)
   console.log('fileExtension:', songInfo.template, songInfo)
   const d = new Date()

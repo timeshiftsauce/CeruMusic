@@ -1,12 +1,11 @@
 <script lang="ts" setup>
 import '@applemusic-like-lyrics/core/style.css'
-import {
-  BackgroundRender as CoreBackgroundRender,
-  PixiRenderer
-} from '@applemusic-like-lyrics/core'
+import { LayoutReason, LayoutReasonStrategyMap } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick, toRaw } from 'vue'
+import { useBackgroundBeat } from '@renderer/composables/useBackgroundBeat'
+import { usePlayerBackground } from '@renderer/composables/usePlayerBackground'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import {
   Fullscreen1Icon,
@@ -32,6 +31,15 @@ import LtDanmakuLayer from '@renderer/components/ListenTogether/LtDanmakuLayer.v
 import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 
 const playSetting = usePlaySettingStore()
+// 只调整 seek 时的阶梯延迟，仍由 AMLL 对齐逐字高亮和间奏状态。
+watch(
+  () => playSetting.getIsSeekLyricStagger,
+  (enabled) => {
+    LayoutReasonStrategyMap[LayoutReason.Seek].disableStagger = !enabled
+  },
+  { immediate: true }
+)
+
 const settingsStore = useSettingsStore()
 const dlnaStore = useDlnaStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
@@ -381,7 +389,7 @@ const toggleFullscreen = () => {
   window.api.toggleFullscreen()
 }
 
-// 监听窗口化全屏状态变化（来自主进程）
+// 监听原生全屏状态变化（来自主进程）
 let unsubscribeFullscreen: (() => void) | null = null
 onMounted(async () => {
   unsubscribeFullscreen = window.api.onFullscreenChanged((value: boolean) => {
@@ -435,10 +443,9 @@ const state = reactive({
   albumUrl: props.coverImage,
   albumIsVideo: false,
   currentTime: 0,
-  lowFreqVolume: 1.0
+  lowFreqVolume: 0
 })
 
-const bgRef = ref<CoreBackgroundRender<PixiRenderer> | undefined>(undefined)
 const lyricPlayerRef = ref<LyricPlayerRef | undefined>(undefined)
 const backgroundContainer = ref<HTMLDivElement | null>(null)
 
@@ -482,46 +489,13 @@ const jumpTime = (e) => {
   }
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
-// 背景渲染懒加载状态：仅在首次进入全屏时初始化 PIXI，避免在最小化播放栏期间空跑
-const bgInitialized = ref(false)
-let pendingAlbumImage: string | null = null
-
-// 监听封面图片变化
-watch(
-  () => actualCoverImage.value,
-  async (newImage) => {
-    // 若背景渲染器尚未初始化（用户还没打开过全屏），仅缓存待应用的封面，不触发任何 PIXI 工作
-    if (!bgRef.value) {
-      pendingAlbumImage = newImage
-      return
-    }
-    // 当处于隐藏状态时，缓存到下次显示再切（避免无意义的纹理上传）
-    if (!props.show) {
-      pendingAlbumImage = newImage
-      return
-    }
-    pendingAlbumImage = null
-    // 尝试获取旧的纹理引用，以便在过渡后手动销毁以防止内存泄漏
-    const renderer = bgRef.value as any
-    const oldTexture = renderer.curContainer?.children?.[0]?.texture
-
-    await bgRef.value.setAlbum(newImage, false)
-
-    // 延迟销毁旧纹理，确保过渡动画（约1秒）完成
-    if (oldTexture) {
-      setTimeout(() => {
-        if (oldTexture.baseTexture && !oldTexture.baseTexture.destroyed) {
-          try {
-            oldTexture.destroy(true)
-          } catch (e) {
-            console.warn('Failed to clean up old album texture:', e)
-          }
-        }
-      }, 2000)
-    }
-  },
-  { immediate: true }
-)
+const isAppActive = ref(!document.hidden)
+const { ready: bgInitialized } = usePlayerBackground(backgroundContainer, {
+  renderer: () => playSetting.getBackgroundRenderer,
+  album: () => actualCoverImage.value,
+  active: () => props.show && isAppActive.value,
+  lowFreqVolume: () => (playSetting.getIsBackgroundBeat ? state.lowFreqVolume : 0)
+})
 
 // 在全屏播放显示时阻止系统息屏
 const blockerActive = ref(false)
@@ -538,88 +512,6 @@ watch(
       }
     } catch (e) {
       console.error('powerSaveBlocker 切换失败:', e)
-    }
-  },
-  { immediate: true }
-)
-
-// 初始化背景渲染器的函数
-const initBackgroundRender = async () => {
-  if (backgroundContainer.value) {
-    // 清理旧实例
-    if (bgRef.value) {
-      bgRef.value.dispose()
-      // 移除canvas元素
-      const canvas = bgRef.value.getElement()
-      canvas?.parentNode?.removeChild(canvas)
-    }
-
-    // 创建新实例
-    bgRef.value = CoreBackgroundRender.new(PixiRenderer)
-
-    // 获取canvas元素并添加到DOM
-    const canvas = bgRef.value.getElement()
-    canvas.style.position = 'absolute'
-    canvas.style.top = '0'
-    canvas.style.left = '0'
-    canvas.style.width = '100%'
-    canvas.style.height = '100%'
-    canvas.style.zIndex = '-1'
-
-    backgroundContainer.value.appendChild(canvas)
-
-    // 设置参数
-    bgRef.value.setRenderScale(0.5)
-    bgRef.value.setFlowSpeed(1)
-    bgRef.value.setFPS(30)
-    bgRef.value.setHasLyric(player.value.lyrics.lines.length > 10)
-
-    // 设置专辑图片
-    await bgRef.value.setAlbum(actualCoverImage.value, false)
-    // 恢复动画
-    bgRef.value.resume()
-  }
-}
-
-// 首次进入全屏时才创建 PIXI 实例；之后通过 pause/resume 控制是否产生 GPU 工作
-const ensureBackgroundRender = async () => {
-  if (bgRef.value) return
-  await initBackgroundRender()
-  // 应用挂载期间收集的最新封面（initBackgroundRender 内部已 setAlbum 一次，
-  // 但若期间封面 watch 又有更新，这里以最新为准）
-  if (bgRef.value && pendingAlbumImage) {
-    const img = pendingAlbumImage
-    pendingAlbumImage = null
-    try {
-      await (bgRef.value as any).setAlbum(img, false)
-    } catch {}
-  }
-  // 略微延迟标记，避免 PIXI 第一帧未刷出时露出黑色
-  requestAnimationFrame(() => {
-    bgInitialized.value = true
-  })
-}
-
-// 组件挂载时不主动创建背景渲染器（懒加载）
-onMounted(() => {})
-
-// 跟随全屏显隐控制背景渲染：显示时确保实例存在并 resume；隐藏时 pause 释放主线程/GPU
-watch(
-  () => props.show,
-  async (visible) => {
-    if (visible) {
-      await ensureBackgroundRender()
-      // 应用隐藏期间累积的待处理封面
-      if (bgRef.value && pendingAlbumImage) {
-        const img = pendingAlbumImage
-        pendingAlbumImage = null
-        try {
-          await bgRef.value.setAlbum(img, false)
-        } catch {}
-      }
-      bgRef.value?.resume()
-    } else {
-      bgRef.value?.pause()
     }
   },
   { immediate: true }
@@ -655,13 +547,6 @@ onBeforeUnmount(async () => {
     Audio.value.audio.removeEventListener('play', updatePlayState)
     Audio.value.audio.removeEventListener('pause', updatePlayState)
   }
-  // 清理背景渲染器资源
-  if (bgRef.value) {
-    const canvas = bgRef.value.getElement()
-    canvas?.parentNode?.removeChild(canvas)
-    bgRef.value.dispose()
-    bgRef.value = undefined
-  }
   // 清理歌词播放器资源
   lyricPlayerRef.value?.lyricPlayer?.dispose()
 })
@@ -681,12 +566,6 @@ watch(
     state.currentTime = Math.round(newTime * 1000)
   }
 )
-
-// 处理低频音量更新
-const handleLowFreqUpdate = (volume: number) => {
-  state.lowFreqVolume = volume
-  // console.log('lowFreqVolume', volume)
-}
 
 // 计算偏白的主题色
 const lightMainColor = computed(() => {
@@ -774,14 +653,6 @@ const checkOverflow = async () => {
 // 监听歌曲信息变化和窗口大小变化
 watch(() => [props.songInfo, props.show], checkOverflow, { immediate: true })
 
-// watchEffect(() => {
-//   if (Audio.value.isPlay) {
-//     bgRef.value?.resume()
-//   } else {
-//     bgRef.value?.pause()
-//   }
-// })
-
 // 点击外部关闭设置面板
 const floatActionRef = ref<HTMLElement | null>(null)
 const handleClickOutside = (event: MouseEvent) => {
@@ -795,22 +666,21 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 // --- 后台暂停动画逻辑 Start ---
-const isAppActive = ref(!document.hidden)
+
+useBackgroundBeat(
+  () => Audio.value.audio,
+  () => playSetting.getIsBackgroundBeat && props.show && Audio.value.isPlay && isAppActive.value,
+  (volume) => {
+    state.lowFreqVolume = volume
+  }
+)
 
 const handleVisibilityChange = () => {
   isAppActive.value = !document.hidden
-  if (document.hidden) {
-    bgRef.value?.pause()
-  } else {
-    bgRef.value?.resume()
-  }
 }
 
 const handleWindowFocus = () => {
   isAppActive.value = !document.hidden
-  if (!document.hidden) {
-    bgRef.value?.resume()
-  }
 }
 // --- 后台暂停动画逻辑 End ---
 
@@ -861,11 +731,14 @@ onUnmounted(() => {
       :class="{ active: activeLayer === 'B' }"
       :style="{ backgroundImage: bgLayerB }"
     ></div>
-    <!-- PIXI 背景渲染层：未进入全屏时不创建实例；隐藏时 pause -->
+    <!-- 动态背景层：未进入全屏时不创建实例；隐藏时 pause -->
     <div
       ref="backgroundContainer"
       class="bg-render"
-      :class="{ 'bg-render-active': props.show && bgInitialized }"
+      :class="{
+        'bg-render-active': props.show && bgInitialized,
+        'bg-render-mesh': playSetting.getBackgroundRenderer === 'mesh'
+      }"
     ></div>
     <div v-if="showFestivalEffects" ref="festivalOverlay" class="festival-overlay"></div>
     <!-- 全屏按钮 -->
@@ -1002,13 +875,7 @@ onUnmounted(() => {
       class="audio-visualizer-container"
       :class="{ idle: isIdle }"
     >
-      <AudioVisualizer
-        :show="Audio.isPlay"
-        :height="70"
-        :bar-count="80"
-        :color="mainColor"
-        @low-freq-update="handleLowFreqUpdate"
-      />
+      <AudioVisualizer :show="Audio.isPlay" :height="70" :bar-count="80" :color="mainColor" />
     </div>
 
     <div ref="floatActionRef" class="float-action" :class="{ idle: isIdle }">
@@ -1192,7 +1059,7 @@ onUnmounted(() => {
   }
 }
 
-/* PIXI 背景层：仅全屏激活后淡入显示 */
+/* 动态背景层：仅全屏激活后淡入显示 */
 .bg-render {
   position: absolute;
   inset: 0;
@@ -1202,6 +1069,12 @@ onUnmounted(() => {
   pointer-events: none;
   contain: strict;
   will-change: opacity;
+}
+// Mesh 额外柔化封面色块；其他渲染器保持原有的画面效果。
+.bg-render-mesh {
+  --background-blur: clamp(24px, 3vw, 48px);
+  inset: calc(var(--background-blur) * -3);
+  filter: blur(var(--background-blur));
 }
 .bg-render-active {
   opacity: 1;

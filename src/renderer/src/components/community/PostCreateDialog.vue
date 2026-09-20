@@ -16,7 +16,12 @@
 import { ref, computed, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CloseIcon, ImageIcon, MusicIcon } from 'tdesign-icons-vue-next'
-import { communityAPI, type PostAttachment, type CommunityPost, type PostImage } from '@renderer/api/community'
+import {
+  communityAPI,
+  type PostAttachment,
+  type CommunityPost,
+  type PostImage
+} from '@renderer/api/community'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
 
@@ -39,6 +44,15 @@ const images = ref<PostImage[]>([])
 const uploadingImage = ref(false)
 const attachment = ref<PostAttachment | null>(null)
 const submitting = ref(false)
+const imageInput = ref<HTMLInputElement>()
+const attachmentCover = computed(() =>
+  attachment.value?.type === 'song'
+    ? attachment.value.song?.img
+    : attachment.value?.cover || attachment.value?.preview?.[0]?.img
+)
+const canSubmit = computed(
+  () => !!content.value.trim() && !uploadingImage.value && !submitting.value
+)
 
 /* 附件选择器状态 */
 const showPicker = ref(false)
@@ -185,7 +199,7 @@ async function pickPlaylist(idx: number) {
       MessagePlugin.info('歌单未上传,正在自动上传到云端...')
       const songsRes = await songListAPI.getSongs(l.id)
       const songs = (songsRes?.success ? songsRes.data : []) || []
-      const local = (await songListAPI.getAll().catch(() => ({ success: false, data: [] }) as any))
+      const local = await songListAPI.getAll().catch(() => ({ success: false, data: [] }) as any)
       const localItem = (local.data || []).find((x: any) => x.id === l.id)
       const created = await cloudSongListAPI.createUserSongList({
         localId: l.id,
@@ -281,6 +295,7 @@ function removeAttachment() {
 /* ---------------- 提交 ---------------- */
 
 async function submit() {
+  if (submitting.value || uploadingImage.value) return
   if (!content.value.trim()) {
     MessagePlugin.warning('请填写正文')
     return
@@ -309,56 +324,131 @@ async function submit() {
 <template>
   <t-dialog
     v-model:visible="visibleLocal"
-    header="发表帖子"
+    dialog-class-name="community-composer"
     :footer="false"
-    width="640px"
+    width="min(680px, calc(100vw - 40px))"
+    placement="center"
     :close-on-overlay-click="false"
     destroy-on-close
   >
+    <template #header>
+      <div class="composer-heading">
+        <span class="heading-icon"><MusicIcon size="24" /></span>
+        <div>
+          <h2>分享这一刻</h2>
+          <p>一首好歌，一点心情，都值得被听见。</p>
+        </div>
+      </div>
+    </template>
     <div class="create-form">
-      <t-textarea
-        v-model="content"
-        :maxlength="1000"
-        :rows="6"
-        placeholder="分享你正在听的歌、想聊的事..."
-      />
-      <div class="counter">{{ content.length }} / 1000</div>
+      <div class="writing-area">
+        <textarea
+          v-model="content"
+          aria-label="笔记正文"
+          maxlength="1000"
+          :placeholder="'最近，有哪首歌打动了你？\n写下你的故事，或分享此刻的心情…'"
+          :disabled="submitting"
+        />
+        <div class="editor-meta">
+          <span>让音乐和故事相遇</span>
+          <span class="counter">{{ content.length }}<span> / 1000</span></span>
+        </div>
+      </div>
 
       <!-- 图片 -->
-      <div class="images">
+      <div v-if="images.length" class="images">
         <div v-for="(img, i) in images" :key="i" class="img-box">
-          <img :src="img.url" />
-          <button class="remove" @click="removeImage(i)"><CloseIcon size="14" /></button>
+          <img :src="img.url" :alt="`笔记图片 ${i + 1}`" />
+          <button
+            class="remove"
+            :aria-label="`移除图片 ${i + 1}`"
+            :disabled="submitting"
+            @click="removeImage(i)"
+          >
+            <CloseIcon size="14" />
+          </button>
         </div>
-        <label v-if="images.length < 9" class="add-img" :class="{ disabled: uploadingImage }">
-          <ImageIcon size="22" />
-          <span>{{ uploadingImage ? '上传中...' : '添加图片' }}</span>
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            :disabled="uploadingImage"
-            @change="handleImageFiles"
-          />
-        </label>
       </div>
 
       <!-- 附件 -->
-      <div class="attachment-row">
-        <div v-if="attachment" class="attach-chip">
-          <MusicIcon size="16" />
-          <span v-if="attachment.type === 'song'">单曲: {{ attachment.song?.name }} - {{ attachment.song?.singer }}</span>
-          <span v-else>歌单: {{ attachment.name }} ({{ attachment.songCount }} 首)</span>
-          <button @click="removeAttachment"><CloseIcon size="12" /></button>
+      <div v-if="attachment" class="attachment-preview">
+        <img v-if="attachmentCover" :src="attachmentCover" alt="附件封面" />
+        <span v-else class="attachment-placeholder"><MusicIcon size="24" /></span>
+        <div class="attachment-info">
+          <span class="attachment-kind">{{
+            attachment.type === 'song' ? '分享单曲' : '分享歌单'
+          }}</span>
+          <strong>{{
+            attachment.type === 'song' ? attachment.song?.name : attachment.name
+          }}</strong>
+          <span>{{
+            attachment.type === 'song'
+              ? attachment.song?.singer
+              : `${attachment.songCount || 0} 首歌曲`
+          }}</span>
         </div>
-        <t-button v-else theme="default" variant="outline" @click="openPicker">
-          <MusicIcon size="16" /> 附加歌曲 / 歌单
-        </t-button>
+        <button
+          class="remove-attachment"
+          aria-label="移除音乐附件"
+          :disabled="submitting"
+          @click="removeAttachment"
+        >
+          <CloseIcon size="18" />
+        </button>
+      </div>
+
+      <input
+        ref="imageInput"
+        class="file-input"
+        type="file"
+        accept="image/*"
+        multiple
+        :disabled="uploadingImage || submitting || images.length >= 9"
+        @change="handleImageFiles"
+      />
+      <div class="additions">
+        <button
+          class="addition"
+          :disabled="uploadingImage || submitting || images.length >= 9"
+          @click="imageInput?.click()"
+        >
+          <span class="addition-icon photo"><ImageIcon size="22" /></span>
+          <span
+            ><strong>{{
+              uploadingImage ? '正在上传图片…' : images.length ? '继续添加图片' : '添加图片'
+            }}</strong
+            ><small>{{ images.length }} / 9 张 · 记录此刻</small></span
+          >
+          <span class="addition-plus">+</span>
+        </button>
+        <button class="addition" :disabled="submitting" @click="openPicker">
+          <span class="addition-icon music"><MusicIcon size="22" /></span>
+          <span
+            ><strong>{{ attachment ? '更换音乐' : '分享音乐' }}</strong
+            ><small>附上喜欢的歌曲或歌单</small></span
+          >
+          <span class="addition-plus">+</span>
+        </button>
       </div>
 
       <div class="actions">
-        <t-button theme="default" @click="visibleLocal = false">取消</t-button>
-        <t-button theme="primary" :loading="submitting" @click="submit">发布</t-button>
+        <span class="publish-hint">分享给每一个热爱音乐的人</span>
+        <t-button
+          class="cancel-button"
+          theme="default"
+          variant="text"
+          :disabled="submitting"
+          @click="visibleLocal = false"
+          >取消</t-button
+        >
+        <t-button
+          class="publish-button"
+          theme="primary"
+          :disabled="!canSubmit"
+          :loading="submitting"
+          @click="submit"
+          >发布笔记</t-button
+        >
       </div>
     </div>
 
@@ -373,15 +463,32 @@ async function submit() {
     >
       <div class="picker">
         <div class="tabs">
-          <button :class="{ active: pickerTab === 'playlist' }" @click="pickerTab = 'playlist'">附加歌单</button>
-          <button :class="{ active: pickerTab === 'song' }" @click="pickerTab = 'song'; pickerSelectedListIdx = -1">附加单曲</button>
+          <button :class="{ active: pickerTab === 'playlist' }" @click="pickerTab = 'playlist'">
+            附加歌单
+          </button>
+          <button
+            :class="{ active: pickerTab === 'song' }"
+            @click="
+              () => {
+                pickerTab = 'song'
+                pickerSelectedListIdx = -1
+              }
+            "
+          >
+            附加单曲
+          </button>
         </div>
 
         <div v-if="pickerLoading" class="picker-state">加载中...</div>
 
         <template v-else-if="pickerTab === 'playlist'">
           <div class="list-grid">
-            <div v-for="(l, idx) in pickerLists" :key="l.id" class="list-item" @click="pickPlaylist(idx)">
+            <div
+              v-for="(l, idx) in pickerLists"
+              :key="l.id"
+              class="list-item"
+              @click="pickPlaylist(idx)"
+            >
               <img v-if="l.cover" :src="l.cover" />
               <div v-else class="cover-fallback">♬</div>
               <div class="info">
@@ -389,7 +496,9 @@ async function submit() {
                   <span v-if="l.isFavorite" class="fav-tag">喜欢</span>
                   {{ l.name }}
                 </div>
-                <div class="sub">{{ l.isCloud || l.cloudId ? '已上传云端' : '本地(选中后自动上传)' }}</div>
+                <div class="sub">
+                  {{ l.isCloud || l.cloudId ? '已上传云端' : '本地(选中后自动上传)' }}
+                </div>
               </div>
             </div>
             <div v-if="pickerLists.length === 0" class="picker-state">没有歌单</div>
@@ -399,7 +508,12 @@ async function submit() {
         <template v-else>
           <!-- 先选歌单 -->
           <div v-if="pickerSelectedListIdx === -1" class="list-grid">
-            <div v-for="(l, idx) in pickerLists" :key="l.id" class="list-item" @click="pickListForSongs(idx)">
+            <div
+              v-for="(l, idx) in pickerLists"
+              :key="l.id"
+              class="list-item"
+              @click="pickListForSongs(idx)"
+            >
               <img v-if="l.cover" :src="l.cover" />
               <div v-else class="cover-fallback">♬</div>
               <div class="info">
@@ -414,7 +528,17 @@ async function submit() {
           <!-- 再选歌曲 -->
           <template v-else>
             <div class="back-row">
-              <t-button size="small" variant="text" @click="pickerSelectedListIdx = -1; pickerSongs = []">← 返回歌单列表</t-button>
+              <t-button
+                size="small"
+                variant="text"
+                @click="
+                  () => {
+                    pickerSelectedListIdx = -1
+                    pickerSongs = []
+                  }
+                "
+                >← 返回歌单列表</t-button
+              >
             </div>
             <div class="song-list">
               <div v-for="s in pickerSongs" :key="s.songmid" class="song-row" @click="pickSong(s)">
@@ -435,97 +559,300 @@ async function submit() {
 </template>
 
 <style scoped lang="scss">
+/* The dialog is teleported; target its explicit class for the outer shell. */
+:global(.community-composer.t-dialog) {
+  padding: 28px 30px 24px;
+  border-radius: 22px;
+  border: 1px solid var(--td-border-level-1-color, #eee);
+  box-shadow: 0 24px 90px #23172126;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
+}
+:global(.community-composer .t-dialog__body) {
+  padding: 22px 0 0;
+}
+:global(.community-composer .t-dialog__close) {
+  top: 25px;
+  right: 26px;
+  border-radius: 50%;
+  -webkit-app-region: no-drag;
+}
+.composer-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-right: 28px;
+  h2 {
+    margin: 0 0 5px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--td-text-color-primary);
+  }
+  p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--td-text-color-secondary);
+    font-weight: 400;
+  }
+}
+.heading-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-light, #fff0f4);
+  flex-shrink: 0;
+  line-height: 1;
+  :deep(svg) {
+    display: block;
+    // TDesign applies an 8px margin to icons in dialog headers.
+    margin: 0 !important;
+    flex-shrink: 0;
+    vertical-align: initial;
+  }
+}
 .create-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-
-  .counter {
-    text-align: right;
-    color: var(--td-text-color-placeholder, #aaa);
-    font-size: 12px;
-    margin-top: -4px;
+  gap: 18px;
+  -webkit-app-region: no-drag;
+  button {
+    font: inherit;
   }
-
+  button:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: 3px;
+  }
+  .writing-area {
+    padding: 18px 20px 13px;
+    border: 1px solid var(--td-border-level-1-color, #eee);
+    border-radius: 16px;
+    background: var(--td-bg-color-secondarycontainer, #faf9fb);
+    transition: border-color 0.2s;
+  }
+  .writing-area:focus-within {
+    border-color: var(--td-brand-color);
+  }
+  textarea {
+    display: block;
+    width: 100%;
+    min-height: 158px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    resize: none;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.9;
+    color: var(--td-text-color-primary);
+    background: transparent;
+  }
+  textarea::placeholder {
+    color: var(--td-text-color-placeholder);
+  }
+  .editor-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--td-text-color-placeholder);
+  }
+  .counter {
+    font-variant-numeric: tabular-nums;
+    color: var(--td-text-color-secondary);
+    span {
+      color: var(--td-text-color-placeholder);
+    }
+  }
   .images {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    .img-box {
-      position: relative;
-      aspect-ratio: 1;
-      border-radius: 8px;
+    gap: 10px;
+  }
+  .img-box {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--td-bg-color-component);
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+  .remove {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    border: 0;
+    color: white;
+    background: #0009;
+    cursor: pointer;
+  }
+  .file-input {
+    display: none;
+  }
+  .additions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .addition {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--td-border-level-1-color, #eee);
+    background: var(--td-bg-color-container);
+    text-align: left;
+    color: var(--td-text-color-primary);
+    cursor: pointer;
+    transition:
+      background 0.18s,
+      border-color 0.18s;
+  }
+  .addition:hover:not(:disabled) {
+    border-color: var(--td-brand-color-light);
+    background: var(--td-bg-color-secondarycontainer);
+  }
+  .addition:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .addition strong,
+  .addition small {
+    display: block;
+  }
+  .addition strong {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .addition small {
+    margin-top: 4px;
+    color: var(--td-text-color-placeholder);
+    font-size: 11px;
+  }
+  .addition-icon {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+  .photo {
+    color: #67928b;
+    background: #87b6a91a;
+  }
+  .music {
+    color: var(--td-brand-color);
+    background: var(--td-brand-color-light);
+  }
+  .addition-plus {
+    margin-left: auto;
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--td-text-color-placeholder);
+  }
+  .attachment-preview {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--td-brand-color-light);
+  }
+  .attachment-preview > img,
+  .attachment-placeholder {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .attachment-placeholder {
+    display: grid;
+    place-items: center;
+    color: var(--td-brand-color);
+    background: var(--td-bg-color-container);
+  }
+  .attachment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+    color: var(--td-text-color-secondary);
+    font-size: 11px;
+    strong {
       overflow: hidden;
-      background: #eee;
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      .remove {
-        position: absolute;
-        top: 4px;
-        right: 4px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #fff;
-        border: none;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-    }
-    .add-img {
-      aspect-ratio: 1;
-      border: 1.5px dashed var(--td-border-level-2-color, #ddd);
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: var(--td-text-color-placeholder, #999);
-      cursor: pointer;
-      gap: 4px;
-      font-size: 12px;
-      &.disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      input {
-        display: none;
-      }
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      color: var(--td-text-color-primary);
     }
   }
-
-  .attachment-row {
-    margin: 4px 0;
-    .attach-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--td-brand-color-light, #fff1f3);
-      color: var(--td-brand-color, #ff2442);
-      padding: 6px 12px;
-      border-radius: 16px;
-      font-size: 13px;
-      button {
-        border: none;
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-        margin-left: 4px;
-      }
-    }
+  .attachment-kind {
+    font-size: 10px;
+    color: var(--td-brand-color);
   }
-
+  .remove-attachment {
+    border: 0;
+    background: transparent;
+    color: var(--td-text-color-secondary);
+    cursor: pointer;
+    padding: 8px;
+  }
   .actions {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 10px;
+    border-top: 1px solid var(--td-border-level-1-color);
+    padding-top: 18px;
+    margin-top: 4px;
+  }
+  .publish-hint {
+    margin-right: auto;
+    font-size: 11px;
+    color: var(--td-text-color-placeholder);
+  }
+  .publish-button {
+    border-radius: 22px;
+    min-width: 106px;
+    height: 40px;
+  }
+  .cancel-button {
+    border-radius: 22px;
+    height: 40px;
+  }
+}
+@media (max-width: 540px) {
+  :global(.community-composer.t-dialog) {
+    padding: 22px 18px;
+  }
+  .create-form .additions {
+    grid-template-columns: 1fr;
+  }
+  .create-form .publish-hint {
+    display: none;
+  }
+  .create-form .images {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

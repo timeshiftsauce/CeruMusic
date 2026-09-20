@@ -61,11 +61,6 @@
         { "id": "account.logout", "title": "退出演示账号", "action": "account.logout" },
         { "id": "render.library", "title": "渲染原生音乐页", "action": "render.library" },
         { "id": "library.refresh", "title": "刷新原生音乐页", "action": "library.refresh" },
-        {
-          "id": "library.openSection",
-          "title": "定位演示歌单区块",
-          "action": "library.openSection"
-        },
         { "id": "playlist.open", "title": "打开原生歌单详情", "action": "playlist.open" },
         { "id": "playlist.import", "title": "导入演示歌单", "action": "playlist.import" },
         { "id": "tracks.play", "title": "播放演示歌曲", "action": "tracks.play" }

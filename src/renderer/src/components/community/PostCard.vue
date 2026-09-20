@@ -18,6 +18,8 @@ import { HeartFilledIcon, HeartIcon } from 'tdesign-icons-vue-next'
 import type { CommunityPost, PostImageOrUrl } from '@renderer/api/community'
 import { ossAvatar, ossCard, ossThumb } from '@renderer/utils/ossImage'
 import LazyImage from './LazyImage.vue'
+import { usePostAttachmentCover } from './usePostAttachmentCover'
+import TextNoteCover from './TextNoteCover.vue'
 
 const props = defineProps<{
   post: CommunityPost
@@ -39,12 +41,16 @@ function imgAspect(it: PostImageOrUrl): string | undefined {
   return `${it.w} / ${it.h}`
 }
 
-const firstImage = computed(() => (images.value[0] ? imgUrl(images.value[0]) : ''))
+const { cover: attachmentCover, onCoverError } = usePostAttachmentCover(
+  () => props.post,
+  () => images.value.length === 0
+)
+const firstImage = computed(() =>
+  images.value[0] ? imgUrl(images.value[0]) : attachmentCover.value
+)
 /** 后端上传时记录的真实宽高 -> 立即给 LazyImage 设 aspect-ratio,
  * 不用等模糊 thumb 加载完才有骨架高度 */
-const firstAspect = computed(() =>
-  images.value[0] ? imgAspect(images.value[0]) : undefined
-)
+const firstAspect = computed(() => (images.value[0] ? imgAspect(images.value[0]) : '1 / 1'))
 const extraCount = computed(() => Math.max(0, images.value.length - 1))
 
 const initial = computed(() => (props.post.username || '?').slice(0, 1).toUpperCase())
@@ -65,25 +71,21 @@ const textExcerpt = computed(() => {
 </script>
 
 <template>
-  <article
-    class="note-card"
-    :data-post-id="post.id"
-    @click="$emit('click', $event)"
-  >
+  <article class="note-card" :data-post-id="post.id" @click="$emit('click', $event)">
     <!-- 封面 -->
     <div v-if="firstImage" class="cover-wrap">
       <LazyImage
+        :key="firstImage"
         :src="ossCard(firstImage)"
         :thumb="ossThumb(firstImage)"
         fit="cover"
         auto-aspect
         :aspect-ratio="firstAspect"
+        @error="!images.length && onCoverError(firstImage)"
       />
       <span v-if="extraCount > 0" class="multi-badge">{{ images.length }} 图</span>
     </div>
-    <div v-else class="text-cover">
-      <p>{{ textExcerpt }}</p>
-    </div>
+    <TextNoteCover v-else :seed="post.id" :content="textExcerpt" />
 
     <!-- 文字 + 底栏 -->
     <div class="body">
@@ -140,30 +142,6 @@ const textExcerpt = computed(() => {
     padding: 2px 8px;
     border-radius: 10px;
     backdrop-filter: blur(4px);
-  }
-}
-
-.text-cover {
-  width: 100%;
-  border-radius: 10px;
-  padding: 22px 16px;
-  background: linear-gradient(135deg, #ffe1e6 0%, #fff5d6 100%);
-  min-height: 140px;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-
-  p {
-    margin: 0;
-    color: #333;
-    font-size: 15px;
-    font-weight: 500;
-    line-height: 1.55;
-    display: -webkit-box;
-    -webkit-line-clamp: 6;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    word-break: break-word;
   }
 }
 

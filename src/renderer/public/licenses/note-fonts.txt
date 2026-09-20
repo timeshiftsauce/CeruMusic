@@ -1,0 +1,16 @@
+Community note fonts
+
+The following fonts are bundled as WOFF2 files converted from their upstream
+TrueType releases. Character coverage is retained. Each font is distributed
+under the SIL Open Font License 1.1; the corresponding license is in this folder.
+
+Zhi Mang Xing — https://github.com/google/fonts/tree/main/ofl/zhimangxing
+Ma Shan Zheng — https://github.com/google/fonts/tree/main/ofl/mashanzheng
+Liu Jian Mao Cao — https://github.com/google/fonts/tree/main/ofl/liujianmaocao
+Long Cang — https://github.com/google/fonts/tree/main/ofl/longcang
+ZCOOL KuaiLe — https://github.com/google/fonts/tree/main/ofl/zcoolkuaile
+ZCOOL XiaoWei — https://github.com/google/fonts/tree/main/ofl/zcoolxiaowei
+ZCOOL QingKe HuangYou — https://github.com/google/fonts/tree/main/ofl/zcoolqingkehuangyou
+
+The note font pool also reuses the application's existing lyricfont
+(Alibaba rounded font) and PingFangSC-Semibold assets and font-face definitions.

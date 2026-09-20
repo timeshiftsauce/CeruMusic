@@ -96,9 +96,9 @@ html.dark #app .vp-doc p {
   word-spacing: 2px;
 }
 html.dark #app .vp-doc h3:after,
-h4:after,
-h5:after,
-h6:after {
+html.dark #app .vp-doc h4:after,
+html.dark #app .vp-doc h5:after,
+html.dark #app .vp-doc h6:after {
   content: '';
   display: inline-block;
   margin-left: 0.2em;

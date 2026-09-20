@@ -36,7 +36,7 @@ function basisEvent(mainWindow: BrowserWindow) {
   })
 
   ipcMain.on('window-maximize', () => {
-    // 转发到 main/index.ts，在我方全屏激活时会先退出全屏再判断 maximize
+    // 转发到 main/index.ts，全屏时先恢复窗口模式
     ipcMain.emit('app-maximize-internal')
   })
 
@@ -93,7 +93,7 @@ function basisEvent(mainWindow: BrowserWindow) {
     mainWindow.focus()
   })
 
-  // 全屏模式 IPC：转发到 main/index.ts 的窗口化全屏 toggle
+  // 全屏模式 IPC：转发到 main/index.ts 的原生全屏 toggle
   ipcMain.on('window-toggle-fullscreen', () => {
     ipcMain.emit('app-toggle-fullscreen-internal')
   })

@@ -1,9 +1,16 @@
 import { defineStore } from 'pinia'
+import {
+  getBackgroundRenderer,
+  type BackgroundRendererType
+} from '@renderer/config/backgroundRenderers'
 
 export const playSetting = defineStore('playSetting', {
   state: () => ({
     isJumpLyric: true, // 是否使用跳动歌词
+    isSeekLyricStagger: true, // 跳转时歌词逐行错开
     bgPlaying: true, // 是否播放背景动画 布朗运动
+    backgroundRenderer: 'pixi' as BackgroundRendererType,
+    isBackgroundBeat: false, // 背景随低频鼓点变化，默认关闭
     isAudioVisualizer: true, // 音频可视化
     layoutMode: 'cd', // 播放页布局模式: 'cd' | 'cover'
     showLeftPanel: true, // 是否显示左侧面板
@@ -18,7 +25,13 @@ export const playSetting = defineStore('playSetting', {
   }),
   getters: {
     getisJumpLyric: (state) => state.isJumpLyric,
+    getIsSeekLyricStagger: (state) => state.isSeekLyricStagger,
     getBgPlaying: (state) => state.bgPlaying,
+    getBackgroundRenderer: (state) => getBackgroundRenderer(state.backgroundRenderer).value,
+    getBackgroundSupportsBeat: (state) =>
+      getBackgroundRenderer(state.backgroundRenderer).supportsBeat,
+    getIsBackgroundBeat: (state) =>
+      state.isBackgroundBeat && getBackgroundRenderer(state.backgroundRenderer).supportsBeat,
     getIsAudioVisualizer: (state) => state.isAudioVisualizer,
     getLayoutMode: (state) => state.layoutMode,
     getShowLeftPanel: (state) => state.showLeftPanel,
@@ -35,11 +48,20 @@ export const playSetting = defineStore('playSetting', {
     setIsDumpLyric(isDumpLyric: boolean) {
       this.isJumpLyric = isDumpLyric
     },
+    setIsSeekLyricStagger(enabled: boolean) {
+      this.isSeekLyricStagger = enabled
+    },
     setIsBlurLyric(isBlurLyric: boolean) {
       this.isBlurLyric = isBlurLyric
     },
     setBgPlaying(bgPlaying: boolean) {
       this.bgPlaying = bgPlaying
+    },
+    setIsBackgroundBeat(enabled: boolean) {
+      this.isBackgroundBeat = enabled
+    },
+    setBackgroundRenderer(renderer: BackgroundRendererType) {
+      this.backgroundRenderer = getBackgroundRenderer(renderer).value
     },
     setIsAudioVisualizer(isAudioVisualizer: boolean) {
       this.isAudioVisualizer = isAudioVisualizer

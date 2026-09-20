@@ -3,6 +3,7 @@ import { ref, watch, reactive, onBeforeUnmount } from 'vue'
 import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { useMessage, useDialog } from 'naive-ui'
 import { SearchIcon } from 'tdesign-icons-vue-next'
+import { lyricFormats, type BuiltinLyricFormat } from '@common/lyricFormats'
 
 const props = defineProps<{
   show: boolean
@@ -27,7 +28,7 @@ const formModel = reactive({
   img: ''
 })
 
-const lyricFormat = ref<'standard' | 'word-by-word'>('standard')
+const lyricFormat = ref<BuiltinLyricFormat>('enhanced-lrc')
 const searchKeyword = ref('')
 const searchResults = ref<any[]>([])
 const searching = ref(false)
@@ -287,7 +288,7 @@ const applyResult = async (item: any) => {
       const lyricRes = await (window as any).api.music.requestSdk('getLyric', {
         source: item.source,
         songInfo: toRaw(item),
-        useFormat: lyricFormat.value === 'word-by-word' ? 'word-by-word' : 'lrc'
+        useFormat: lyricFormat.value
       })
 
       if (typeof lyricRes === 'string') {
@@ -380,11 +381,14 @@ const applyResult = async (item: any) => {
             <n-input
               v-model:value="formModel.lrc"
               type="textarea"
-              placeholder="输入LRC歌词内容"
+              placeholder="粘贴 LRC、逐字 LRC / SPL、TTML、QRC、YRC、LYS、LYL 或 LQE 歌词，播放时自动识别"
               :autosize="{ minRows: 6, maxRows: 12 }"
               style="font-family: monospace; font-size: 12px"
             />
           </n-form-item>
+          <p class="lyric-help">
+            歌词按原文保存，播放时自动识别格式。内置支持的格式无需转换插件；其他格式由已安装的歌词插件处理。
+          </p>
         </n-form>
       </n-tab-pane>
 
@@ -404,10 +408,11 @@ const applyResult = async (item: any) => {
 
           <div class="options">
             <span class="label">歌词格式：</span>
-            <n-radio-group v-model:value="lyricFormat" size="small">
-              <n-radio-button value="standard">标准LRC</n-radio-button>
-              <n-radio-button value="word-by-word">逐字LRC</n-radio-button>
-            </n-radio-group>
+            <n-select
+              v-model:value="lyricFormat"
+              :options="lyricFormats.map(({ value, label }) => ({ value, label }))"
+              style="width: 300px"
+            />
           </div>
         </div>
 
@@ -461,6 +466,11 @@ const applyResult = async (item: any) => {
 </template>
 
 <style scoped lang="scss">
+.lyric-help {
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .edit-layout {
   display: flex;
   gap: 24px;

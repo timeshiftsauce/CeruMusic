@@ -29,6 +29,8 @@ Provider 是宿主调用音乐能力的入口。先在 Manifest 声明，再在�
 
 把此片段合并到 `manifest.contributes`。`connectionMode` 为 `none / single / multiple`，用于表达连接方式；不要将声明理解为宿主已经替你完成登录。
 
+接入常见平台时，可参考[音源命名约定](./source-conventions)选择 Provider ID 和音质标识。这些名称是推荐写法，可以自定义；清单、注册代码和歌曲引用中的 Provider ID 需要保持一致。
+
 ## 方法分组与签名
 
 `operation` 均为宿主提供的 OperationContext，方法返回 Promise。
@@ -46,7 +48,7 @@ Provider 是宿主调用音乐能力的入口。先在 Manifest 声明，再在�
 | `charts.getTracks`     | `resource, cursor \| undefined, operation`  | `Page<ContentEntity>` |
 | `sharing.describe`     | `resource, policy, operation`               | JsonObject            |
 
-旧的顶层 `search/resolve/lyrics/categories/list/share` 标为兼容早期 v2 预览契约；新插件使用分组方法。桌面内部的 artwork/suggest/hotSearch 扩展不属于 SDK 0.3.5 标准接口，本文不要求插件实现。
+新插件使用下方的分组方法。桌面内部的 artwork/suggest/hotSearch 扩展不属于标准接口，本文不要求插件实现。
 
 ## ResourceRef：资源身份
 

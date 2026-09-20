@@ -33,7 +33,7 @@ pageClass: plugin-v2-doc
 5. 用 HTTP 客户端替换旧请求工具，声明权限并传递 operation。
 6. 转换歌词为 CrLyric，或注册专门转换器。
 7. 将偏好迁入 storage，增加原生抽屉或 Web 页面。
-8. build → validate → preview → 在澜音 ≥1.14.1 安装验证。
+8. build → validate → preview → 在澜音 ≥2.0 安装验证。
 
 ## 需要保留旧版本用户时
 

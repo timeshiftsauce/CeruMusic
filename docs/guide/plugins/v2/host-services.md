@@ -5,12 +5,9 @@ pageClass: plugin-v2-doc
 # 宿主服务与支持状态
 
 ::: tip 桌面扩展
-SDK 0.3.5 契约包含 <code>playlistSections</code>、歌单区块定位和 Web Surface 自动内容高度，参见[0.3.5 工具链更新](./sdk-upgrade)。自建账号界面使用通用 Surface，详见[桌面扩展](./desktop-extensions)。
 :::
 
-**核对版本：桌面 1.14.1 起；账号与 native Surface 最低使用 0.3.3，同页歌单区块与自动高度使用 Core、SDK、CLI 0.3.5 同一协议线。**
-
-下面的“已接入”指当前桌面代码实际提供了调用路径；“部分”需要阅读限制；“未接入”表示即使 TypeScript 编译通过，调用仍不能完成。表中列出每个方法，不以 SDK 类型代替运行验证。
+本页描述澜音 2.0 的 v2 插件服务及其与独立工作台的差异。桌面 Host 已接通 SDK 当前声明的通用业务服务；表中的限制是运行时边界，不只是类型约定。
 
 ## 先检查能力
 
@@ -23,58 +20,67 @@ if (!service.available) {
 
 `list(): Promise<ServiceAvailability[]>` / `get(service: string): Promise<ServiceAvailability>` 返回 `service, version, available, reason?, permissionGroups`。reason 包含 host-not-connected、unsupported、not-logged-in、disabled。
 
-当前桌面在 list 中报告 **account、library、player、queue**。其中 player 只列出 play，queue 只列出 replace；其他 get 返回 unsupported。HTTP、storage、UI 等需按本指南各章判断。工作台对正式软件业务服务返回 host-not-connected。
+桌面 Host 会报告 **account、app、library、player、queue、favorites、history、downloads、files、clipboard、localMusic、settings、window、hotkeys、sharing、rooms、devices、ai、tasks**，并在 `methods` 中给出当前可调用的方法。未知服务返回 `available: false, reason: 'unsupported'`。HTTP、storage、UI 等基础能力仍按本指南各章判断。
+
+独立工作台只为少量只读方法提供确定性的空数据，用于让界面和分支逻辑可以调试；其他业务方法返回 `host-not-connected`。插件必须检查 `available` 和 `methods`，并在正式桌面 Host 中验证写操作、系统对话框和设备行为。
 
 ## 基础能力
 
-| API                                                          | 桌面                                       | CLI 工作台                                                   |
-| ------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| plugin、host、log.debug/info/warn/error                      | 已接入                                     | 已接入                                                       |
-| providers/actions/playlistImporters/lyricConverters.register | 已接入，需 Manifest 声明                   | 注册及对应测试/预览                                          |
-| effects.add                                                  | 已接入                                     | 已接入                                                       |
-| config.get                                                   | 已接入，含桌面配置覆盖                     | 构建/发行配置                                                |
-| storage.get/set/delete                                       | 持久化、10 MiB、结构化共享键               | 0.3.3 起持久化到 .ceru-dev/storage，10 MiB；不支持跨插件读取 |
-| permissions.query/request/getGranted/requestGroup            | 按组授权；动态 scope 未完整实现            | 模拟授权；不等同于桌面授权持久化                             |
-| http.create/request                                          | 已接入                                     | 已接入，限额较小                                             |
-| sockets.connect、socket.on/emit/send/disconnect              | 已接入                                     | 已接入                                                       |
-| icons.list/url、assets.list/url、utils.lodash                | 已接入受支持资源                           | 预览资源与计算工具                                           |
-| credentials.get                                              | 未接入                                     | 未接入                                                       |
-| modules.require                                              | 内建模块映射；模块存在不代表其每个服务可用 | 同类边界                                                     |
+| API                                                          | 桌面                                       | CLI 工作台                                           |
+| ------------------------------------------------------------ | ------------------------------------------ | ---------------------------------------------------- |
+| plugin、host、log.debug/info/warn/error                      | 已接入                                     | 已接入                                               |
+| providers/actions/playlistImporters/lyricConverters.register | 已接入，需 Manifest 声明                   | 注册及对应测试/预览                                  |
+| effects.add                                                  | 已接入                                     | 已接入                                               |
+| config.get                                                   | 已接入，含桌面配置覆盖                     | 构建/发行配置                                        |
+| storage.get/set/delete                                       | 持久化、10 MiB、结构化共享键               | 持久化到 .ceru-dev/storage，10 MiB；不支持跨插件读取 |
+| permissions.query/request/getGranted/requestGroup            | 按组授权；动态 scope 未完整实现            | 模拟授权；不等同于桌面授权持久化                     |
+| http.create/request                                          | 已接入                                     | 已接入，限额较小                                     |
+| sockets.connect、socket.on/emit/send/disconnect              | 已接入                                     | 已接入                                               |
+| icons.list/url、assets.list/url、utils.lodash                | 已接入受支持资源                           | 预览资源与计算工具                                   |
+| credentials.get                                              | 未接入                                     | 未接入                                               |
+| modules.require                                              | 内建模块映射；模块存在不代表其每个服务可用 | 同类边界                                             |
 
 ## 桌面业务方法
 
 `ServiceCall` 为 `{ operation: OperationContext, permissionKey: string }`。其余完整参数与返回类型可在[类型参考](./reference#宿主服务完整签名)展开查阅。
 
-| API                                                                       | 桌面状态与结果                                                   | 权限 / 使用条件                                    |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------- |
-| capabilities.list / get                                                   | 已接入，粗粒度状态见上                                           | 无业务权限                                         |
-| account.getSession                                                        | `{ loggedIn, profile }`                                          | account.profile                                    |
-| account.getProfile                                                        | 未登录为 null；登录返回插件作用域 ID、displayName、identityScope | account.profile；不返回主账号 token                |
-| account.openLogin                                                         | 打开软件登录流程                                                 | 用户完成登录                                       |
-| app.openSettings                                                          | 打开设置；当前忽略细分 section                                   | 无业务权限                                         |
-| app.getInfo / openExternal                                                | 未接入                                                           | SDK 声明不代表可调用                               |
-| library.playlists.list / getTracks / import                               | 已接入，详见[歌单](./playlist-import)                            | library.read / library.write；云端需要登录         |
-| player.play                                                               | 已接入；传完整歌曲 ResourceRef，歌曲须先在插件队列中             | player.control                                     |
-| player.getState / pause / next / previous / seek / setVolume / setMode    | 未接入通用插件服务                                               | SDK 声明不代表可调用                               |
-| queue.replace                                                             | 已接入；接收标准 ContentEntity[]，保留完整资源身份               | player.control；一起听中拒绝替换                   |
-| queue.get / append / remove / reorder                                     | 未接入                                                           | SDK 声明不代表可调用                               |
-| favorites.contains / add / remove                                         | 未接入                                                           | SDK 契约                                           |
-| history.list                                                              | 未接入                                                           | SDK 契约                                           |
-| downloads.list / create / pause / resume / cancel / retry / reveal        | 未接入                                                           | SDK 契约                                           |
-| files.pick / pickDirectory / readText / readBase64 / saveText / writeText | 未接入                                                           | SDK 契约；不能替换为直接 fs                        |
-| clipboard.readText / writeText                                            | 未接入                                                           | SDK 契约                                           |
-| localMusic.list / scan / getTags / writeTags                              | 未接入                                                           | SDK 契约                                           |
-| settings.get / update                                                     | 未接入                                                           | 与插件自己的 config/storage 区分                   |
-| window.control                                                            | 未接入                                                           | SDK 契约                                           |
-| hotkeys.register                                                          | 未接入                                                           | SDK 契约                                           |
-| sharing.create / revoke / resolve                                         | 未接入通用服务                                                   | 与 Provider 的 sharing.describe 和专用分享工厂区分 |
-| rooms.getState / join / leave / requestTrack                              | 未接入                                                           | SDK 契约                                           |
-| devices.list / select                                                     | 未接入                                                           | SDK 契约                                           |
-| ai.generate                                                               | 未接入                                                           | SDK 契约                                           |
-| tasks.schedule / cancel                                                   | 未接入                                                           | SDK 契约                                           |
-| events.on                                                                 | 部分：有事件传输，桌面明确发送 permissions.changed               | 不承诺 player/queue/theme 等所有声明事件已接线     |
+| API                                                                           | 桌面状态与结果                                                                           | 权限 / 使用条件                                             |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| capabilities.list / get                                                       | 返回每项服务的精确 `methods`；未知服务为 unsupported                                     | 无业务权限                                                  |
+| account.getSession / getProfile / openLogin                                   | 返回登录状态和插件作用域账号 ID，或打开软件登录流程                                      | account.profile；不返回 token、邮箱、电话                   |
+| app.getInfo / openSettings / openExternal                                     | 返回版本、平台、语言和主题；打开设置或 HTTP(S) 外链                                      | openExternal 需要 external.open                             |
+| library.playlists.list / getTracks / import                                   | 读写本地或云端歌单，详见[歌单](./playlist-import)                                        | library.read / library.write；云端需要登录                  |
+| player.getState / play / pause / next / previous / seek / setVolume / setMode | 读取和控制当前播放器；指定歌曲播放时，歌曲必须已在队列中                                 | player.read / player.control                                |
+| queue.get / append / replace / remove / reorder                               | 返回带 revision 的完整队列；排序必须提交当前全部歌曲和匹配的 revision                    | player.read / player.control；一起听中拒绝修改              |
+| favorites.contains / add / remove                                             | 操作本地“我喜欢”歌单；add 的歌曲必须能从当前队列解析                                     | library.read / library.write                                |
+| history.list                                                                  | 返回持久化的本机播放历史；按资源去重，最多 200 条，每页最多 50 条                        | player.read                                                 |
+| downloads.list / create / pause / resume / cancel / retry / reveal            | 创建 1 至 100 个任务并管理下载；歌曲从当前队列、本地音乐或历史中解析                     | downloads.create / downloads.manage                         |
+| files.pick / pickDirectory / readText / readBase64 / saveText / writeText     | 使用系统选择器和不透明句柄；读取和文本写入上限为 16 MiB                                  | readText/readBase64 需 files.read；writeText 需 files.write |
+| clipboard.readText / writeText                                                | 读写系统文本剪贴板                                                                       | clipboard.read / clipboard.write                            |
+| localMusic.list / scan / getTags / writeTags                                  | 分页读取、扫描已选择目录、读取或修改标签；结构化歌词写为 LRC                             | localMusic.read / localMusic.write                          |
+| settings.get / update                                                         | 只读写公开设置白名单；get 最多 50 个键，update JSON 上限 32 KiB                          | settings.read / settings.write                              |
+| window.control                                                                | 支持 show、minimize、maximize、restore；mini-player 当前不可用                           | window.control                                              |
+| hotkeys.register                                                              | 注册已声明 command 的全局快捷键并返回 disposer；替换失败会恢复旧绑定，插件停止时自动清理 | hotkeys.register                                            |
+| sharing.create / revoke / resolve                                             | 创建和解析数据型应用链接；revoke 当前为幂等兼容操作，不会使已生成的数据型链接失效        | create 需 sharing.publish；revoke 需 sharing.revoke         |
+| rooms.getState / join / leave / requestTrack                                  | 读取、加入、退出一起听房间，或请求播放当前队列中的歌曲                                   | rooms.read / rooms.control                                  |
+| devices.list / select                                                         | 枚举和选择本地输出或 DLNA 设备                                                           | devices.control                                             |
+| ai.generate                                                                   | 调用软件 AI 服务；提示词最多 20000 字符，输出上限最多 50000 字符                         | ai.use；取决于软件 AI 服务是否可用                          |
+| tasks.schedule / cancel                                                       | 按 ID 安排或取消已声明 command；周期限制为 1 分钟至 24 小时                              | background.run                                              |
+| events.on                                                                     | 已连接 SDK 声明的 11 个宿主事件，具体见下文                                              | 监听本身不额外请求权限                                      |
 
-工作台可以模拟账号摘要、Native View、queue.replace 与 player.play 的调用，但不等于桌面的真实队列和音频设备。最终仍需在澜音中验证。
+下载目录只能来自 `files.pickDirectory()` 返回的 `DirectoryHandle`。文件与目录句柄不会暴露真实路径，只属于创建它的插件实例，并在插件停止或重载后失效。下载状态事件只发送给创建该任务的插件。
+
+`settings` 与插件自己的 `config`、`storage` 不同：它操作的是软件公开偏好。目前白名单为 `showFloatBall`、`autoCacheMusic`、`filenameTemplate`、`autoImportPlaylistOnOpen`、`suppressImportPrompt`、`lyricFontFamily`、`lyricFontSize`、`FullPlayLyricFontRate`、`lyricFontWeight`、`theme`、`isDarkMode`、`followSystemTheme`、`springFestivalDisabled`、`routePreloadEnabled`、`macStatusBarLyricEnabled`。白名单外的读取不会返回值，写入会被拒绝。
+
+### 宿主事件
+
+`events.on()` 可监听 `account.changed`、`library.changed`、`player.changed`、`queue.changed`、`lyrics.changed`、`downloads.changed`、`settings.changed`、`theme.changed`、`rooms.changed`、`devices.changed`、`permissions.changed`。播放器的状态变化会立即发布；播放期间还会每 5 秒发布一次位置更新。队列、歌词、设置、主题、房间和设备事件跟随对应状态变化，权限事件由桌面权限管理发送。
+
+事件值与[类型参考](./reference#宿主服务完整签名)中的 `HostServiceEvents` 一致。`account.changed` 中的账号 ID 会按插件单独散列；`downloads.changed` 不会向其他插件广播任务。
+
+### 独立工作台
+
+工作台当前提供以下只读模拟：`account.getSession/getProfile`、`app.getInfo`、`player.getState`、`queue.get`、`history.list`、`downloads.list`、`localMusic.list`、`settings.get`、`rooms.getState`、`devices.list`。它们返回稳定的未登录、空列表或空闲状态。歌单、收藏、下载创建、文件选择、窗口、快捷键、分享、房间写操作、设备选择、AI 和后台任务等不会在工作台伪造成功。
 
 ## UI 方法与差异
 
@@ -95,7 +101,7 @@ if (!service.available) {
 
 工作台支持其自身通知、Schema/Web 预览和导入预览，不提供与桌面一致的上述通用业务弹窗、设置路由和插件更新流程。
 
-0.3.5 Web Surface 会自动报告自然内容高度，Host 的 modal 按内容调整并限制在当前视口内。插件页面不要设置 <code>height/min-height: 100vh</code>，也不需要自行发送尺寸消息。
+Web Surface 会自动报告自然内容高度，Host 的 modal 按内容调整并限制在当前视口内。插件页面不要设置 <code>height/min-height: 100vh</code>，也不需要自行发送尺寸消息。
 
 ### 账号读取
 
@@ -128,6 +134,6 @@ if (result.queued) ctx.log.info('更新提示已加入通知')
 
 地址是示例，不应照抄成真实发布地址。返回 queued 表示已通知，不能显示“安装成功”；用户还需在宿主界面完成后续流程。
 
-## 尚未接入时如何设计
+## 能力不可用时如何设计
 
-让功能显式不可用或引导到已有界面，不伪造成功返回，也不要通过直接访问主窗口或内部 IPC 绕过服务边界。通用服务接入前，应将示例标为契约参考，避免放入必做的入门步骤。
+让功能显式不可用或引导到已有界面，不伪造成功返回，也不要通过直接访问主窗口或内部 IPC 绕过服务边界。能力只在 `capabilities.get()` 的 `methods` 中出现时才调用；在工作台不可用的流程应留到桌面 Host 验证。

@@ -62,10 +62,20 @@ function applicationWindow() {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
 }
 
-export function assertPluginUIRequest(event: IpcMainInvokeEvent): void {
+export function assertMainWindowRequest(event: IpcMainInvokeEvent, message: string): void {
   const win = applicationWindow()
-  if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame)
-    throw new Error('只有澜音主界面可以操作插件抽屉')
+  const senderFrame = event.senderFrame
+  if (
+    !win ||
+    event.sender !== win.webContents ||
+    !senderFrame ||
+    senderFrame.parent !== null
+  )
+    throw new Error(message)
+}
+
+export function assertPluginUIRequest(event: IpcMainInvokeEvent): void {
+  assertMainWindowRequest(event, '只有澜音主界面可以操作插件抽屉')
 }
 
 export function callPluginUI(pluginId: string, method: string, data: any): Promise<any> {

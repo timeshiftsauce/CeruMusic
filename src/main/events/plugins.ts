@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import pluginService from '../services/plugin'
 import ManageSongList from '../services/songList/ManageSongList'
 import { pluginLog } from '../logger'
-import { assertPluginUIRequest } from '../services/plugin/uiBridge'
+import { assertMainWindowRequest, assertPluginUIRequest } from '../services/plugin/uiBridge'
 import { assertAccountSummary } from '@shiqianjiang/ceru-plugin-sdk'
 import {
   prepareExternalPlugin,
@@ -39,6 +39,16 @@ export default function InitPluginService() {
     }
   )
   ipcMain.handle('plugin:restore-enabled', () => pluginService.restoreEnabledPlugins())
+  ipcMain.handle(
+    'plugin:publish-host-event',
+    async (event, name: string, value: unknown, pluginId?: string) => {
+      assertMainWindowRequest(event, '只有主界面可以发布插件宿主事件')
+      if (Buffer.byteLength(JSON.stringify(value ?? null)) > 1024 * 1024)
+        throw new Error('插件宿主事件数据过大')
+      await pluginService.publishHostEvent(name, value, pluginId)
+      return null
+    }
+  )
   ipcMain.handle('plugin:account-summary', async (event, pluginId: string, itemId: string) => {
     assertPluginUIRequest(event)
     const host = pluginService.getPluginById(pluginId)
@@ -169,11 +179,17 @@ export default function InitPluginService() {
   })
   ipcMain.handle(
     'plugin:surface-action',
-    (event, pluginId, surfaceId, sessionId, action, input) => {
+    async (event, pluginId, surfaceId, sessionId, action, input) => {
       assertPluginUIRequest(event)
       const host = pluginService.getPluginById(pluginId)
       if (!host || host.isDisabled()) throw new Error('插件未运行')
-      return host.invokeSurfaceAction(surfaceId, sessionId, action, input)
+      try {
+        return { value: await host.invokeSurfaceAction(surfaceId, sessionId, action, input) }
+      } catch (error) {
+        // Expected cancellation is transported as data so Electron does not log an IPC failure.
+        if (error instanceof DOMException && error.name === 'AbortError') return { cancelled: true }
+        throw error
+      }
     }
   )
   ipcMain.handle('plugin:drawer-close', (event, pluginId, surfaceId, sessionId) => {

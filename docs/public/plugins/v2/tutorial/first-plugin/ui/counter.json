@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "presentation": { "kind": "drawer", "placement": "right", "size": 360 },
+  "root": {
+    "type": "form",
+    "title": "问候计数",
+    "submitAction": "hello",
+    "submitLabel": "问候一次",
+    "children": [
+      { "type": "text", "bind": "status" }
+    ]
+  }
+}

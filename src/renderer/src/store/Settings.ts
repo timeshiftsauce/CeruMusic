@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { LyricFileOptions, LyricFormatPreference } from '@common/lyricFormats'
 
-export interface TagWriteOptions {
+export interface TagWriteOptions extends LyricFileOptions {
   basicInfo: boolean // 基础信息（标题、艺术家、专辑）
   cover: boolean // 封面
   lyrics: boolean // 普通歌词
   downloadLyrics: boolean // 单独下载歌词文件
-  lyricFormat: 'lrc' | 'word-by-word' // 歌词格式
+  lyricFormat: LyricFormatPreference
 }
 
 export interface GlobalBackgroundSettings {
@@ -59,7 +60,9 @@ export const useSettingsStore = defineStore(
         cover: true,
         lyrics: true,
         downloadLyrics: false,
-        lyricFormat: 'word-by-word'
+        lyricFormat: 'enhanced-lrc',
+        lyricExtensionMode: 'auto',
+        lyricExtension: 'lrc'
       },
       autoUpdate: true,
       autoImportPlaylistOnOpen: false,
@@ -109,7 +112,9 @@ export const useSettingsStore = defineStore(
                 (defaultSettings.tagWriteOptions as TagWriteOptions).downloadLyrics,
               lyricFormat:
                 parsed.tagWriteOptions?.lyricFormat ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat
+                (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat,
+              lyricExtensionMode: parsed.tagWriteOptions?.lyricExtensionMode ?? 'auto',
+              lyricExtension: parsed.tagWriteOptions?.lyricExtension ?? 'lrc'
             }
           }
         }
@@ -180,7 +185,9 @@ export const useSettingsStore = defineStore(
           cover: true,
           lyrics: true,
           downloadLyrics: false,
-          lyricFormat: 'word-by-word'
+          lyricFormat: 'enhanced-lrc',
+          lyricExtensionMode: 'auto',
+          lyricExtension: 'lrc'
         }
       }
       localStorage.setItem('appSettings', JSON.stringify(settings.value))

@@ -11,7 +11,7 @@
  *  - 进入时:GET /community/posts/:id + GET /community/posts/:id/comments
  *  - 点赞/评论后本地乐观更新计数,失败回滚
  */
-import { ref, computed, onMounted, toRaw, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import gsap from 'gsap'
@@ -32,6 +32,8 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { ossAvatar, ossCard } from '@renderer/utils/ossImage'
 import songListAPI from '@renderer/api/songList'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
+import { usePostAttachmentCover } from './usePostAttachmentCover'
+import TextNoteCover from './TextNoteCover.vue'
 
 const props = defineProps<{
   postId: string
@@ -40,6 +42,12 @@ const props = defineProps<{
    * 之后 loadPost() 异步刷新最新点赞/评论数。
    */
   initialPost?: CommunityPost | null
+  navigationDirection?: -1 | 0 | 1
+  exitDirection?: -1 | 0 | 1
+  pairedTransition?: boolean
+  getAdjacentPost?: (direction: -1 | 1) => Promise<CommunityPost | null>
+  getPostAt?: (index: number) => Promise<CommunityPost | null>
+  postIndex?: number
   /**
    * 一镜到底动画的源矩形 —— 点击卡片时记录的卡片视口位置/尺寸,
    * GSAP FLIP 用它把 modal 容器"压缩"到卡片位置作为打开起点。
@@ -51,6 +59,8 @@ const emit = defineEmits<{
   close: []
   updated: [post: CommunityPost]
   removed: [id: string]
+  navigate: [post: CommunityPost, direction: -1 | 1]
+  departed: [id: string]
 }>()
 
 /* ============================================================
@@ -71,9 +81,119 @@ const emit = defineEmits<{
 const maskEl = ref<HTMLElement | null>(null)
 const modalEl = ref<HTMLElement | null>(null)
 const closing = ref(false)
+const switching = ref(false)
+const navigationHint = ref('')
+const SLIDE_DURATION = 0.48
+let motion: gsap.core.Timeline | null = null
+let disposed = false
+let opening = true
+let hintTimer: ReturnType<typeof setTimeout> | undefined
+let wheelTotal = 0
+let lastWheelAt = performance.now()
+const WHEEL_DISTANCE = 80
+
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+function showNavigationHint(text: string) {
+  clearTimeout(hintTimer)
+  navigationHint.value = text
+  hintTimer = setTimeout(() => (navigationHint.value = ''), 1800)
+}
+
+async function onWheel(event: WheelEvent) {
+  const target = event.target as HTMLElement
+  if (
+    !props.getAdjacentPost ||
+    event.ctrlKey ||
+    Math.abs(event.deltaX) >= Math.abs(event.deltaY) ||
+    target.closest(
+      '.comments, .comment-input, .reply-hint, input, textarea, [contenteditable="true"]'
+    )
+  ) {
+    wheelTotal = 0
+    return
+  }
+
+  // 非评论区域只翻笔记，不把滚轮传给背景瀑布流。
+  event.preventDefault()
+  const now = performance.now()
+  if (now - lastWheelAt > 100) {
+    wheelTotal = 0
+  }
+  lastWheelAt = now
+  if (
+    opening ||
+    closing.value ||
+    switching.value ||
+    reportVisible.value ||
+    submittingComment.value ||
+    document.activeElement?.matches('input, textarea, [contenteditable="true"]')
+  ) {
+    // 划入/划出期间的距离不排队；结束后继续滚动即可重新累计。
+    wheelTotal = 0
+    return
+  }
+
+  const delta =
+    event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1)
+  if (Math.sign(delta) !== Math.sign(wheelTotal)) wheelTotal = 0
+  wheelTotal += delta
+  if (Math.abs(wheelTotal) < WHEEL_DISTANCE) return
+  const direction = wheelTotal > 0 ? 1 : -1
+  // 单个大幅滚动只触发一篇，不把余量带到下一篇。
+  wheelTotal = 0
+  await navigatePost(direction, () => props.getAdjacentPost!(direction))
+}
+
+async function navigateTo(index: number) {
+  if (!props.getPostAt || index === props.postIndex) return
+  const direction = index > (props.postIndex ?? 0) ? 1 : -1
+  wheelTotal = 0
+  await navigatePost(direction, () => props.getPostAt!(index))
+}
+
+defineExpose({ navigateTo, postId: props.postId })
+
+async function navigatePost(direction: -1 | 1, resolvePost: () => Promise<CommunityPost | null>) {
+  if (opening || closing.value || switching.value || disposed || props.exitDirection) return
+  switching.value = true
+  try {
+    const nextPost = await resolvePost()
+    if (disposed || closing.value) return
+    if (!nextPost) {
+      showNavigationHint(direction === 1 ? '暂时没有更多笔记了' : '已经是第一篇笔记了')
+      switching.value = false
+      return
+    }
+    // 保留当前实例到划出结束，下一篇立即挂载，两篇同时移动。
+    emit('navigate', nextPost, direction)
+  } catch {
+    if (!disposed && !closing.value) {
+      switching.value = false
+      showNavigationHint('加载失败，请稍后重试')
+    }
+  }
+}
 
 const OPEN_DUR = 0.45
 const CLOSE_DUR = 0.34
+
+watch(
+  () => props.exitDirection,
+  (direction) => {
+    const modal = modalEl.value
+    if (!direction || !modal || disposed) return
+    motion?.kill()
+    motion = gsap.timeline({ onComplete: () => emit('departed', props.postId) })
+    motion.to(modal, {
+      y: reduceMotion() ? 0 : -direction * (modal.clientHeight + 24),
+      opacity: reduceMotion() ? 0 : 0.25,
+      duration: reduceMotion() ? 0 : SLIDE_DURATION,
+      ease: 'power2.inOut'
+    })
+  },
+  { flush: 'post' }
+)
 
 /** 计算把 modal 容器压到 origin 矩形所需的 transform 起点参数 */
 function computeFlipStart(): {
@@ -100,6 +220,24 @@ function playOpen() {
   const modal = modalEl.value
   const mask = maskEl.value
   if (!modal || !mask) return
+  motion?.kill()
+  if (props.navigationDirection) {
+    gsap.set(mask, { opacity: 1 })
+    motion = gsap.timeline({
+      onComplete: () => {
+        opening = false
+      }
+    })
+    motion.fromTo(
+      modal,
+      {
+        y: reduceMotion() ? 0 : props.navigationDirection * (modal.clientHeight + 24),
+        opacity: reduceMotion() ? 0 : 0.55
+      },
+      { y: 0, opacity: 1, duration: reduceMotion() ? 0 : SLIDE_DURATION, ease: 'power2.inOut' }
+    )
+    return
+  }
   const start = computeFlipStart()
   gsap.set(mask, { opacity: 0 })
   gsap.set(modal, {
@@ -111,8 +249,12 @@ function playOpen() {
     transformOrigin: '50% 50%',
     force3D: true
   })
-  const tl = gsap.timeline()
-  tl.to(mask, { opacity: 1, duration: OPEN_DUR, ease: 'power2.out' }, 0)
+  const tl = (motion = gsap.timeline({
+    onComplete: () => {
+      opening = false
+    }
+  }))
+  tl.to(mask, { opacity: 1, duration: reduceMotion() ? 0 : OPEN_DUR, ease: 'power2.out' }, 0)
   tl.to(
     modal,
     {
@@ -121,7 +263,7 @@ function playOpen() {
       scaleX: 1,
       scaleY: 1,
       opacity: 1,
-      duration: OPEN_DUR,
+      duration: reduceMotion() ? 0 : OPEN_DUR,
       ease: 'expo.out'
     },
     0
@@ -129,8 +271,9 @@ function playOpen() {
 }
 
 function close(useFlip = true) {
-  if (closing.value) return
+  if (closing.value || disposed) return
   closing.value = true
+  motion?.kill()
   const modal = modalEl.value
   const mask = maskEl.value
   if (!modal || !mask) {
@@ -138,11 +281,9 @@ function close(useFlip = true) {
     return
   }
   const shouldFlip = useFlip && !!props.origin
-  const target = shouldFlip
-    ? computeFlipStart()
-    : { x: 0, y: 0, scaleX: 0.94, scaleY: 0.94 }
-  const tl = gsap.timeline({ onComplete: () => emit('close') })
-  tl.to(mask, { opacity: 0, duration: CLOSE_DUR, ease: 'power2.in' }, 0)
+  const target = shouldFlip ? computeFlipStart() : { x: 0, y: 0, scaleX: 0.94, scaleY: 0.94 }
+  const tl = (motion = gsap.timeline({ onComplete: () => emit('close') }))
+  tl.to(mask, { opacity: 0, duration: reduceMotion() ? 0 : CLOSE_DUR, ease: 'power2.in' }, 0)
   tl.to(
     modal,
     {
@@ -151,7 +292,7 @@ function close(useFlip = true) {
       scaleX: target.scaleX,
       scaleY: target.scaleY,
       opacity: shouldFlip ? 1 : 0,
-      duration: CLOSE_DUR,
+      duration: reduceMotion() ? 0 : CLOSE_DUR,
       ease: 'power2.in'
     },
     0
@@ -163,12 +304,17 @@ const userStore = LocalUserDetailStore()
 
 const post = ref<CommunityPost | null>(props.initialPost ?? null)
 const comments = ref<CommunityComment[]>([])
-const commentsLoading = ref(false)
+const commentsLoading = ref(true)
 const commentInput = ref('')
 const submittingComment = ref(false)
 const imageIdx = ref(0)
-/** 仅在没有 initialPost 时才显示 loading 覆盖 */
+/** 已有列表快照时保留内容，只对尚未获取的数据显示骨架。 */
 const loading = ref(!props.initialPost)
+const loadedImage = ref('')
+const failedImage = ref('')
+const loadedAvatar = ref('')
+const failedAvatar = ref('')
+const loadedAttachmentCover = ref('')
 
 const isAuthor = computed(() => {
   // userStore.userInfo.uid 是用户 sub —— 看其他模块的用法
@@ -176,20 +322,31 @@ const isAuthor = computed(() => {
   return !!myId && post.value?.userId === myId
 })
 
+const { cover: attCoverUrl, onCoverError } = usePostAttachmentCover(() => post.value)
 const currentImage = computed(() => {
   const item = post.value?.images?.[imageIdx.value]
-  if (!item) return ''
+  if (!item) return attCoverUrl.value
   return typeof item === 'string' ? item : item.url
 })
-const hasImages = computed(() => (post.value?.images?.length || 0) > 0)
+const hasImages = computed(() => !!currentImage.value)
+function onImageError(event: Event) {
+  const { imageUrl, coverUrl: url } = (event.target as HTMLImageElement).dataset
+  if (imageUrl) failedImage.value = imageUrl
+  if (url) onCoverError(url)
+}
 
 const initial = computed(() => (post.value?.username || '?').slice(0, 1).toUpperCase())
 
 onMounted(async () => {
   // GSAP timeline 在 mount 后立即播放(此时 modal DOM 已就绪,可量 rect)
   playOpen()
-  await loadPost()
-  await loadComments()
+  await Promise.all([loadPost(), loadComments()])
+})
+
+onUnmounted(() => {
+  disposed = true
+  motion?.kill()
+  clearTimeout(hintTimer)
 })
 
 async function loadPost() {
@@ -199,8 +356,10 @@ async function loadPost() {
   if (!hadInitial) loading.value = true
   try {
     const fresh = await communityAPI.getPost(props.postId)
+    if (disposed) return
     post.value = fresh
   } catch (e: any) {
+    if (disposed) return
     if (!hadInitial) {
       MessagePlugin.error(e?.message || '帖子加载失败')
       close()
@@ -215,8 +374,10 @@ async function loadComments() {
   commentsLoading.value = true
   try {
     const res = await communityAPI.listComments(props.postId, 1, 100)
+    if (disposed) return
     comments.value = res.items
   } catch (e: any) {
+    if (disposed) return
     MessagePlugin.error(e?.message || '评论加载失败')
   } finally {
     commentsLoading.value = false
@@ -279,9 +440,7 @@ interface ReplyTarget {
 const replyTarget = ref<ReplyTarget | null>(null)
 
 /** 按 parentId 分组,模板里渲染嵌套 */
-const rootComments = computed<CommunityComment[]>(() =>
-  comments.value.filter((c) => !c.parentId)
-)
+const rootComments = computed<CommunityComment[]>(() => comments.value.filter((c) => !c.parentId))
 const repliesByParent = computed<Record<string, CommunityComment[]>>(() => {
   const map: Record<string, CommunityComment[]> = {}
   for (const c of comments.value) {
@@ -481,11 +640,6 @@ const attSongLiked = ref(false)
 const attLikeBusy = ref(false)
 
 const att = computed(() => post.value?.attachment || null)
-const attCoverUrl = computed(() => {
-  const a = att.value
-  if (!a) return ''
-  return a.type === 'song' ? (a.song?.img as string) || '' : a.cover || ''
-})
 
 /** 确保"我的喜欢"本地歌单存在 —— 返回其 id */
 async function ensureFavoritesId(): Promise<string | null> {
@@ -497,9 +651,7 @@ async function ensureFavoritesId(): Promise<string | null> {
     }
     const search = await songListAPI.search('我的喜欢', 'local')
     if (search.success && Array.isArray(search.data)) {
-      const exact = search.data.find(
-        (pl: any) => pl.name === '我的喜欢' && pl.source === 'local'
-      )
+      const exact = search.data.find((pl: any) => pl.name === '我的喜欢' && pl.source === 'local')
       if (exact?.id) {
         await (window as any).api?.songList?.setFavoritesId?.(exact.id)
         return exact.id
@@ -528,17 +680,18 @@ async function refreshAttLiked() {
   if (res.success) attSongLiked.value = !!res.data
 }
 
-watch(() => att.value?.song?.songmid, () => void refreshAttLiked(), { immediate: true })
+watch(
+  () => att.value?.song?.songmid,
+  () => void refreshAttLiked(),
+  { immediate: true }
+)
 
 /** 播放: 单曲 -> 立即播放;歌单 -> 整批替换播放列表 */
 async function onAttPlay() {
   const a = att.value
   if (!a) return
   if (a.type === 'song') {
-    ;(window as any).musicEmitter?.emit(
-      'addToPlaylistAndPlay',
-      toRaw(a.song) as any
-    )
+    ;(window as any).musicEmitter?.emit('addToPlaylistAndPlay', toRaw(a.song) as any)
     MessagePlugin.success('正在播放')
   } else if (a.type === 'playlist' && a.listId) {
     try {
@@ -624,218 +777,391 @@ function formatTime(iso: string): string {
 
 <template>
   <Teleport to="body">
-    <div ref="maskEl" class="post-modal-mask" @click.self="() => close()">
-      <div ref="modalEl" class="post-modal">
-        <button class="close-btn" @click="() => close()"><CloseIcon size="22" /></button>
-
-        <div v-if="loading || !post" class="loading">加载中...</div>
-
-        <template v-else>
-          <!-- 左:图片 ——
-               直接用 <img> 而不是 LazyImage 容器,原因:
-                 · img 本身有 intrinsic size,max-width/max-height + object-fit:contain
-                   会让浏览器把 layout box 自动收缩到"实际图像视觉边界"
-                 · view-transition-name 绑在 img 上,boundingRect = 图像可见区域,
-                   与卡片侧 .cover-wrap(auto-aspect = 图像比例) 形状一致 -> morph 端点对齐
-                 · src 优先用 ossCard URL(卡片刚才已请求过,浏览器缓存命中,无加载等待),
-                   挂载瞬间就有 size,view-transition 旧快照拍到时元素已就位 -> 不闪现 -->
-          <div class="left" :class="{ 'no-img': !hasImages }">
-            <template v-if="hasImages">
-              <img class="big-img" :src="ossCard(currentImage)" :alt="post.username" />
-              <button v-if="post.images.length > 1" class="nav prev" @click="prevImage">
-                <ChevronLeftIcon size="28" />
-              </button>
-              <button v-if="post.images.length > 1" class="nav next" @click="nextImage">
-                <ChevronRightIcon size="28" />
-              </button>
-              <div v-if="post.images.length > 1" class="dots">
-                <span
-                  v-for="(_, i) in post.images"
-                  :key="i"
-                  :class="{ active: i === imageIdx }"
-                  @click="imageIdx = i"
-                />
-              </div>
-            </template>
-            <div v-else class="text-only">
-              <p>{{ post.content }}</p>
-            </div>
+    <div
+      ref="maskEl"
+      class="post-modal-mask"
+      :class="{ 'is-departing': exitDirection, 'is-arriving': pairedTransition && !exitDirection }"
+      :inert="!!exitDirection"
+      :aria-hidden="exitDirection ? true : undefined"
+      @click.self="() => close()"
+      @wheel="onWheel"
+    >
+      <div class="modal-titlebar-drag" aria-hidden="true" @click.stop />
+      <div class="post-modal-viewport" :class="{ 'is-sliding': pairedTransition }">
+        <div ref="modalEl" class="post-modal" :aria-busy="switching">
+          <button class="close-btn" aria-label="关闭详情" @click="() => close()">
+            <CloseIcon size="22" />
+          </button>
+          <div v-if="navigationHint" class="navigation-hint" role="status">
+            {{ navigationHint }}
           </div>
 
-          <!-- 右:信息 + 评论 -->
-          <div class="right">
-            <header class="author">
-              <img v-if="post.userAvatar" :src="ossAvatar(post.userAvatar)" />
-              <span v-else class="avatar-fallback">{{ initial }}</span>
-              <div class="info">
-                <div class="name">{{ post.username }}</div>
-                <div class="time">{{ formatTime(post.createdAt) }}</div>
+          <Transition name="skeleton-fade">
+            <div v-if="loading || !post" class="post-skeleton">
+              <div class="left" role="status" aria-label="正在加载笔记图片">
+                <div class="image-skeleton skeleton" />
               </div>
-            </header>
-
-            <div class="content-area">
-              <p v-if="hasImages" class="content-text">{{ post.content }}</p>
-
-              <!-- 附件:单曲走播放器卡片;歌单走简洁可点击卡片(整张点击跳转) -->
-              <template v-if="att">
-                <!-- 单曲: 播放器样式 + 操作集 -->
-                <div v-if="att.type === 'song'" class="att-player">
-                  <div class="att-cover">
-                    <img v-if="attCoverUrl" :src="ossAvatar(attCoverUrl)" />
-                    <div v-else class="att-cover-fallback">♬</div>
-                    <button class="att-cover-play" title="播放" @click="onAttPlay">
-                      <PlayCircleIcon size="32" />
-                    </button>
+              <div class="right" aria-busy="true" aria-label="正在加载笔记详情">
+                <header class="author">
+                  <span class="skeleton skeleton-avatar" />
+                  <div class="info skeleton-lines">
+                    <span class="skeleton skeleton-line name-placeholder" />
+                    <span class="skeleton skeleton-line time-placeholder" />
                   </div>
-                  <div class="att-info">
-                    <div class="att-name">{{ att.song?.name }}</div>
-                    <div class="att-sub">
-                      {{ att.song?.singer }}
-                      <template v-if="att.song?.albumName"> · {{ att.song.albumName }}</template>
-                    </div>
-                    <div class="att-actions">
-                      <button class="att-btn primary" @click="onAttPlay">
-                        <PlayCircleIcon size="14" />播放
-                      </button>
-                      <button class="att-btn" @click="onAttAddToQueue">
-                        <AddIcon size="14" />加入队列
-                      </button>
-                      <button
-                        class="att-btn"
-                        :class="{ liked: attSongLiked }"
-                        @click="onAttToggleLike"
-                      >
-                        <component :is="attSongLiked ? HeartFilledIcon : HeartIcon" size="14" />
-                        {{ attSongLiked ? '已喜欢' : '喜欢' }}
-                      </button>
+                </header>
+                <div class="content-area">
+                  <div class="skeleton-summary skeleton-lines">
+                    <span class="skeleton skeleton-line" />
+                    <span class="skeleton skeleton-line short-line" />
+                  </div>
+                  <div class="skeleton-attachment">
+                    <span class="skeleton skeleton-cover" />
+                    <div class="skeleton-lines">
+                      <span class="skeleton skeleton-line" />
+                      <span class="skeleton skeleton-line short-line" />
+                      <span class="skeleton skeleton-line short-line" />
                     </div>
                   </div>
                 </div>
+                <footer class="action-bar skeleton-footer">
+                  <span class="skeleton skeleton-line skeleton-actions short-line" />
+                  <span class="skeleton skeleton-input" />
+                </footer>
+              </div>
+            </div>
+          </Transition>
 
-                <!-- 歌单: 简洁卡片,整张点击跳转到歌单详情 -->
-                <div v-else class="att-playlist" @click="openAttachmentPlaylist">
-                  <div class="att-cover playlist">
-                    <img v-if="attCoverUrl" :src="ossAvatar(attCoverUrl)" />
-                    <div v-else class="att-cover-fallback">♬</div>
-                  </div>
-                  <div class="att-info">
-                    <div class="att-name">{{ att.name }}</div>
-                    <div class="att-sub">歌单 · {{ att.songCount || 0 }} 首</div>
-                  </div>
-                  <ChevronRightIcon class="att-arrow" size="20" />
+          <template v-if="post && !loading">
+            <!-- 左侧始终保留完整图片区域，图片加载仅替换区域内的骨架。 -->
+            <div class="left detail-pane" :class="{ 'no-img': !hasImages }">
+              <template v-if="hasImages">
+                <Transition name="skeleton-fade">
+                  <div
+                    v-if="loadedImage !== currentImage && failedImage !== currentImage"
+                    class="image-skeleton skeleton"
+                    role="status"
+                    aria-label="正在加载笔记图片"
+                  />
+                </Transition>
+                <img
+                  class="image-backdrop"
+                  :src="ossCard(currentImage)"
+                  alt=""
+                  aria-hidden="true"
+                  draggable="false"
+                />
+                <img
+                  :key="currentImage"
+                  class="big-img"
+                  :src="ossCard(currentImage)"
+                  :alt="post.username"
+                  :data-image-url="currentImage"
+                  :data-cover-url="post.images.length ? undefined : currentImage"
+                  @load="loadedImage = ($event.target as HTMLImageElement).dataset.imageUrl || ''"
+                  @error="onImageError"
+                />
+                <button v-if="post.images.length > 1" class="nav prev" @click="prevImage">
+                  <ChevronLeftIcon size="28" />
+                </button>
+                <button v-if="post.images.length > 1" class="nav next" @click="nextImage">
+                  <ChevronRightIcon size="28" />
+                </button>
+                <div v-if="post.images.length > 1" class="dots">
+                  <span
+                    v-for="(_, i) in post.images"
+                    :key="i"
+                    :class="{ active: i === imageIdx }"
+                    @click="imageIdx = i"
+                  />
                 </div>
               </template>
+              <TextNoteCover v-else :seed="post.id" :content="post.content" expanded />
+            </div>
 
-              <!-- 评论列表 —— 两级回复 -->
-              <section class="comments">
-                <h4>评论 {{ post.commentCount }}</h4>
-                <div v-if="commentsLoading" class="empty">加载中...</div>
-                <div v-else-if="rootComments.length === 0" class="empty">
-                  还没有评论,说说你的看法
+            <!-- 右:信息 + 评论 -->
+            <div class="right detail-pane">
+              <header class="author">
+                <div class="author-avatar">
+                  <img
+                    v-if="post.userAvatar && failedAvatar !== post.userAvatar"
+                    :key="post.userAvatar"
+                    :src="ossAvatar(post.userAvatar)"
+                    :data-avatar-url="post.userAvatar"
+                    alt=""
+                    @load="
+                      loadedAvatar = ($event.target as HTMLImageElement).dataset.avatarUrl || ''
+                    "
+                    @error="
+                      failedAvatar = ($event.target as HTMLImageElement).dataset.avatarUrl || ''
+                    "
+                  />
+                  <span v-else class="avatar-fallback">{{ initial }}</span>
+                  <Transition name="skeleton-fade">
+                    <span
+                      v-if="
+                        post.userAvatar &&
+                        loadedAvatar !== post.userAvatar &&
+                        failedAvatar !== post.userAvatar
+                      "
+                      class="image-skeleton skeleton"
+                      aria-label="正在加载头像"
+                    />
+                  </Transition>
                 </div>
+                <div class="info">
+                  <div class="name">{{ post.username }}</div>
+                  <div class="time">{{ formatTime(post.createdAt) }}</div>
+                </div>
+              </header>
 
-                <div v-for="c in rootComments" :key="c.id" class="comment">
-                  <img v-if="c.userAvatar" :src="ossAvatar(c.userAvatar)" class="c-avatar" />
-                  <span v-else class="c-avatar-fallback">{{
-                    (c.username || '?').slice(0, 1)
-                  }}</span>
-                  <div class="c-body">
-                    <div class="c-name">
-                      {{ c.username }}
-                      <span class="c-time">{{ formatTime(c.createdAt) }}</span>
-                    </div>
-                    <div class="c-text">{{ c.content }}</div>
-                    <div class="c-actions">
-                      <button class="c-like" :class="{ liked: c.liked }" @click="toggleCommentLike(c)">
-                        <component :is="c.liked ? HeartFilledIcon : HeartIcon" size="13" />
-                        <span v-if="c.likeCount">{{ c.likeCount }}</span>
-                      </button>
-                      <button class="c-reply" @click="startReply(c)">回复</button>
-                      <button
-                        v-if="(userStore as any)?.userInfo?.uid === c.userId || (userStore as any)?.userInfo?.userId === c.userId"
-                        class="c-del-inline"
-                        @click="deleteComment(c)"
-                      >
-                        删除
-                      </button>
-                    </div>
+              <div class="content-area">
+                <p v-if="post.images.length || att" class="content-text">{{ post.content }}</p>
 
-                    <!-- 二级回复列表 -->
-                    <div v-if="repliesByParent[c.id]?.length" class="replies">
-                      <div v-for="r in repliesByParent[c.id]" :key="r.id" class="reply">
-                        <img
-                          v-if="r.userAvatar"
-                          :src="ossAvatar(r.userAvatar)"
-                          class="c-avatar small"
+                <!-- 附件:单曲走播放器卡片;歌单走简洁可点击卡片(整张点击跳转) -->
+                <template v-if="att">
+                  <!-- 单曲: 播放器样式 + 操作集 -->
+                  <div v-if="att.type === 'song'" class="att-player">
+                    <div class="att-cover">
+                      <img
+                        v-if="attCoverUrl"
+                        :key="attCoverUrl"
+                        :src="ossAvatar(attCoverUrl)"
+                        :data-cover-url="attCoverUrl"
+                        @load="
+                          loadedAttachmentCover =
+                            ($event.target as HTMLImageElement).dataset.coverUrl || ''
+                        "
+                        @error="onImageError"
+                      />
+                      <div v-else class="att-cover-fallback">♬</div>
+                      <Transition name="skeleton-fade">
+                        <span
+                          v-if="attCoverUrl && loadedAttachmentCover !== attCoverUrl"
+                          class="image-skeleton skeleton"
+                          aria-label="正在加载歌曲封面"
                         />
-                        <span v-else class="c-avatar-fallback small">{{
-                          (r.username || '?').slice(0, 1)
-                        }}</span>
-                        <div class="c-body">
-                          <div class="c-name">
-                            {{ r.username }}
-                            <template v-if="r.replyToUsername">
-                              <span class="reply-to"> 回复 @{{ r.replyToUsername }}</span>
-                            </template>
-                            <span class="c-time">{{ formatTime(r.createdAt) }}</span>
-                          </div>
-                          <div class="c-text">{{ r.content }}</div>
-                          <div class="c-actions">
-                            <button class="c-like" :class="{ liked: r.liked }" @click="toggleCommentLike(r)">
-                              <component :is="r.liked ? HeartFilledIcon : HeartIcon" size="13" />
-                              <span v-if="r.likeCount">{{ r.likeCount }}</span>
-                            </button>
-                            <button class="c-reply" @click="startReply(r)">回复</button>
-                            <button
-                              v-if="(userStore as any)?.userInfo?.uid === r.userId || (userStore as any)?.userInfo?.userId === r.userId"
-                              class="c-del-inline"
-                              @click="deleteComment(r)"
-                            >
-                              删除
-                            </button>
-                          </div>
-                        </div>
+                      </Transition>
+                      <button class="att-cover-play" title="播放" @click="onAttPlay">
+                        <PlayCircleIcon size="32" />
+                      </button>
+                    </div>
+                    <div class="att-info">
+                      <div class="att-name">{{ att.song?.name }}</div>
+                      <div class="att-sub">
+                        {{ att.song?.singer }}
+                        <template v-if="att.song?.albumName"> · {{ att.song.albumName }}</template>
+                      </div>
+                      <div class="att-actions">
+                        <button class="att-btn primary" @click="onAttPlay">
+                          <PlayCircleIcon size="14" />播放
+                        </button>
+                        <button class="att-btn" @click="onAttAddToQueue">
+                          <AddIcon size="14" />加入队列
+                        </button>
+                        <button
+                          class="att-btn like-button"
+                          :class="{ liked: attSongLiked }"
+                          @click="onAttToggleLike"
+                        >
+                          <component :is="attSongLiked ? HeartFilledIcon : HeartIcon" size="14" />
+                          {{ attSongLiked ? '已喜欢' : '喜欢' }}
+                        </button>
                       </div>
                     </div>
                   </div>
-                </div>
-              </section>
-            </div>
 
-            <footer class="action-bar">
-              <div class="actions-left">
-                <button class="action" @click="onLike">
-                  <component :is="post.liked ? HeartFilledIcon : HeartIcon" size="20" :class="{ liked: post.liked }" />
-                  <span>{{ post.likeCount }}</span>
-                </button>
-                <div class="action stat-only">
-                  <ChatIcon size="20" />
-                  <span>{{ post.commentCount }}</span>
+                  <!-- 歌单: 简洁卡片,整张点击跳转到歌单详情 -->
+                  <div v-else class="att-playlist" @click="openAttachmentPlaylist">
+                    <div class="att-cover playlist">
+                      <img
+                        v-if="attCoverUrl"
+                        :key="attCoverUrl"
+                        :src="ossAvatar(attCoverUrl)"
+                        :data-cover-url="attCoverUrl"
+                        @load="
+                          loadedAttachmentCover =
+                            ($event.target as HTMLImageElement).dataset.coverUrl || ''
+                        "
+                        @error="onImageError"
+                      />
+                      <div v-else class="att-cover-fallback">♬</div>
+                      <Transition name="skeleton-fade">
+                        <span
+                          v-if="attCoverUrl && loadedAttachmentCover !== attCoverUrl"
+                          class="image-skeleton skeleton"
+                          aria-label="正在加载歌单封面"
+                        />
+                      </Transition>
+                    </div>
+                    <div class="att-info">
+                      <div class="att-name">{{ att.name }}</div>
+                      <div class="att-sub">歌单 · {{ att.songCount || 0 }} 首</div>
+                    </div>
+                    <ChevronRightIcon class="att-arrow" size="20" />
+                  </div>
+                </template>
+
+                <!-- 评论列表 —— 两级回复 -->
+                <section class="comments" :aria-busy="commentsLoading">
+                  <h4>评论 {{ post.commentCount }}</h4>
+                  <div class="comments-body">
+                    <Transition name="skeleton-fade">
+                      <div
+                        v-if="commentsLoading && !rootComments.length"
+                        class="comments-skeleton"
+                        role="status"
+                        aria-label="正在加载评论"
+                      >
+                        <div v-for="row in 3" :key="row" class="skeleton-comment">
+                          <span class="skeleton skeleton-avatar" />
+                          <div class="skeleton-lines">
+                            <span class="skeleton skeleton-line name-placeholder" />
+                            <span class="skeleton skeleton-line" />
+                            <span class="skeleton skeleton-line short-line" />
+                          </div>
+                        </div>
+                      </div>
+                    </Transition>
+                    <Transition name="skeleton-fade">
+                      <div v-if="!commentsLoading || rootComments.length" class="comments-content">
+                        <div v-if="rootComments.length === 0" class="empty">
+                          还没有评论,说说你的看法
+                        </div>
+
+                        <div v-for="c in rootComments" :key="c.id" class="comment">
+                          <img
+                            v-if="c.userAvatar"
+                            :src="ossAvatar(c.userAvatar)"
+                            class="c-avatar"
+                          />
+                          <span v-else class="c-avatar-fallback">{{
+                            (c.username || '?').slice(0, 1)
+                          }}</span>
+                          <div class="c-body">
+                            <div class="c-name">
+                              {{ c.username }}
+                              <span class="c-time">{{ formatTime(c.createdAt) }}</span>
+                            </div>
+                            <div class="c-text">{{ c.content }}</div>
+                            <div class="c-actions">
+                              <button
+                                class="c-like"
+                                :class="{ liked: c.liked }"
+                                @click="toggleCommentLike(c)"
+                              >
+                                <component :is="c.liked ? HeartFilledIcon : HeartIcon" size="13" />
+                                <span v-if="c.likeCount">{{ c.likeCount }}</span>
+                              </button>
+                              <button class="c-reply" @click="startReply(c)">回复</button>
+                              <button
+                                v-if="
+                                  (userStore as any)?.userInfo?.uid === c.userId ||
+                                  (userStore as any)?.userInfo?.userId === c.userId
+                                "
+                                class="c-del-inline"
+                                @click="deleteComment(c)"
+                              >
+                                删除
+                              </button>
+                            </div>
+
+                            <!-- 二级回复列表 -->
+                            <div v-if="repliesByParent[c.id]?.length" class="replies">
+                              <div v-for="r in repliesByParent[c.id]" :key="r.id" class="reply">
+                                <img
+                                  v-if="r.userAvatar"
+                                  :src="ossAvatar(r.userAvatar)"
+                                  class="c-avatar small"
+                                />
+                                <span v-else class="c-avatar-fallback small">{{
+                                  (r.username || '?').slice(0, 1)
+                                }}</span>
+                                <div class="c-body">
+                                  <div class="c-name">
+                                    {{ r.username }}
+                                    <template v-if="r.replyToUsername">
+                                      <span class="reply-to"> 回复 @{{ r.replyToUsername }}</span>
+                                    </template>
+                                    <span class="c-time">{{ formatTime(r.createdAt) }}</span>
+                                  </div>
+                                  <div class="c-text">{{ r.content }}</div>
+                                  <div class="c-actions">
+                                    <button
+                                      class="c-like"
+                                      :class="{ liked: r.liked }"
+                                      @click="toggleCommentLike(r)"
+                                    >
+                                      <component
+                                        :is="r.liked ? HeartFilledIcon : HeartIcon"
+                                        size="13"
+                                      />
+                                      <span v-if="r.likeCount">{{ r.likeCount }}</span>
+                                    </button>
+                                    <button class="c-reply" @click="startReply(r)">回复</button>
+                                    <button
+                                      v-if="
+                                        (userStore as any)?.userInfo?.uid === r.userId ||
+                                        (userStore as any)?.userInfo?.userId === r.userId
+                                      "
+                                      class="c-del-inline"
+                                      @click="deleteComment(r)"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </Transition>
+                  </div>
+                </section>
+              </div>
+
+              <footer class="action-bar">
+                <div class="actions-left">
+                  <button class="action" @click="onLike">
+                    <component
+                      :is="post.liked ? HeartFilledIcon : HeartIcon"
+                      size="20"
+                      :class="{ liked: post.liked }"
+                    />
+                    <span>{{ post.likeCount }}</span>
+                  </button>
+                  <div class="action stat-only">
+                    <ChatIcon size="20" />
+                    <span>{{ post.commentCount }}</span>
+                  </div>
+                  <button class="action" @click="onReport"><ErrorCircleIcon size="18" /></button>
+                  <button v-if="isAuthor" class="action danger" @click="onDelete">
+                    <DeleteIcon size="18" />
+                  </button>
                 </div>
-                <button class="action" @click="onReport"><ErrorCircleIcon size="18" /></button>
-                <button v-if="isAuthor" class="action danger" @click="onDelete">
-                  <DeleteIcon size="18" />
-                </button>
-              </div>
-              <!-- 回复目标提示条 -->
-              <div v-if="replyTarget" class="reply-hint">
-                回复 <strong>@{{ replyTarget.username }}</strong>
-                <button class="reply-cancel" @click="cancelReply">✕</button>
-              </div>
-              <div class="comment-input">
-                <input
-                  v-model="commentInput"
-                  :placeholder="replyTarget ? `回复 @${replyTarget.username}` : '说点什么...'"
-                  maxlength="300"
-                  @keydown.enter="submitComment"
-                />
-                <button :disabled="!commentInput.trim() || submittingComment" @click="submitComment">
-                  发送
-                </button>
-              </div>
-            </footer>
-          </div>
-        </template>
+                <!-- 回复目标提示条 -->
+                <div v-if="replyTarget" class="reply-hint">
+                  回复 <strong>@{{ replyTarget.username }}</strong>
+                  <button class="reply-cancel" @click="cancelReply">✕</button>
+                </div>
+                <div class="comment-input">
+                  <input
+                    v-model="commentInput"
+                    :placeholder="replyTarget ? `回复 @${replyTarget.username}` : '说点什么...'"
+                    maxlength="300"
+                    @keydown.enter="submitComment"
+                  />
+                  <button
+                    :disabled="!commentInput.trim() || submittingComment"
+                    @click="submitComment"
+                  >
+                    发送
+                  </button>
+                </div>
+              </footer>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -865,6 +1191,8 @@ function formatTime(iso: string): string {
 
 <style scoped lang="scss">
 .post-modal-mask {
+  --post-modal-height: min(720px, 88vh);
+  -webkit-app-region: no-drag;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.75);
@@ -872,20 +1200,65 @@ function formatTime(iso: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
+
+  &.is-arriving {
+    background: transparent;
+    z-index: 2001;
+  }
+  &.is-departing {
+    pointer-events: none;
+  }
+}
+
+// 只让弹窗上方的空白条拖动窗口，不与弹窗或关闭按钮相交。
+.modal-titlebar-drag {
+  -webkit-app-region: drag;
+  position: absolute;
+  inset: 0 0 auto;
+  height: max(0px, min(52px, calc((100vh - var(--post-modal-height)) / 2 - 4px)));
+}
+
+.post-modal-viewport {
+  width: min(1100px, 92vw);
+  height: var(--post-modal-height);
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+
+  &.is-sliding {
+    overflow: hidden;
+  }
 }
 
 .post-modal {
+  -webkit-app-region: no-drag;
   background: var(--td-bg-color-container, #fff);
   border-radius: 12px;
-  width: min(1100px, 92vw);
-  height: min(720px, 88vh);
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   display: flex;
   position: relative;
+  z-index: 1;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
+.navigation-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+  z-index: 5;
+}
+
 .close-btn {
+  -webkit-app-region: no-drag;
   position: absolute;
   top: 12px;
   right: 12px;
@@ -902,46 +1275,171 @@ function formatTime(iso: string): string {
   justify-content: center;
 }
 
-.loading {
+.post-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  background: var(--td-bg-color-container, #fff);
+  pointer-events: none;
+}
+.skeleton-fade-enter-active,
+.skeleton-fade-leave-active {
+  transition: opacity 240ms ease;
+}
+.skeleton-fade-enter-from,
+.skeleton-fade-leave-to {
+  opacity: 0;
+}
+.detail-pane {
+  animation: detail-reveal 240ms ease both;
+}
+.comments-body {
+  position: relative;
+}
+.comments-skeleton.skeleton-fade-leave-active {
+  position: absolute;
+  inset: 0 0 auto;
+  pointer-events: none;
+}
+@keyframes detail-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--td-bg-color-component, #ededed) 25%,
+    var(--td-bg-color-secondarycontainer, #f7f7f7) 50%,
+    var(--td-bg-color-component, #ededed) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+.skeleton-line {
+  display: block;
+  height: 14px;
+  border-radius: 5px;
+  width: 100%;
+}
+.skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   flex: 1;
+  min-width: 0;
+}
+.name-placeholder {
+  width: 96px;
+}
+.time-placeholder {
+  width: 64px;
+  height: 12px;
+}
+.short-line {
+  width: 60%;
+}
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.skeleton-summary {
+  padding: 4px 0 16px;
+}
+.skeleton-attachment {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-secondary, #888);
+  gap: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--td-bg-color-secondarycontainer, #f7f7f7);
+}
+.skeleton-cover {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.skeleton-comment {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0 18px;
+}
+.skeleton-comment .skeleton-avatar {
+  width: 32px;
+  height: 32px;
+}
+.skeleton-input {
+  display: block;
+  height: 36px;
+  border-radius: 18px;
+}
+.skeleton-actions {
+  height: 28px;
+}
+.image-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-fade-enter-active,
+  .skeleton-fade-leave-active {
+    transition: none;
+  }
+  .skeleton,
+  .detail-pane {
+    animation: none;
+  }
 }
 
 .left {
   flex: 1.4;
-  background: #000;
+  background: var(--td-bg-color-secondarycontainer, #e8e8ed);
   position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
   overflow: hidden;
 
+  .image-backdrop {
+    position: absolute;
+    inset: -100px;
+    width: calc(100% + 200px);
+    height: calc(100% + 200px);
+    object-fit: cover;
+    filter: blur(64px) brightness(0.8);
+    opacity: 0.85;
+    pointer-events: none;
+    user-select: none;
+    z-index: -1;
+  }
+
   .big-img {
+    width: 100%;
+    height: 100%;
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
     display: block;
-  }
-
-  &.no-img {
-    background: linear-gradient(135deg, #ff8d9e, #ffd06c);
-  }
-
-  .text-only {
-    padding: 48px;
-    color: #fff;
-    p {
-      font-size: 24px;
-      line-height: 1.6;
-      max-height: 100%;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
   }
 
   .nav {
@@ -990,18 +1488,32 @@ function formatTime(iso: string): string {
   display: flex;
   flex-direction: column;
   min-width: 340px;
+  min-height: 0;
   border-left: 1px solid var(--td-border-level-1-color, #eee);
 }
 
 .author {
+  flex-shrink: 0;
+  height: 76px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 20px;
+  padding: 16px 60px 16px 20px;
   border-bottom: 1px solid var(--td-border-level-1-color, #eee);
+
+  .author-avatar {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    overflow: hidden;
+  }
 
   img,
   .avatar-fallback {
+    flex-shrink: 0;
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -1014,7 +1526,12 @@ function formatTime(iso: string): string {
     font-weight: 600;
   }
   .info {
+    min-width: 0;
+    flex: 1;
     .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-weight: 500;
       font-size: 14px;
     }
@@ -1028,7 +1545,10 @@ function formatTime(iso: string): string {
 
 .content-area {
   flex: 1;
+  min-height: 0;
+  scrollbar-gutter: stable;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 20px;
 
   .content-text {
@@ -1058,6 +1578,7 @@ function formatTime(iso: string): string {
   }
 
   .att-cover.playlist {
+    position: relative;
     width: 48px;
     height: 48px;
     border-radius: 6px;
@@ -1115,7 +1636,8 @@ function formatTime(iso: string): string {
   background: linear-gradient(135deg, var(--td-brand-color-light), var(--td-bg-color-component));
   border-radius: 12px;
   margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);  .att-cover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  .att-cover {
     position: relative;
     width: 80px;
     height: 80px;
@@ -1198,6 +1720,11 @@ function formatTime(iso: string): string {
         font-size: 12px;
         cursor: pointer;
         transition: all 0.15s;
+
+        &.like-button {
+          min-width: 76px;
+          justify-content: center;
+        }
 
         &:hover {
           color: var(--td-brand-color);
@@ -1291,7 +1818,9 @@ function formatTime(iso: string): string {
           color: var(--td-text-color-placeholder);
           cursor: pointer;
           padding: 0;
-          &:hover { color: var(--td-text-color-secondary); }
+          &:hover {
+            color: var(--td-text-color-secondary);
+          }
         }
         .c-like {
           display: inline-flex;
@@ -1301,7 +1830,9 @@ function formatTime(iso: string): string {
             color: var(--td-brand-color, #ff2442);
           }
         }
-        .c-del-inline:hover { color: var(--td-error-color, #e34d59); }
+        .c-del-inline:hover {
+          color: var(--td-error-color, #e34d59);
+        }
       }
       /* 二级回复缩进 + 灰底 */
       .replies {
@@ -1338,6 +1869,9 @@ function formatTime(iso: string): string {
 }
 
 .action-bar {
+  flex-shrink: 0;
+  min-height: 99px;
+  box-sizing: border-box;
   border-top: 1px solid var(--td-border-level-1-color, #eee);
   padding: 12px 16px;
   display: flex;
@@ -1394,8 +1928,11 @@ function formatTime(iso: string): string {
   .comment-input {
     display: flex;
     gap: 8px;
+    height: 36px;
+    flex-shrink: 0;
     input {
       flex: 1;
+      min-width: 0;
       padding: 8px 12px;
       border-radius: 18px;
       border: 1px solid var(--td-border-level-2-color, #ddd);
@@ -1424,9 +1961,14 @@ function formatTime(iso: string): string {
 
 /* 窄屏自适应 */
 @media (max-width: 900px) {
+  .post-modal-mask {
+    --post-modal-height: 92vh;
+  }
+  .post-skeleton {
+    flex-direction: column;
+  }
   .post-modal {
     flex-direction: column;
-    height: 92vh;
   }
   .left {
     flex: 0 0 40%;

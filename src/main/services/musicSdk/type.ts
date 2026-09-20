@@ -1,4 +1,5 @@
 import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
+import type { LyricFileOptions } from '@common/lyricFormats'
 
 export interface sdkArg {
   source: string
@@ -99,12 +100,11 @@ export interface PlaylistDetailResult {
   info: PlaylistInfo
 }
 
-export interface TagWriteOptions {
+export interface TagWriteOptions extends LyricFileOptions {
   basicInfo?: boolean
   cover?: boolean
   lyrics?: boolean
   downloadLyrics?: boolean
-  lyricFormat?: 'lrc' | 'word-by-word'
 }
 
 export interface DownloadSingleSongArgs extends GetMusicUrlArg {
