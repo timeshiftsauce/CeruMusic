@@ -156,7 +156,7 @@ async function loadPickerLists() {
       merged.push({
         id: l.id,
         name: l.name,
-        cover: l.coverImgUrl || matchedCloud?.cover || '',
+        cover: matchedCloud?.cover || l.coverImgUrl || '',
         songCount: typeof l.songCount === 'number' ? l.songCount : 0,
         isCloud: false,
         cloudId: matchedCloud?.id,
@@ -219,6 +219,7 @@ async function pickPlaylist(idx: number) {
         })) as any
       })
       cloudId = created.id
+      cover = created.cover || ''
       preview = songs.slice(0, 3)
       total = songs.length
     } else {

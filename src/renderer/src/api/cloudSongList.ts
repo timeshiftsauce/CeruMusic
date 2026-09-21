@@ -116,7 +116,7 @@ export const cloudSongListAPI = {
     // JSON stringify songlist
     formData.append('songlist', JSON.stringify(data.songlist))
 
-    return unwrap<{ id: string; updatedAt: string }>(request.post(BASE_URL, formData))
+    return unwrap<CloudSongList>(request.post(BASE_URL, formData))
   },
 
   // 更新歌单
