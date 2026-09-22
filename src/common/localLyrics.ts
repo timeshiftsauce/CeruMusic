@@ -20,7 +20,7 @@ import { TTMLParser, TTMLGenerator, toAmllLyrics, toTTMLResult } from '@applemus
 import { DOMParser, DOMImplementation, XMLSerializer } from '@xmldom/xmldom'
 import { assertLyricsDocument, type CrLyric, type ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { lyricFormats, normalizeLyricFormat } from './lyricFormats'
-import { toPlayerLyrics } from './pluginMusic'
+import { sanitizeLyricText, toPlayerLyrics } from './pluginLyrics'
 
 const MAX_LENGTH = 2 * 1024 * 1024
 
@@ -61,7 +61,8 @@ function toDocument(
   parsed: LyricLine[],
   track: ResourceRef,
   offsetMs: number,
-  timedWords: boolean
+  timedWords: boolean,
+  structuredSources: any[] = []
 ): CrLyric | null {
   parsed = parsed
     .filter((line) => Number.isFinite(line.startTime) && line.words.some((w) => w.word.trim()))
@@ -73,6 +74,32 @@ function toDocument(
       parsed[i + 1].startTime > parsed[i].startTime ? parsed[i + 1].startTime : nextStarts[i + 1]
   }
   const lines: CrLyric['lines'] = parsed.map((line, index) => {
+    const source = structuredSources[index]
+    const alternatives = (values: any) =>
+      Array.isArray(values)
+        ? values
+            .map((value: any) => {
+              const text = sanitizeLyricText(value?.text)
+              if (!text) return undefined
+              const words = Array.isArray(value.words)
+                ? value.words
+                    .map((word: any) => ({
+                      text: sanitizeLyricText(word.text) + (word.endsWithSpace ? ' ' : ''),
+                      startTimeMs: word.startTime,
+                      endTimeMs: word.endTime
+                    }))
+                    .filter((word: any) => word.text)
+                : []
+              return {
+                ...(value.language ? { language: value.language } : {}),
+                text,
+                ...(words.length ? { words } : {})
+              }
+            })
+            .filter((value): value is NonNullable<typeof value> => value !== undefined)
+        : []
+    const translations = alternatives(source?.translations)
+    const romanizations = alternatives(source?.romanizations)
     const startTimeMs = Math.max(0, line.startTime)
     const end =
       Number.isFinite(line.endTime) && line.endTime > startTimeMs && line.endTime < 60039999
@@ -106,8 +133,14 @@ function toDocument(
       endTimeMs: Math.max(end, ...(timedWords ? words.map((word) => word.endTimeMs) : [])),
       text: words.map((word) => word.text).join(''),
       ...(timedWords ? { words } : {}),
-      ...(line.translatedLyric ? { translation: line.translatedLyric } : {}),
-      ...(line.romanLyric ? { romanization: line.romanLyric } : {}),
+      ...(sanitizeLyricText(line.translatedLyric || translations[0]?.text)
+        ? { translation: sanitizeLyricText(line.translatedLyric || translations[0]?.text) }
+        : {}),
+      ...(sanitizeLyricText(line.romanLyric || romanizations[0]?.text)
+        ? { romanization: sanitizeLyricText(line.romanLyric || romanizations[0]?.text) }
+        : {}),
+      ...(translations.length ? { translations } : {}),
+      ...(romanizations.length ? { romanizations } : {}),
       isBackground: line.isBG,
       isDuet: line.isDuet
     }
@@ -132,6 +165,7 @@ export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'
   const format = detected === 'auto' ? hint : detected
   let parsed: LyricLine[]
   let timedWords = true
+  let structuredSources: any[] = []
   switch (format) {
     case 'lrc':
     case 'enhanced-lrc':
@@ -141,9 +175,14 @@ export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'
       timedWords = /<\d+:\d+(?:\.\d+)?>|\]\s*[^\[\]\n]+\[\d+:\d+(?:\.\d+)?\]/.test(input)
       break
     }
-    case 'ttml':
-      parsed = toAmllLyrics(TTMLParser.parse(input, { domParser: xmlParser() })).lines
+    case 'ttml': {
+      const result = TTMLParser.parse(input, { domParser: xmlParser() })
+      parsed = toAmllLyrics(result).lines
+      structuredSources = result.lines.flatMap((line: any) =>
+        line.backgroundVocal ? [line, line.backgroundVocal] : [line]
+      )
       break
+    }
     case 'qrc':
       parsed = parseQrc(qrcContent(input))
       break
@@ -164,7 +203,13 @@ export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'
       return null
   }
   const offset = Number(input.match(/^\s*\[offset:([+-]?\d+)\]/im)?.[1] || 0)
-  return toDocument(parsed, track, Number.isFinite(offset) ? offset : 0, timedWords)
+  return toDocument(
+    parsed,
+    track,
+    Number.isFinite(offset) ? offset : 0,
+    timedWords,
+    structuredSources
+  )
 }
 
 /** Compatibility for callers explicitly expecting LRC only. */
@@ -191,7 +236,7 @@ export function exportBuiltinLyrics(document: CrLyric, requestedFormat?: string)
       text = stringifyEslrc(lines)
       break
     case 'ttml':
-      text = TTMLGenerator.generate(toTTMLResult(lines, []), {
+      text = TTMLGenerator.generate(toStructuredTtmlResult(document, lines), {
         domImplementation: new DOMImplementation(),
         xmlSerializer: new XMLSerializer()
       })
@@ -218,4 +263,39 @@ export function exportBuiltinLyrics(document: CrLyric, requestedFormat?: string)
     mime: 'text/plain' as const,
     extension: lyricFormats.find((item) => item.value === format)!.extension
   }
+}
+
+function toStructuredTtmlResult(
+  document: CrLyric,
+  lines: import('@applemusic-like-lyrics/core').LyricLine[]
+) {
+  const result: any = toTTMLResult(lines, [])
+  const targets = result.lines.flatMap((line: any) =>
+    line.backgroundVocal ? [line, line.backgroundVocal] : [line]
+  )
+  document.lines.forEach((line: any, index: number) => {
+    const target = targets[index]
+    if (!target) return
+    if (Array.isArray(line.translations))
+      target.translations = toTtmlAlternatives(line.translations)
+    if (Array.isArray(line.romanizations))
+      target.romanizations = toTtmlAlternatives(line.romanizations)
+  })
+  return result
+}
+
+function toTtmlAlternatives(values: any[]) {
+  return values.map((value) => ({
+    ...(value.language ? { language: value.language } : {}),
+    text: sanitizeLyricText(value.text),
+    ...(Array.isArray(value.words)
+      ? {
+          words: value.words.map((word: any) => ({
+            text: word.text,
+            startTime: word.startTimeMs,
+            endTime: word.endTimeMs
+          }))
+        }
+      : {})
+  }))
 }

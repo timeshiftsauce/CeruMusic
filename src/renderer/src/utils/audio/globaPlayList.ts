@@ -1,3 +1,4 @@
+import { songKey, selectSong, restoredSong, durationMilliseconds } from '@common/musicItem'
 import { ref, toRaw, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
@@ -120,9 +121,12 @@ const handlePlay = async () => {
   }
   if (!Audio.value.url) {
     if (list.value.length > 0) {
-      const lastId = userInfo.value.lastPlaySongId
       const target =
-        (lastId != null && list.value.find((s) => s.songmid === lastId)) || list.value[0]
+        restoredSong(
+          list.value,
+          userInfo.value,
+          useGlobalPlayStatusStore().player.songInfo as SongList
+        ) || list.value[0]
       await playSong(target)
     } else {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
@@ -130,7 +134,7 @@ const handlePlay = async () => {
     return
   }
   try {
-    if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongId) {
+    if (pendingRestorePosition > 0 && pendingRestoreSongId === userInfo.value.lastPlaySongKey) {
       if (Audio.value.audio) {
         await waitForAudioReady(Audio.value.audio)
       }
@@ -298,7 +302,7 @@ const playSong = async (
 
   // Monotonic IDs keep rapid clicks distinct, even within one millisecond.
   const requestId = ++currentPlayRequestId
-  pendingSongId = song.songmid
+  pendingSongId = songKey(song)
   pendingMetadataController?.abort()
   const metadataController = new AbortController()
   pendingMetadataController = metadataController
@@ -336,12 +340,20 @@ const playSong = async (
     }
 
     const isHistoryPlay =
-      song.songmid === userInfo.value.lastPlaySongId &&
+      songKey(song) ===
+        (userInfo.value.lastPlaySongKey ||
+          songKey(
+            restoredSong(
+              list.value,
+              userInfo.value,
+              useGlobalPlayStatusStore().player.songInfo as SongList
+            )
+          )) &&
       userInfo.value.currentTime !== undefined &&
       userInfo.value.currentTime > 0
     if (isHistoryPlay && userInfo.value.currentTime !== undefined) {
       pendingRestorePosition = userInfo.value.currentTime
-      pendingRestoreSongId = song.songmid
+      pendingRestoreSongId = songKey(song)
       userInfo.value.currentTime = 0
     } else {
       pendingRestorePosition = 0
@@ -533,6 +545,7 @@ const playSong = async (
     metadataCommitted = true
     songInfo.value = { ...song }
     userInfo.value.lastPlaySongId = song.songmid
+    userInfo.value.lastPlaySongKey = songKey(song)
     // 音频已就绪后再更新 SMTC，避免切换时空隙
     mediaSessionController.updateMetadata({
       title: song.name,
@@ -690,7 +703,7 @@ const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
 
 const shuffleOrder = ref<Array<number | string>>([])
 const buildShuffleOrder = () => {
-  const ids = list.value.map((s) => s.songmid)
+  const ids = list.value.map(songKey)
   // Fisher-Yates
   for (let i = ids.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -701,7 +714,7 @@ const buildShuffleOrder = () => {
 
 const isShuffleOrderValid = () => {
   if (shuffleOrder.value.length !== list.value.length) return false
-  const listIds = list.value.map((song) => song.songmid)
+  const listIds = list.value.map(songKey)
   const shuffleIds = new Set(shuffleOrder.value)
   return listIds.every((id) => shuffleIds.has(id))
 }
@@ -757,7 +770,7 @@ const resolveNextSong = ({
 
   if (playMode.value === PlayMode.RANDOM) {
     ensureShuffleOrder()
-    const curId = pendingSongId ?? userInfo.value.lastPlaySongId
+    const curId = pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
     let idx = shuffleOrder.value.findIndex((id) => id === curId)
     if (idx < 0) idx = -1
     let nextIdx = idx + 1
@@ -768,11 +781,21 @@ const resolveNextSong = ({
       nextIdx = 0
     }
     const nextId = shuffleOrder.value[nextIdx]
-    return list.value.find((s) => s.songmid === nextId) || null
+    return list.value.find((s) => songKey(s) === nextId) || null
   }
 
   const currentIndex = list.value.findIndex(
-    (song) => song.songmid === (pendingSongId ?? userInfo.value.lastPlaySongId)
+    (song) =>
+      songKey(song) ===
+      (pendingSongId ??
+        userInfo.value.lastPlaySongKey ??
+        songKey(
+          restoredSong(
+            list.value,
+            userInfo.value,
+            useGlobalPlayStatusStore().player.songInfo as SongList
+          )
+        ))
   )
   const nextIndex = (currentIndex + 1) % list.value.length
   return list.value[nextIndex] || null
@@ -809,7 +832,17 @@ const playPrevious = async () => {
   if (list.value.length === 0) return
   try {
     const currentIndex = list.value.findIndex(
-      (song) => song.songmid === (pendingSongId ?? userInfo.value.lastPlaySongId)
+      (song) =>
+        songKey(song) ===
+        (pendingSongId ??
+          userInfo.value.lastPlaySongKey ??
+          songKey(
+            restoredSong(
+              list.value,
+              userInfo.value,
+              useGlobalPlayStatusStore().player.songInfo as SongList
+            )
+          ))
     )
     const prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
     if (prevIndex >= 0 && prevIndex < list.value.length) {
@@ -861,7 +894,10 @@ const playNextAutoNow = async () => {
   if (list.value.length === 0) return
   try {
     if (playMode.value === PlayMode.SINGLE && userInfo.value.lastPlaySongId) {
-      const currentSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
+      const currentSong = selectSong(
+        list.value,
+        userInfo.value.lastPlaySongKey || userInfo.value.lastPlaySongId!
+      )
       if (currentSong) {
         setCurrentTime(0)
         if (Audio.value.audio) {
@@ -922,6 +958,7 @@ const seekTo = (time: number) => {
 }
 
 let playbackInstalled = false
+let playbackInitPromise: Promise<void> | null = null
 let savePositionInterval: number | null = null
 const onGlobalCtrl = (e: any) => {
   const name = e?.detail?.name
@@ -980,7 +1017,7 @@ const onGlobalCtrl = (e: any) => {
   }
 }
 
-const initPlayback = async () => {
+const installPlayback = async () => {
   // 先连接播放指令，恢复历史音频或可选 IPC 订阅不能阻断双击播放。
   initPlaylistEventListeners(localUserStore, playSong)
   if (playbackInstalled) return
@@ -1007,7 +1044,7 @@ const initPlayback = async () => {
 
   unsubscribeRestorePosition = controlAudio.subscribe('canplay', () => {
     if (
-      pendingRestoreSongId !== userInfo.value.lastPlaySongId ||
+      pendingRestoreSongId !== userInfo.value.lastPlaySongKey ||
       pendingRestorePosition <= 0 ||
       !Audio.value.audio
     )
@@ -1087,16 +1124,24 @@ const initPlayback = async () => {
     }
   }, 1000)
 
-  if (userInfo.value.lastPlaySongId && list.value.length > 0) {
+  {
     const restoreSelection = selectionSequence
-    const lastPlayedSong = list.value.find((song) => song.songmid === userInfo.value.lastPlaySongId)
+    const lastPlayedSong = restoredSong(
+      list.value,
+      userInfo.value,
+      useGlobalPlayStatusStore().player.songInfo as SongList
+    )
     if (lastPlayedSong) {
-      // UI 立即更新
+      // Resolve old scalar selections before asynchronous plugin work.
+      userInfo.value.lastPlaySongId = lastPlayedSong.songmid
+      userInfo.value.lastPlaySongKey = songKey(lastPlayedSong)
       songInfo.value = { ...lastPlayedSong }
       if (!Audio.value.isPlay) {
         const savedPosition = Math.max(0, Number(userInfo.value.currentTime) || 0)
+        Audio.value.currentTime = savedPosition
+        Audio.value.duration = durationMilliseconds(lastPlayedSong.interval) / 1000
         pendingRestorePosition = savedPosition
-        pendingRestoreSongId = lastPlayedSong.songmid
+        pendingRestoreSongId = songKey(lastPlayedSong)
         try {
           console.log('initPlayback', lastPlayedSong)
           const url = await getSongRealUrl(toRaw(lastPlayedSong))
@@ -1137,6 +1182,19 @@ const initPlayback = async () => {
         }
       }
     }
+  }
+}
+
+// Welcome and App can both request startup during the route transition. Keep
+// initialization single-flight so playlist listeners are registered once.
+const initPlayback = async () => {
+  if (playbackInitPromise) return playbackInitPromise
+  if (playbackInstalled) return
+  playbackInitPromise = installPlayback()
+  try {
+    await playbackInitPromise
+  } finally {
+    playbackInitPromise = null
   }
 }
 window.addEventListener('global-music-control', onGlobalCtrl)

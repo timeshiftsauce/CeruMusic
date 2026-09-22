@@ -111,19 +111,9 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         shell: bash
         run: |
-          npm i -g yarn
+          npm i -g yarn@1.22.22
 
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            mkdir -p .fake-bin
-            echo '@echo off' > .fake-bin/npx.cmd
-            echo 'echo "Fake npx called"' >> .fake-bin/npx.cmd
-            export PATH="$PWD/.fake-bin:$PATH"
-          fi
-
-          yarn install --frozen-lockfile --ignore-scripts
-
-          node node_modules/electron/install.js
-          node scripts/prepare-native-modules.mjs
+          yarn run setup
 
       - name: Build Electron App for Windows
         if: steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest'

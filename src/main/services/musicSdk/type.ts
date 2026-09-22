@@ -13,22 +13,8 @@ export interface SearchArg {
 }
 
 // 单首歌曲的类型定义
-export interface MusicItem {
-  pluginResource?: ResourceRef
-  hash?: string
-  singer: string
-  name: string
-  albumName: string
-  albumId: number | string
-  source: string
-  interval: string
-  songmid: number | string
-  img: string
-  lrc: null | string
-  types?: string[]
-  _types?: Record<string, any>
-  typeUrl?: Record<string, any>
-}
+export type { MusicItem } from '@common/musicItem'
+import type { MusicItem } from '@common/musicItem'
 
 // 搜索结果的类型定义
 export interface SearchResult {
@@ -40,7 +26,7 @@ export interface SearchResult {
 }
 
 export interface GetMusicUrlArg {
-  pluginId: string
+  pluginId?: string
   songInfo: MusicItem
   quality: string
   isCache?: boolean

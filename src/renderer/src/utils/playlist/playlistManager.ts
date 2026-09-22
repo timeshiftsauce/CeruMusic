@@ -1,3 +1,4 @@
+import { normalizeMusicItem, sameSong, restoredSong } from '@common/musicItem'
 import mitt, { type Emitter } from 'mitt'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { SongList } from '@renderer/types/audio'
@@ -150,9 +151,8 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     quality = calculateBestQuality(song.types, quality, order) || order.at(-1) || quality
 
     console.log(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)
-    if (!LocalUserDetail.userSource.pluginId) throw new Error('插件都不配就想播放，想的倒挺美呢')
     const urlData = await window.api.music.requestSdk('getMusicUrl', {
-      pluginId: LocalUserDetail.userSource.pluginId,
+      pluginId: song.pluginResource?.pluginId || LocalUserDetail.userSource.pluginId,
       source: song.source,
       songInfo: song as any,
       quality,
@@ -195,26 +195,27 @@ export async function addToPlaylistAndPlay(
   /* 一起听 host/admin:先 ctl:queue-add 让 server 增量入队,广播 QUEUE_UPDATE 同步给
    * 所有成员;不阻塞后续 playSong 切歌流程(切歌走 ctl:change-song 单独的命令)。 */
   void tryAddToQueueAsHost(song)
-  if (!localUserStore.userSource.pluginId && song.source !== 'local' && !(song as any).url) {
+  if (
+    !localUserStore.userSource.pluginId &&
+    !song.pluginResource?.pluginId &&
+    song.source !== 'local' &&
+    !(song as any).url
+  ) {
     MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
     return
   }
   try {
     // 获取当前正在播放的歌曲索引
-    const currentId = localUserStore.userInfo?.lastPlaySongId
-    const currentIndex =
-      currentId !== undefined && currentId !== null
-        ? localUserStore.list.findIndex((item: SongList) => item.songmid === currentId)
-        : -1
+    song = normalizeMusicItem(song)
+    const current = restoredSong(localUserStore.list, localUserStore.userInfo)
 
     // 如果目标歌曲已在列表中，先移除以避免重复
-    const existingIndex = localUserStore.list.findIndex(
-      (item: SongList) => item.songmid === song.songmid
-    )
+    const existingIndex = localUserStore.list.findIndex((item: SongList) => sameSong(item, song))
     if (existingIndex !== -1) {
       localUserStore.list.splice(existingIndex, 1)
     }
 
+    const currentIndex = localUserStore.list.findIndex((item: SongList) => sameSong(item, current))
     if (currentIndex !== -1) {
       // 正在播放：插入到当前歌曲的下一首
       localUserStore.list.splice(currentIndex + 1, 0, song)
@@ -251,9 +252,7 @@ export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
   void tryAddToQueueAsHost(song)
   try {
     // 检查歌曲是否已在播放列表中
-    const existingIndex = localUserStore.list.findIndex(
-      (item: SongList) => item.songmid === song.songmid
-    )
+    const existingIndex = localUserStore.list.findIndex((item: SongList) => sameSong(item, song))
 
     if (existingIndex !== -1) {
       await MessagePlugin.warning('歌曲已在播放列表中')

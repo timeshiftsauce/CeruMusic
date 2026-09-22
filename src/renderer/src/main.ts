@@ -52,5 +52,10 @@ watch(
 )
 // router
 app.use(router)
+// Read-only preflight; the in-app prompt waits until the welcome page has exited.
+if (!/^#\/(?:desktop-lyric|recognition-worker)(?:\/|$)/.test(location.hash)) {
+  const { inspectMusicDataAtStartup } = await import('./services/musicDataRepair')
+  await inspectMusicDataAtStartup()
+}
 // app
 app.mount('#app')

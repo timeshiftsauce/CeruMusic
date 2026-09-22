@@ -1,3 +1,4 @@
+import { getPlaylistDatabase } from '../services/songList/PlaylistDatabase'
 import { ipcMain } from 'electron'
 import ManageSongList, { SongListError } from '../services/songList/ManageSongList'
 import type { SongList, Songs } from '@common/types/songList'
@@ -441,5 +442,16 @@ ipcMain.handle('songlist:force-save', async (_, hashId: string) => {
       error: message,
       code: error instanceof SongListError ? error.code : 'UNKNOWN_ERROR'
     }
+  }
+})
+
+ipcMain.handle('songlist:replace-songs', (_, id: string, songs: any[]) => {
+  try {
+    const db = getPlaylistDatabase()
+    if (!db.playlistExists(id)) throw new Error('歌单不存在')
+    db.replaceSongs(id, songs)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
   }
 })

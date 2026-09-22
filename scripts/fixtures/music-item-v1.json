@@ -1,0 +1,20 @@
+{
+  "songmid": "004VR0Hn3bkqqE",
+  "hash": "",
+  "name": "可爱女人",
+  "singer": "周杰伦",
+  "albumName": "Jay",
+  "albumId": "000f01724fd7TH",
+  "source": "tx",
+  "interval": "03:59",
+  "img": "https://y.gtimg.cn/music/photo_new/T002R500x500M000000f01724fd7TH.jpg",
+  "lrc": null,
+  "types": [
+    { "type": "128k", "size": "3.65 MB" },
+    { "type": "320k", "size": "9.12 MB" },
+    { "type": "flac", "size": "26.42 MB" }
+  ],
+  "_types": {},
+  "typeUrl": {},
+  "pos": 1250
+}

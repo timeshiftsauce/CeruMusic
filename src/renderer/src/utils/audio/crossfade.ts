@@ -1,3 +1,4 @@
+import { songKey } from '@common/musicItem'
 import { reactive, toRaw } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { usePlaySettingStore } from '@renderer/store'
@@ -499,6 +500,7 @@ const beginCrossfade = async () => {
   // lastPlaySongId 同步更新以驱动歌词获取（GlobalPlayStatus 通过 watch songId 拉取歌词）。
   try {
     localUserStore.userInfo.lastPlaySongId = nextSong.songmid as any
+    localUserStore.userInfo.lastPlaySongKey = songKey(nextSong)
   } catch {}
   try {
     globalPlayStatus.commitPrepared(prepared)

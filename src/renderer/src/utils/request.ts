@@ -97,18 +97,30 @@ export class Request {
     }
 
     console.error('Request Error:', error)
-    throw new Error(message)
+    throw Object.assign(new Error(message), { status })
   }
 
   // 核心请求方法
-  async request<T = any>(config: AxiosRequestConfig, returnRaw = false): Promise<T | any> {
+  async request<T = any>(
+    config: AxiosRequestConfig,
+    returnRaw = false,
+    authMode: 'required' | 'optional' = 'required'
+  ): Promise<T | any> {
     const authStore = await import('@renderer/store').then((m) => m.useAuthStore())
-    if (!authStore.isAuthenticated) {
+    if (authMode === 'required' && !authStore.isAuthenticated) {
       MessagePlugin.warning('未登录，请先登录')
       throw new Error('未登录，请先登录')
     }
-    // 1. 获取 Token
-    const token = await this.getAccessToken()
+    // 只读公开接口允许匿名访问；登录时仍带上 Token,保留个性化字段(如 liked)。
+    let token: string | undefined
+    if (authStore.isAuthenticated) {
+      try {
+        token = await this.getAccessToken()
+      } catch (error) {
+        if (authMode === 'required') throw error
+        console.warn('Optional auth unavailable, continuing anonymously:', error)
+      }
+    }
 
     try {
       // 2. 组装配置
@@ -117,7 +129,7 @@ export class Request {
 
         headers: {
           ...config.headers,
-          Authorization: `Bearer ${token}`
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       }
       /* dev 切换:从 config.json 的 baseUrl 列表里查 url 等于 this.resource 的条目,
@@ -152,6 +164,11 @@ export class Request {
   // 便捷方法：GET
   async get<T = any>(url: string, config?: AxiosRequestConfig, returnRaw = false) {
     return this.request<T>({ ...config, method: 'GET', url }, returnRaw)
+  }
+
+  /** GET for endpoints that are readable anonymously but personalize when logged in. */
+  async getPublic<T = any>(url: string, config?: AxiosRequestConfig, returnRaw = false) {
+    return this.request<T>({ ...config, method: 'GET', url }, returnRaw, 'optional')
   }
 
   // 便捷方法：POST

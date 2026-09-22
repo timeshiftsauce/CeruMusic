@@ -158,12 +158,14 @@ let userScrollTimeoutId: ReturnType<typeof setTimeout> | null = null
 const USER_SCROLL_TIMEOUT = 3000
 
 const handleUserScroll = () => {
+  if (scrollAnimationId !== null) {
+    cancelAnimationFrame(scrollAnimationId)
+    scrollAnimationId = null
+  }
   userScrolling.value = true
   if (userScrollTimeoutId !== null) clearTimeout(userScrollTimeoutId)
   userScrollTimeoutId = setTimeout(() => {
-    userScrolling.value = false
-    userScrollTimeoutId = null
-    lyricsScroll(scrollTargetIndex.value)
+    resumeAutoScroll()
   }, USER_SCROLL_TIMEOUT)
 }
 
@@ -208,7 +210,7 @@ const lyricsScroll = (index: number) => {
   smoothScrollTo(container, targetY, 500)
 }
 
-const lrcAllLeave = () => {
+const resumeAutoScroll = () => {
   userScrolling.value = false
   if (userScrollTimeoutId !== null) {
     clearTimeout(userScrollTimeoutId)
@@ -216,6 +218,16 @@ const lrcAllLeave = () => {
   }
   lyricsScroll(scrollTargetIndex.value)
 }
+
+const lrcAllLeave = resumeAutoScroll
+
+// Recalculate the centered line after the parent view returns from a hidden
+// route. The current time may be unchanged, so the index watcher alone will
+// not run again.
+const refresh = () => {
+  nextTick(resumeAutoScroll)
+}
+defineExpose({ refresh, resumeAutoScroll })
 
 const YRC_DIM_ALPHA = 0.3
 const YRC_LINE_FADE_MS = 250

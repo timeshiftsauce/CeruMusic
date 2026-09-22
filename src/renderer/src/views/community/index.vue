@@ -13,16 +13,17 @@
  */
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon } from 'tdesign-icons-vue-next'
+import { AddIcon, ArrowUpIcon, RefreshIcon } from 'tdesign-icons-vue-next'
 import { communityAPI, type CommunityPost } from '@renderer/api/community'
 import PostCard from '@renderer/components/community/PostCard.vue'
 import PostDetailModal from '@renderer/components/community/PostDetailModal.vue'
 import NotePositionIndicator from '@renderer/components/community/NotePositionIndicator.vue'
 import PostCreateDialog from '@renderer/components/community/PostCreateDialog.vue'
+import { useAuthStore } from '@renderer/store/Auth'
 
-type Sort = 'latest' | 'recommend'
+type FeedMode = 'latest' | 'recommend' | 'mine'
 
-const sort = ref<Sort>('recommend')
+const feedMode = ref<FeedMode>('recommend')
 const posts = ref<CommunityPost[]>([])
 const page = ref(1)
 const pageSize = 20
@@ -30,6 +31,10 @@ const total = ref(0)
 const loading = ref(false)
 const noMore = ref(false)
 const showCreate = ref(false)
+const showBackToTop = ref(false)
+const authStore = useAuthStore()
+const currentUserId = computed(() => authStore.user?.sub || '')
+const likingPostIds = new Set<string>()
 const activePostId = ref<string | null>(null)
 const detailModals = ref<InstanceType<typeof PostDetailModal>[]>([])
 /**
@@ -86,6 +91,10 @@ const itemRefs = ref<HTMLElement[]>([])
 const containerWidth = ref(0)
 const containerHeight = ref(0)
 const layouts = ref<Array<{ left: number; top: number; width: number }>>([])
+const enteringPostIds = ref(new Set<string>())
+const pendingPostIds = ref(new Set<string>())
+let enteringTimer: ReturnType<typeof setTimeout> | null = null
+const LOAD_AHEAD_DISTANCE = 520
 
 const colCount = computed(() => {
   const w = containerWidth.value
@@ -152,6 +161,9 @@ onMounted(() => {
   void load(true)
 })
 onUnmounted(() => ro?.disconnect())
+onUnmounted(() => {
+  if (enteringTimer) clearTimeout(enteringTimer)
+})
 
 /* posts 变更 -> 重排;同时监听数组身份(切换排序时 length 可能不变,
  * 必须用引用变化触发) */
@@ -193,14 +205,40 @@ async function loadPage(reset = false) {
   loading.value = true
   try {
     const target = reset ? 1 : page.value
-    const res = await communityAPI.listPosts({ sort: sort.value, page: target, pageSize })
+    const res = await communityAPI.listPosts({
+      // 只有「推荐」走推荐排序;「最新」「我的」都按发布时间倒序(新的在前)
+      sort: feedMode.value === 'recommend' ? 'recommend' : 'latest',
+      userId: feedMode.value === 'mine' ? currentUserId.value || undefined : undefined,
+      page: target,
+      pageSize
+    })
     if (reset) {
       posts.value = res.items
       itemRefs.value = []
+      layouts.value = []
+      containerHeight.value = 0
+      enteringPostIds.value = new Set()
+      pendingPostIds.value = new Set()
       page.value = 2
     } else {
       const exist = new Set(posts.value.map((p) => p.id))
-      posts.value.push(...res.items.filter((p) => !exist.has(p.id)))
+      const incoming = res.items.filter((p) => !exist.has(p.id))
+      if (incoming.length) {
+        const incomingIds = new Set(incoming.map((p) => p.id))
+        pendingPostIds.value = incomingIds
+        enteringPostIds.value = new Set()
+        posts.value.push(...incoming)
+        await nextTick()
+        doRelayout()
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        pendingPostIds.value = new Set()
+        enteringPostIds.value = incomingIds
+        if (enteringTimer) clearTimeout(enteringTimer)
+        enteringTimer = setTimeout(() => {
+          enteringPostIds.value = new Set()
+          enteringTimer = null
+        }, 460)
+      }
       page.value += 1
     }
     total.value = res.total
@@ -212,19 +250,60 @@ async function loadPage(reset = false) {
   }
 }
 
-function switchSort(next: Sort) {
-  if (sort.value === next) return
-  sort.value = next
+async function switchFeed(next: FeedMode) {
+  if (feedMode.value === next) return
+  if (next === 'mine' && !currentUserId.value) {
+    MessagePlugin.warning('请先登录后查看我的笔记')
+    return
+  }
+  feedMode.value = next
   noMore.value = false
   page.value = 1
-  load(true)
+  scrollRoot.value?.scrollTo({ top: 0, behavior: 'auto' })
+  showBackToTop.value = false
+  if (pendingLoad) await pendingLoad
+  await load(true)
+}
+
+async function refreshFeed() {
+  noMore.value = false
+  page.value = 1
+  scrollRoot.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  if (pendingLoad) await pendingLoad
+  await load(true)
 }
 
 function onScroll() {
   const el = scrollRoot.value
   if (!el) return
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 280) {
+  showBackToTop.value = el.scrollTop > 360
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < LOAD_AHEAD_DISTANCE) {
     void load(false)
+  }
+}
+
+function scrollToTop() {
+  scrollRoot.value?.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+async function onPostLike(post: CommunityPost) {
+  if (likingPostIds.has(post.id)) return
+  likingPostIds.add(post.id)
+  const wasLiked = post.liked
+  post.liked = !wasLiked
+  post.likeCount += wasLiked ? -1 : 1
+  try {
+    const result = await communityAPI.toggleLike(post.id)
+    if (result.liked !== post.liked) {
+      post.liked = result.liked
+      post.likeCount += result.liked ? 1 : -1
+    }
+  } catch (error: any) {
+    post.liked = wasLiked
+    post.likeCount += wasLiked ? 1 : -1
+    MessagePlugin.error(error?.message || '操作失败')
+  } finally {
+    likingPostIds.delete(post.id)
   }
 }
 
@@ -327,14 +406,29 @@ function onPostRemoved(id: string) {
       </div>
       <div class="header-actions">
         <div class="tabs">
-          <button :class="{ active: sort === 'recommend' }" @click="switchSort('recommend')">
+          <button :class="{ active: feedMode === 'recommend' }" @click="switchFeed('recommend')">
             推荐
           </button>
-          <button :class="{ active: sort === 'latest' }" @click="switchSort('latest')">最新</button>
+          <button :class="{ active: feedMode === 'latest' }" @click="switchFeed('latest')">
+            最新
+          </button>
+          <button :class="{ active: feedMode === 'mine' }" @click="switchFeed('mine')">我的</button>
         </div>
+        <button
+          class="refresh-button"
+          :class="{ 'is-loading': loading }"
+          type="button"
+          aria-label="刷新笔记"
+          title="刷新笔记"
+          :aria-busy="loading"
+          :disabled="loading"
+          @click="refreshFeed"
+        >
+          <RefreshIcon size="17" />
+        </button>
         <t-button theme="primary" @click="showCreate = true">
-          <AddIcon size="16" />
-          <span style="margin-left: 4px">发笔记</span>
+          <template #icon><AddIcon size="16" /></template>
+          发笔记
         </t-button>
       </div>
     </div>
@@ -351,12 +445,17 @@ function onPostRemoved(id: string) {
         :key="p.id"
         :ref="(el) => setItemRef(el, i)"
         class="m-item"
+        :class="{
+          'is-entering': enteringPostIds.has(p.id),
+          'is-pending': pendingPostIds.has(p.id)
+        }"
         :style="{
           width: (layouts[i]?.width || colWidth) + 'px',
-          transform: `translate3d(${layouts[i]?.left || 0}px, ${layouts[i]?.top || 0}px, 0)`
+          transform: `translate3d(${layouts[i]?.left || 0}px, ${layouts[i]?.top || 0}px, 0)`,
+          visibility: layouts[i] && !pendingPostIds.has(p.id) ? 'visible' : 'hidden'
         }"
       >
-        <PostCard :post="p" @click="(ev) => onCardClick(p, ev)" />
+        <PostCard :post="p" @click="(ev) => onCardClick(p, ev)" @like="onPostLike(p)" />
       </div>
     </div>
 
@@ -384,6 +483,19 @@ function onPostRemoved(id: string) {
       </button>
       <p class="empty-hint">文字、照片、歌曲和歌单，都可以分享</p>
     </section>
+
+    <Transition name="back-to-top">
+      <button
+        v-if="showBackToTop"
+        class="back-to-top"
+        type="button"
+        aria-label="回到顶部"
+        title="回到顶部"
+        @click="scrollToTop"
+      >
+        <ArrowUpIcon size="19" />
+      </button>
+    </Transition>
 
     <PostCreateDialog v-model:visible="showCreate" @created="onCreated" />
     <NotePositionIndicator
@@ -497,6 +609,56 @@ function onPostRemoved(id: string) {
         }
       }
     }
+
+    .refresh-button {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid var(--td-component-stroke);
+      border-radius: 50%;
+      color: var(--td-text-color-secondary);
+      background: color-mix(in srgb, var(--td-bg-color-container) 76%, transparent);
+      cursor: pointer;
+      transition:
+        color 160ms ease,
+        border-color 160ms ease,
+        background 160ms ease,
+        transform 160ms ease;
+
+      &:hover:not(:disabled) {
+        color: var(--td-brand-color);
+        border-color: var(--td-brand-color-light);
+        background: var(--td-bg-color-container);
+        transform: rotate(20deg);
+      }
+
+      &:active:not(:disabled) {
+        transform: rotate(20deg) scale(0.92);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--td-brand-color);
+        outline-offset: 3px;
+      }
+
+      &:disabled {
+        cursor: wait;
+        opacity: 0.7;
+      }
+
+      &.is-loading :deep(svg) {
+        animation: refresh-spin 800ms linear infinite;
+      }
+    }
+  }
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -512,12 +674,85 @@ function onPostRemoved(id: string) {
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
 }
+.m-item.is-entering {
+  /* Newly appended items already render at their measured masonry position. */
+  transition: none;
+}
+.m-item.is-pending {
+  transition: none;
+}
+.m-item.is-entering :deep(.note-card) {
+  animation: note-card-rise-in 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes note-card-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 .state {
   text-align: center;
   padding: 18px 0;
   color: var(--td-text-color-placeholder);
   font-size: 13px;
+}
+
+.back-to-top {
+  position: fixed;
+  right: 28px;
+  bottom: 104px;
+  z-index: 20;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--td-component-stroke) 72%, transparent);
+  border-radius: 50%;
+  color: var(--td-text-color-primary);
+  /* 更通透的毛玻璃:底色更透明、模糊更强 */
+  background: color-mix(in srgb, var(--td-bg-color-container) 44%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 8px 24px rgb(25 31 43 / 12%);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+
+  /* 悬停只把透明度拉回原来的 68%,不再上浮 */
+  &:hover {
+    background: color-mix(in srgb, var(--td-bg-color-container) 68%, transparent);
+    box-shadow: 0 10px 26px rgb(25 31 43 / 16%);
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: 3px;
+  }
+}
+
+.back-to-top-enter-active,
+.back-to-top-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.back-to-top-enter-from,
+.back-to-top-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.86);
 }
 
 .community-empty {
@@ -718,8 +953,70 @@ function onPostRemoved(id: string) {
   .community-empty {
     animation: none;
   }
+  .m-item {
+    transition: none;
+  }
+  .m-item.is-entering :deep(.note-card) {
+    animation: none;
+  }
   .empty-create {
     transition: none;
+  }
+  .refresh-button {
+    transition: none;
+  }
+  .refresh-button.is-loading :deep(svg) {
+    animation: none;
+  }
+  .back-to-top {
+    transition: none;
+  }
+  .back-to-top-enter-active,
+  .back-to-top-leave-active {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .community-page {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    margin-right: -14px;
+    margin-left: -14px;
+    padding: 14px;
+
+    .header-left {
+      width: 100%;
+
+      h2 {
+        font-size: 1.6rem;
+      }
+    }
+
+    .header-actions {
+      width: 100%;
+      gap: 8px;
+
+      .tabs {
+        flex: 1;
+
+        button {
+          flex: 1;
+          padding-right: 10px;
+          padding-left: 10px;
+        }
+      }
+    }
+  }
+
+  .back-to-top {
+    right: 16px;
+    bottom: 88px;
   }
 }
 </style>

@@ -18,7 +18,8 @@ Guest、分享、Storage、插件更新、导入窗口、Surface 和歌单页区
 | guests.import/select/remove                         | 直接提供完整 Guest 管理签名                  |
 | GuestInfo / GuestBootstrapAPI                       | 从包根入口或 /guests 导入                    |
 | ShareResolverEntry 等分享类型                       | 从包根入口或 /share 导入                     |
-| modules.share、commands.description、Guest 展示字段 | 类型已补齐；构建器与宿主仍需支持             |
+| commands.description、Guest 展示字段                 | 类型已补齐；构建器与宿主仍需支持             |
+| modules.share 分享模块                               | 类型、issuer 校验与桌面分享导出均已支持      |
 | AccountSummary / accountItems                       | 账号胶囊摘要、可选退出动作已公开             |
 | NativeView / defineNativeView                       | 原生 page、actions、grid/list 已公开         |
 | playlistSections / navigation sectionId             | 现有“歌单”页区块与定位已公开                 |

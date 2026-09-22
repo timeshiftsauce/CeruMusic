@@ -186,7 +186,7 @@
         <div class="virtual-scroll-content" :style="{ transform: `translateY(${offsetY}px)` }">
           <div
             v-for="(song, index) in visibleItems"
-            :key="`${song.source || ''}-${song.songmid}-${song.albumId || ''}`"
+            :key="songKey(song)"
             v-observe-cover="song"
             class="song-item"
             @mouseenter="hoveredSong = song.id || song.songmid"
@@ -209,7 +209,7 @@
               <t-checkbox
                 v-if="isMultiSelect"
                 class="select-checkbox always-show"
-                :checked="selectedSet.has(song.songmid)"
+                :checked="selectedSet.has(songKey(song))"
                 @change="
                   (checked, ctx) => onRowCheckboxChange(checked as boolean, ctx as any, song)
                 "
@@ -315,6 +315,7 @@
 </template>
 
 <script setup lang="ts">
+import { songKey } from '@common/musicItem'
 import { getQualityDisplayName } from '@common/utils/quality'
 import { ref, computed, onMounted, onUnmounted, nextTick, toRaw, watch } from 'vue'
 import {
@@ -345,24 +346,7 @@ import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 
 const settingsStore = useSettingsStore()
 
-interface Song {
-  id?: number
-  songmid: number
-  singer: string
-  name: string
-  albumName: string
-  albumId: number
-  source: string
-  interval: string | number
-  img: string
-  lrc: null | string
-  types: any[]
-  _types: Record<string, any>
-  typeUrl: Record<string, any>
-  bitrate?: number
-  sampleRate?: number
-  path?: string
-}
+type Song = import('@common/musicItem').MusicItem
 
 interface Props {
   songs: Song[]
@@ -646,7 +630,7 @@ async function ensureCover(song: Song) {
   if (!props.coverLoader) return
   if ((song as any).img) return
 
-  const id = (song as any).songmid
+  const id = songKey(song)
   if (coverControllers.has(id)) return // 已经在加载中
 
   const ctrl = new AbortController()
@@ -668,7 +652,7 @@ async function ensureCover(song: Song) {
 }
 
 function abortCover(song: Song) {
-  const id = (song as any).songmid
+  const id = songKey(song)
   const ctrl = coverControllers.get(id)
   if (ctrl) {
     ctrl.abort()
@@ -827,10 +811,10 @@ const onScroll = (event: Event) => {
 
 // 多选相关
 const isMultiSelect = computed(() => props.multiSelect)
-const selectedSet = ref<Set<number>>(new Set())
+const selectedSet = ref<Set<string>>(new Set())
 const selectedSongs = computed(() => {
   const set = selectedSet.value
-  return props.songs.filter((s) => set.has(s.songmid))
+  return props.songs.filter((s) => set.has(songKey(s)))
 })
 const selectedCount = computed(() => selectedSongs.value.length)
 const selectedNonLocalSongs = computed(() =>
@@ -838,7 +822,7 @@ const selectedNonLocalSongs = computed(() =>
 )
 const selectedNonLocalCount = computed(() => selectedNonLocalSongs.value.length)
 const toggleSelect = (song: Song) => {
-  const id = song.songmid
+  const id = songKey(song)
   if (selectedSet.value.has(id)) {
     selectedSet.value.delete(id)
   } else {
@@ -851,7 +835,7 @@ const onRowCheckboxChange = (checked: boolean, context: { e?: Event } | undefine
       context.e.stopPropagation()
     }
   } catch {}
-  const id = song.songmid
+  const id = songKey(song)
   if (checked) {
     selectedSet.value.add(id)
   } else {
@@ -865,7 +849,7 @@ const toggleSelectAll = () => {
   if (isAllSelected.value) {
     selectedSet.value.clear()
   } else {
-    const all = new Set<number>(props.songs.map((s) => s.songmid))
+    const all = new Set<string>(props.songs.map(songKey))
     selectedSet.value = all
   }
 }
@@ -886,7 +870,7 @@ const removeSelected = () => {
   const list = selectedSongs.value
   if (list.length === 0) return
   emit('removeBatch', list)
-  const removeIds = new Set(list.map((s) => s.songmid))
+  const removeIds = new Set(list.map(songKey))
   selectedSet.value = new Set([...selectedSet.value].filter((id) => !removeIds.has(id)))
 }
 const addSelectedToSongList = (playlist: SongList) => {
@@ -1123,7 +1107,7 @@ const loadFavorites = async () => {
     }
     const songsRes = await songListAPI.getSongs(id)
     if (songsRes.success && Array.isArray(songsRes.data)) {
-      likedSet.value = new Set(songsRes.data.map((s: any) => s.songmid))
+      likedSet.value = new Set(songsRes.data.map(songKey))
     }
   } catch (e) {
     console.error('加载“我的喜欢”失败:', e)
@@ -1135,7 +1119,7 @@ const handlePlaylistUpdated = async () => {
   await loadFavorites()
 }
 
-const isLiked = (song: Song) => likedSet.value.has(song.songmid)
+const isLiked = (song: Song) => likedSet.value.has(songKey(song))
 
 const ensureFavoritesId = async (): Promise<string | null> => {
   if (favoritesId.value) {
@@ -1167,9 +1151,9 @@ const onToggleLike = async (song: Song) => {
     const id = await ensureFavoritesId()
     if (!id) return
     if (isLiked(song)) {
-      const removeRes = await songListAPI.removeSong(id, song.songmid)
+      const removeRes = await songListAPI.removeSong(id, songKey(song))
       if (removeRes.success && removeRes.data) {
-        likedSet.value.delete(song.songmid)
+        likedSet.value.delete(songKey(song))
         // MessagePlugin.success('已取消喜欢')
       } else {
         MessagePlugin.error(removeRes.error || '取消喜欢失败')
@@ -1177,7 +1161,7 @@ const onToggleLike = async (song: Song) => {
     } else {
       const addRes = await songListAPI.addSongs(id, [toRaw(song) as any])
       if (addRes.success) {
-        likedSet.value.add(song.songmid)
+        likedSet.value.add(songKey(song))
         // MessagePlugin.success('已添加到“我的喜欢”')
       } else {
         MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
@@ -1196,6 +1180,7 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
 
     // Cloud Only Playlist
     if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
+      if (!cloudSong) throw new Error('本地文件歌曲不能加入云端歌单')
       await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
       MessagePlugin.success(`已将"${song.name}"添加到云端歌单"${playlist.name}"`)
       return
@@ -1207,7 +1192,7 @@ const handleAddToSongList = async (song: Song, playlist: SongList) => {
       MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
 
       // 如果是已同步的本地歌单，尝试同步到云端
-      if (playlist.meta?.cloudId && playlist.meta?.isSynced) {
+      if (cloudSong && playlist.meta?.cloudId && playlist.meta?.isSynced) {
         try {
           const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
           if (res && res.updatedAt) {
@@ -1271,15 +1256,17 @@ watch(
 watch(
   () => props.songs,
   (newSongs) => {
-    const ids = new Set(newSongs.map((s) => s.songmid))
+    const ids = new Set(newSongs.map(songKey))
     selectedSet.value = new Set([...selectedSet.value].filter((id) => ids.has(id)))
   }
 )
 
 const scrollToSong = (songmid: string | number, source: string) => {
   if (!scrollContainer.value) return
-  const index = sortedSongs.value.findIndex(
-    (s) => String(s.songmid) === String(songmid) && s.source === source
+  const index = sortedSongs.value.findIndex((s) =>
+    String(songmid).startsWith('ceru-song:')
+      ? songKey(s) === songmid
+      : String(s.songmid) === String(songmid) && s.source === source
   )
   if (index === -1) return
   const targetScrollTop = index * itemHeight

@@ -26,9 +26,19 @@ ul {
 html {
   font-size: min(max(1.4vw, 15px), 18px);
 }
+
+html,
+body,
 #app {
   height: 100%;
   width: 100%;
+  min-height: 100%;
+  min-width: 100%;
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
 }
 
 .icon {
@@ -56,8 +66,6 @@ body {
     'Helvetica Neue',
     sans-serif;
   text-rendering: optimizeLegibility;
-  height: 100vh;
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

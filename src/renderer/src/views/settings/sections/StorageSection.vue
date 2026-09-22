@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openMusicDataRepair } from '@renderer/services/musicDataRepair'
 import { ref, computed } from 'vue'
 import { lyricFormats, normalizeLyricFormat, lyricFileExtension } from '@common/lyricFormats'
 import type { TagWriteOptions } from '@renderer/store/Settings'
@@ -95,6 +96,10 @@ const getTagOptionsStatus = () => {
 
 <template>
   <div class="settings-section">
+    <t-card title="旧版音乐数据" class="setting-group" style="margin-bottom: 20px">
+      <p>备份并修复歌曲、播放历史和歌单数据。</p>
+      <t-button variant="outline" @click="openMusicDataRepair">检查并修复</t-button>
+    </t-card>
     <div id="storage-directory">
       <DirectorySettings
         ref="directorySettingsRef"

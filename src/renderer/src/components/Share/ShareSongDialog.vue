@@ -232,6 +232,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, toRaw } from 'vue'
+import { normalizeMusicItem, sameSong } from '@common/musicItem'
+import { collectShareComments } from './shareComments'
 import { storeToRefs } from 'pinia'
 import { MessagePlugin } from 'tdesign-vue-next'
 import BaseDialog from '@renderer/components/BaseDialog.vue'
@@ -507,8 +509,7 @@ async function doShare() {
     const selectedSong = JSON.parse(JSON.stringify(toRaw(songInfo.value)))
     setStep(0, 'active', '导出当前音源的播放解析模块...')
     const resolver = await window.api.share.exportResolver(selectedSong.source, selectedSong)
-    const song = { ...selectedSong, ...resolver.musicInfo }
-    delete song.pluginResource
+    const song = normalizeMusicItem({ ...selectedSong, ...resolver.musicInfo })
     const preferred =
       localUserStore.userInfo.sourceQualityMap?.[song.source] ||
       localUserStore.userInfo.selectQuality
@@ -523,12 +524,22 @@ async function doShare() {
       return
     }
     setStep(0, 'done', '服务器播放解析模块已就绪')
-    setStep(1, 'active', '读取歌词...')
+    setStep(1, 'active', '读取歌词与热门评论...')
     const current = player.value.songInfo
-    let crlyric =
-      current?.songmid === song.songmid && current?.source === song.source
-        ? player.value.lyrics.crlyric
-        : undefined
+    let commentWarning = ''
+    const commentsPromise = collectShareComments(
+      song,
+      {
+        song: current,
+        comments: player.value.comments.hotList
+      },
+      (method, input) => window.api.music.requestSdk(method, input)
+    ).catch((error) => {
+      console.warn('分享热评读取失败:', error)
+      commentWarning = '热评读取失败，本次分享未包含热评'
+      return []
+    })
+    let crlyric = sameSong(current, song) ? player.value.lyrics.crlyric : undefined
     if (!crlyric) {
       try {
         crlyric = (
@@ -548,7 +559,8 @@ async function doShare() {
         /* Optional lyrics must not prevent a playable share. */
       }
     }
-    setStep(1, 'done', '元数据已就绪')
+    const hotComments = await commentsPromise
+    setStep(1, 'done', commentWarning || `元数据已就绪，已收集 ${hotComments.length} 条热评`)
     setStep(2, 'active', '创建网页分享链接...')
     const result = await shareAPI.create({
       pluginMd5: resolver.md5,
@@ -562,11 +574,13 @@ async function doShare() {
         singer: song.singer,
         source: song.source
       },
-      lyric: lyricLrc.value ? { lrc: lyricLrc.value, format: 'lrc' } : undefined
+      lyric: lyricLrc.value ? { lrc: lyricLrc.value, format: 'lrc' } : undefined,
+      hotComments
     })
     setStep(2, 'done', '分享链接已生成')
     shareResult.value = result
     setStatus('分享成功，打开链接即可在网页播放', 'success')
+    if (commentWarning) MessagePlugin.warning(commentWarning)
     void buildPoster(result)
   } catch (error: any) {
     const index = steps.value.findIndex((step) => step.state === 'active')

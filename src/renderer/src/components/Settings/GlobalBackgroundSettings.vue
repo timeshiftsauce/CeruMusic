@@ -50,10 +50,17 @@ const handleFileSelect = async () => {
 
       // Default to image if not explicitly a video
       const newType = isVideo ? 'video' : 'image'
+      const normalizedPath = path.replace(/\\/g, '/')
+      const prefix = normalizedPath.startsWith('//')
+        ? 'file:'
+        : normalizedPath.startsWith('/')
+          ? 'file://'
+          : 'file:///'
+      const encodedPath = encodeURI(normalizedPath).replace(/[?#]/g, encodeURIComponent)
 
       updateMultipleBg({
         type: newType,
-        url: `file://${path.replace(/\\/g, '/')}`
+        url: `${prefix}${encodedPath}`
       })
     }
   } catch (e) {

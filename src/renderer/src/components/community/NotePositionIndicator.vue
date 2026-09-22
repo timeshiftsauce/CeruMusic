@@ -13,9 +13,13 @@ const track = ref<HTMLElement | null>(null)
 const current = ref<HTMLElement | null>(null)
 const pill = ref<HTMLElement | null>(null)
 const STEP = 22
+/** 主位移弹簧：轻微过冲 + 缓慢收敛，手感更水灵 Q 弹 */
+const SPRING = 'elastic.out(1, 0.75)'
+/** 胶囊变形回弹更绵软 */
+const SPRING_PILL = 'elastic.out(1, 0.5)'
 let motion: gsap.core.Timeline | null = null
 
-function move(previousIndex?: number) {
+function move(previousIndex?: number, previousCount = props.count) {
   if (!current.value || !pill.value || !track.value) return
   motion?.kill()
   const y = activeSlot.value * STEP
@@ -30,30 +34,44 @@ function move(previousIndex?: number) {
   }
 
   const direction = Math.sign(props.index - previousIndex)
-  const fromY = Number(gsap.getProperty(current.value, 'y'))
+  const previousVisible = Math.min(10, previousCount)
+  const previousStart = Math.max(0, Math.min(previousIndex - 4, previousCount - previousVisible))
   motion = gsap.timeline()
-  // 先顺着方向拉长，再略微压扁，最后弹回胶囊形状。
+
+  if (start.value !== previousStart) {
+    // 超过 10 篇后窗口滑动：让点列从偏移处滚回一格（胶囊锚定不动），
+    // 视觉上像"点从胶囊下滚过"，而不是整个指示器一起平移。
+    if (direction === 0) {
+      // 列表增长导致的窗口重定位：胶囊平滑挪到新槽位，点列直接换页。
+      motion.set(track.value, { y: 0 }, 0)
+      motion.to(current.value, { y, duration: 0.5, ease: 'power2.out' }, 0)
+    } else {
+      motion.fromTo(track.value, { y: direction * STEP }, { y: 0, duration: 0.55, ease: SPRING }, 0)
+      // 胶囊保持锚定：仅在动画被打断时补齐回当前槽位，不做跟随位移。
+      motion.to(current.value, { y, duration: 0.25, ease: 'power2.out' }, 0)
+    }
+    // 胶囊被流过的点"撑"一下再弹回，作为捕获新点的反馈。
+    motion.to(pill.value, { scaleX: 0.8, scaleY: 1.35, duration: 0.16, ease: 'sine.in' }, 0)
+    motion.to(pill.value, { scaleX: 1.14, scaleY: 0.89, duration: 0.18, ease: 'sine.out' }, 0.16)
+    motion.to(pill.value, { scaleX: 1, scaleY: 1, duration: 0.5, ease: SPRING_PILL }, 0.34)
+    return
+  }
+
+  // 窗口内移动：胶囊先顺着方向拉长，再略微压扁，最后弹回胶囊形状。
+  const fromY = Number(gsap.getProperty(current.value, 'y'))
   motion.to(
     current.value,
-    { y: (fromY + y) / 2 + direction * 3, duration: 0.14, ease: 'power2.in' },
+    { y: (fromY + y) / 2 + direction * 4, duration: 0.15, ease: 'sine.in' },
     0
   )
-  motion.to(pill.value, { scaleX: 0.78, scaleY: 1.4, duration: 0.14, ease: 'power2.in' }, 0)
-  motion.to(current.value, { y, duration: 0.48, ease: 'elastic.out(1, 0.65)' }, 0.14)
-  motion.to(pill.value, { scaleX: 1.16, scaleY: 0.88, duration: 0.15, ease: 'power2.out' }, 0.14)
-  motion.to(pill.value, { scaleX: 1, scaleY: 1, duration: 0.42, ease: 'elastic.out(1, 0.5)' }, 0.29)
-  if (start.value !== Math.max(0, Math.min(previousIndex - 4, props.count - visibleCount.value))) {
-    motion.fromTo(
-      track.value,
-      { y: direction * 6 },
-      { y: 0, duration: 0.42, ease: 'power3.out' },
-      0
-    )
-  }
+  motion.to(pill.value, { scaleX: 0.8, scaleY: 1.35, duration: 0.16, ease: 'sine.in' }, 0)
+  motion.to(current.value, { y, duration: 0.55, ease: SPRING }, 0.15)
+  motion.to(pill.value, { scaleX: 1.14, scaleY: 0.89, duration: 0.18, ease: 'sine.out' }, 0.16)
+  motion.to(pill.value, { scaleX: 1, scaleY: 1, duration: 0.5, ease: SPRING_PILL }, 0.34)
 }
 
 onMounted(() => move())
-watch([() => props.index, () => props.count], (_next, previous) => move(previous[0]), {
+watch([() => props.index, () => props.count], (_next, previous) => move(previous[0], previous[1]), {
   flush: 'post'
 })
 onUnmounted(() => motion?.kill())
@@ -104,6 +122,8 @@ onUnmounted(() => motion?.kill())
 .position-track {
   display: flex;
   flex-direction: column;
+  /* 窗口滑动时点列整体位移，裁掉滚出容器的点 */
+  overflow: hidden;
 }
 .position-dot {
   display: grid;

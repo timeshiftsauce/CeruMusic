@@ -34,6 +34,8 @@ Ceru Music (澜音) is an Electron + Vue 3 + TypeScript desktop music player tha
 | -------------------------------------- | --------------------------- | ------------------------------------------------------------------------- |
 | Electron main IPC, services, windowing | `src/main/`                 | Home of download manager, plugin host, music SDK wrappers, IPC events     |
 | Renderer UI + state                    | `src/renderer/src/`         | Vue 3 + Pinia. Components auto-imported via unplugin. Entry at `main.ts`  |
+| 社区发布后的援助提示                   | `src/renderer/src/utils/communitySupport.ts` | 后端文本审核判定 `action='review'`(自伤信号)时,响应会带 `support`;发帖/编辑/评论三处发布成功后弹窗。改成 toast 就等于没提示。 |
+| 评论区顺序与分页                       | `src/renderer/src/components/community/PostDetailModal.vue` | 顺序必须跟后端:根评论**倒序**(新发的 `unshift` 到最前)、回复正序(`repliesByParent` 里再按 `createdAt` 排一次)。分页:根评论**触底自动翻页**(哨兵 + IntersectionObserver),回复**每根首屏 50 条 + 「加载更多回复 (N)」按钮**(`replyCount` 来自后端)。offset 分页 + 本地插入会漂移 → 合并时按 id 去重。 |
 | Preload bridge APIs                    | `src/preload/index.ts`      | Defines channel surface exposed to renderer, keep in sync with IPC events |
 | Shared types/utilities                 | `src/common/`, `src/types/` | Basic TS declarations reused by main + renderer                           |
 | Docs site                              | `docs/`                     | VitePress (see `.vitepress` config), high-level guides                    |

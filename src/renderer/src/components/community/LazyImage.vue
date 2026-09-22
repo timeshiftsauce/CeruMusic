@@ -12,12 +12,14 @@
  * 注: 卡片高度需要外层容器决定(aspect-ratio 或固定 height),
  *     LazyImage 内部图片是 absolute 填满,自身不会撑高度。
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
 const props = withDefaults(
   defineProps<{
     /** 清晰图 URL,通常通过 ossCard/ossDetail 处理过 */
     src: string
+    /** 清晰图处理失败时使用的原始图片 URL */
+    fallbackSrc?: string
     /** 模糊占位图;不传则不显示占位层(纯透明背景) */
     thumb?: string
     alt?: string
@@ -57,19 +59,24 @@ const rootEl = ref<HTMLElement | null>(null)
 const started = ref(props.eager)
 /** 清晰图是否加载完成 */
 const loaded = ref(false)
+const triedFallback = ref(false)
 /** autoAspect 模式: thumb 算出来的比例字符串(给 CSS aspect-ratio 用) */
 const autoAspectStyle = ref<string | null>(null)
 
 let io: IntersectionObserver | null = null
 
 onMounted(() => {
-  if (props.eager) return
+  if (props.eager) {
+    void syncCachedImage()
+    return
+  }
   if (!rootEl.value) return
   io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
         if (e.isIntersecting) {
           started.value = true
+          void syncCachedImage()
           io?.disconnect()
           io = null
           break
@@ -91,8 +98,23 @@ watch(
   () => props.src,
   () => {
     loaded.value = false
+    triedFallback.value = false
+    void syncCachedImage()
   }
 )
+
+/**
+ * Cached images can be complete before a browser dispatches a new load event.
+ * Check the DOM after Vue has rendered the real image so the thumb cannot stay
+ * visible forever just because the request was served from cache.
+ */
+async function syncCachedImage() {
+  await nextTick()
+  const img = rootEl.value?.querySelector<HTMLImageElement>('.real')
+  if (img?.complete && img.naturalWidth > 0) {
+    await revealImage(img)
+  }
+}
 
 /** 容器 inline style —— 合并 aspect-ratio + view-transition-name */
 const rootStyle = computed<Record<string, string>>(() => {
@@ -120,11 +142,34 @@ function onThumbLoad(e: Event) {
   }
 }
 
-function onImgLoad() {
-  loaded.value = true
+async function revealImage(img: HTMLImageElement, expectedSrc = props.src) {
+  try {
+    await img.decode()
+  } catch {
+    // Some browsers reject decode() for already-decoded/cached images.
+  }
+  if (
+    img.isConnected &&
+    img.naturalWidth > 0 &&
+    (img.currentSrc === expectedSrc || img.src === expectedSrc)
+  ) {
+    loaded.value = true
+  }
+}
+
+function onImgLoad(e: Event) {
+  const img = e.currentTarget as HTMLImageElement
+  void revealImage(img, img.currentSrc || props.src)
   emit('load')
 }
-function onImgError() {
+function onImgError(e: Event) {
+  const img = e.currentTarget as HTMLImageElement
+  if (props.fallbackSrc && !triedFallback.value && img.currentSrc !== props.fallbackSrc) {
+    triedFallback.value = true
+    loaded.value = false
+    img.src = props.fallbackSrc
+    return
+  }
   emit('error')
 }
 </script>
@@ -137,14 +182,7 @@ function onImgError() {
     :style="rootStyle"
   >
     <!-- 模糊占位层 —— 模糊+放大 1.1 避免边缘锯齿 -->
-    <img
-      v-if="thumb"
-      class="thumb"
-      :src="thumb"
-      alt=""
-      aria-hidden="true"
-      @load="onThumbLoad"
-    />
+    <img v-if="thumb" class="thumb" :src="thumb" alt="" aria-hidden="true" @load="onThumbLoad" />
     <!-- 清晰图 —— 进入视口才设 src,加载完淡入 -->
     <img
       v-if="started"
@@ -179,6 +217,7 @@ function onImgError() {
   height: 100%;
   filter: blur(12px);
   transform: scale(1.12);
+  z-index: 0;
 }
 .real {
   position: absolute;
@@ -187,6 +226,7 @@ function onImgError() {
   height: 100%;
   opacity: 0;
   transition: opacity 0.35s ease;
+  z-index: 1;
 }
 .real.loaded {
   opacity: 1;

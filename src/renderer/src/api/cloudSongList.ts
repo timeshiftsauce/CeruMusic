@@ -1,3 +1,5 @@
+import { songKey, selectSong } from '@common/musicItem'
+import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import { Request, unwrap } from '@renderer/utils/request'
 import { base64ToFile, isBase64 } from '@renderer/utils/file'
 import config from '@common/api/config.json'
@@ -53,6 +55,40 @@ const API_URL = config.baseUrl[0].url
 const request = new Request(API_URL)
 
 const BASE_URL = '/user-songlist'
+let capabilityCache: { value: boolean; until: number } | undefined
+async function supportsIdentity(): Promise<boolean> {
+  if (capabilityCache && capabilityCache.until > Date.now()) return capabilityCache.value
+  let value: boolean
+  try {
+    value = (await unwrap<any>(request.get(`${BASE_URL}/capabilities`))).songIdentity >= 2
+  } catch (error: any) {
+    if (error.status !== 404) throw error
+    value = false
+  }
+  capabilityCache = { value, until: Date.now() + 60_000 }
+  return value
+}
+function assertLegacyIdentities(songs: any[]) {
+  const ids = new Map<string, string>()
+  for (const song of songs) {
+    const mid = String(song.songmid),
+      key = songKey(song)
+    if (ids.has(mid) && ids.get(mid) !== key)
+      throw new Error('当前云端不支持同 ID 的不同来源歌曲，请升级后端；本地歌曲已保留')
+    ids.set(mid, key)
+  }
+}
+async function prepareCloudSongs(songs: any[], listId?: string): Promise<any[]> {
+  const normalized = mapSongsToCloud(songs)
+  if (!(await supportsIdentity())) {
+    if (normalized.some((song) => song.pluginResource)) {
+      throw new Error('当前云端不支持保存私有歌曲引用，请升级后端；本地歌曲已保留')
+    }
+    const existing = listId ? (await cloudSongListAPI.getSongListDetail(listId, 'asc')).list : []
+    assertLegacyIdentities([...existing, ...normalized])
+  }
+  return normalized
+}
 
 export const cloudSongListAPI = {
   // 获取用户的所有歌单
@@ -72,6 +108,7 @@ export const cloudSongListAPI = {
 
   // 创建歌单
   createUserSongList: async (data: CreateUserSongListDto) => {
+    data = { ...data, songlist: await prepareCloudSongs(data.songlist) }
     const formData = new FormData()
     formData.append('localId', data.localId)
     formData.append('name', data.name)
@@ -121,6 +158,7 @@ export const cloudSongListAPI = {
 
   // 更新歌单
   updateUserSongList: async (data: UpdateUserSongListDto) => {
+    if (data.songlist) data = { ...data, songlist: await prepareCloudSongs(data.songlist) }
     const formData = new FormData()
     formData.append('listId', data.listId)
     if (data.localId) formData.append('localId', data.localId)
@@ -179,7 +217,8 @@ export const cloudSongListAPI = {
   },
 
   // 添加歌曲到歌单
-  addSongsToList: (id: string, songs: CloudSongDto[]) => {
+  addSongsToList: async (id: string, songs: CloudSongDto[]) => {
+    songs = await prepareCloudSongs(songs, id)
     return unwrap<{ updatedAt: string }>(
       request.patch(`${BASE_URL}/list`, {
         id,
@@ -189,12 +228,19 @@ export const cloudSongListAPI = {
   },
 
   // 从歌单删除歌曲
-  removeSongsFromList: (id: string, songmids: string[]) => {
+  removeSongsFromList: async (id: string, songmids: string[]) => {
+    const modern = await supportsIdentity()
+    const existing = (await cloudSongListAPI.getSongListDetail(id, 'asc')).list
+    const selected = songmids.map((id) => selectSong(existing as any[], id)).filter(Boolean)
+    if (!modern) {
+      assertLegacyIdentities(existing)
+      songmids = selected.map((song) => String(song!.songmid))
+    }
     return unwrap<{ updatedAt: string }>(
       request.delete(`${BASE_URL}/list`, {
         data: {
           id,
-          songmids
+          ...(modern ? { songKeys: selected.map(songKey) } : { songmids })
         }
       })
     )

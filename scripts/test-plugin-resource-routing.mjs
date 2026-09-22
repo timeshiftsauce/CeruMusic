@@ -149,6 +149,9 @@ try {
     supportsV2Provider(source, method) {
       return !this.disabled && source === 'shared' && (!method || this.methods.has(method))
     },
+    supportsShareResolver() {
+      return !this.disabled && manifestId === 'owner.plugin'
+    },
     supportsAction(action) {
       return !this.disabled && this.actions.has(action)
     },
@@ -244,6 +247,16 @@ try {
   fixture.capabilityOwners.set('shared:tracks.resolve', 'runtime-default')
   assert.equal(service.getV2Provider('shared', undefined, 'tracks.resolve').host, defaultHost)
   assert.equal(service.getV2Provider('shared', 'owner.plugin', 'tracks.resolve').host, ownerHost)
+  assert.equal(
+    service.getV2Provider('shared', undefined, 'tracks.resolve', true).host,
+    ownerHost,
+    'public share routing skips a selected playback plugin without a share resolver'
+  )
+  assert.equal(
+    service.getV2Provider('shared', 'default.plugin', 'tracks.resolve', true),
+    null,
+    'private resources stay bound when their owner lacks a share resolver'
+  )
   fixture.capabilityOwners.clear()
 
   const { default: sdk, resolveDownloadUrl } = await bundle('src/main/services/musicSdk/service.ts', {
@@ -352,8 +365,12 @@ try {
     'https://media.example/default.plugin'
   )
   ownerHost.disabled = false
-  const publicRef = { pluginId: 'owner.plugin', providerId: 'shared', kind: 'track',
-    id: 'track-1', scope: 'provider', data: { privateToken: 'do-not-forward' } }
+  const publicRef = {
+    providerId: 'shared',
+    kind: 'track',
+    id: 'track-1',
+    scope: 'provider'
+  }
   const publicSong = { ...song, pluginResource: publicRef }
   ownerHost.actions.delete('comments.get')
   await api.getComment({ songInfo: publicSong })
@@ -375,7 +392,10 @@ try {
   const alternateKey = state.cacheKeys.at(-1)
   fixture.capabilityOwners.set('shared:tracks.resolve', 'runtime-owner')
   await api.getMusicUrl({ songInfo: publicSong, quality: 'flac' })
-  assert.deepEqual(state.calls.at(-1).ref, publicRef)
+  assert.deepEqual(state.calls.at(-1).ref, {
+    pluginId: 'owner.plugin',
+    ...publicRef
+  })
   assert.notEqual(state.cacheKeys.at(-1), alternateKey, 'playback preference isolates cache')
   fixture.capabilityOwners.set('shared:tracks.lyrics', 'runtime-default')
   await api.getLyric({ songInfo: publicSong })
@@ -385,8 +405,31 @@ try {
   fixture.capabilityOwners.set('shared:tracks.resolve', 'runtime-default')
   assert.equal(await api.getMusicUrl({ songInfo: publicSong, quality: 'flac' }),
     'https://media.example/default.plugin', 'public ID works without its origin plugin')
+  const oldLinglanSong = {
+    ...song,
+    source: 'shared',
+    pluginResource: {
+      pluginId: 'local.linglan-source',
+      providerId: 'shared',
+      kind: 'track',
+      id: 'track-1',
+      data: { song: { source: 'shared', songmid: 'track-1' } }
+    }
+  }
+  assert.equal(
+    await api.getMusicUrl({ songInfo: oldLinglanSong, quality: 'flac' }),
+    'https://media.example/default.plugin',
+    'legacy Linglan playlist tracks are upgraded without the origin plugin'
+  )
+  assert.deepEqual(state.calls.at(-1).ref, {
+    pluginId: 'default.plugin',
+    providerId: 'shared',
+    kind: 'track',
+    id: 'track-1',
+    scope: 'provider'
+  })
   console.log(
-    'PASS: native playlist pagination, opaque refs, owner routing, disabled-owner isolation, account cache isolation and legacy defaults'
+    'PASS: private ownership, provider routing, ownerless public tracks and legacy Linglan playlists'
   )
 } finally {
   delete globalThis.__resourceRoutingTest

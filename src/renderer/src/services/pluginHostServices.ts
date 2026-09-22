@@ -1,3 +1,5 @@
+import { sameSong, songKey } from '@common/musicItem'
+import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import type { ContentEntity, ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { toAppTrack, toPluginTrack } from '@common/pluginMusic'
 import songListAPI from '@renderer/api/songList'
@@ -24,9 +26,6 @@ const PUBLIC_SETTINGS = new Set<keyof SettingsState>([
   'routePreloadEnabled',
   'macStatusBarLyricEnabled'
 ])
-
-const HISTORY_KEY = 'ceru-plugin-playback-history-v1'
-const HISTORY_LIMIT = 200
 
 const unwrap = (result: any) => {
   if (!result?.success) throw new Error(result?.error || result?.message || '操作失败')
@@ -56,31 +55,14 @@ export const toPluginDownloadTask = (task: any) => ({
   ...(task.error ? { error: { code: 'DOWNLOAD_FAILED', message: String(task.error) } } : {})
 })
 
-const sameRef = (song: any, ref: ResourceRef) => {
-  const resource = song?.pluginResource
-  return resource
-    ? resource.pluginId === ref.pluginId &&
-        resource.providerId === ref.providerId &&
-        resource.id === ref.id
-    : String(song?.songmid) === ref.id && song?.source === ref.providerId
-}
+const sameRef = sameSong
 
 function historyItems(): ContentEntity[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-    return Array.isArray(value) ? value.slice(0, HISTORY_LIMIT) : []
-  } catch {
-    return []
-  }
+  return useGlobalPlayStatusStore().history.map((song) => toPluginTrack(song))
 }
 
 export function recordPluginHistory(song: any): void {
-  if (!song || song.songmid == null || !song.source) return
-  const item = toPluginTrack(song) as ContentEntity
-  const items = historyItems().filter(
-    (existing) => !sameRef({ pluginResource: existing.ref }, item.ref)
-  )
-  localStorage.setItem(HISTORY_KEY, JSON.stringify([item, ...items].slice(0, HISTORY_LIMIT)))
+  useGlobalPlayStatusStore().recordHistory(song)
 }
 
 const lyricTimestamp = (milliseconds: number) => {
@@ -151,12 +133,12 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
     }
   }
   if (method.startsWith('services.favorites.')) {
-    const favoritesId = await window.api.songList.getFavoritesId()
+    const favoritesId = unwrap(await window.api.songList.getFavoritesId())
     if (!favoritesId) throw new Error('尚未创建我喜欢的音乐歌单')
     const refs = args[0] as ResourceRef[]
     if (method.endsWith('.contains'))
       return Promise.all(
-        refs.map(async (ref) => !!unwrap(await songListAPI.hasSong(favoritesId, ref.id)))
+        refs.map(async (ref) => !!unwrap(await songListAPI.hasSong(favoritesId, songKey(ref))))
       )
     if (method.endsWith('.add')) {
       const queue = LocalUserDetailStore().list
@@ -168,12 +150,7 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
       unwrap(await songListAPI.addSongs(favoritesId, songs))
       return null
     }
-    unwrap(
-      await songListAPI.removeSongs(
-        favoritesId,
-        refs.map((ref) => ref.id)
-      )
-    )
+    unwrap(await songListAPI.removeSongs(favoritesId, refs.map(songKey)))
     return null
   }
   if (method.startsWith('services.downloads.')) {

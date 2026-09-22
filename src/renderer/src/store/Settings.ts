@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { LyricFileOptions, LyricFormatPreference } from '@common/lyricFormats'
 
 export interface TagWriteOptions extends LyricFileOptions {
@@ -90,41 +90,56 @@ export const useSettingsStore = defineStore(
 
     // 从本地存储加载设置（与默认值深合并）
     const loadSettings = (): SettingsState => {
-      try {
-        const saved = localStorage.getItem('appSettings')
-        if (saved) {
-          const parsed = JSON.parse(saved) as SettingsState
-          return {
-            ...defaultSettings,
-            ...parsed,
-            tagWriteOptions: {
-              basicInfo:
-                parsed.tagWriteOptions?.basicInfo ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).basicInfo,
-              cover:
-                parsed.tagWriteOptions?.cover ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).cover,
-              lyrics:
-                parsed.tagWriteOptions?.lyrics ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).lyrics,
-              downloadLyrics:
-                parsed.tagWriteOptions?.downloadLyrics ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).downloadLyrics,
-              lyricFormat:
-                parsed.tagWriteOptions?.lyricFormat ??
-                (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat,
-              lyricExtensionMode: parsed.tagWriteOptions?.lyricExtensionMode ?? 'auto',
-              lyricExtension: parsed.tagWriteOptions?.lyricExtension ?? 'lrc'
+      // appSettings is the canonical snapshot. Only use the old Pinia snapshot as a fallback.
+      for (const key of ['appSettings', 'settings']) {
+        try {
+          const saved = localStorage.getItem(key)
+          if (saved) {
+            const snapshot = JSON.parse(saved)
+            const parsed = key === 'settings' ? snapshot?.settings : snapshot
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue
+            return {
+              ...defaultSettings,
+              ...parsed,
+              globalBackground: {
+                ...defaultSettings.globalBackground,
+                ...parsed.globalBackground
+              },
+              tagWriteOptions: {
+                basicInfo:
+                  parsed.tagWriteOptions?.basicInfo ??
+                  (defaultSettings.tagWriteOptions as TagWriteOptions).basicInfo,
+                cover:
+                  parsed.tagWriteOptions?.cover ??
+                  (defaultSettings.tagWriteOptions as TagWriteOptions).cover,
+                lyrics:
+                  parsed.tagWriteOptions?.lyrics ??
+                  (defaultSettings.tagWriteOptions as TagWriteOptions).lyrics,
+                downloadLyrics:
+                  parsed.tagWriteOptions?.downloadLyrics ??
+                  (defaultSettings.tagWriteOptions as TagWriteOptions).downloadLyrics,
+                lyricFormat:
+                  parsed.tagWriteOptions?.lyricFormat ??
+                  (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat,
+                lyricExtensionMode: parsed.tagWriteOptions?.lyricExtensionMode ?? 'auto',
+                lyricExtension: parsed.tagWriteOptions?.lyricExtension ?? 'lrc'
+              }
             }
           }
+        } catch (error) {
+          console.error(`加载设置失败 (${key}):`, error)
         }
-      } catch (error) {
-        console.error('加载设置失败:', error)
       }
       return { ...defaultSettings }
     }
 
     const settings = ref<SettingsState>(loadSettings())
+
+    // Persist direct mutations too, synchronously so quitting immediately cannot lose changes.
+    watch(settings, (value) => localStorage.setItem('appSettings', JSON.stringify(value)), {
+      deep: true,
+      flush: 'sync'
+    })
 
     // 保存设置到本地存储
     const saveSettings = () => {
@@ -190,7 +205,6 @@ export const useSettingsStore = defineStore(
           lyricExtension: 'lrc'
         }
       }
-      localStorage.setItem('appSettings', JSON.stringify(settings.value))
 
       // 把 closeToTray 同步到主进程，保险用（主进程 mainWindow.on('close') 会读取此值）
       if (typeof settings.value.closeToTray !== 'undefined') {
@@ -251,7 +265,7 @@ export const useSettingsStore = defineStore(
     }
   },
   {
-    // @ts-ignore
-    persist: true
+    // Do not hydrate again from the stale "settings" key after loadSettings().
+    persist: false
   }
 )

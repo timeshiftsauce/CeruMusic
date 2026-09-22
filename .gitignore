@@ -19,3 +19,17 @@ docs/.vitepress/cache
 /.plugin-host-smoke.mjs
 
 /.plugin-lifecycle-smoke.mjs
+
+# Isolated regression profiles and generated verification artifacts
+/.tmp/
+
+# .workflow 校验脚本的产物:每次运行 check-*.mjs 都会重新生成,不入库
+/.workflow/*/preview.js
+/.workflow/*/preview.css
+/.workflow/*/index.html
+/.workflow/*/*.png
+
+# 本地手工安装的 Python fontTools(仅用于字体子集化),不入库
+/.workflow/font-tools/
+__pycache__/
+*.py[cod]

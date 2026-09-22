@@ -519,6 +519,17 @@ onDeactivated(() => {
       .plugin-tab-pane {
         min-height: 0;
         overflow: hidden;
+
+        // Native plugin pages own their scroll container. Keep the inset inside it
+        // so the scrollbar reaches the window edge, just like the playlist tab.
+        &:has(.native-surface) {
+          padding: 0;
+
+          .native-surface {
+            padding-left: 2rem;
+            padding-right: 2rem;
+          }
+        }
       }
     }
   }

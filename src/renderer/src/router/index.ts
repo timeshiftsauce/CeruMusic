@@ -163,8 +163,18 @@ const getRoutePreloadEnabled = () => {
 // 在浏览器空闲时进行预加载
 const startPreload = () => {
   if (!getRoutePreloadEnabled()) return
-  const idleCallback =
-    window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(cb, 200))
+
+  // requestIdleCallback 必须带 timeout 兜底:页面存在持续动画(rAF,如主页粒子)时
+  // 可能长时间没有空闲窗口,不传 timeout 会一直不触发;timeout 触发时 didTimeout=true,
+  // 下方的 timeRemaining 检查会直接放行。
+  const IDLE_TIMEOUT_MS = 1000
+  const idleCallback = (cb: IdleRequestCallback) => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(cb, { timeout: IDLE_TIMEOUT_MS })
+    } else {
+      window.setTimeout(() => cb({ didTimeout: true, timeRemaining: () => 0 }), 200)
+    }
+  }
 
   // 当前路径下用户最可能跳转的路由优先,大体积/低频路由放最后
   const priorityOrder = [
@@ -191,23 +201,23 @@ const startPreload = () => {
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
   })
 
-  // 用户最近交互(滚动/点击/键入)时间戳;在交互期间暂停预加载
+  // 用户最近交互(点击/键入/滚轮)时间戳;在交互期间暂停预加载。
+  // 不监听 scroll:歌词/列表的自动滚动也会触发 scroll,会把播放页的预加载永久推迟。
   let lastInteract = 0
   const markInteract = () => {
     lastInteract = performance.now()
   }
-  window.addEventListener('scroll', markInteract, { passive: true, capture: true })
   window.addEventListener('pointerdown', markInteract, { passive: true, capture: true })
   window.addEventListener('keydown', markInteract, { passive: true, capture: true })
   window.addEventListener('wheel', markInteract, { passive: true, capture: true })
 
-  const INTERACT_COOLDOWN_MS = 1500
-  const GAP_BETWEEN_CHUNKS_MS = 400
+  const INTERACT_COOLDOWN_MS = 600
+  const GAP_BETWEEN_CHUNKS_MS = 150
 
   const runBatch = (deadline?: IdleDeadline) => {
     if (!getRoutePreloadEnabled()) return
 
-    // 用户刚交互过 → 推迟,避免和滚动重绘抢主线程/GPU
+    // 用户刚交互过 → 推迟,避免和用户操作/重绘抢主线程/GPU
     if (performance.now() - lastInteract < INTERACT_COOLDOWN_MS) {
       setTimeout(() => idleCallback(runBatch), INTERACT_COOLDOWN_MS)
       return
@@ -220,7 +230,6 @@ const startPreload = () => {
 
     const route = queue.shift()
     if (!route) {
-      window.removeEventListener('scroll', markInteract, { capture: true } as any)
       window.removeEventListener('pointerdown', markInteract, { capture: true } as any)
       window.removeEventListener('keydown', markInteract, { capture: true } as any)
       window.removeEventListener('wheel', markInteract, { capture: true } as any)
@@ -231,19 +240,19 @@ const startPreload = () => {
     } catch (e) {
       console.warn(`Failed to preload route: ${route.path}`, e)
     }
-    // 每解析完一个 chunk,留出 400ms 间隔让浏览器处理输入/绘制
+    // 每解析完一个 chunk,留出一点间隔让浏览器处理输入/绘制
     setTimeout(() => idleCallback(runBatch), GAP_BETWEEN_CHUNKS_MS)
   }
 
   const schedule = () => idleCallback(runBatch)
-  // 首屏加载完后多等一会再开预加载,给当前页一点呼吸时间
+  // 首屏加载完后稍等片刻再开预加载,给当前页一点呼吸时间
   if (document.readyState === 'complete') {
-    setTimeout(schedule, 5000)
+    setTimeout(schedule, 2000)
   } else {
     window.addEventListener(
       'load',
       () => {
-        setTimeout(schedule, 5000)
+        setTimeout(schedule, 2000)
       },
       { once: true }
     )

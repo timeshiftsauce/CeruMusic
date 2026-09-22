@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { startupHomeAvailable, refreshPluginContributions } from '@renderer/services/pluginState'
 import { useRouter } from 'vue-router'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
@@ -78,6 +78,7 @@ const loadingText = ref('正在初始化核心服务...')
 const loadingPercent = ref(0)
 
 const startupError = ref(false)
+let progressTimer: ReturnType<typeof setInterval> | null = null
 
 const progressWidth = computed(() => `${loadingPercent.value}%`)
 
@@ -90,6 +91,12 @@ const features = showNewYear.value
 
 async function prepareStartup() {
   startupError.value = false
+  if (progressTimer) clearInterval(progressTimer)
+  loadingPercent.value = 0
+  progressTimer = setInterval(() => {
+    if (loadingPercent.value < 75) loadingPercent.value = Math.min(75, loadingPercent.value + 2)
+  }, 100)
+
   // 获取版本号
   try {
     const appVersion = await window.electron.ipcRenderer.invoke('get-app-version')
@@ -109,16 +116,34 @@ async function prepareStartup() {
     console.error('Plugin init failed', e)
     loadingText.value = '插件恢复失败，请重新加载'
     startupError.value = true
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = null
+    }
     return
   }
   loadingPercent.value = 80
-  loadingText.value = '准备首页...'
+  loadingText.value = '恢复上次歌曲和播放进度...'
+  try {
+    // Playback restoration is gated until the post-welcome repair decision.
+  } catch (error) {
+    // Playback restoration is best-effort; the home page can still be used.
+    console.warn('恢复播放状态失败:', error)
+  }
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
   loadingPercent.value = 100
   loadingText.value = '准备就绪'
   await router.replace(startupHomeAvailable.value ? '/home/find' : '/home/local')
   if (settings.value.autoUpdate) void checkForUpdates()
 }
 onMounted(prepareStartup)
+onUnmounted(() => {
+  if (progressTimer) clearInterval(progressTimer)
+  progressTimer = null
+})
 </script>
 
 <style scoped>

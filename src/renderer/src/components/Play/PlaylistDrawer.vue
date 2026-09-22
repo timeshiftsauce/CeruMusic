@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { songKey } from '@common/musicItem'
 import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -59,8 +60,8 @@ const queueItemForSong = (song: SongList) => {
  * member 端可能滞后），改用 lt.current.song.songmid 保证高亮跟着房间走。
  */
 const effectiveCurrentSongId = computed<string | number | null | undefined>(() => {
-  if (lt.isInRoom) return lt.current.song?.songmid ?? null
-  return props.currentSongId
+  if (lt.isInRoom) return lt.current.song ? songKey(lt.current.song) : null
+  return localUserStore.userInfo.lastPlaySongKey ?? props.currentSongId
 })
 
 // 虚拟滚动数据源 —— 跟随 displayList 变化
@@ -125,7 +126,7 @@ const scrollToCurrentSong = () => {
 
   // 使用 nextTick 确保 DOM 已更新
   nextTick(() => {
-    const index = displayList.value.findIndex((song) => song.songmid === targetSongId)
+    const index = displayList.value.findIndex((song) => songKey(song) === targetSongId)
     if (index !== -1) {
       const container = document.querySelector('.playlist-content')
       if (container) {
@@ -558,7 +559,7 @@ const handleLocateCurrentSong = () => {
   }
 
   const currentSongExists = displayList.value.some(
-    (song) => song.songmid === effectiveCurrentSongId.value
+    (song) => songKey(song) === effectiveCurrentSongId.value
   )
   if (!currentSongExists) {
     MessagePlugin.warning('当前播放的歌曲不在播放列表中')
@@ -589,7 +590,7 @@ const playDisplayItem = (_index: number, song: SongList) => {
 
 const removeDisplayItem = (_index: number, song: SongList) => {
   if (!lt.isInRoom) {
-    localUserStore.removeSong(song.songmid)
+    localUserStore.removeSong(songKey(song))
     return
   }
   const item = queueItemForSong(song)
@@ -646,10 +647,10 @@ defineExpose({
         <div v-else :class="playlistSongsClass" :style="wrapperProps.style">
           <div
             v-for="item in visibleList"
-            :key="item.data.songmid"
+            :key="songKey(item.data)"
             class="playlist-song"
             :class="{
-              active: item.data.songmid === effectiveCurrentSongId,
+              active: songKey(item.data) === effectiveCurrentSongId,
               dragging: isDragSorting && item.index === draggedIndex
             }"
             @mousedown="handleMouseDown($event, item.index, item.data)"

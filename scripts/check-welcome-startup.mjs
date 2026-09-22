@@ -11,7 +11,7 @@ const mocks = {
   'vue-router': `export const useRouter=()=>({replace:async path=>{globalThis.state.route=path}});`,
   '@renderer/services/pluginState': `export const startupHomeAvailable={get value(){return globalThis.state.hasHome}}; export const refreshPluginContributions=async()=>{globalThis.state.pluginStarted=true};`,
   './pluginIntegrations': `export const pluginHomeTabs={value:[]};`,
-  '@renderer/utils/audio/globaPlayList': `export const initPlayback=()=>{globalThis.state.playbackStarted=true;return new Promise(()=>{})};`,
+  '@renderer/utils/audio/globaPlayList': `export const initPlayback=async()=>{globalThis.state.playbackStarted=true};`,
   '@renderer/composables/useAutoUpdate': `export const useAutoUpdate=()=>({checkForUpdates:()=>{}});`,
   '@renderer/store/Settings': `export const useSettingsStore=()=>({shouldUseSpringFestivalTheme:()=>false,settings:{autoUpdate:false}});`,
   pinia: `export const storeToRefs=s=>({settings:{value:s.settings}});`
@@ -32,12 +32,14 @@ for (const hasHome of [false,true]) {
   const module = {exports:{}}
   runInNewContext(result.outputFiles[0].text, {
     module, exports:module.exports, state, console,
-    window:{electron:{ipcRenderer:{invoke:async channel=>channel==='get-app-version'?'test':true}}}
+    window:{electron:{ipcRenderer:{invoke:async channel=>channel==='get-app-version'?'test':true}}},
+    setInterval,
+    clearInterval
   })
   module.exports.default.setup({}, {expose(){}})
   await state.mount()
   assert.equal(state.route, hasHome ? '/home/find' : '/home/local')
-  assert.equal(state.playbackStarted, undefined, 'welcome leaves playback initialization to the app lifecycle')
+  assert.notEqual(state.playbackStarted, true, 'welcome leaves playback restoration to the post-welcome repair gate')
 }
 
 // Exercise the real contribution state while the restored runtime is still pending.
@@ -47,6 +49,7 @@ const registryBuild=await build({stdin:{contents:stateSource,loader:'ts',resolve
  b.onLoad({filter:/.*/,namespace:'mock'},args=>({loader:'js',contents:
    args.path==='vue' ? mocks.vue :
    args.path==='./pluginIntegrations' ? `export const pluginHomeTabs={value:[]};export const refreshNativeIntegrations=async()=>{};` :
+   args.path==='@common/pluginCapabilities' ? `export const isRoutablePluginCapability=()=>true;export const migratePluginCapabilitySelections=value=>value||{};` :
    `export const LocalUserDetailStore=()=>globalThis.state.store;`
  }))
 }}]})

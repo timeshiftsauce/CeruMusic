@@ -83,7 +83,7 @@ const baseMenuList: MenuItem[] = [
   },
   {
     name: '社区',
-    icon: 'icon-shijian',
+    icon: 'icon-shequ',
     path: '/home/community'
   },
   {
@@ -225,6 +225,8 @@ const inputRef = ref<any>(null)
 // 处理搜索事件
 const handleSearch = async () => {
   if (!SearchStore.getValue.trim()) return
+  // 记录搜索历史(最近搜索置顶)
+  SearchStore.addHistory(SearchStore.getValue)
   // 重新设置搜索关键字
   try {
     router.push({

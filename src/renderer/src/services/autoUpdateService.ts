@@ -185,6 +185,8 @@ export class AutoUpdateService {
             },
             confirmBtn: '继续下载',
             cancelBtn: '稍后再说',
+            closeBtn: true,
+            onClose: () => dialog.destroy(),
             onConfirm: () => {
               try {
                 window.api.download.resumeTask(updateTask.id)
@@ -205,7 +207,7 @@ export class AutoUpdateService {
     // 优先检测是否已下载完成，若已下载则提示安装
     const path = await window.api.autoUpdater.getDownloadedPath(updateInfo)
     if (path) {
-      DialogPlugin.confirm({
+      const dialog = DialogPlugin.confirm({
         header: `新版本 ${updateInfo.name} 已下载`,
         body: () => {
           const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否立即安装？`
@@ -217,6 +219,8 @@ export class AutoUpdateService {
         },
         confirmBtn: '立即安装',
         cancelBtn: '稍后再说',
+        closeBtn: true,
+        onClose: () => dialog.destroy(),
         onConfirm: () => {
           this.quitAndInstall()
         }
@@ -239,6 +243,8 @@ export class AutoUpdateService {
       },
       confirmBtn: '立即下载',
       cancelBtn: '稍后提醒',
+      closeBtn: true,
+      onClose: () => dialog.destroy(),
       onConfirm: () => {
         dialog.hide()
         if (updateInfo.supportsDifferential) {
@@ -265,6 +271,8 @@ export class AutoUpdateService {
       },
       confirmBtn: '差分更新 (推荐)',
       cancelBtn: '全量更新',
+      closeBtn: true,
+      onClose: () => dialog.destroy(),
       onConfirm: () => {
         this.downloadUpdate('differential')
         dialog.hide()
@@ -281,6 +289,7 @@ export class AutoUpdateService {
     NotifyPlugin.info({
       title: '已是最新版本',
       content: '当前已是最新版本，无需更新',
+      closeBtn: true,
       duration: 1500
     })
   }
@@ -312,11 +321,13 @@ export class AutoUpdateService {
     downloadState.isDownloading = false
     downloadState.progress.percent = 100
 
-    DialogPlugin.confirm({
+    const dialog = DialogPlugin.confirm({
       header: '更新下载完成',
       body: '新版本已下载完成，是否立即重启应用以完成更新？',
       confirmBtn: '立即重启',
       cancelBtn: '稍后重启',
+      closeBtn: true,
+      onClose: () => dialog.destroy(),
       onConfirm: () => {
         this.quitAndInstall()
       },

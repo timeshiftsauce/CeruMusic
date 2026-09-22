@@ -6,7 +6,7 @@
     @after-leave="calcSearchSuggestHeights"
   >
     <n-card
-      v-if="SearchStore.focus && SearchStore.value"
+      v-if="SearchStore.focus && (SearchStore.value || SearchStore.history.length)"
       class="search-suggest"
       content-style="padding: 0"
       :style="{
@@ -17,6 +17,7 @@
       <n-scrollbar class="scrollbar">
         <!-- 直接搜索 -->
         <div
+          v-if="SearchStore.value"
           ref="directSearchRef"
           class="direct"
           @click="emit('toSearch', SearchStore.value, 'keyword')"
@@ -27,7 +28,11 @@
         <!-- 搜索建议 -->
         <Transition name="fade" mode="out-in" @after-leave="calcSearchSuggestHeights">
           <div
-            v-if="Object.keys(searchSuggestData)?.length && searchSuggestData?.order"
+            v-if="
+              SearchStore.value &&
+              Object.keys(searchSuggestData)?.length &&
+              searchSuggestData?.order
+            "
             ref="searchSuggestRef"
             class="all-suggest"
           >
@@ -53,6 +58,21 @@
             </div>
           </div>
         </Transition>
+        <!-- 搜索历史(输入为空时展示) -->
+        <div v-if="!SearchStore.value" ref="historyRef" class="search-history">
+          <div class="history-header">
+            <n-text depth="3">搜索历史</n-text>
+            <n-text depth="3" class="clear" @click="SearchStore.clearHistory()">清除</n-text>
+          </div>
+          <div
+            v-for="item in SearchStore.history"
+            :key="item"
+            class="history-item"
+            @click="emit('toSearch', item, 'keyword')"
+          >
+            <n-text class="name">{{ item }}</n-text>
+          </div>
+        </div>
       </n-scrollbar>
     </n-card>
   </Transition>
@@ -61,7 +81,7 @@
 <script setup lang="ts">
 import { useSearchStore } from '@renderer/store'
 import { watchDebounced } from '@vueuse/core'
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
 const emit = defineEmits<{
@@ -84,6 +104,8 @@ const searchSuggestHeights = ref<number>(0)
 // 搜索建议元素
 const directSearchRef = ref<HTMLElement | null>(null)
 const searchSuggestRef = ref<HTMLElement | null>(null)
+// 搜索历史元素
+const historyRef = ref<HTMLElement | null>(null)
 
 // 搜索建议分类
 const searchSuggestionsType = {
@@ -136,11 +158,13 @@ const getSearchSuggest = async (keywords: string) => {
 const calcSearchSuggestHeights = () => {
   const directSearchHeight = directSearchRef.value?.offsetHeight
   const searchSuggestionsHeight = searchSuggestRef.value?.offsetHeight
-  if (directSearchHeight || searchSuggestionsHeight) {
+  const searchHistoryHeight = historyRef.value?.offsetHeight
+  if (directSearchHeight || searchSuggestionsHeight || searchHistoryHeight) {
     const totalHeight =
       (directSearchHeight || 0) +
       (searchSuggestionsHeight || 0) +
       (searchSuggestionsHeight ? 8 : 0) +
+      (searchHistoryHeight || 0) +
       20
     searchSuggestHeights.value = totalHeight
   } else {
@@ -148,11 +172,21 @@ const calcSearchSuggestHeights = () => {
   }
 }
 
+// 聚焦/输入内容/历史变化时重新计算卡片高度(空输入时内容块会整体换成搜索历史)
+watch([() => SearchStore.focus, () => !!SearchStore.value, () => SearchStore.history.length], () =>
+  nextTick(calcSearchSuggestHeights)
+)
+
 // 搜索框改变
 watchDebounced(
   () => SearchStore.value,
   (val) => {
-    if (!val || val === '') return
+    if (!val || val === '') {
+      // 清空输入时丢弃旧建议,避免与搜索历史同时出现
+      searchSuggestData.value = {}
+      nextTick(calcSearchSuggestHeights)
+      return
+    }
     getSearchSuggest(val)
   },
   { debounce: 300 }
@@ -192,6 +226,37 @@ watchDebounced(
     }
     &:hover {
       background-color: var(--n-border-color);
+    }
+  }
+  .search-history {
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px;
+      .clear {
+        cursor: pointer;
+        transition: color 0.3s;
+        &:hover {
+          color: var(--td-brand-color);
+        }
+      }
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 6px;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+      cursor: pointer;
+      .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      &:hover {
+        background-color: var(--n-border-color);
+      }
     }
   }
   .all-suggest {

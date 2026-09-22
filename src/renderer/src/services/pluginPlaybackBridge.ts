@@ -1,3 +1,4 @@
+import { sameSong, songKey } from '@common/musicItem'
 import { assertContentPage, assertResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import type { ContentEntity, ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import type { Router } from 'vue-router'
@@ -30,24 +31,15 @@ export function markPluginQueueChanged(): void {
   queueRevision = crypto.randomUUID()
 }
 
-const sameRef = (a: ResourceRef | undefined, b: ResourceRef) =>
-  !!a &&
-  a.pluginId === b.pluginId &&
-  a.providerId === b.providerId &&
-  a.kind === b.kind &&
-  a.id === b.id &&
-  a.connectionId === b.connectionId
-
 /** Main has already checked player.control and the calling plugin's resource ownership. */
 export async function handlePluginPlayback(method: string, args: unknown[]): Promise<unknown> {
   const store = LocalUserDetailStore()
   if (!store.initialization) store.init()
-  const currentRef = useGlobalPlayStatusStore().player.songInfo?.pluginResource
+  const currentSong = useGlobalPlayStatusStore().player.songInfo
+  const currentRef = currentSong?.songmid != null ? toPluginTrack(currentSong).ref : undefined
   const queueState = () => ({
     items: store.list.map((song) => toPluginTrack(song)),
-    currentIndex: currentRef
-      ? store.list.findIndex((song) => sameRef(song.pluginResource, currentRef))
-      : -1,
+    currentIndex: currentRef ? store.list.findIndex((song) => sameSong(song, currentRef)) : -1,
     revision: queueRevision
   })
   if (method === 'services.queue.get') return queueState()
@@ -55,16 +47,13 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
     if (useListenTogetherStore().isInRoom) throw new Error('请先退出一起听，再修改本地播放队列')
     if (method === 'services.queue.remove') {
       const refs = args[0] as ResourceRef[]
-      store.list = store.list.filter(
-        (song) => !refs.some((ref) => sameRef(song.pluginResource, ref))
-      )
+      store.list = store.list.filter((song) => !refs.some((ref) => sameSong(song, ref)))
     } else if (method === 'services.queue.reorder') {
       if (args[1] !== queueRevision) throw new Error('播放队列已变化，请重新读取后再排序')
       const refs = args[0] as ResourceRef[]
-      if (refs.length !== store.list.length) throw new Error('排序必须包含当前队列的全部歌曲')
-      const reordered = refs.map((ref) =>
-        store.list.find((song) => sameRef(song.pluginResource, ref))
-      )
+      if (refs.length !== store.list.length || new Set(refs.map(songKey)).size !== refs.length)
+        throw new Error('排序必须包含当前队列的全部歌曲')
+      const reordered = refs.map((ref) => store.list.find((song) => sameSong(song, ref)))
       if (reordered.some((song) => !song)) throw new Error('排序包含不在当前队列中的歌曲')
       store.list = reordered as any[]
     } else {
@@ -75,8 +64,7 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
       store.list = method === 'services.queue.replace' ? incoming : [...store.list, ...incoming]
       const seen = new Set<string>()
       store.list = store.list.filter((song) => {
-        const ref = song.pluginResource
-        const key = JSON.stringify([ref?.pluginId, ref?.providerId, ref?.connectionId, ref?.id])
+        const key = songKey(song)
         if (seen.has(key)) return false
         seen.add(key)
         return true
@@ -92,7 +80,7 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
     const currentSong = useGlobalPlayStatusStore().player.songInfo
     return {
       status: audio.isPlay ? 'playing' : currentRef ? 'paused' : 'idle',
-      track: currentSong ? toPluginTrack(currentSong) : null,
+      track: currentSong?.songmid != null ? toPluginTrack(currentSong) : null,
       positionMs: Math.round((audio.currentTime || 0) * 1000),
       durationMs: Math.round((audio.duration || 0) * 1000),
       volume: Math.max(0, Math.min(1, (audio.volume || 0) / 100)),
@@ -108,7 +96,7 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
     }
     assertResourceRef(args[0])
     const ref = args[0]
-    const song = store.list.find((item) => sameRef(item.pluginResource, ref))
+    const song = store.list.find((item) => sameSong(item, ref))
     if (!song) throw new Error('歌曲不在播放队列中，请先添加歌曲')
     await playback.playSong(song)
     return null

@@ -1,15 +1,18 @@
 <script setup lang="ts">
+import { songKey } from '@common/musicItem'
 /**
  * 帖子详情弹窗 —— 小红书风格全屏 modal
  *
  * 布局:
  *  - 左侧 60%: 图片轮播(无图时显示渐变文本块)
  *  - 右侧 40%: 作者头像/昵称 -> 正文 -> 附件(歌单/单曲) -> 评论列表 -> 评论输入 + 操作栏
- *  - 底部操作栏(右侧固定): 点赞 / 举报 / 删除(仅作者) / 关闭
+ *  - 底部操作栏: 点赞 / 评论数 / 举报(仅他人帖子)
+ *  - 右上角: ⋯ 二级菜单(自己的帖子: 编辑/删除;他人帖子: 举报) + 关闭
  *
  * 数据:
  *  - 进入时:GET /community/posts/:id + GET /community/posts/:id/comments
  *  - 点赞/评论后本地乐观更新计数,失败回滚
+ *  - 作者编辑:复用 PostCreateDialog(editPost 模式),保存走 PATCH /community/posts/:id
  */
 import { ref, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -22,21 +25,28 @@ import {
   ChatIcon,
   ErrorCircleIcon,
   DeleteIcon,
+  EditIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PlayCircleIcon,
   AddIcon
 } from 'tdesign-icons-vue-next'
 import { communityAPI, type CommunityPost, type CommunityComment } from '@renderer/api/community'
-import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { ossAvatar, ossCard } from '@renderer/utils/ossImage'
+import { useAuthStore } from '@renderer/store/Auth'
+import { ossAvatar, ossDetail } from '@renderer/utils/ossImage'
+import { showSupportNotice } from '@renderer/utils/communitySupport'
 import songListAPI from '@renderer/api/songList'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import { usePostAttachmentCover } from './usePostAttachmentCover'
 import TextNoteCover from './TextNoteCover.vue'
+import PostCreateDialog from './PostCreateDialog.vue'
+
+/** 无归属地 / 解析失败时统一展示的文案 */
+const IP_LOCATION_FALLBACK = '澜星'
 
 const props = defineProps<{
   postId: string
+  initialReplyTo?: { commentId: string; username: string }
   /**
    * 列表里已有的完整 post 数据 —— modal mount 瞬间立即显示,
    * 之后 loadPost() 异步刷新最新点赞/评论数。
@@ -54,6 +64,14 @@ const props = defineProps<{
    */
   origin?: { x: number; y: number; w: number; h: number } | null
 }>()
+
+const authStore = useAuthStore()
+
+function requireLogin(): boolean {
+  if (authStore.isAuthenticated) return true
+  MessagePlugin.warning('未登录，请先登录')
+  return false
+}
 
 const emit = defineEmits<{
   close: []
@@ -91,6 +109,14 @@ let hintTimer: ReturnType<typeof setTimeout> | undefined
 let wheelTotal = 0
 let lastWheelAt = performance.now()
 const WHEEL_DISTANCE = 80
+const imageDirection = ref<1 | -1>(1)
+const imageTransition = computed(() =>
+  imageDirection.value > 0 ? 'image-slide-next' : 'image-slide-prev'
+)
+/** 首图不播翻页滑入动画 —— 它是预加载完成后异步插入的,若走 Transition 会看起来像自动翻页;
+ * 只有用户主动切图(箭头 / 滚轮 / 圆点)才启用 image-slide 过渡 */
+const imageSwitchAnimated = ref(false)
+const commentsSection = ref<HTMLElement | null>(null)
 
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -102,19 +128,23 @@ function showNavigationHint(text: string) {
 
 async function onWheel(event: WheelEvent) {
   const target = event.target as HTMLElement
+  const isImageArea = Boolean(target.closest('.left'))
+  const isContentArea = Boolean(target.closest('.content-area'))
+  const isInsideModal = Boolean(target.closest('.post-modal'))
+  const canNavigate =
+    !isInsideModal || isImageArea || Boolean(target.closest('.author, .action-bar'))
   if (
-    !props.getAdjacentPost ||
     event.ctrlKey ||
     Math.abs(event.deltaX) >= Math.abs(event.deltaY) ||
-    target.closest(
-      '.comments, .comment-input, .reply-hint, input, textarea, [contenteditable="true"]'
-    )
+    !canNavigate ||
+    isContentArea
   ) {
     wheelTotal = 0
     return
   }
 
-  // 非评论区域只翻笔记，不把滚轮传给背景瀑布流。
+  // 遮罩空白、图片、标题栏和操作栏可翻页；正文保留原生滚动。
+  // 图片区滚动切图、其余可翻页区域切笔记，具体分发见下方判断。
   event.preventDefault()
   const now = performance.now()
   if (now - lastWheelAt > 100) {
@@ -126,6 +156,7 @@ async function onWheel(event: WheelEvent) {
     closing.value ||
     switching.value ||
     reportVisible.value ||
+    showEdit.value ||
     submittingComment.value ||
     document.activeElement?.matches('input, textarea, [contenteditable="true"]')
   ) {
@@ -142,7 +173,14 @@ async function onWheel(event: WheelEvent) {
   const direction = wheelTotal > 0 ? 1 : -1
   // 单个大幅滚动只触发一篇，不把余量带到下一篇。
   wheelTotal = 0
-  await navigatePost(direction, () => props.getAdjacentPost!(direction))
+  // 多图笔记：仅当指针悬停在左侧图片预览区时才切换图片；
+  // 遮罩空白、标题栏、操作栏等其他可翻页区域一律切换到上一篇/下一篇笔记。
+  if (isImageArea && post.value?.images.length && post.value.images.length > 1) {
+    if (direction > 0) nextImage()
+    else prevImage()
+    return
+  }
+  if (props.getAdjacentPost) await navigatePost(direction, () => props.getAdjacentPost!(direction))
 }
 
 async function navigateTo(index: number) {
@@ -300,7 +338,6 @@ function close(useFlip = true) {
 }
 
 const router = useRouter()
-const userStore = LocalUserDetailStore()
 
 const post = ref<CommunityPost | null>(props.initialPost ?? null)
 const comments = ref<CommunityComment[]>([])
@@ -310,17 +347,27 @@ const submittingComment = ref(false)
 const imageIdx = ref(0)
 /** 已有列表快照时保留内容，只对尚未获取的数据显示骨架。 */
 const loading = ref(!props.initialPost)
-const loadedImage = ref('')
+/** 已预加载完成、当前实际展示的大图 URL —— 先预加载再换图，避免切换时闪白 */
+const shownImage = ref('')
 const failedImage = ref('')
 const loadedAvatar = ref('')
 const failedAvatar = ref('')
 const loadedAttachmentCover = ref('')
 
-const isAuthor = computed(() => {
-  // userStore.userInfo.uid 是用户 sub —— 看其他模块的用法
-  const myId = (userStore as any)?.userInfo?.uid || (userStore as any)?.userInfo?.userId
-  return !!myId && post.value?.userId === myId
-})
+/** 当前登录用户 id —— Logto sub,与社区列表页 currentUserId 同一来源 */
+const myUserId = computed(() => authStore.user?.sub || '')
+
+const isAuthor = computed(() => !!myUserId.value && post.value?.userId === myUserId.value)
+
+/** 评论是否属于当前用户 —— 决定是否显示删除入口 */
+function isOwnComment(c: CommunityComment): boolean {
+  return !!myUserId.value && c.userId === myUserId.value
+}
+
+/** 评论是否为帖子作者本人 —— 昵称旁展示"作者"标记 */
+function isPostAuthor(c: CommunityComment): boolean {
+  return !!post.value?.userId && c.userId === post.value.userId
+}
 
 const { cover: attCoverUrl, onCoverError } = usePostAttachmentCover(() => post.value)
 const currentImage = computed(() => {
@@ -329,6 +376,35 @@ const currentImage = computed(() => {
   return typeof item === 'string' ? item : item.url
 })
 const hasImages = computed(() => !!currentImage.value)
+
+/**
+ * 大图切换前先预加载 —— 预加载完成后才更新 shownImage。
+ * 旧图（含模糊背景）保持可见直到新图就绪，过渡期间不会出现空白/骨架闪烁。
+ */
+let imageToken = 0
+watch(
+  currentImage,
+  (url) => {
+    if (!url) {
+      shownImage.value = ''
+      return
+    }
+    const token = ++imageToken
+    const probe = new Image()
+    probe.onload = () => {
+      if (token === imageToken) shownImage.value = url
+    }
+    probe.onerror = () => {
+      if (token !== imageToken) return
+      failedImage.value = url
+      // 无图笔记用附件封面充当大图时，沿用附件封面的失败回退链
+      if (!post.value?.images?.length) onCoverError(url)
+    }
+    probe.src = ossDetail(url)
+  },
+  { immediate: true }
+)
+
 function onImageError(event: Event) {
   const { imageUrl, coverUrl: url } = (event.target as HTMLImageElement).dataset
   if (imageUrl) failedImage.value = imageUrl
@@ -347,6 +423,8 @@ onUnmounted(() => {
   disposed = true
   motion?.kill()
   clearTimeout(hintTimer)
+  commentsObserver?.disconnect()
+  commentsObserver = null
 })
 
 async function loadPost() {
@@ -370,12 +448,25 @@ async function loadPost() {
   }
 }
 
+/** 评论分页:分页单位是「一级评论」,回复随根评论一并返回(后端约定) */
+const COMMENTS_PAGE_SIZE = 50
+const commentsPage = ref(1)
+const commentsRootTotal = ref(0)
+const commentsHasMore = ref(false)
+const commentsLoadingMore = ref(false)
+const commentsSentinel = ref<HTMLElement | null>(null)
+let commentsObserver: IntersectionObserver | null = null
+
 async function loadComments() {
   commentsLoading.value = true
+  const postId = props.postId
   try {
-    const res = await communityAPI.listComments(props.postId, 1, 100)
-    if (disposed) return
+    const res = await communityAPI.listComments(postId, 1, COMMENTS_PAGE_SIZE)
+    if (disposed || postId !== props.postId) return
     comments.value = res.items
+    commentsPage.value = res.page || 1
+    commentsRootTotal.value = res.rootTotal ?? 0
+    commentsHasMore.value = res.hasMore ?? false
   } catch (e: any) {
     if (disposed) return
     MessagePlugin.error(e?.message || '评论加载失败')
@@ -384,17 +475,75 @@ async function loadComments() {
   }
 }
 
+/** 滚到底自动翻页(哨兵 + IntersectionObserver,换成别的滚动容器也不用改) */
+async function loadMoreComments() {
+  if (disposed || commentsLoadingMore.value || !commentsHasMore.value) return
+  commentsLoadingMore.value = true
+  const next = commentsPage.value + 1
+  const postId = props.postId
+  try {
+    const res = await communityAPI.listComments(postId, next, COMMENTS_PAGE_SIZE)
+    // 翻页途中切到了别的笔记 → 这份响应已经过期,直接丢掉
+    if (disposed || postId !== props.postId) return
+    /* 服务端是 offset 分页:翻页期间若有人发了新评论,下一页会和上一页重叠
+     * (新评论把后面的一级评论往后挤了一位)—— 按 id 去重后再追加 */
+    const seen = new Set(comments.value.map((c) => c.id))
+    comments.value = [...comments.value, ...res.items.filter((c) => !seen.has(c.id))]
+    commentsPage.value = res.page || next
+    commentsRootTotal.value = res.rootTotal ?? commentsRootTotal.value
+    commentsHasMore.value = res.hasMore ?? false
+  } catch (e: any) {
+    if (disposed) return
+    MessagePlugin.error(e?.message || '加载更多评论失败')
+  } finally {
+    commentsLoadingMore.value = false
+  }
+}
+
+/** 拿到哨兵节点后接管滚动触发(卸载时断开,避免重复观察) */
+watch(commentsSentinel, (el) => {
+  commentsObserver?.disconnect()
+  commentsObserver = null
+  if (!el) return
+  commentsObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreComments()
+    },
+    // 提前 200px 触发,滚动到底不会看见等待
+    { rootMargin: '200px' }
+  )
+  commentsObserver.observe(el)
+})
+
 function prevImage() {
   if (!post.value) return
+  imageDirection.value = -1
+  imageSwitchAnimated.value = true
   imageIdx.value = (imageIdx.value - 1 + post.value.images.length) % post.value.images.length
 }
 function nextImage() {
   if (!post.value) return
+  imageDirection.value = 1
+  imageSwitchAnimated.value = true
   imageIdx.value = (imageIdx.value + 1) % post.value.images.length
+}
+function selectImage(index: number) {
+  if (!post.value || index === imageIdx.value) return
+  imageDirection.value = index > imageIdx.value ? 1 : -1
+  imageSwitchAnimated.value = true
+  imageIdx.value = index
+}
+
+function scrollToComments() {
+  commentsSection.value?.scrollIntoView({
+    behavior: reduceMotion() ? 'auto' : 'smooth',
+    block: 'start'
+  })
 }
 
 async function onLike() {
   if (!post.value) return
+  if (!requireLogin()) return
   /* 同评论点赞,做并发去抖 + 服务端真值校准,避免双击产生负数 */
   if (likingPostIds.has(props.postId)) return
   likingPostIds.add(props.postId)
@@ -424,6 +573,9 @@ async function onLike() {
  *    rootComments:    parentId === null 的一级评论
  *    repliesByParent: Map<parentId, replies[]>
  *
+ *  排序与后端 listComments 对齐: 一级评论**倒序**(新→旧)、回复正序(旧→新);
+ *  本地新增评论必须维持这个顺序(见 submitComment)
+ *
  *  回复时:
  *   - 一级评论的"回复"按钮 -> replyTo = { commentId: 该评论id, username: 该评论作者 }
  *   - 二级评论的"回复"按钮 -> parentId 仍指向根, replyToUsername 是被回复人
@@ -431,13 +583,22 @@ async function onLike() {
  * ============================================================ */
 
 interface ReplyTarget {
+  commentId: string
   /** 真正用于 API 的 parentId(始终是根评论 id) */
   parentId: string
   /** "回复 @x" 显示的目标昵称 */
   username: string
 }
 
-const replyTarget = ref<ReplyTarget | null>(null)
+const replyTarget = ref<ReplyTarget | null>(
+  props.initialReplyTo
+    ? {
+        commentId: props.initialReplyTo.commentId,
+        parentId: props.initialReplyTo.commentId,
+        username: props.initialReplyTo.username
+      }
+    : null
+)
 
 /** 按 parentId 分组,模板里渲染嵌套 */
 const rootComments = computed<CommunityComment[]>(() => comments.value.filter((c) => !c.parentId))
@@ -448,11 +609,46 @@ const repliesByParent = computed<Record<string, CommunityComment[]>>(() => {
       ;(map[c.parentId] ||= []).push(c)
     }
   }
+  /* 回复正序兜底排序:本地新发的回复可能先于"更早但还没加载"的回复落进数组,
+   * 等用户点「加载更多回复」把旧的一页并进来,靠排序才能回到正确位置 */
+  for (const list of Object.values(map)) {
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+  }
   return map
 })
 
+/** 每条一级评论还没加载的回复数(0 = 全部加载完) */
+function pendingReplies(root: CommunityComment): number {
+  return Math.max(0, (root.replyCount ?? 0) - (repliesByParent.value[root.id]?.length ?? 0))
+}
+
+const REPLIES_PAGE_SIZE = 50
+/** 正在加载回复的根评论 id —— 防止连点 */
+const loadingReplies = ref<Set<string>>(new Set())
+
+/** 点「加载更多回复」:按根评论翻页(后端同样是每根 50 条一页,正序) */
+async function loadMoreReplies(root: CommunityComment) {
+  if (loadingReplies.value.has(root.id)) return
+  const loaded = repliesByParent.value[root.id]?.length ?? 0
+  const page = Math.floor(loaded / REPLIES_PAGE_SIZE) + 1
+  loadingReplies.value = new Set(loadingReplies.value).add(root.id)
+  try {
+    const res = await communityAPI.listReplies(root.id, page, REPLIES_PAGE_SIZE)
+    const seen = new Set(comments.value.map((c) => c.id))
+    comments.value = [...comments.value, ...res.items.filter((c) => !seen.has(c.id))]
+    if (res.total > 0) root.replyCount = res.total
+  } catch (e: any) {
+    MessagePlugin.error(e?.message || '加载回复失败')
+  } finally {
+    const next = new Set(loadingReplies.value)
+    next.delete(root.id)
+    loadingReplies.value = next
+  }
+}
+
 function startReply(c: CommunityComment) {
   replyTarget.value = {
+    commentId: c.id,
     parentId: c.parentId || c.id, // 二级评论的回复也挂在根上
     username: c.username
   }
@@ -467,6 +663,7 @@ function cancelReply() {
 async function submitComment() {
   const text = commentInput.value.trim()
   if (!text) return
+  if (!requireLogin()) return
   if (text.length > 300) {
     MessagePlugin.warning('评论不超过 300 字')
     return
@@ -477,13 +674,23 @@ async function submitComment() {
       postId: props.postId,
       content: text,
       parentId: replyTarget.value?.parentId,
+      replyToCommentId: replyTarget.value?.commentId,
       replyToUsername: replyTarget.value?.username
     })
-    /* 回复挂在已有列表合适位置 —— 一级 push 到末尾,二级 push 到末尾(按时序)
-     * listComments 已经按 createdAt asc,所以新回复自然出现在末尾 */
-    comments.value.push(c)
+    /* 一级评论插到最前 —— 后端 listComments 是「根评论倒序」(新的在最前),
+     * 本地也得同序,否则新评论会孤零零挂在列表末尾
+     * (回复仍是追加:repliesByParent 按 createdAt 排序,新回复自然排在最后) */
+    if (c.parentId) {
+      comments.value.push(c)
+      // 同步根评论的回复计数,否则「加载更多回复」的剩余数会少算一条
+      const root = comments.value.find((x) => x.id === c.parentId)
+      if (root) root.replyCount = (root.replyCount ?? 0) + 1
+    } else {
+      comments.value.unshift(c)
+    }
     commentInput.value = ''
     replyTarget.value = null
+    showSupportNotice(c.support)
     if (post.value) {
       post.value.commentCount += 1
       emit('updated', { ...post.value })
@@ -503,6 +710,10 @@ async function deleteComment(c: CommunityComment) {
       try {
         await communityAPI.deleteComment(c.id)
         comments.value = comments.value.filter((x) => x.id !== c.id)
+        if (c.parentId) {
+          const root = comments.value.find((x) => x.id === c.parentId)
+          if (root) root.replyCount = Math.max(0, (root.replyCount ?? 0) - 1)
+        }
         if (post.value) {
           post.value.commentCount = Math.max(0, post.value.commentCount - 1)
           emit('updated', { ...post.value })
@@ -525,6 +736,7 @@ const likingCommentIds = new Set<string>()
 
 /** 评论点赞 toggle —— 乐观更新 + 并发去抖 + 服务端校准 */
 async function toggleCommentLike(c: CommunityComment) {
+  if (!requireLogin()) return
   if (likingCommentIds.has(c.id)) return
   likingCommentIds.add(c.id)
   const was = c.liked
@@ -552,6 +764,8 @@ const reportReason = ref('')
 const reportSubmitting = ref(false)
 
 function onReport() {
+  // 举报入口对未登录用户也可见,先拦住避免走到必然失败的提交
+  if (!requireLogin()) return
   reportReason.value = ''
   reportVisible.value = true
 }
@@ -587,10 +801,23 @@ async function submitReport() {
   }
 }
 
+/* 编辑 —— 复用发帖对话框(editPost 模式) */
+const showEdit = ref(false)
+
+function startEdit() {
+  showEdit.value = true
+}
+
+function onPostEdited(updated: CommunityPost) {
+  post.value = updated
+  emit('updated', { ...updated })
+  MessagePlugin.success('修改已保存')
+}
+
 async function onDelete() {
   const confirmDialog = DialogPlugin.confirm({
     header: '删除帖子',
-    body: '帖子删除后无法恢复,确认删除?',
+    body: '删除后帖子将从社区中移除,确认删除?',
     onConfirm: async () => {
       try {
         await communityAPI.deletePost(props.postId)
@@ -676,7 +903,7 @@ async function refreshAttLiked() {
   if (!id) return
   const songmid = String(att.value.song?.songmid)
   if (!songmid) return
-  const res = await songListAPI.hasSong(id, songmid)
+  const res = await songListAPI.hasSong(id, songKey(att.value.song))
   if (res.success) attSongLiked.value = !!res.data
 }
 
@@ -746,7 +973,7 @@ async function onAttToggleLike() {
     if (!id) throw new Error('无法获取喜欢列表')
     const song = att.value.song as any
     if (wasLiked) {
-      const res = await songListAPI.removeSong(id, String(song.songmid))
+      const res = await songListAPI.removeSong(id, songKey(song))
       if (!res.success) throw new Error(res.error || '取消喜欢失败')
       MessagePlugin.success('已取消喜欢')
     } else {
@@ -789,9 +1016,30 @@ function formatTime(iso: string): string {
       <div class="modal-titlebar-drag" aria-hidden="true" @click.stop />
       <div class="post-modal-viewport" :class="{ 'is-sliding': pairedTransition }">
         <div ref="modalEl" class="post-modal" :aria-busy="switching">
-          <button class="close-btn" aria-label="关闭详情" @click="() => close()">
-            <CloseIcon size="22" />
-          </button>
+          <div class="top-actions">
+            <!-- ⋯ 二级菜单:自己的帖子 → 编辑/删除;他人帖子 → 举报(末位) -->
+            <t-dropdown v-if="post" trigger="click" placement="bottom-right">
+              <button class="more-btn" type="button" aria-label="更多操作">
+                <t-icon name="ellipsis" size="20" />
+              </button>
+              <t-dropdown-menu>
+                <template v-if="isAuthor">
+                  <t-dropdown-item @click="startEdit">
+                    <span class="menu-item"><EditIcon size="16" />编辑</span>
+                  </t-dropdown-item>
+                  <t-dropdown-item theme="error" @click="onDelete">
+                    <span class="menu-item"><DeleteIcon size="16" />删除</span>
+                  </t-dropdown-item>
+                </template>
+                <t-dropdown-item v-else @click="onReport">
+                  <span class="menu-item"><ErrorCircleIcon size="16" />举报</span>
+                </t-dropdown-item>
+              </t-dropdown-menu>
+            </t-dropdown>
+            <button class="close-btn" aria-label="关闭详情" @click="() => close()">
+              <CloseIcon size="22" />
+            </button>
+          </div>
           <div v-if="navigationHint" class="navigation-hint" role="status">
             {{ navigationHint }}
           </div>
@@ -837,29 +1085,35 @@ function formatTime(iso: string): string {
               <template v-if="hasImages">
                 <Transition name="skeleton-fade">
                   <div
-                    v-if="loadedImage !== currentImage && failedImage !== currentImage"
+                    v-if="!shownImage && failedImage !== currentImage"
                     class="image-skeleton skeleton"
                     role="status"
                     aria-label="正在加载笔记图片"
                   />
                 </Transition>
-                <img
-                  class="image-backdrop"
-                  :src="ossCard(currentImage)"
-                  alt=""
-                  aria-hidden="true"
-                  draggable="false"
-                />
-                <img
-                  :key="currentImage"
-                  class="big-img"
-                  :src="ossCard(currentImage)"
-                  :alt="post.username"
-                  :data-image-url="currentImage"
-                  :data-cover-url="post.images.length ? undefined : currentImage"
-                  @load="loadedImage = ($event.target as HTMLImageElement).dataset.imageUrl || ''"
-                  @error="onImageError"
-                />
+                <Transition name="skeleton-fade">
+                  <img
+                    v-if="shownImage"
+                    :key="shownImage"
+                    class="image-backdrop"
+                    :src="ossDetail(shownImage)"
+                    alt=""
+                    aria-hidden="true"
+                    draggable="false"
+                  />
+                </Transition>
+                <Transition :name="imageTransition" :css="imageSwitchAnimated">
+                  <img
+                    v-if="shownImage"
+                    :key="shownImage"
+                    class="big-img"
+                    :src="ossDetail(shownImage)"
+                    :alt="post.username"
+                    :data-image-url="shownImage"
+                    :data-cover-url="post.images.length ? undefined : shownImage"
+                    @error="onImageError"
+                  />
+                </Transition>
                 <button v-if="post.images.length > 1" class="nav prev" @click="prevImage">
                   <ChevronLeftIcon size="28" />
                 </button>
@@ -871,7 +1125,7 @@ function formatTime(iso: string): string {
                     v-for="(_, i) in post.images"
                     :key="i"
                     :class="{ active: i === imageIdx }"
-                    @click="imageIdx = i"
+                    @click="selectImage(i)"
                   />
                 </div>
               </template>
@@ -910,7 +1164,9 @@ function formatTime(iso: string): string {
                 </div>
                 <div class="info">
                   <div class="name">{{ post.username }}</div>
-                  <div class="time">{{ formatTime(post.createdAt) }}</div>
+                  <div class="time">
+                    {{ formatTime(post.createdAt) }} · {{ post.ipLocation || IP_LOCATION_FALLBACK }}
+                  </div>
                 </div>
               </header>
 
@@ -1002,7 +1258,7 @@ function formatTime(iso: string): string {
                 </template>
 
                 <!-- 评论列表 —— 两级回复 -->
-                <section class="comments" :aria-busy="commentsLoading">
+                <section ref="commentsSection" class="comments" :aria-busy="commentsLoading">
                   <h4>评论 {{ post.commentCount }}</h4>
                   <div class="comments-body">
                     <Transition name="skeleton-fade">
@@ -1037,31 +1293,37 @@ function formatTime(iso: string): string {
                           <span v-else class="c-avatar-fallback">{{
                             (c.username || '?').slice(0, 1)
                           }}</span>
+                          <!-- 删除放在评论右上角(仅自己的评论) -->
+                          <button
+                            v-if="isOwnComment(c)"
+                            class="c-del-inline"
+                            aria-label="删除评论"
+                            title="删除"
+                            @click="deleteComment(c)"
+                          >
+                            <DeleteIcon size="14" />
+                          </button>
                           <div class="c-body">
                             <div class="c-name">
                               {{ c.username }}
-                              <span class="c-time">{{ formatTime(c.createdAt) }}</span>
+                              <span v-if="isPostAuthor(c)" class="c-author">作者</span>
+                              <span v-else-if="isOwnComment(c)" class="c-author me">我</span>
                             </div>
                             <div class="c-text">{{ c.content }}</div>
-                            <div class="c-actions">
+                            <div class="c-meta">
+                              <span class="c-time">{{ formatTime(c.createdAt) }}</span>
+                              <span class="c-sep">·</span>
+                              <span class="c-location">{{
+                                c.ipLocation || IP_LOCATION_FALLBACK
+                              }}</span>
+                              <button class="c-reply" @click="startReply(c)">回复</button>
                               <button
                                 class="c-like"
                                 :class="{ liked: c.liked }"
                                 @click="toggleCommentLike(c)"
                               >
-                                <component :is="c.liked ? HeartFilledIcon : HeartIcon" size="13" />
+                                <component :is="c.liked ? HeartFilledIcon : HeartIcon" size="14" />
                                 <span v-if="c.likeCount">{{ c.likeCount }}</span>
-                              </button>
-                              <button class="c-reply" @click="startReply(c)">回复</button>
-                              <button
-                                v-if="
-                                  (userStore as any)?.userInfo?.uid === c.userId ||
-                                  (userStore as any)?.userInfo?.userId === c.userId
-                                "
-                                class="c-del-inline"
-                                @click="deleteComment(c)"
-                              >
-                                删除
                               </button>
                             </div>
 
@@ -1076,16 +1338,32 @@ function formatTime(iso: string): string {
                                 <span v-else class="c-avatar-fallback small">{{
                                   (r.username || '?').slice(0, 1)
                                 }}</span>
+                                <button
+                                  v-if="isOwnComment(r)"
+                                  class="c-del-inline"
+                                  aria-label="删除回复"
+                                  title="删除"
+                                  @click="deleteComment(r)"
+                                >
+                                  <DeleteIcon size="13" />
+                                </button>
                                 <div class="c-body">
                                   <div class="c-name">
                                     {{ r.username }}
+                                    <span v-if="isPostAuthor(r)" class="c-author">作者</span>
+                                    <span v-else-if="isOwnComment(r)" class="c-author me">我</span>
                                     <template v-if="r.replyToUsername">
                                       <span class="reply-to"> 回复 @{{ r.replyToUsername }}</span>
                                     </template>
-                                    <span class="c-time">{{ formatTime(r.createdAt) }}</span>
                                   </div>
                                   <div class="c-text">{{ r.content }}</div>
-                                  <div class="c-actions">
+                                  <div class="c-meta">
+                                    <span class="c-time">{{ formatTime(r.createdAt) }}</span>
+                                    <span class="c-sep">·</span>
+                                    <span class="c-location">{{
+                                      r.ipLocation || IP_LOCATION_FALLBACK
+                                    }}</span>
+                                    <button class="c-reply" @click="startReply(r)">回复</button>
                                     <button
                                       class="c-like"
                                       :class="{ liked: r.liked }"
@@ -1097,22 +1375,34 @@ function formatTime(iso: string): string {
                                       />
                                       <span v-if="r.likeCount">{{ r.likeCount }}</span>
                                     </button>
-                                    <button class="c-reply" @click="startReply(r)">回复</button>
-                                    <button
-                                      v-if="
-                                        (userStore as any)?.userInfo?.uid === r.userId ||
-                                        (userStore as any)?.userInfo?.userId === r.userId
-                                      "
-                                      class="c-del-inline"
-                                      @click="deleteComment(r)"
-                                    >
-                                      删除
-                                    </button>
                                   </div>
                                 </div>
                               </div>
                             </div>
+
+                            <!-- 回复分页:首屏每根 50 条,剩下的点这里翻 -->
+                            <button
+                              v-if="pendingReplies(c) > 0"
+                              class="c-more-replies"
+                              :disabled="loadingReplies.has(c.id)"
+                              @click="loadMoreReplies(c)"
+                            >
+                              {{
+                                loadingReplies.has(c.id)
+                                  ? '加载中…'
+                                  : `加载更多回复 (${pendingReplies(c)})`
+                              }}
+                            </button>
                           </div>
+                        </div>
+
+                        <!-- 分页哨兵:进入视口就自动拉下一页(见 loadMoreComments) -->
+                        <div ref="commentsSentinel" class="comments-sentinel" aria-hidden="true" />
+                        <div v-if="commentsLoadingMore" class="comments-more" role="status">
+                          加载更多评论…
+                        </div>
+                        <div v-else-if="!commentsHasMore && commentsPage > 1" class="comments-more">
+                          已显示全部评论
                         </div>
                       </div>
                     </Transition>
@@ -1130,13 +1420,13 @@ function formatTime(iso: string): string {
                     />
                     <span>{{ post.likeCount }}</span>
                   </button>
-                  <div class="action stat-only">
+                  <button class="action stat-only" aria-label="查看评论" @click="scrollToComments">
                     <ChatIcon size="20" />
                     <span>{{ post.commentCount }}</span>
-                  </div>
-                  <button class="action" @click="onReport"><ErrorCircleIcon size="18" /></button>
-                  <button v-if="isAuthor" class="action danger" @click="onDelete">
-                    <DeleteIcon size="18" />
+                  </button>
+                  <!-- 举报仅对他人的帖子显示(举报自己的帖子没意义) -->
+                  <button v-if="!isAuthor" class="action" aria-label="举报" @click="onReport">
+                    <ErrorCircleIcon size="18" />
                   </button>
                 </div>
                 <!-- 回复目标提示条 -->
@@ -1186,6 +1476,9 @@ function formatTime(iso: string): string {
         autofocus
       />
     </t-dialog>
+
+    <!-- 编辑对话框 —— 复用发帖组件(editPost 模式) -->
+    <PostCreateDialog v-model:visible="showEdit" :edit-post="post" @updated="onPostEdited" />
   </Teleport>
 </template>
 
@@ -1231,6 +1524,7 @@ function formatTime(iso: string): string {
 }
 
 .post-modal {
+  font-family: 'PingFangSC-Semibold';
   -webkit-app-region: no-drag;
   background: var(--td-bg-color-container, #fff);
   border-radius: 12px;
@@ -1257,22 +1551,69 @@ function formatTime(iso: string): string {
   z-index: 5;
 }
 
-.close-btn {
+.top-actions {
   -webkit-app-region: no-drag;
   position: absolute;
-  top: 12px;
+  /* 与 76px 高的作者栏垂直居中: (76 - 32) / 2 */
+  top: 22px;
   right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+/* 作者操作入口 —— 白色圆钮,位于关闭按钮左侧 */
+.more-btn {
   width: 32px;
   height: 32px;
+  padding: 0;
+  line-height: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #fff;
+  color: #4b4b4b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+  &:hover {
+    background: #f3f3f3;
+    color: #1f2329;
+  }
+  :deep(svg) {
+    display: block;
+    margin: 0;
+  }
+}
+
+.menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.close-btn {
+  -webkit-app-region: no-drag;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  line-height: 0;
   border-radius: 50%;
   border: none;
   background: rgba(0, 0, 0, 0.4);
   color: #fff;
   cursor: pointer;
-  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
+  :deep(svg) {
+    display: block;
+    margin: 0;
+  }
 }
 
 .post-skeleton {
@@ -1296,6 +1637,33 @@ function formatTime(iso: string): string {
 }
 .comments-body {
   position: relative;
+}
+.comments-sentinel {
+  height: 1px;
+}
+.c-more-replies {
+  display: inline-block;
+  margin: 6px 0 2px;
+  padding: 2px 10px 2px 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--td-brand-color, #ff2442);
+  cursor: pointer;
+  &:hover {
+    text-decoration: underline;
+  }
+  &:disabled {
+    color: var(--td-text-color-placeholder, #aaa);
+    cursor: default;
+    text-decoration: none;
+  }
+}
+.comments-more {
+  padding: 10px 0 2px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder, #aaa);
 }
 .comments-skeleton.skeleton-fade-leave-active {
   position: absolute;
@@ -1442,6 +1810,37 @@ function formatTime(iso: string): string {
     display: block;
   }
 
+  /* 轮播式整幅平移:新旧两张图同速、同缓动,边缘相接地滑过,
+   * 不做透明度交叉(会产生鬼影),才像真正的轮播图 */
+  .image-slide-next-enter-active,
+  .image-slide-next-leave-active,
+  .image-slide-prev-enter-active,
+  .image-slide-prev-leave-active {
+    position: absolute;
+    inset: 0;
+    transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  .image-slide-next-enter-from {
+    transform: translateX(100%);
+  }
+  .image-slide-next-leave-to {
+    transform: translateX(-100%);
+  }
+  .image-slide-prev-enter-from {
+    transform: translateX(-100%);
+  }
+  .image-slide-prev-leave-to {
+    transform: translateX(100%);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .image-slide-next-enter-active,
+    .image-slide-next-leave-active,
+    .image-slide-prev-enter-active,
+    .image-slide-prev-leave-active {
+      transition: none;
+    }
+  }
+
   .nav {
     position: absolute;
     top: 50%;
@@ -1499,7 +1898,11 @@ function formatTime(iso: string): string {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 60px 16px 20px;
+  /* 右侧预留 ⋯ + ✕ 两个按钮的位置,昵称不会钻到按钮下面 */
+  padding: 16px 100px 16px 20px;
+  /* 作者栏是 UI 壳层,禁止选中 */
+  user-select: none;
+  -webkit-user-select: none;
   border-bottom: 1px solid var(--td-border-level-1-color, #eee);
 
   .author-avatar {
@@ -1549,15 +1952,23 @@ function formatTime(iso: string): string {
   scrollbar-gutter: stable;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px 20px;
+  scroll-padding-block: 16px;
+  padding: 18px 22px 24px;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: default;
 
   .content-text {
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.85;
     color: var(--td-text-color-primary, #333);
-    margin: 0 0 12px;
+    margin: 0 0 18px;
     white-space: pre-wrap;
     word-break: break-word;
+    letter-spacing: 0.01em;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 }
 
@@ -1752,6 +2163,12 @@ function formatTime(iso: string): string {
 }
 
 .comments {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--td-border-level-1-color, #eee) 80%, transparent);
+  /* 评论区壳层(标题/头像/昵称/时间/操作)禁止选中;评论内容在 .c-text 单独放行 */
+  user-select: none;
+  -webkit-user-select: none;
   h4 {
     font-size: 14px;
     color: var(--td-text-color-secondary, #666);
@@ -1765,6 +2182,7 @@ function formatTime(iso: string): string {
     padding: 20px 0;
   }
   .comment {
+    position: relative;
     display: flex;
     gap: 10px;
     margin-bottom: 14px;
@@ -1790,15 +2208,34 @@ function formatTime(iso: string): string {
         font-size: 13px;
         color: var(--td-text-color-secondary, #666);
         margin-bottom: 2px;
+        /* 右上角删除图标的占位,避免长昵称重叠 */
+        padding-right: 1.5rem;
+        .c-author {
+          display: inline-flex;
+          align-items: center;
+          height: 16px;
+          /* 昵称后模板换行自带一个空格，这里不再叠加外边距 */
+          padding: 0 6px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 500;
+          line-height: 1;
+          color: var(--td-brand-color, #ff2442);
+          background: var(--td-brand-color-light, #ffe3ea);
+          vertical-align: middle;
+          /* middle 对齐在中西文混排字体下会略偏下(实测 ~1.6px)，向上微调 */
+          position: relative;
+          top: -1.5px;
+        }
+        /* 我评论别人的笔记 —— 浅灰底"我"标记(帖子作者优先显示"作者") */
+        .c-author.me {
+          color: var(--td-text-color-secondary, #666);
+          background: var(--td-bg-color-secondarycontainer, #f3f3f5);
+        }
         .reply-to {
           color: var(--td-text-color-placeholder);
           margin-left: 4px;
           font-weight: 400;
-        }
-        .c-time {
-          color: var(--td-text-color-placeholder, #aaa);
-          font-size: 11px;
-          margin-left: 8px;
         }
       }
       .c-text {
@@ -1806,23 +2243,33 @@ function formatTime(iso: string): string {
         color: var(--td-text-color-primary, #222);
         line-height: 1.5;
         word-break: break-word;
+        user-select: text;
+        -webkit-user-select: text;
+        cursor: text;
       }
-      .c-actions {
+      /* 时间 · IP归属地 · 回复 · 点赞(同一行,点赞靠右) */
+      .c-meta {
         display: flex;
-        gap: 12px;
+        align-items: center;
+        gap: 8px;
         margin-top: 4px;
         font-size: 12px;
+        line-height: 1.4;
+        color: var(--td-text-color-placeholder, #aaa);
         button {
           border: none;
           background: transparent;
-          color: var(--td-text-color-placeholder);
+          color: inherit;
           cursor: pointer;
           padding: 0;
+          /* 按钮默认不继承字体与行高,补上让"回复"与相邻文字同字体同基线 */
+          font: inherit;
           &:hover {
             color: var(--td-text-color-secondary);
           }
         }
         .c-like {
+          margin-left: auto;
           display: inline-flex;
           align-items: center;
           gap: 3px;
@@ -1830,29 +2277,50 @@ function formatTime(iso: string): string {
             color: var(--td-brand-color, #ff2442);
           }
         }
-        .c-del-inline:hover {
-          color: var(--td-error-color, #e34d59);
+      }
+    }
+    /* 二级回复缩进 + 灰底 */
+    .replies {
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: var(--td-bg-color-component);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      .reply {
+        position: relative;
+        display: flex;
+        gap: 8px;
+        .c-avatar,
+        .c-avatar-fallback {
+          width: 24px;
+          height: 24px;
+          font-size: 11px;
         }
       }
-      /* 二级回复缩进 + 灰底 */
-      .replies {
-        margin-top: 8px;
-        padding: 6px 10px;
-        background: var(--td-bg-color-component);
-        border-radius: 8px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        .reply {
-          display: flex;
-          gap: 8px;
-          .c-avatar,
-          .c-avatar-fallback {
-            width: 24px;
-            height: 24px;
-            font-size: 11px;
-          }
-        }
+    }
+    /* 删除按钮(图标): 每条评论/回复的右上角 */
+    .c-del-inline {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.25rem;
+      height: 1.25rem;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--td-text-color-placeholder, #aaa);
+      cursor: pointer;
+      transition: color 0.15s ease;
+      &:hover {
+        color: var(--td-error-color, #e34d59);
+      }
+      :deep(svg) {
+        display: block;
       }
     }
     .c-del {
@@ -1877,6 +2345,9 @@ function formatTime(iso: string): string {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 操作栏/发送按钮属于 UI 壳层,禁止选中;输入框单独放行 */
+  user-select: none;
+  -webkit-user-select: none;
 
   .actions-left {
     display: flex;
@@ -1939,6 +2410,9 @@ function formatTime(iso: string): string {
       outline: none;
       font-size: 13px;
       background: var(--td-bg-color-component, #f7f7f7);
+      /* 输入内容仍可选中与编辑 */
+      user-select: text;
+      -webkit-user-select: text;
       &:focus {
         border-color: var(--td-brand-color, #ff2442);
       }

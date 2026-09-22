@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
+import NotificationBell from './notifications/NotificationBell.vue'
 
 const props = withDefaults(defineProps<Props>(), {
   controlStyle: false,
@@ -163,6 +164,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 设置按钮 -->
+      <NotificationBell v-if="showAccount" />
       <t-button
         v-if="showSettings"
         shape="circle"

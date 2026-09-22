@@ -25,8 +25,9 @@ const props = defineProps<{
   post: CommunityPost
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   click: [ev: MouseEvent]
+  like: []
 }>()
 
 const images = computed(() => props.post.images || [])
@@ -77,6 +78,7 @@ const textExcerpt = computed(() => {
       <LazyImage
         :key="firstImage"
         :src="ossCard(firstImage)"
+        :fallback-src="firstImage"
         :thumb="ossThumb(firstImage)"
         fit="cover"
         auto-aspect
@@ -101,10 +103,17 @@ const textExcerpt = computed(() => {
           <span v-else class="avatar fallback">{{ initial }}</span>
           <span class="name">{{ post.username }}</span>
         </div>
-        <div class="like" :class="{ liked: post.liked }">
+        <button
+          class="like"
+          :class="{ liked: post.liked }"
+          type="button"
+          :aria-label="post.liked ? '取消点赞' : '点赞'"
+          :aria-pressed="post.liked"
+          @click.stop="emit('like')"
+        >
           <component :is="post.liked ? HeartFilledIcon : HeartIcon" size="14" />
           <span>{{ likeText }}</span>
-        </div>
+        </button>
       </div>
     </div>
   </article>
@@ -122,6 +131,7 @@ const textExcerpt = computed(() => {
   &:hover {
     transform: translateY(-2px);
   }
+  font-family: 'PingFangSC-Semibold';
 }
 
 .cover-wrap {
@@ -206,6 +216,31 @@ const textExcerpt = computed(() => {
     align-items: center;
     gap: 3px;
     flex-shrink: 0;
+    border: 0;
+    padding: 2px 3px;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 6px;
+    transition:
+      color 160ms ease,
+      background 160ms ease,
+      transform 160ms ease;
+
+    &:hover {
+      background: var(--td-bg-color-component);
+    }
+
+    &:active {
+      transform: scale(0.92);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--td-brand-color);
+      outline-offset: 2px;
+    }
 
     &.liked {
       color: var(--td-brand-color);

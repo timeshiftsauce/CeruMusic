@@ -1,3 +1,5 @@
+import { getMusicStorage, setMusicStorage } from '@renderer/services/musicDataPersistence'
+import { normalizeMusicItem, sameSong, songKey, selectSong } from '@common/musicItem'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
@@ -15,15 +17,21 @@ export const LocalUserDetailStore = defineStore(
     function persistUserInfo() {
       // Available providers are a runtime snapshot, not user preferences.
       const { supportedSources: _runtimeSources, ...preferences } = userInfo.value
-      localStorage.setItem('userInfo', JSON.stringify(preferences))
+      setMusicStorage('userInfo', JSON.stringify(preferences))
     }
 
     function init(): void {
       if (initialization.value) return
-      const UserInfoLocal = localStorage.getItem('userInfo')
-      const ListLocal = localStorage.getItem('songList')
+      const UserInfoLocal = getMusicStorage('userInfo')
+      const ListLocal = getMusicStorage('songList')
       if (UserInfoLocal) {
-        userInfo.value = JSON.parse(UserInfoLocal) as UserInfo
+        try {
+          const parsed = JSON.parse(UserInfoLocal)
+          userInfo.value =
+            parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+        } catch {
+          userInfo.value = {}
+        }
         if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
       } else {
         userInfo.value = {
@@ -36,13 +44,26 @@ export const LocalUserDetailStore = defineStore(
           sourceQualityMap: {},
           hasGuide: false
         }
-        localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
+        setMusicStorage('userInfo', JSON.stringify(userInfo.value))
       }
       if (ListLocal) {
-        list.value = JSON.parse(ListLocal) as SongList[]
+        try {
+          const parsed = JSON.parse(ListLocal)
+          list.value = Array.isArray(parsed)
+            ? parsed.flatMap((song) => {
+                try {
+                  return [normalizeMusicItem(song)]
+                } catch {
+                  return []
+                }
+              })
+            : []
+        } catch {
+          list.value = []
+        }
       } else {
         list.value = []
-        localStorage.setItem('songList', JSON.stringify([]))
+        setMusicStorage('songList', JSON.stringify([]))
       }
       console.log('init local user detail')
       initialization.value = true
@@ -61,7 +82,7 @@ export const LocalUserDetailStore = defineStore(
       watch(
         list,
         (newVal) => {
-          localStorage.setItem('songList', JSON.stringify(newVal))
+          setMusicStorage('songList', JSON.stringify(newVal.map(normalizeMusicItem)))
         },
         {
           deep: true
@@ -71,7 +92,7 @@ export const LocalUserDetailStore = defineStore(
         userInfo,
         (newVal) => {
           const { supportedSources: _runtimeSources, ...preferences } = newVal
-          localStorage.setItem('userInfo', JSON.stringify(preferences))
+          setMusicStorage('userInfo', JSON.stringify(preferences))
         },
         {
           deep: true
@@ -93,7 +114,8 @@ export const LocalUserDetailStore = defineStore(
     }
 
     function addSong(song: SongList) {
-      if (!list.value.find((item) => item.songmid === song.songmid)) {
+      song = normalizeMusicItem(song)
+      if (!list.value.find((item) => sameSong(item, song))) {
         list.value.push(song)
       }
 
@@ -101,7 +123,8 @@ export const LocalUserDetailStore = defineStore(
     }
 
     function addSongToFirst(song: SongList) {
-      const existingIndex = list.value.findIndex((item) => item.songmid === song.songmid)
+      song = normalizeMusicItem(song)
+      const existingIndex = list.value.findIndex((item) => sameSong(item, song))
       if (existingIndex !== -1) {
         // 如果歌曲已存在，将其移动到第一位
         const existingSong = list.value.splice(existingIndex, 1)[0]
@@ -114,7 +137,8 @@ export const LocalUserDetailStore = defineStore(
     }
 
     function removeSong(songId: number | string) {
-      const index = list.value.findIndex((item) => item.songmid === songId)
+      const selected = selectSong(list.value, songId)
+      const index = selected ? list.value.indexOf(selected) : -1
       if (index !== -1) {
         const newList = [...list.value]
         newList.splice(index, 1)
@@ -126,30 +150,16 @@ export const LocalUserDetailStore = defineStore(
       list.value = []
     }
     function replaceSongList(songs: SongList[]) {
-      const seen1 = new Set<string | number>()
-      console.log(
-        'origin',
-        songs.filter((item) => {
-          const keyValue = item.songmid
-          if (seen1.has(keyValue)) {
-            return false
-          } else {
-            seen1.add(keyValue)
-            return true
-          }
-        })
-      )
-
-      const seen = new Set<string | number>()
+      const seen = new Set<string>()
       const deduped: SongList[] = []
-      for (const s of songs) {
-        const mid = (s as any).songmid
-        if (!seen.has(mid)) {
-          seen.add(mid)
-          deduped.push(s)
+      for (const value of songs) {
+        const song = normalizeMusicItem(value)
+        const key = songKey(song)
+        if (!seen.has(key)) {
+          seen.add(key)
+          deduped.push(song)
         }
       }
-      console.log('size', seen.size)
       list.value = deduped
       return list.value
     }

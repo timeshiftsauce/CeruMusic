@@ -61,11 +61,8 @@ jobs:
       - name: Install Dependencies
         shell: bash
         run: |
-          npm i -g yarn
-          yarn install --frozen-lockfile --ignore-scripts
-
-          node node_modules/electron/install.js
-          node scripts/prepare-native-modules.mjs
+          npm i -g yarn@1.22.22
+          yarn run setup
 
       - name: Build Electron App for macOS Intel (x64)
         if: matrix.os == 'macos-15-intel'

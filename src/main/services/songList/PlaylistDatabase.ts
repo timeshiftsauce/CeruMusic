@@ -1,3 +1,4 @@
+import { normalizeMusicItem, songKey, selectSong } from '@common/musicItem'
 import path from 'node:path'
 import fs from 'node:fs'
 import { app } from 'electron'
@@ -20,6 +21,7 @@ export interface PlaylistRow {
 interface PlaylistSongRow {
   playlist_id: string
   songmid: string
+  song_key: string
   position: number
   data: string
   name: string
@@ -48,8 +50,10 @@ function rowToSongList(r: PlaylistRow): SongList {
 }
 
 function songToRowFields(playlistId: string, song: Songs, position: number): PlaylistSongRow {
+  song = normalizeMusicItem(song)
   return {
     playlist_id: playlistId,
+    song_key: songKey(song),
     songmid: String(song.songmid),
     position,
     data: JSON.stringify(song),
@@ -62,6 +66,24 @@ function songToRowFields(playlistId: string, song: Songs, position: number): Pla
 
 export class PlaylistDatabase {
   private db: Database.Database
+  private get identityColumn(): string {
+    return this.hasSongKeys() ? 'song_key' : 'songmid'
+  }
+  hasSongKeys(): boolean {
+    return (this.db.pragma('table_info(playlist_songs)') as any[]).some(
+      (c) => c.name === 'song_key'
+    )
+  }
+  private resolveSelector(playlistId: string, selector: string | number): string {
+    const song = selectSong(this.listSongs(playlistId), selector)
+    return song ? (this.hasSongKeys() ? songKey(song) : String(song.songmid)) : '__missing__'
+  }
+  async backup(destination: string): Promise<void> {
+    await this.db.backup(destination)
+  }
+  repairNeeded(): boolean {
+    return !this.hasSongKeys() || Number(this.db.pragma('user_version', { simple: true })) < 2
+  }
 
   private stmtGetPlaylists!: Database.Statement
   private stmtGetPlaylistById!: Database.Statement
@@ -91,9 +113,12 @@ export class PlaylistDatabase {
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('synchronous = NORMAL')
     this.db.pragma('foreign_keys = ON')
+    const existing = this.db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'playlist_songs'")
+      .get()
     this.migrate()
+    if (!existing) this.db.pragma('user_version = 2')
     this.prepareStatements()
-    this.migrateFromJsonIfNeeded()
   }
 
   private migrate() {
@@ -111,13 +136,14 @@ export class PlaylistDatabase {
       CREATE TABLE IF NOT EXISTS playlist_songs (
         playlist_id  TEXT NOT NULL,
         songmid      TEXT NOT NULL,
+        song_key     TEXT NOT NULL,
         position     INTEGER NOT NULL,
         data         TEXT NOT NULL,
         name         TEXT DEFAULT '',
         singer       TEXT DEFAULT '',
         albumName    TEXT DEFAULT '',
         img          TEXT DEFAULT '',
-        PRIMARY KEY (playlist_id, songmid),
+        PRIMARY KEY (playlist_id, song_key),
         FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_playlist_songs_position
@@ -157,10 +183,10 @@ export class PlaylistDatabase {
       'SELECT COUNT(*) AS c FROM playlist_songs WHERE playlist_id = ?'
     )
     this.stmtHasSong = this.db.prepare(
-      'SELECT 1 FROM playlist_songs WHERE playlist_id = ? AND songmid = ? LIMIT 1'
+      `SELECT 1 FROM playlist_songs WHERE playlist_id = ? AND ${this.identityColumn} = ? LIMIT 1`
     )
     this.stmtGetSong = this.db.prepare(
-      'SELECT data FROM playlist_songs WHERE playlist_id = ? AND songmid = ?'
+      `SELECT data FROM playlist_songs WHERE playlist_id = ? AND ${this.identityColumn} = ?`
     )
     this.stmtMinPosition = this.db.prepare(
       'SELECT MIN(position) AS p FROM playlist_songs WHERE playlist_id = ?'
@@ -170,12 +196,12 @@ export class PlaylistDatabase {
     )
     this.stmtInsertSong = this.db.prepare(`
       INSERT OR IGNORE INTO playlist_songs
-        (playlist_id, songmid, position, data, name, singer, albumName, img)
+        (playlist_id, songmid, ${this.hasSongKeys() ? 'song_key,' : ''} position, data, name, singer, albumName, img)
       VALUES
-        (@playlist_id, @songmid, @position, @data, @name, @singer, @albumName, @img)
+        (@playlist_id, @songmid, ${this.hasSongKeys() ? '@song_key,' : ''} @position, @data, @name, @singer, @albumName, @img)
     `)
     this.stmtDeleteSong = this.db.prepare(
-      'DELETE FROM playlist_songs WHERE playlist_id = ? AND songmid = ?'
+      `DELETE FROM playlist_songs WHERE playlist_id = ? AND ${this.identityColumn} = ?`
     )
     this.stmtClearSongs = this.db.prepare('DELETE FROM playlist_songs WHERE playlist_id = ?')
     this.stmtAggSinger = this.db.prepare(`
@@ -192,16 +218,32 @@ export class PlaylistDatabase {
 
   listPlaylists(): SongList[] {
     const rows = this.stmtGetPlaylists.all() as PlaylistRow[]
-    return rows.map(rowToSongList)
+    const current = rows.map(rowToSongList)
+    if (Number(this.db.pragma('user_version', { simple: true })) >= 3) return current
+    try {
+      const file = path.join(app.getPath('userData'), 'songList', 'index.json')
+      const old = JSON.parse(fs.readFileSync(file, 'utf8'))
+      return Array.isArray(old)
+        ? [...current, ...old.filter((p) => !current.some((c) => c.id === p.id))]
+        : current
+    } catch {
+      return current
+    }
+  }
+
+  private assertWritablePlaylist(id: string): void {
+    if (!this.stmtPlaylistExists.get(id)) throw new Error('请先修复旧版 JSON 歌单，再修改歌曲')
   }
 
   getPlaylist(id: string): SongList | null {
     const row = this.stmtGetPlaylistById.get(id) as PlaylistRow | undefined
-    return row ? rowToSongList(row) : null
+    return row
+      ? rowToSongList(row)
+      : (this.listPlaylists().find((playlist) => playlist.id === id) ?? null)
   }
 
   playlistExists(id: string): boolean {
-    return !!this.stmtPlaylistExists.get(id)
+    return !!this.getPlaylist(id)
   }
 
   insertPlaylist(p: SongList): void {
@@ -218,11 +260,13 @@ export class PlaylistDatabase {
   }
 
   deletePlaylist(id: string): void {
+    this.assertWritablePlaylist(id)
     // cascade deletes songs via FK
     this.stmtDeletePlaylist.run(id)
   }
 
   updatePlaylist(id: string, updates: Partial<Omit<SongList, 'id' | 'createTime'>>): void {
+    this.assertWritablePlaylist(id)
     this.stmtUpdatePlaylist.run({
       id,
       name: updates.name ?? null,
@@ -235,6 +279,7 @@ export class PlaylistDatabase {
   }
 
   updateCover(id: string, coverImgUrl: string): void {
+    this.assertWritablePlaylist(id)
     this.stmtUpdateCover.run(coverImgUrl || DEFAULT_COVER, new Date().toISOString(), id)
   }
 
@@ -243,9 +288,29 @@ export class PlaylistDatabase {
   listSongs(playlistId: string): Songs[] {
     const rows = this.stmtListSongs.all(playlistId) as { data: string }[]
     const out: Songs[] = []
+    if (!rows.length && !this.stmtPlaylistExists.get(playlistId) && this.getPlaylist(playlistId)) {
+      try {
+        const legacy = JSON.parse(
+          fs.readFileSync(
+            path.join(app.getPath('userData'), 'songList', `${playlistId}.json`),
+            'utf8'
+          )
+        )
+        if (Array.isArray(legacy))
+          return legacy.flatMap((song) => {
+            try {
+              return [normalizeMusicItem(song)]
+            } catch {
+              return []
+            }
+          })
+      } catch {
+        /* Keep the legacy file untouched until the repair dialog is accepted. */
+      }
+    }
     for (const r of rows) {
       try {
-        out.push(JSON.parse(r.data) as Songs)
+        out.push(normalizeMusicItem(JSON.parse(r.data)))
       } catch {
         // skip corrupted row
       }
@@ -254,19 +319,26 @@ export class PlaylistDatabase {
   }
 
   countSongs(playlistId: string): number {
+    if (!this.stmtPlaylistExists.get(playlistId)) return this.listSongs(playlistId).length
     const r = this.stmtCountSongs.get(playlistId) as { c: number }
     return r?.c ?? 0
   }
 
   hasSong(playlistId: string, songmid: string | number): boolean {
-    return !!this.stmtHasSong.get(playlistId, String(songmid))
+    if (!this.stmtPlaylistExists.get(playlistId))
+      return !!selectSong(this.listSongs(playlistId), songmid)
+    return !!this.stmtHasSong.get(playlistId, this.resolveSelector(playlistId, songmid))
   }
 
   getSong(playlistId: string, songmid: string | number): Songs | null {
-    const row = this.stmtGetSong.get(playlistId, String(songmid)) as { data: string } | undefined
+    if (!this.stmtPlaylistExists.get(playlistId))
+      return selectSong(this.listSongs(playlistId), songmid) ?? null
+    const row = this.stmtGetSong.get(playlistId, this.resolveSelector(playlistId, songmid)) as
+      | { data: string }
+      | undefined
     if (!row) return null
     try {
-      return JSON.parse(row.data) as Songs
+      return normalizeMusicItem(JSON.parse(row.data))
     } catch {
       return null
     }
@@ -278,6 +350,18 @@ export class PlaylistDatabase {
    */
   addSongsHead(playlistId: string, songs: Songs[], desc: boolean): number {
     if (!songs.length) return 0
+    songs = songs.map(normalizeMusicItem)
+    if (!this.stmtPlaylistExists.get(playlistId))
+      throw new Error('请先修复旧版 JSON 歌单，再修改歌曲')
+    if (!this.hasSongKeys()) {
+      const seen = new Map<string, string>()
+      for (const song of [...this.listSongs(playlistId), ...songs]) {
+        const mid = String(song.songmid)
+        if (seen.has(mid) && seen.get(mid) !== songKey(song))
+          throw new Error('请先修复旧版音乐数据，再添加同 ID 的不同来源歌曲')
+        seen.set(mid, songKey(song))
+      }
+    }
     const minRow = this.stmtMinPosition.get(playlistId) as { p: number | null }
     const minPos = minRow?.p ?? 0
     const ordered = desc ? [...songs].reverse() : songs
@@ -290,7 +374,7 @@ export class PlaylistDatabase {
       const seen = new Set<string>()
       for (let i = 0; i < items.length; i++) {
         const song = items[i]
-        const mid = String(song?.songmid ?? '')
+        const mid = songKey(song)
         if (!mid || seen.has(mid)) continue
         seen.add(mid)
         const info = this.stmtInsertSong.run(songToRowFields(playlistId, song, startPos + i))
@@ -307,13 +391,25 @@ export class PlaylistDatabase {
    */
   appendSongs(playlistId: string, songs: Songs[]): number {
     if (!songs.length) return 0
+    songs = songs.map(normalizeMusicItem)
+    if (!this.stmtPlaylistExists.get(playlistId))
+      throw new Error('请先修复旧版 JSON 歌单，再修改歌曲')
+    if (!this.hasSongKeys()) {
+      const seen = new Map<string, string>()
+      for (const song of [...this.listSongs(playlistId), ...songs]) {
+        const mid = String(song.songmid)
+        if (seen.has(mid) && seen.get(mid) !== songKey(song))
+          throw new Error('请先修复旧版音乐数据，再添加同 ID 的不同来源歌曲')
+        seen.set(mid, songKey(song))
+      }
+    }
     const maxRow = this.stmtMaxPosition.get(playlistId) as { p: number | null }
     let nextPos = (maxRow?.p ?? -1) + 1
     let inserted = 0
     const tx = this.db.transaction((items: Songs[]) => {
       const seen = new Set<string>()
       for (const song of items) {
-        const mid = String(song?.songmid ?? '')
+        const mid = songKey(song)
         if (!mid || seen.has(mid)) continue
         seen.add(mid)
         const info = this.stmtInsertSong.run(songToRowFields(playlistId, song, nextPos))
@@ -332,18 +428,25 @@ export class PlaylistDatabase {
    * Songmids not provided are left untouched at positions past the newly assigned range.
    */
   reorderSongs(playlistId: string, songmids: (string | number)[]): number {
+    this.assertWritablePlaylist(playlistId)
     if (!songmids.length) return 0
+    const ordered = songmids.map((id) => this.resolveSelector(playlistId, id))
+    if (new Set(ordered).size !== ordered.length || ordered.includes('__missing__'))
+      throw new Error('排序包含重复或不存在的歌曲')
+    const remaining = this.listSongs(playlistId)
+      .map((song) => (this.hasSongKeys() ? songKey(song) : String(song.songmid)))
+      .filter((id) => !ordered.includes(id))
     const updateStmt = this.db.prepare(
-      'UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND songmid = ?'
+      `UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND ${this.identityColumn} = ?`
     )
     let updated = 0
     const tx = this.db.transaction((ids: (string | number)[]) => {
       for (let i = 0; i < ids.length; i++) {
-        const info = updateStmt.run(i, playlistId, String(ids[i]))
+        const info = updateStmt.run(i, playlistId, ids[i])
         if (info.changes > 0) updated++
       }
     })
-    tx(songmids)
+    tx([...ordered, ...remaining])
     return updated
   }
 
@@ -352,9 +455,12 @@ export class PlaylistDatabase {
    * range are updated — O(|Δ|) writes instead of O(n).
    */
   moveSong(playlistId: string, songmid: string | number, toIndex: number): boolean {
-    const mid = String(songmid)
+    this.assertWritablePlaylist(playlistId)
+    const mid = this.resolveSelector(playlistId, songmid)
     const curRow = this.db
-      .prepare('SELECT position FROM playlist_songs WHERE playlist_id = ? AND songmid = ?')
+      .prepare(
+        `SELECT position FROM playlist_songs WHERE playlist_id = ? AND ${this.identityColumn} = ?`
+      )
       .get(playlistId, mid) as { position: number } | undefined
     if (!curRow) return false
 
@@ -381,7 +487,7 @@ export class PlaylistDatabase {
        WHERE playlist_id = ? AND position >= ? AND position < ?`
     )
     const setPos = this.db.prepare(
-      'UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND songmid = ?'
+      `UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND ${this.identityColumn} = ?`
     )
 
     const tx = this.db.transaction(() => {
@@ -397,16 +503,18 @@ export class PlaylistDatabase {
   }
 
   removeSong(playlistId: string, songmid: string | number): boolean {
-    const info = this.stmtDeleteSong.run(playlistId, String(songmid))
+    this.assertWritablePlaylist(playlistId)
+    const info = this.stmtDeleteSong.run(playlistId, this.resolveSelector(playlistId, songmid))
     return info.changes > 0
   }
 
   removeSongs(playlistId: string, songmids: (string | number)[]): number {
+    this.assertWritablePlaylist(playlistId)
     if (!songmids.length) return 0
     let removed = 0
     const tx = this.db.transaction((ids: (string | number)[]) => {
       for (const id of ids) {
-        const info = this.stmtDeleteSong.run(playlistId, String(id))
+        const info = this.stmtDeleteSong.run(playlistId, this.resolveSelector(playlistId, id))
         if (info.changes > 0) removed++
       }
     })
@@ -414,11 +522,26 @@ export class PlaylistDatabase {
     return removed
   }
 
+  replaceSongs(playlistId: string, songs: Songs[]): void {
+    songs = songs.map(normalizeMusicItem)
+    this.db.transaction(() => {
+      this.clearSongs(playlistId)
+      this.appendSongs(playlistId, songs)
+    })()
+  }
+
   clearSongs(playlistId: string): void {
+    this.assertWritablePlaylist(playlistId)
     this.stmtClearSongs.run(playlistId)
   }
 
   searchSongs(playlistId: string, keyword: string): Songs[] {
+    if (!this.stmtPlaylistExists.get(playlistId))
+      return this.listSongs(playlistId).filter((song) =>
+        [song.name, song.singer, song.albumName].some((value) =>
+          value.toLowerCase().includes(keyword.toLowerCase())
+        )
+      )
     const kw = `%${keyword.replace(/[%_]/g, (m) => '\\' + m)}%`
     const rows = this.db
       .prepare(
@@ -433,7 +556,7 @@ export class PlaylistDatabase {
     const out: Songs[] = []
     for (const r of rows) {
       try {
-        out.push(JSON.parse(r.data) as Songs)
+        out.push(normalizeMusicItem(JSON.parse(r.data)))
       } catch {
         // skip
       }
@@ -442,6 +565,14 @@ export class PlaylistDatabase {
   }
 
   aggregateBy(playlistId: string, field: 'singer' | 'albumName'): Record<string, number> {
+    if (!this.stmtPlaylistExists.get(playlistId))
+      return this.listSongs(playlistId).reduce(
+        (result, song) => {
+          if (song[field]) result[song[field]] = (result[song[field]] || 0) + 1
+          return result
+        },
+        {} as Record<string, number>
+      )
     const stmt = field === 'singer' ? this.stmtAggSinger : this.stmtAggAlbum
     const rows = stmt.all(playlistId) as { k: string; c: number }[]
     const out: Record<string, number> = {}
@@ -449,72 +580,194 @@ export class PlaylistDatabase {
     return out
   }
 
-  // ===== one-shot JSON migration =====
+  close(): void {
+    this.db.close()
+  }
 
-  private migrateFromJsonIfNeeded(): void {
-    try {
-      const userData = app.getPath('userData')
-      const dir = path.join(userData, 'songList')
-      const indexPath = path.join(dir, 'index.json')
-      if (!fs.existsSync(indexPath)) return
-
-      // Only migrate if DB is empty to avoid re-import after user work.
-      const cnt = this.db.prepare('SELECT COUNT(*) AS c FROM playlists').get() as {
-        c: number
-      }
-      if (cnt.c > 0) return
-
-      const raw = fs.readFileSync(indexPath, 'utf-8')
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return
-
-      const tx = this.db.transaction((playlists: SongList[]) => {
-        for (const pl of playlists) {
-          if (!pl || !pl.id) continue
-          const nowIso = new Date().toISOString()
-          const normalized: SongList = {
-            id: pl.id,
-            name: pl.name ?? pl.id,
-            description: pl.description ?? '',
-            coverImgUrl: pl.coverImgUrl || DEFAULT_COVER,
-            source: pl.source ?? 'local',
-            meta: pl.meta ?? {},
-            createTime: pl.createTime || nowIso,
-            updateTime: pl.updateTime || nowIso
-          }
-          this.insertPlaylist(normalized)
-
-          const songsFile = path.join(dir, `${pl.id}.json`)
-          if (fs.existsSync(songsFile)) {
+  inspectRepair() {
+    const rows = this.db.prepare('SELECT playlist_id, data FROM playlist_songs').all() as any[]
+    const recoveryCandidates: { playlist: string; name: string; singer: string }[] = []
+    const seen = new Set<string>()
+    for (const name of fs
+      .readdirSync(app.getPath('userData'))
+      .filter((name) => name.startsWith('songList.backup.'))) {
+      try {
+        const dir = path.join(app.getPath('userData'), name)
+        const playlists = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'))
+        for (const playlist of playlists) {
+          const songs = JSON.parse(fs.readFileSync(path.join(dir, `${playlist.id}.json`), 'utf8'))
+          for (const raw of songs) {
             try {
-              const sraw = fs.readFileSync(songsFile, 'utf-8')
-              const sarr = JSON.parse(sraw)
-              if (Array.isArray(sarr) && sarr.length > 0) {
-                this.appendSongs(pl.id, sarr as Songs[])
+              const song = normalizeMusicItem(raw)
+              const key = `${playlist.id}:${songKey(song)}`
+              if (!seen.has(key) && !this.getSong(playlist.id, songKey(song))) {
+                seen.add(key)
+                recoveryCandidates.push({
+                  playlist: playlist.name || playlist.id,
+                  name: song.name,
+                  singer: song.singer
+                })
               }
-            } catch (e) {
-              console.warn(`迁移歌单 ${pl.id} 的歌曲失败:`, e)
+            } catch {
+              /* Invalid originals remain in the backup. */
             }
           }
         }
-      })
-      tx(parsed as SongList[])
-
-      try {
-        const backup = path.join(userData, `songList.backup.${Date.now()}`)
-        fs.renameSync(dir, backup)
-        console.log(`[playlist] JSON 歌单已迁移到 SQLite，旧数据保留在: ${backup}`)
-      } catch (e) {
-        console.warn('[playlist] 重命名旧 songList 目录失败（不影响迁移结果）:', e)
+      } catch {
+        /* Detailed errors are reported by the consented import. */
       }
-    } catch (e) {
-      console.error('[playlist] JSON → SQLite 迁移失败，将保留旧 JSON 数据:', e)
     }
+    return {
+      playlists: this.listPlaylists().length,
+      songs: rows.length,
+      needsRepair: this.repairNeeded(),
+      recoveryCandidates
+    }
+  }
+
+  repairSongs(): { fixed: number; issues: string[] } {
+    const issues: string[] = []
+    let fixed = 0
+    this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT * FROM playlist_songs ORDER BY position').all() as any[]
+      if (!this.hasSongKeys()) {
+        this.db.exec('ALTER TABLE playlist_songs RENAME TO playlist_songs_old')
+        this.db.exec(
+          'DROP INDEX IF EXISTS idx_playlist_songs_position; DROP INDEX IF EXISTS idx_playlist_songs_name'
+        )
+        this.migrate()
+      } else this.db.exec('DELETE FROM playlist_songs')
+      const insert = this.db.prepare(`INSERT INTO playlist_songs
+        (playlist_id, songmid, song_key, position, data, name, singer, albumName, img)
+        VALUES (@playlist_id, @songmid, @song_key, @position, @data, @name, @singer, @albumName, @img)`)
+      for (const [index, row] of rows.entries()) {
+        try {
+          const song = normalizeMusicItem(JSON.parse(row.data))
+          insert.run(songToRowFields(row.playlist_id, song, row.position))
+          fixed++
+        } catch (error) {
+          // Preserve the exact unreadable row instead of discarding a user's data.
+          insert.run({ ...row, song_key: `unrepaired:${index}` })
+          issues.push(`${row.playlist_id}/${row.songmid}: ${String(error)}`)
+        }
+      }
+      this.db.exec('DROP TABLE IF EXISTS playlist_songs_old')
+      this.db.pragma(
+        `user_version = ${Math.max(2, Number(this.db.pragma('user_version', { simple: true })))}`
+      )
+    })()
+    this.prepareStatements()
+    return { fixed, issues }
+  }
+
+  restoreBackup(filename: string): void {
+    this.db.prepare('ATTACH DATABASE ? AS repair_backup').run(filename)
+    try {
+      const schema = this.db
+        .prepare(
+          "SELECT name, sql FROM repair_backup.sqlite_master WHERE type = 'table' AND name IN ('playlists', 'playlist_songs') ORDER BY name DESC"
+        )
+        .all() as any[]
+      this.db.transaction(() => {
+        this.db.exec('DROP TABLE playlist_songs; DROP TABLE playlists')
+        for (const name of ['playlists', 'playlist_songs']) {
+          this.db.exec(schema.find((row) => row.name === name).sql)
+          this.db.exec(`INSERT INTO ${name} SELECT * FROM repair_backup.${name}`)
+        }
+        const version = this.db.pragma('repair_backup.user_version', { simple: true })
+        this.db.pragma(`user_version = ${Number(version) || 0}`)
+      })()
+    } finally {
+      this.db.exec('DETACH DATABASE repair_backup')
+    }
+    this.migrate()
+    this.prepareStatements()
+  }
+
+  importLegacyPlaylists(restoreMissing = false): { fixed: number; issues: string[] } {
+    const firstImport = Number(this.db.pragma('user_version', { simple: true })) < 3
+    const userData = app.getPath('userData')
+    const directories = fs
+      .readdirSync(userData)
+      .filter((name) => name === 'songList' || name.startsWith('songList.backup.'))
+    const issues: string[] = []
+    let fixed = 0
+    for (const directory of directories) {
+      const dir = path.join(userData, directory)
+      const indexPath = path.join(dir, 'index.json')
+      if (!fs.existsSync(indexPath)) continue
+      try {
+        const playlists = JSON.parse(fs.readFileSync(indexPath, 'utf8'))
+        for (const pl of playlists) {
+          const existing = this.stmtPlaylistExists.get(String(pl.id))
+          // A backup may contain deliberate deletions. Only restore missing entries by consent.
+          if (!existing && !(directory === 'songList' && firstImport) && !restoreMissing) continue
+          if (!existing) {
+            const now = new Date().toISOString()
+            this.insertPlaylist({
+              ...pl,
+              name: pl.name || pl.id,
+              source: pl.source || 'local',
+              description: pl.description || '',
+              coverImgUrl: pl.coverImgUrl || DEFAULT_COVER,
+              meta: pl.meta || {},
+              createTime: pl.createTime || now,
+              updateTime: pl.updateTime || now
+            })
+          }
+          const file = path.join(dir, `${pl.id}.json`)
+          if (!fs.existsSync(file)) continue
+          const values = JSON.parse(fs.readFileSync(file, 'utf8'))
+          for (const value of values) {
+            try {
+              const song = normalizeMusicItem(value)
+              const current = this.getSong(pl.id, songKey(song))
+              if (current) {
+                const merged = { ...song, ...current }
+                for (const field of ['interval', 'img', 'albumName', 'hash']) {
+                  if (!current[field] || current[field] === '0:00' || current[field] === '00:00')
+                    merged[field] = song[field]
+                }
+                merged.types = (current.types?.length ? current.types : song.types)?.map(
+                  (quality: any) => {
+                    const type = typeof quality === 'string' ? quality : quality.type
+                    const old = song.types?.find(
+                      (q: any) => (typeof q === 'string' ? q : q.type) === type
+                    )
+                    return {
+                      ...(typeof old === 'object' ? old : {}),
+                      ...(typeof quality === 'object' ? quality : { type })
+                    }
+                  }
+                )
+                this.db
+                  .prepare(
+                    'UPDATE playlist_songs SET data = ? WHERE playlist_id = ? AND song_key = ?'
+                  )
+                  .run(JSON.stringify(normalizeMusicItem(merged)), pl.id, songKey(song))
+              } else if ((directory === 'songList' && firstImport) || restoreMissing)
+                fixed += this.appendSongs(pl.id, [song])
+            } catch (error) {
+              issues.push(`${pl.id}: ${String(error)}`)
+            }
+          }
+        }
+      } catch (error) {
+        issues.push(`${directory}: ${String(error)}`)
+      }
+    }
+    // Retain raw JSON for backup/retry, but never resurrect it after a later deletion.
+    this.db.pragma('user_version = 3')
+    return { fixed, issues }
   }
 }
 
-let instance: PlaylistDatabase | null = null
+let repairLocked = false
+export const setPlaylistRepairLocked = (value: boolean) => {
+  repairLocked = value
+}
+let instance: PlaylistDatabase | undefined
 export function getPlaylistDatabase(): PlaylistDatabase {
-  if (!instance) instance = new PlaylistDatabase()
-  return instance
+  if (repairLocked) throw new Error('音乐数据正在修复，请稍后重试')
+  return (instance ??= new PlaylistDatabase())
 }
