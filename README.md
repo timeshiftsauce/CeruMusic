@@ -232,7 +232,7 @@ CeruMuisc/
 
 - **IDE**: VS Code 或 WebStorm
 - **Node.js 版本**: 22.14 及以上（CI 使用 Node 22）
-- **包管理器**: **Yarn 1.22.22**，CI 使用 `yarn install --frozen-lockfile`
+- **包管理器**: **Yarn 1.22.22**
 - **项目后端**: 欢迎对接[https://api.ceru.shiqianjiang.cn/api-docs](https://api.ceru.shiqianjiang.cn/api-docs)
 
 ### 项目设置
@@ -240,8 +240,10 @@ CeruMuisc/
 1. 安装依赖：
 
    ```bash
-   yarn install
+   yarn setup
    ```
+
+   `yarn setup` 会跳过 Yarn 1 对 `better-sqlite3` 的错误 `node-gyp` 自动编译，下载 Electron 运行时，并检查 native 模块。不要直接使用普通 `yarn install`，否则 Windows 需要额外安装 Visual Studio 的 C++ 工具链。
 
 2. 启动开发服务器：
 

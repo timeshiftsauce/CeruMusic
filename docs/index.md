@@ -80,15 +80,17 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
 - **IDE**: VS Code 或 WebStorm
 - **Node.js 版本**: 22 及以上
-- **包管理器**: **yarn**
+- **包管理器**: **Yarn 1.22.22**
 
 ### 项目设置
 
 1. 安装依赖：
 
    ```bash
-   yarn install
+   yarn setup
    ```
+
+   `yarn setup` 会跳过 Yarn 1 对 `better-sqlite3` 的错误 `node-gyp` 自动编译，并完成 Electron 与 native 模块准备。不要直接使用普通 `yarn install`。
 
 2. 启动开发服务器：
 

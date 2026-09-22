@@ -10,7 +10,8 @@ const pluginSidebar = {
       collapsed: false,
       items: [
         { text: '简介', link: '/guide/plugins/v2/' },
-        { text: '常用概念', link: '/guide/plugins/v2/concepts' }
+        { text: '常用概念', link: '/guide/plugins/v2/concepts' },
+        { text: '歌曲数据契约与升级修复', link: '/guide/music-data-repair' }
       ]
     },
     {
@@ -77,6 +78,7 @@ const pluginSidebar = {
       collapsed: true,
       items: [
         { text: '工程与 Manifest', link: '/guide/plugins/v2/manifest' },
+        { text: 'PluginContext API 总览', link: '/guide/plugins/v2/plugin-context' },
         { text: '运行时与模块', link: '/guide/plugins/v2/runtime' },
         { text: '权限', link: '/guide/plugins/v2/permissions' },
         { text: '配置与数据迁移', link: '/guide/plugins/v2/configuration' },

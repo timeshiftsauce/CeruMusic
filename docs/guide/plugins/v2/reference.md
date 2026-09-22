@@ -56,11 +56,21 @@ export type HostLodash = Pick<LoDashStatic, (typeof LODASH_METHODS)[number]>;
 export * from './manifest.js';
 import type { JsonValue, JsonObject, MaybePromise, Disposable, PluginManifest } from './manifest.js';
 export interface ResourceRef {
-    pluginId: string;
+    /**
+     * Owning plugin for private resources. Public provider-scoped tracks may omit
+     * this field so a playlist/search result does not pin playback to its source
+     * plugin; the Host fills it in only when invoking a selected implementation.
+     */
+    pluginId?: string;
     providerId: string;
     connectionId?: string;
     kind: string;
     id: string;
+    /** Public canonical track ID within providerId. Allows the Host's selected resolver.
+     * Omit for plugin/account-private IDs. Cannot be combined with connectionId.
+     * Cross-plugin calls receive only this public identity, never data.
+     */
+    scope?: 'provider';
     /** Opaque plugin-owned JSON persisted by the Host and returned only to this plugin. */
     data?: JsonObject;
 }
@@ -792,6 +802,7 @@ export interface HostServiceEvents {
         keys: string[];
     };
 }
+export declare const HOST_SERVICE_EVENT_NAMES: readonly ["account.changed", "library.changed", "player.changed", "queue.changed", "lyrics.changed", "downloads.changed", "settings.changed", "theme.changed", "rooms.changed", "devices.changed", "permissions.changed"];
 /** Contract first: availability must be checked before using services not connected by this Host. */
 export interface HostServices {
     capabilities: {
@@ -1386,10 +1397,18 @@ export interface PermissionGroupResult {
 import type { ContentEntity, ResourceRef, ResolveResult } from './index.js';
 /** Milliseconds throughout. Platform-specific formats/decryption stay inside the plugin. */
 export interface LyricWord {
+    /** Optional translation aligned with this timed source word. */
+    translation?: string;
     romanization?: string;
     startTimeMs: number;
     endTimeMs: number;
     text: string;
+}
+/** A translation or romanization, optionally preserving its own timed words. */
+export interface LyricSubLine {
+    language?: string;
+    text: string;
+    words?: LyricWord[];
 }
 export interface LyricLine {
     isBackground?: boolean;
@@ -1399,6 +1418,9 @@ export interface LyricLine {
     text: string;
     translation?: string;
     romanization?: string;
+    /** Structured TTML-style alternatives. Singular fields remain backward compatible. */
+    translations?: LyricSubLine[];
+    romanizations?: LyricSubLine[];
     words?: LyricWord[];
 }
 export interface CrLyric {
@@ -1413,12 +1435,18 @@ export interface CrLyric {
 /** @deprecated Use CrLyric. */
 export type LyricsDocument = CrLyric;
 export interface TrackMetadata {
+    /** Optional platform hash; not a plugin owner or routing key. */
+    hash?: string;
+    /** Original display sizes when exact bytes are unavailable. Never infer bytes from these labels. */
+    qualitySizeLabels?: Record<string, string>;
     artists: string[];
     album?: {
         id?: string;
         title: string;
     };
     qualities?: string[];
+    /** Actual file sizes in bytes, keyed by the same IDs as qualities. Omit unknown sizes. */
+    qualitySizes?: Record<string, number>;
     artworkUrl?: string;
     durationMs?: number;
 }
@@ -1451,6 +1479,8 @@ export interface MusicChart extends ContentEntity {
     chart?: ChartMetadata;
 }
 export declare function assertResourceRef(value: unknown): asserts value is ResourceRef;
+/** Retarget a public track without disclosing the original plugin's private data. */
+export declare function retargetTrackRef(ref: ResourceRef, pluginId: string): ResourceRef;
 export declare function assertContentPage(value: unknown): void;
 export declare function assertResolveResult(value: unknown): asserts value is ResolveResult;
 export declare function assertLyricsDocument(value: unknown): asserts value is LyricsDocument;
@@ -1464,7 +1494,7 @@ export declare function assertLyricsDocument(value: unknown): asserts value is L
 import type { CrLyric } from './music.js';
 import type { ResourceRef, OperationContext } from './index.js';
 export type LyricInputFormat = 'auto' | 'lrc' | 'enhanced-lrc' | 'yrc' | 'qrc' | 'krc' | 'ttml' | 'plain';
-export type LyricExportFormat = 'lrc' | 'enhanced-lrc' | 'yrc';
+export type LyricExportFormat = 'lrc' | 'enhanced-lrc' | 'yrc' | 'ttml';
 export interface LyricParseRequest {
     track: ResourceRef;
     format: LyricInputFormat;
@@ -1480,7 +1510,7 @@ export interface LyricExportResult {
     format: LyricExportFormat;
     text: string;
     mime: 'text/plain';
-    extension: 'lrc' | 'yrc';
+    extension: 'lrc' | 'yrc' | 'ttml';
 }
 /** Parsing/decryption/serialization belongs to plugins, not the player or download manager. */
 export interface LyricConverter {

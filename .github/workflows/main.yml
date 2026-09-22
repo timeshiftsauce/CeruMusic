@@ -55,24 +55,11 @@ jobs:
         run: |
           npm i -g yarn@1.22.22
 
-          # Temporary fix for Windows: mock npx to bypass "only-allow pnpm" script failure
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            mkdir -p .fake-bin
-            echo '@echo off' > .fake-bin/npx.cmd
-            echo 'echo "Fake npx called"' >> .fake-bin/npx.cmd
-            export PATH="$PWD/.fake-bin:$PATH"
-          fi
+          yarn run setup
 
-          # better-sqlite3 13 ships Node-API prebuilds. Running Yarn lifecycle
-          # scripts here can incorrectly fall back to node-gyp on Windows,
-          # which requires a C++ toolchain that the runner does not need.
-          yarn install --frozen-lockfile --ignore-scripts
-
-      # Install Electron explicitly, then run the project-owned native checks.
+      # Verify the Electron runtime and project-owned native modules.
       - name: Verify Electron runtime and native modules
         run: |
-          node node_modules/electron/install.js
-          node scripts/prepare-native-modules.mjs
           node scripts/check-native-runtime.cjs
 
       - name: Build Electron App for windows

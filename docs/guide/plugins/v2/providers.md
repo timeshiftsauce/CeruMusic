@@ -61,16 +61,17 @@ const ref = {
 }
 ```
 
-| 字段            | 说明                                                        |
-| --------------- | ----------------------------------------------------------- |
-| `pluginId`      | 当前插件 Manifest ID，代码里用 ctx.plugin.id                |
-| `providerId`    | 清单及注册时的 Provider ID                                  |
-| `kind`          | track、playlist、chart 等资源类型                           |
-| `id`            | 上游稳定标识，始终转换为字符串                              |
-| `connectionId?` | 多连接场景的连接标识                                        |
-| `data?`         | 插件私有 JSON 对象，随资源保存并回传；最多 **64 KiB UTF-8** |
+| 字段            | 说明                                                                        |
+| --------------- | --------------------------------------------------------------------------- |
+| `pluginId`      | 当前插件 Manifest ID，代码里用 ctx.plugin.id；私有资源必填，公共引用可省略  |
+| `providerId`    | 清单及注册时的 Provider ID                                                  |
+| `kind`          | track、playlist、chart 等资源类型                                           |
+| `id`            | 上游稳定标识，始终转换为字符串                                              |
+| `connectionId?` | 多连接场景的连接标识                                                        |
+| `scope?`        | 公共歌曲声明 `'provider'`，由宿主按已选实现路由；不能与 connectionId 同时用 |
+| `data?`         | 插件私有 JSON 对象，随资源保存并回传；最多 **64 KiB UTF-8**                 |
 
-四个必需标识不能为空，每个最多 2048 个 UTF-16 代码单元。`data` 不是凭据保险箱，不要保存 Cookie、token 或不可公开的发行信息。
+`providerId / kind / id` 必须非空，单个标识最多 2048 个 UTF-16 代码单元。公共歌曲可以声明 `scope: 'provider'`，表示这个 ID 是 `providerId` 下的公共标识：宿主会用播放、下载、歌词各自配置的实现解析它，跨插件调用只传公共身份、不再携带 `data`。不声明 scope 时引用保持插件归属，服务器私有库、账号相关 ID 与 `connectionId` 继续走这种默认行为。`data` 不是凭据保险箱，不要保存 Cookie、token 或不可公开的发行信息。
 
 ## ContentEntity：宿主认识的数据
 
@@ -98,7 +99,7 @@ const track: ContentEntity = {
 }
 ```
 
-`ref / title / capabilities` 必需；track 类型必须有 `metadata.artists` 数组。`metadata` 支持 album、qualities、artworkUrl、durationMs。`artwork` 是 AssetHandle，与 `metadata.artworkUrl` 字符串不同。
+`ref / title / capabilities` 必需；track 类型必须有 `metadata.artists` 数组。`metadata` 支持 album、qualities、artworkUrl、durationMs，以及音质大小的两种写法：`qualitySizes`（各音质的真实字节数，未知就省略）和 `qualitySizeLabels`（平台返回的原始大小文字，键必须在 `qualities` 中，不能反推字节数）；平台已有哈希时可填 `hash`。`artwork` 是 AssetHandle，与 `metadata.artworkUrl` 字符串不同。
 
 歌单信息放在 `playlist: { trackCount?, description?, author?, artworkUrl? }`；排行榜信息放在 `chart: { updateFrequency?, artworkUrl? }`。不要直接返回平台原始 JSON。
 

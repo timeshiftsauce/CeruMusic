@@ -417,9 +417,10 @@ function startHostEventPublishing() {
       { immediate: true }
     ),
     watch(
-      () => globalStatus.player.songInfo,
-      (song) => recordPluginHistory(song),
-      { immediate: true }
+      () => [audio.isPlay, globalStatus.player.songInfo] as const,
+      ([playing, song]) => {
+        if (playing) recordPluginHistory(song)
+      }
     ),
     watch(
       () => JSON.stringify(globalStatus.player.lyrics.crlyric ?? null),

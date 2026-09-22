@@ -17,6 +17,7 @@ import {
 } from 'electron'
 import { configManager } from './services/ConfigManager'
 import menuBarLyric from './services/menuBarLyric'
+import { allowCrossOriginEmbeds } from './services/iframeEmbed'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/logo.png?asset'
@@ -397,19 +398,24 @@ function setupDownloadManager() {
     const format = normalizeLyricFormat(task.tagWriteOptions?.lyricFormat)
     if (!format) throw new Error('不支持的歌词导出格式')
     const resource = task.songInfo.pluginResource
-    const cacheKey = 'lyric-export-v2:' + JSON.stringify([
-      resource?.pluginId ?? task.pluginId ?? null,
-      resource?.providerId ?? source,
-      resource?.connectionId ?? null,
-      resource?.id ??
-        task.songInfo.songmid ??
-        task.songInfo.hash ??
-        `${task.songInfo.name}-${task.songInfo.singer}`,
-      format
-    ])
+    const cacheKey =
+      'lyric-export-v2:' +
+      JSON.stringify([
+        resource?.pluginId ?? task.pluginId ?? null,
+        resource?.providerId ?? source,
+        resource?.connectionId ?? null,
+        resource?.id ??
+          task.songInfo.songmid ??
+          task.songInfo.hash ??
+          `${task.songInfo.name}-${task.songInfo.singer}`,
+        format
+      ])
     const cachedLyric = await musicCacheService.getCachedLyric(cacheKey)
     if (cachedLyric) return cachedLyric
-    const result = await musicSdkService(source).getLyric({ songInfo: task.songInfo, useFormat: format })
+    const result = await musicSdkService(source).getLyric({
+      songInfo: task.songInfo,
+      useFormat: format
+    })
     if (result?.error) throw new Error(result.error)
     const lyric = typeof result === 'string' && result ? result : null
     if (lyric) musicCacheService.cacheLyric(cacheKey, lyric).catch(console.error)
@@ -722,6 +728,8 @@ registerAutoUpdateEvents()
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // 尽早挂上跨域放宽 —— 首屏的通知卡片 / 插件 iframe 就要用(详见 services/iframeEmbed)
+  allowCrossOriginEmbeds()
   // 清理上次安装残留的安装包（仅限临时目录）
   try {
     await cleanupDownloadedInstallers()

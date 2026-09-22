@@ -641,7 +641,7 @@ onUnmounted(() => {
     <NMessageProvider>
       <NDialogProvider>
         <NGlobalStyle />
-        <div class="page">
+        <div class="page app-provider">
           <slot></slot>
           <t-dialog v-model:visible="importPromptVisible" header="是否导入此歌单" :footer="false">
             <div>
@@ -703,8 +703,17 @@ onUnmounted(() => {
   </NConfigProvider>
 </template>
 <style>
+.app-provider {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: var(--td-bg-color-page, #eee);
+}
+
 .pagesApp {
-  width: 100vw;
   position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
 }
 </style>

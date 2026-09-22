@@ -445,6 +445,9 @@ export default class PluginHost {
     if (this.disposed || !this.core?.snapshot().providers.includes(id)) return false
     return !method || this.providerMethods.get(id)?.has(method) === true
   }
+  supportsShareResolver() {
+    return !this.disposed && Boolean(this.artifact?.header.manifest.modules?.share)
+  }
   supportsAction(id: string) {
     return !this.disposed && this.actionIds.has(id)
   }
@@ -540,8 +543,8 @@ export default class PluginHost {
       pluginId: this.getPluginInfo().id,
       providerId: source,
       kind: 'track',
-      id: String(original?.id ?? song.hash ?? song.songmid ?? song.id),
-      data: { song }
+      id: String(song.songmid ?? song.hash ?? song.id),
+      scope: 'provider' as const
     }
   }
   async getMusicUrl(source: string, song: any, quality: string): Promise<string> {
@@ -1348,7 +1351,31 @@ export default class PluginHost {
                 .replace(/https?:\/\/[^\s]+\?[^\s]+/g, '[url query redacted]')
             : value
       )
-      this.logger[level]('[plugin]', JSON.parse(values))
+      const parsedValues = JSON.parse(values) as unknown[]
+      // Keep plugin logs as normal logger arguments. Passing the entire array
+      // as one argument makes the logger render `["message", {...}]` and
+      // escapes every nested quote, which is hard to read and search.
+      const compact = (value: unknown): unknown => {
+        if (typeof value !== 'string') {
+          try {
+            const text = JSON.stringify(value)
+            if (text && text.length > 2200) {
+              const edge = 1000
+              return `${text.slice(0, edge)}…[truncated ${text.length - edge * 2} chars]…${text.slice(-edge)}`
+            }
+          } catch {
+            return String(value)
+          }
+        }
+        return value
+      }
+      const [message, ...rawDetails] = parsedValues
+      // Older runtimes forwarded an omitted second argument as `null`. Drop
+      // only that trailing compatibility artifact; an explicit null in a new
+      // single-string log has already been formatted before reaching Host.
+      const details =
+        rawDetails.length === 1 && rawDetails[0] === null ? [] : rawDetails
+      this.logger[level](`[plugin] ${String(message ?? '')}`, ...details.map(compact))
       return
     }
     if (type === 'notify') {

@@ -12,6 +12,29 @@ import {
 
 let isPluginsInitialized = false
 
+const DEFAULT_HOST_EVENT_MAX_BYTES = 1024 * 1024
+const LARGE_HOST_EVENT_MAX_BYTES = 8 * 1024 * 1024
+const LARGE_HOST_EVENTS = new Set(['queue.changed', 'lyrics.changed'])
+
+function assertHostEventPayloadSize(name: string, value: unknown): void {
+  let serialized: string
+  try {
+    serialized = JSON.stringify(value ?? null)
+  } catch {
+    throw new Error(`插件宿主事件 ${name} 数据无法序列化`)
+  }
+
+  const bytes = Buffer.byteLength(serialized, 'utf8')
+  const limit = LARGE_HOST_EVENTS.has(name)
+    ? LARGE_HOST_EVENT_MAX_BYTES
+    : DEFAULT_HOST_EVENT_MAX_BYTES
+  if (bytes <= limit) return
+
+  const actualMiB = (bytes / 1024 / 1024).toFixed(2)
+  const limitMiB = limit / 1024 / 1024
+  throw new Error(`插件宿主事件 ${name} 数据过大（${actualMiB} MiB，限制 ${limitMiB} MiB）`)
+}
+
 export default function InitPluginService() {
   ipcMain.handle('plugin:external:prepare', (_event, sequence: number) =>
     prepareExternalPlugin(sequence)
@@ -43,8 +66,7 @@ export default function InitPluginService() {
     'plugin:publish-host-event',
     async (event, name: string, value: unknown, pluginId?: string) => {
       assertMainWindowRequest(event, '只有主界面可以发布插件宿主事件')
-      if (Buffer.byteLength(JSON.stringify(value ?? null)) > 1024 * 1024)
-        throw new Error('插件宿主事件数据过大')
+      assertHostEventPayloadSize(name, value)
       await pluginService.publishHostEvent(name, value, pluginId)
       return null
     }

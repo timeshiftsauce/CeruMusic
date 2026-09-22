@@ -4,6 +4,14 @@ import type { HotkeyConfigPayload } from '@common/types/hotkeys'
 
 // Custom APIs for renderer
 const api = {
+  musicDataRepair: {
+    inspect: () => ipcRenderer.invoke('music:repair-inspect'),
+    begin: (storage: Record<string, string | null>, restoreMissing: boolean) => ipcRenderer.invoke('music:repair-begin', storage, restoreMissing),
+    finish: () => ipcRenderer.invoke('music:repair-finish'),
+    rollback: () => ipcRenderer.invoke('music:repair-rollback'),
+    rollbackComplete: () => ipcRenderer.invoke('music:repair-rollback-complete'),
+    openBackup: () => ipcRenderer.invoke('music:repair-open-backup')
+  },
   deepLinks: {
     pending: (): Promise<import('../common/types/deepLink').QueuedDeepLink[]> =>
       ipcRenderer.invoke('deeplink:pending'),
@@ -308,6 +316,7 @@ const api = {
 
   // 歌单管理 API
   songList: {
+    replaceSongs: (id: string, songs: any[]) => ipcRenderer.invoke('songlist:replace-songs', id, songs),
     // === 歌单管理 ===
     create: (name: string, description?: string, source?: string, meta?: Record<string, any>) =>
       ipcRenderer.invoke('songlist:create', name, description, source, meta),

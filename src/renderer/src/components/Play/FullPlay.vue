@@ -3,7 +3,18 @@ import '@applemusic-like-lyrics/core/style.css'
 import { LayoutReason, LayoutReasonStrategyMap } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
-import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick, toRaw } from 'vue'
+import {
+  ref,
+  computed,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  watch,
+  reactive,
+  onBeforeUnmount,
+  nextTick,
+  toRaw
+} from 'vue'
 import { useBackgroundBeat } from '@renderer/composables/useBackgroundBeat'
 import { usePlayerBackground } from '@renderer/composables/usePlayerBackground'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
@@ -442,7 +453,7 @@ const state = reactive({
   audioUrl: Audio.value.url,
   albumUrl: props.coverImage,
   albumIsVideo: false,
-  currentTime: 0,
+  currentTime: Math.round((Number(Audio.value.currentTime) || 0) * 1000),
   lowFreqVolume: 0
 })
 
@@ -471,6 +482,81 @@ const currentLyricOffset = computed(() => {
 })
 const effectiveLyricTime = computed(
   () => (Number(state.currentTime) || 0) + currentLyricOffset.value
+)
+
+let lyricSyncFrame: number | undefined
+let lyricAutoResumeTimer: ReturnType<typeof setTimeout> | undefined
+
+const cancelLyricSync = () => {
+  if (lyricSyncFrame !== undefined) {
+    cancelAnimationFrame(lyricSyncFrame)
+    lyricSyncFrame = undefined
+  }
+}
+
+const cancelLyricAutoResume = () => {
+  if (lyricAutoResumeTimer !== undefined) {
+    clearTimeout(lyricAutoResumeTimer)
+    lyricAutoResumeTimer = undefined
+  }
+}
+
+// PlayMusic is cached by KeepAlive while navigating to settings. Wait until
+// FullPlay has been reinserted and laid out before asking either renderer to
+// reposition itself, otherwise AMLL can calculate against a zero-sized view.
+const syncLyricPosition = (rebuildView = false) => {
+  const elementTime = Number(Audio.value.audio?.currentTime)
+  const storeTime = Number(Audio.value.currentTime)
+  const currentTimeSeconds = Number.isFinite(elementTime)
+    ? elementTime
+    : Number.isFinite(storeTime)
+      ? storeTime
+      : 0
+  state.currentTime = Math.max(0, Math.round(currentTimeSeconds * 1000))
+
+  void nextTick(() => {
+    cancelLyricSync()
+    lyricSyncFrame = requestAnimationFrame(() => {
+      lyricSyncFrame = undefined
+      const ref = lyricPlayerRef.value as any
+      const amllPlayer = ref?.lyricPlayer
+      if (amllPlayer) {
+        if (rebuildView && typeof amllPlayer.rebuildLyricView === 'function') {
+          amllPlayer.rebuildLyricView(effectiveLyricTime.value)
+        } else {
+          amllPlayer.resetScroll?.()
+          amllPlayer.setCurrentTime?.(effectiveLyricTime.value, true)
+        }
+      }
+      ref?.refresh?.()
+    })
+  })
+}
+
+const scheduleLyricAutoResume = () => {
+  cancelLyricAutoResume()
+  lyricAutoResumeTimer = setTimeout(() => {
+    lyricAutoResumeTimer = undefined
+    syncLyricPosition()
+  }, 3000)
+}
+
+onActivated(() => syncLyricPosition(true))
+onDeactivated(() => {
+  cancelLyricSync()
+  cancelLyricAutoResume()
+})
+
+watch(
+  () => props.show,
+  (visible) => {
+    if (visible) syncLyricPosition(true)
+    else {
+      cancelLyricSync()
+      cancelLyricAutoResume()
+    }
+  },
+  { immediate: true }
 )
 
 // 订阅音频事件，保持数据同步
@@ -519,6 +605,8 @@ watch(
 
 // 组件卸载前清理订阅
 onBeforeUnmount(async () => {
+  cancelLyricSync()
+  cancelLyricAutoResume()
   // 移除事件监听器
   unsubscribeFullscreen?.()
   unsubscribeFullscreen = null
@@ -564,7 +652,8 @@ watch(
   () => Audio.value.currentTime,
   (newTime) => {
     state.currentTime = Math.round(newTime * 1000)
-  }
+  },
+  { immediate: true }
 )
 
 // 计算偏白的主题色
@@ -865,6 +954,8 @@ onUnmounted(() => {
           :enable-scale="playSetting.getisJumpLyric"
           :text-align="!playSetting.getShowLeftPanel ? 'center' : 'left'"
           :style="playSetting.getShowLeftPanel ? '' : 'text-align: center;'"
+          @wheel="scheduleLyricAutoResume"
+          @touchend="scheduleLyricAutoResume"
           @line-click="jumpTime"
         />
       </div>
@@ -1088,8 +1179,9 @@ onUnmounted(() => {
   // transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
   top: var(--height);
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  right: -1px;
+  width: auto;
+  height: calc(100% + 1px);
   color: var(--text-color);
   overflow: hidden; /* 裁掉未全屏时 bg-fallback 的 blur 光晕外溢到主内容区 */
 

@@ -2,6 +2,7 @@
   <Provider v-if="!isAuxiliaryWindow">
     <GlobalBackground />
     <PluginHostBridge />
+    <NotificationCenter />
 
     <router-view v-slot="{ Component }">
       <Transition
@@ -20,7 +21,14 @@
 </template>
 
 <script setup lang="ts">
+import NotificationCenter from '@renderer/components/notifications/NotificationCenter.vue'
 import { onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { coordinateMusicDataRepair } from '@renderer/services/musicDataRepair'
+import {
+  musicStartupReady,
+  getMusicStorage,
+  setMusicDataPersistence
+} from '@renderer/services/musicDataPersistence'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -40,17 +48,37 @@ const isAuxiliaryWindow = /^#\/(?:desktop-lyric|recognition-worker)(?:\/|$)/.tes
   window.location.hash
 )
 
-// 播放事件属于应用生命周期；刷新后直接进入主界面也必须初始化。
+// Welcome remains uninterrupted. The repair prompt belongs to the first main page.
+let startupDecision: Promise<void> | undefined
 watch(
   () => route.path,
   (path) => {
-    if (!path.startsWith('/home') && path !== '/settings') return
-    void import('@renderer/utils/audio/globaPlayList')
-      .then(({ initPlayback }) => initPlayback())
-      .catch((error) => {
-        console.error('初始化播放器失败:', error)
-        MessagePlugin.error('播放器初始化失败，请重新打开软件后重试')
-      })
+    if (isAuxiliaryWindow || (!path.startsWith('/home') && path !== '/settings')) return
+    startupDecision ??= (async () => {
+      await nextTick()
+      // Let the welcome exit transition finish before showing an in-app modal.
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      const force = sessionStorage.getItem('ceru-open-music-repair') === '1'
+      sessionStorage.removeItem('ceru-open-music-repair')
+      const repaired = await coordinateMusicDataRepair(force)
+      if (repaired) {
+        setMusicDataPersistence(false)
+        const store = LocalUserDetailStore()
+        store.list = JSON.parse(getMusicStorage('songList') || '[]')
+        store.userInfo = JSON.parse(getMusicStorage('userInfo') || '{}')
+        const { useGlobalPlayStatusStore } = await import('@renderer/store/GlobalPlayStatus')
+        useGlobalPlayStatusStore().reloadSnapshot()
+        await nextTick()
+        setMusicDataPersistence(true)
+      }
+      musicStartupReady.value = true
+      updateQueueReady()
+      const { initPlayback } = await import('@renderer/utils/audio/globaPlayList')
+      await initPlayback()
+    })().catch((error) => {
+      console.error('初始化播放器失败:', error)
+      MessagePlugin.error('播放器初始化失败，请重新打开软件后重试')
+    })
   },
   { immediate: true, flush: 'post' }
 )
@@ -64,7 +92,7 @@ async function openSongShare(id: string) {
       const descriptor = await window.api.share.readDescriptor(id)
       const registry = await window.api.plugins.contributions()
       const installed = registry.find((item) => item.manifest.id === descriptor.track.pluginId)
-      if (!installed) {
+      if (!installed && descriptor.track.scope !== 'provider') {
         MessagePlugin.warning('请先安装分享歌曲所需的插件：' + descriptor.track.pluginId)
         return
       }
@@ -149,7 +177,9 @@ let enteredHome = false
 function updateQueueReady() {
   if (route.path.startsWith('/home/')) enteredHome = true
   const interactive = route.path.startsWith('/home/') || route.path.startsWith('/settings')
-  appEntryQueue.setReady(mounted && inboxReady && enteredHome && interactive)
+  appEntryQueue.setReady(
+    mounted && inboxReady && enteredHome && interactive && musicStartupReady.value
+  )
 }
 async function handleDeepLink(item: QueuedDeepLink) {
   try {

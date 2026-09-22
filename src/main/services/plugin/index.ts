@@ -414,30 +414,34 @@ const pluginService = {
   getV2Provider(
     source: string,
     ownerId?: string,
-    method?: string
+    method?: string,
+    requireShareResolver = false
   ): { pluginId: string; host: CeruMusicPluginHost } | null {
+    const supports = (host: CeruMusicPluginHost) =>
+      host.supportsV2Provider(source, method) &&
+      (!requireShareResolver || host.supportsShareResolver())
     // A ResourceRef names its owner. Never route its private data to a different plugin.
     if (ownerId) {
       const owners = runtimeEntries().filter(
         ([pluginId, host]) => pluginId === ownerId || host.getPluginInfo().id === ownerId
       )
       const owner = owners.length === 1 ? owners[0] : undefined
-      return owner?.[1].supportsV2Provider(source, method)
+      return owner && supports(owner[1])
         ? { pluginId: owner[0], host: owner[1] }
         : null
     }
     if (method) {
       const configuredId = capabilityOwners.get(`${source}:${method}`)
       const configured = configuredId ? this.getPluginById(configuredId) : null
-      if (configuredId && configured?.supportsV2Provider(source, method))
+      if (configuredId && configured && supports(configured))
         return { pluginId: configuredId, host: configured }
     }
     const sourceOwnerId = providerOwners.get(source)
     const sourceOwner = sourceOwnerId ? this.getPluginById(sourceOwnerId) : null
-    if (sourceOwnerId && sourceOwner?.supportsV2Provider(source, method))
+    if (sourceOwnerId && sourceOwner && supports(sourceOwner))
       return { pluginId: sourceOwnerId, host: sourceOwner }
     for (const [pluginId, host] of runtimeEntries()) {
-      if (host.supportsV2Provider(source, method)) return { pluginId, host }
+      if (supports(host)) return { pluginId, host }
     }
     return null
   },

@@ -1,3 +1,4 @@
+import { normalizeMusicItems } from '@common/musicItem'
 import type { SongList } from '@renderer/types/audio'
 import CryptoJS from 'crypto-js'
 
@@ -11,7 +12,7 @@ const SECRET_KEY = 'CeruMusic-PlaylistSecretKey'
  */
 export function encryptPlaylist(data: SongList[]): string {
   try {
-    const jsonString = JSON.stringify(data)
+    const jsonString = JSON.stringify(normalizeMusicItems(data))
     const encrypted = CryptoJS.AES.encrypt(jsonString, SECRET_KEY).toString()
     return encrypted
   } catch (error) {
@@ -28,7 +29,7 @@ export function encryptPlaylist(data: SongList[]): string {
 export function decryptPlaylist(encryptedData: string): SongList[] {
   try {
     const decrypted = CryptoJS.AES.decrypt(encryptedData, SECRET_KEY).toString(CryptoJS.enc.Utf8)
-    return JSON.parse(decrypted) as SongList[]
+    return normalizeMusicItems(JSON.parse(decrypted))
   } catch (error) {
     console.error('解密播放列表失败:', error)
     throw new Error('解密播放列表失败或数据格式不正确')

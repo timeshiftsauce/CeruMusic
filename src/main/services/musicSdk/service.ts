@@ -1,3 +1,4 @@
+import { songKey } from '@common/musicItem'
 import {
   SearchArg,
   SearchResult,
@@ -14,8 +15,14 @@ import {
 } from './type'
 import pluginService from '../plugin/index'
 import { assertResourceRef, retargetTrackRef } from '@shiqianjiang/ceru-plugin-sdk'
-import { toAppTrack } from '@common/pluginMusic'
+import {
+  isProviderTrackRef,
+  normalizeAppTrackRef,
+  targetAppTrackRef,
+  toAppTrack
+} from '@common/pluginMusic'
 import { parseLocalLyrics, exportBuiltinLyrics } from '@common/localLyrics'
+import { filterLyricInfo } from '@common/pluginLyrics'
 import { resolveLocalLyrics } from '../localLyrics'
 import { localMusicIndexService } from '../LocalMusicIndex'
 import { readTags } from '../../utils/tagUtils'
@@ -77,8 +84,8 @@ function main(source: string = 'wy') {
     return provider
   }
   const songActionTarget = (action: string, songInfo: any) => {
-    const resource = songInfo?.pluginResource
-    if (resource) assertResourceRef(resource)
+    const resource = normalizeAppTrackRef(songInfo?.pluginResource)
+    if (resource && !isProviderTrackRef(resource)) assertResourceRef(resource)
     const currentSource = resource?.providerId || songInfo?.source || source
     const provider = pluginService.getV2Action(
       currentSource,
@@ -90,7 +97,9 @@ function main(source: string = 'wy') {
         ? {
             ...songInfo,
             source: currentSource,
-            pluginResource: retargetTrackRef(resource, provider.host.getPluginInfo().id)
+            pluginResource: isProviderTrackRef(resource)
+              ? targetAppTrackRef(resource, provider.host.getPluginInfo().id)
+              : retargetTrackRef(resource, provider.host.getPluginInfo().id)
           }
         : songInfo
     return { provider, song, currentSource }
@@ -128,9 +137,9 @@ function main(source: string = 'wy') {
 
     async getMusicUrl({ songInfo, quality, isCache }: GetMusicUrlArg) {
       try {
-        const resource = songInfo.pluginResource
+        const resource = normalizeAppTrackRef(songInfo.pluginResource)
         if (resource) {
-          assertResourceRef(resource)
+          if (!isProviderTrackRef(resource)) assertResourceRef(resource)
           if (resource.kind !== 'track') throw new Error('只能播放歌曲资源')
         }
         const currentSource = resource?.providerId || songInfo.source || source
@@ -141,19 +150,12 @@ function main(source: string = 'wy') {
         )
         if (!provider) throw new Error('请先安装提供该音源的插件')
         const effectiveRef = resource
-          ? retargetTrackRef(resource, provider.host.getPluginInfo().id)
+          ? isProviderTrackRef(resource)
+            ? targetAppTrackRef(resource, provider.host.getPluginInfo().id)
+            : retargetTrackRef(resource, provider.host.getPluginInfo().id)
           : undefined
         // Resolve selection first: changing playback implementations must also change the cache.
-        const songId = JSON.stringify([
-          provider.pluginId,
-          currentSource,
-          effectiveRef?.connectionId ?? null,
-          effectiveRef?.id ??
-            songInfo.hash ??
-            songInfo.songmid ??
-            `${songInfo.name}-${songInfo.singer}`,
-          quality
-        ])
+        const songId = JSON.stringify([provider.pluginId, songKey(songInfo), quality])
 
         // 先检查缓存（isCache !== false 时）
         if (isCache !== false) {
@@ -195,11 +197,16 @@ function main(source: string = 'wy') {
       }
     },
 
-    async getLyric({ songInfo, useFormat = null }: GetLyricArg): Promise<any> {
+    async getLyric({
+      songInfo,
+      grepLyricInfo = false,
+      useStrictMode = false,
+      useFormat = null
+    }: GetLyricArg): Promise<any> {
       try {
-        const resource = songInfo.pluginResource
+        const resource = normalizeAppTrackRef(songInfo.pluginResource)
         if (resource) {
-          assertResourceRef(resource)
+          if (!isProviderTrackRef(resource)) assertResourceRef(resource)
           if (resource.kind !== 'track') throw new Error('只能获取歌曲资源的歌词')
         }
         const currentSource = resource?.providerId || songInfo.source || source
@@ -211,7 +218,9 @@ function main(source: string = 'wy') {
         if (!provider) throw new Error('请安装这首歌曲所需的插件')
         const res = await provider.host.invokeV2Provider(currentSource, 'tracks.lyrics', [
           resource
-            ? retargetTrackRef(resource, provider.host.getPluginInfo().id)
+            ? isProviderTrackRef(resource)
+              ? targetAppTrackRef(resource, provider.host.getPluginInfo().id)
+              : retargetTrackRef(resource, provider.host.getPluginInfo().id)
             : {
                 pluginId: provider.host.getPluginInfo().id,
                 providerId: currentSource,
@@ -230,7 +239,7 @@ function main(source: string = 'wy') {
             })
           ).text
         }
-        return { crlyric: res }
+        return { crlyric: grepLyricInfo ? filterLyricInfo(res, useStrictMode) : res }
       } catch (e: any) {
         return {
           error: '获取歌词失败 ' + (e.error || e.message || e)

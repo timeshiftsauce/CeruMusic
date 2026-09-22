@@ -96,7 +96,7 @@ pageClass: plugin-v2-doc
 
 Web Surface 还可在这里声明 `title`、`presentation` 和 `lifecycle`。presentation 描述抽屉或 modal 的位置/宽度，lifecycle 指定打开和关闭时调用的动作。容器会跟随 Web 内容高度；页面根元素不要设置 100vh。完整配置与示例见[页面教程](./surfaces#配套清单)。
 
-`modules.share` 定义可导出的服务端解析工厂及允许导出的配置键，是高级能力；不能直接把后台完整上下文送到服务端。
+`modules.share` 定义可导出的服务端解析工厂及允许导出的配置键，是高级能力；不能直接把后台完整上下文送到服务端。桌面把歌曲或歌单分享到网页播放时，只从声明了 `modules.share` 的插件导出解析模块（`entry` 同样要列在 `entries` 里）；没有它的插件仍能正常搜索、播放和下载，只是不能作为分享解析源。
 
 ## 贡献字段
 

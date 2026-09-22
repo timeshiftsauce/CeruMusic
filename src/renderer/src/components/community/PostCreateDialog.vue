@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 发帖对话框
+ * 发帖 / 编辑帖子对话框
  *
  * 支持:
  *  - 1-1000 字正文(后端会跑 DeepSeek AI 审核,失败给提示)
@@ -10,6 +10,10 @@
  *        cloudSongListAPI.createUserSongList 上传(逻辑与 songlist.vue 一致),
  *        拿到 cloudId 后再附加
  *      · 选单曲:先选一个歌单,从中选一首歌(优先展示"我的喜欢")
+ *
+ * 编辑模式:
+ *  - 传入 editPost 即进入编辑,表单预填原帖内容,提交走 PATCH /community/posts/:id
+ *  - 保存成功 emit('updated'),与新建的 emit('created') 区分
  *
  * 注: tdesign 自动导入 t-dialog / t-textarea / t-button 等。
  */
@@ -24,15 +28,21 @@ import {
 } from '@renderer/api/community'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
+import { showSupportNotice } from '@renderer/utils/communitySupport'
 
 const props = defineProps<{
   visible: boolean
+  /** 传入即进入编辑模式 —— 预填该帖内容,提交时更新而不是新建 */
+  editPost?: CommunityPost | null
 }>()
 
 const emit = defineEmits<{
   'update:visible': [v: boolean]
   created: [post: CommunityPost]
+  updated: [post: CommunityPost]
 }>()
+
+const isEditing = computed(() => !!props.editPost)
 
 const visibleLocal = computed({
   get: () => props.visible,
@@ -80,9 +90,13 @@ watch(visibleLocal, (v) => {
 })
 
 function reset() {
-  content.value = ''
-  images.value = []
-  attachment.value = null
+  const src = props.editPost
+  content.value = src?.content || ''
+  // 兼容旧帖子里纯 URL 字符串的图片项
+  images.value = (src?.images || []).map((it) =>
+    typeof it === 'string' ? { url: it, w: 0, h: 0 } : it
+  )
+  attachment.value = src?.attachment ? { ...src.attachment } : null
   showPicker.value = false
   pickerSongs.value = []
   pickerSelectedListIdx.value = -1
@@ -307,15 +321,23 @@ async function submit() {
   }
   submitting.value = true
   try {
-    const post = await communityAPI.createPost({
+    const payload = {
       content: content.value.trim(),
       images: images.value,
       attachment: attachment.value || undefined
-    })
-    emit('created', post)
+    }
+    if (props.editPost) {
+      const post = await communityAPI.updatePost(props.editPost.id, payload)
+      emit('updated', post)
+      showSupportNotice(post.support)
+    } else {
+      const post = await communityAPI.createPost(payload)
+      emit('created', post)
+      showSupportNotice(post.support)
+    }
     visibleLocal.value = false
   } catch (e: any) {
-    MessagePlugin.error(e?.message || '发布失败')
+    MessagePlugin.error(e?.message || (props.editPost ? '保存失败' : '发布失败'))
   } finally {
     submitting.value = false
   }
@@ -336,10 +358,24 @@ async function submit() {
       <div class="composer-heading">
         <span class="heading-icon"><MusicIcon size="24" /></span>
         <div>
-          <h2>分享这一刻</h2>
-          <p>一首好歌，一点心情，都值得被听见。</p>
+          <h2>{{ isEditing ? '编辑笔记' : '分享这一刻' }}</h2>
+          <p>
+            {{
+              isEditing ? '调整你的故事，让此刻更贴近心情。' : '一首好歌，一点心情，都值得被听见。'
+            }}
+          </p>
         </div>
       </div>
+      <!-- 自定义关闭按钮 —— tdesign 默认的 ✕ 太小且不融入设计,用同风格圆钮替代 -->
+      <button
+        class="composer-close"
+        type="button"
+        aria-label="关闭"
+        :disabled="submitting"
+        @click="visibleLocal = false"
+      >
+        <CloseIcon size="18" />
+      </button>
     </template>
     <div class="create-form">
       <div class="writing-area">
@@ -448,7 +484,7 @@ async function submit() {
           :disabled="!canSubmit"
           :loading="submitting"
           @click="submit"
-          >发布笔记</t-button
+          >{{ isEditing ? '保存修改' : '发布笔记' }}</t-button
         >
       </div>
     </div>
@@ -562,38 +598,83 @@ async function submit() {
 <style scoped lang="scss">
 /* The dialog is teleported; target its explicit class for the outer shell. */
 :global(.community-composer.t-dialog) {
-  padding: 28px 30px 24px;
-  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  /* tdesign 的 .t-dialog__position 上下各有 48px 内边距,扣掉后弹窗正好贴合视口
+     (多留 4px 余量避免亚像素误差),不会再出现"整页/整窗滚动";
+     超高时只滚动中间的正文区 */
+  max-height: calc(100vh - 100px);
+  overflow: hidden;
+  padding: 1.75rem 1.875rem 1.5rem;
+  border-radius: 1.375rem;
   border: 1px solid var(--td-border-level-1-color, #eee);
   box-shadow: 0 24px 90px #23172126;
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
   -webkit-app-region: no-drag;
+}
+:global(.community-composer .t-dialog__header) {
+  flex-shrink: 0;
 }
 :global(.community-composer .t-dialog__body) {
-  padding: 22px 0 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* 滚到底之后不再带动外层容器,避免"整窗滚动" */
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 1.375rem 0 0;
 }
+/* 隐藏 tdesign 默认的 ✕,改用下方自定义圆钮 */
 :global(.community-composer .t-dialog__close) {
-  top: 25px;
-  right: 26px;
-  border-radius: 50%;
+  display: none;
+}
+.composer-close {
   -webkit-app-region: no-drag;
+  position: absolute;
+  top: 2.125rem;
+  right: 1.875rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--td-bg-color-secondarycontainer, #f3f3f5);
+  color: var(--td-text-color-secondary, #666);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+  &:hover:not(:disabled) {
+    background: var(--td-bg-color-secondarycontainer-hover, #e9e9ec);
+    color: var(--td-text-color-primary, #222);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  :deep(svg) {
+    display: block;
+    margin: 0;
+  }
 }
 .composer-heading {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding-right: 28px;
+  gap: 0.875rem;
+  /* 给右上角关闭按钮留位 */
+  padding-right: 2.5rem;
   h2 {
     margin: 0 0 5px;
-    font-size: 22px;
+    font-size: 1.375rem;
     font-weight: 600;
     letter-spacing: 0.5px;
     color: var(--td-text-color-primary);
   }
   p {
     margin: 0;
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--td-text-color-secondary);
     font-weight: 400;
   }
@@ -602,9 +683,9 @@ async function submit() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 1rem;
   color: var(--td-brand-color);
   background: var(--td-brand-color-light, #fff0f4);
   flex-shrink: 0;
@@ -620,7 +701,7 @@ async function submit() {
 .create-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 1.125rem;
   -webkit-app-region: no-drag;
   button {
     font: inherit;
@@ -630,9 +711,9 @@ async function submit() {
     outline-offset: 3px;
   }
   .writing-area {
-    padding: 18px 20px 13px;
+    padding: 1.125rem 1.25rem 0.8125rem;
     border: 1px solid var(--td-border-level-1-color, #eee);
-    border-radius: 16px;
+    border-radius: 1rem;
     background: var(--td-bg-color-secondarycontainer, #faf9fb);
     transition: border-color 0.2s;
   }
@@ -642,14 +723,14 @@ async function submit() {
   textarea {
     display: block;
     width: 100%;
-    min-height: 158px;
+    min-height: 9.875rem;
     padding: 0;
     border: 0;
     outline: 0;
     resize: none;
     box-sizing: border-box;
     font: inherit;
-    font-size: 15px;
+    font-size: 0.9375rem;
     line-height: 1.9;
     color: var(--td-text-color-primary);
     background: transparent;
@@ -661,8 +742,8 @@ async function submit() {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 12px;
-    font-size: 11px;
+    margin-top: 0.75rem;
+    font-size: 0.6875rem;
     color: var(--td-text-color-placeholder);
   }
   .counter {
@@ -675,12 +756,12 @@ async function submit() {
   .images {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
+    gap: 0.625rem;
   }
   .img-box {
     position: relative;
     aspect-ratio: 1;
-    border-radius: 12px;
+    border-radius: 0.75rem;
     overflow: hidden;
     background: var(--td-bg-color-component);
     img {
@@ -695,8 +776,8 @@ async function submit() {
     right: 5px;
     display: grid;
     place-items: center;
-    width: 23px;
-    height: 23px;
+    width: 1.4375rem;
+    height: 1.4375rem;
     border-radius: 50%;
     border: 0;
     color: white;
@@ -709,14 +790,14 @@ async function submit() {
   .additions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 0.75rem;
   }
   .addition {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 15px 14px;
-    border-radius: 14px;
+    gap: 0.75rem;
+    padding: 0.9375rem 0.875rem;
+    border-radius: 0.875rem;
     border: 1px solid var(--td-border-level-1-color, #eee);
     background: var(--td-bg-color-container);
     text-align: left;
@@ -739,20 +820,20 @@ async function submit() {
     display: block;
   }
   .addition strong {
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 500;
   }
   .addition small {
     margin-top: 4px;
     color: var(--td-text-color-placeholder);
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
   .addition-icon {
     display: grid;
     place-items: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
+    width: 2.375rem;
+    height: 2.375rem;
+    border-radius: 0.75rem;
     flex-shrink: 0;
   }
   .photo {
@@ -765,23 +846,23 @@ async function submit() {
   }
   .addition-plus {
     margin-left: auto;
-    font-size: 22px;
+    font-size: 1.375rem;
     font-weight: 300;
     color: var(--td-text-color-placeholder);
   }
   .attachment-preview {
     display: flex;
     align-items: center;
-    gap: 13px;
-    padding: 12px;
-    border-radius: 14px;
+    gap: 0.8125rem;
+    padding: 0.75rem;
+    border-radius: 0.875rem;
     background: var(--td-brand-color-light);
   }
   .attachment-preview > img,
   .attachment-placeholder {
-    width: 56px;
-    height: 56px;
-    border-radius: 10px;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.625rem;
     object-fit: cover;
     flex-shrink: 0;
   }
@@ -798,17 +879,17 @@ async function submit() {
     min-width: 0;
     flex: 1;
     color: var(--td-text-color-secondary);
-    font-size: 11px;
+    font-size: 0.6875rem;
     strong {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 14px;
+      font-size: 0.875rem;
       color: var(--td-text-color-primary);
     }
   }
   .attachment-kind {
-    font-size: 10px;
+    font-size: 0.625rem;
     color: var(--td-brand-color);
   }
   .remove-attachment {
@@ -816,35 +897,93 @@ async function submit() {
     background: transparent;
     color: var(--td-text-color-secondary);
     cursor: pointer;
-    padding: 8px;
+    padding: 0.5rem;
   }
   .actions {
+    /* 吸附在滚动区底部: 标题栏固定,操作栏相对固定,只有中间内容滚动 */
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 0.625rem;
     border-top: 1px solid var(--td-border-level-1-color);
-    padding-top: 18px;
+    padding: 1.125rem 0 0;
     margin-top: 4px;
+    background: var(--td-bg-color-container);
   }
   .publish-hint {
     margin-right: auto;
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--td-text-color-placeholder);
   }
   .publish-button {
-    border-radius: 22px;
-    min-width: 106px;
-    height: 40px;
+    border-radius: 1.375rem;
+    min-width: 6.625rem;
+    height: 2.5rem;
   }
   .cancel-button {
-    border-radius: 22px;
-    height: 40px;
+    border-radius: 1.375rem;
+    height: 2.5rem;
+  }
+}
+@media (max-width: 900px) {
+  /* 小窗口: 整体收一档,避免标题/按钮/留白显得过大 */
+  :global(.community-composer.t-dialog) {
+    padding: 1.25rem 1.25rem 1rem;
+    border-radius: 1.125rem;
+  }
+  :global(.community-composer .t-dialog__body) {
+    padding-top: 1rem;
+  }
+  .composer-heading {
+    gap: 0.75rem;
+    h2 {
+      font-size: 1.125rem;
+    }
+    p {
+      font-size: 0.6875rem;
+    }
+  }
+  .heading-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.875rem;
+  }
+  .composer-close {
+    top: 1.5rem;
+    right: 1.25rem;
+    width: 2rem;
+    height: 2rem;
+  }
+  .create-form {
+    gap: 0.875rem;
+    .writing-area {
+      padding: 0.875rem 1rem 0.625rem;
+    }
+    textarea {
+      min-height: 7rem;
+    }
+    .addition {
+      padding: 0.75rem;
+    }
+    .addition-icon {
+      width: 2rem;
+      height: 2rem;
+    }
+    .publish-button,
+    .cancel-button {
+      height: 2.25rem;
+    }
+    .publish-button {
+      min-width: 5.5rem;
+    }
   }
 }
 @media (max-width: 540px) {
   :global(.community-composer.t-dialog) {
-    padding: 22px 18px;
+    padding: 1.375rem 1.125rem;
   }
   .create-form .additions {
     grid-template-columns: 1fr;

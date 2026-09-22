@@ -8,6 +8,14 @@ import type {
 } from '../common/types/hotkeys'
 // 自定义 API 接口
 interface CustomAPI {
+  musicDataRepair: {
+    inspect: () => Promise<any>
+    begin: (storage: Record<string, string | null>, restoreMissing: boolean) => Promise<any>
+    finish: () => Promise<void>
+    rollback: () => Promise<Record<string, string | null> | null>
+    rollbackComplete: () => Promise<void>
+    openBackup: () => Promise<void>
+  }
   deepLinks: {
     pending: () => Promise<import('../common/types/deepLink').QueuedDeepLink[]>
     acknowledge: (sequence: number) => Promise<void>
@@ -66,6 +74,7 @@ interface CustomAPI {
 
   // 歌单管理 API
   songList: {
+    replaceSongs: (id: string, songs: any[]) => Promise<{ success: boolean; error?: string }>
     // === 歌单管理 ===
     create: (
       name: string,

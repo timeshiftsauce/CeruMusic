@@ -140,10 +140,11 @@
               <circle cx="40" cy="40" r="11" fill="var(--td-brand-color, #ff527c)" />
               <circle cx="40" cy="40" r="3" fill="white" />
             </svg>
-            <t-icon v-else name="extension" size="36px" />
+            <t-icon v-else name="extension" size="24px" />
           </div>
           <div class="plugin-info">
             <div class="plugin-heading">
+              <h3 :title="plugin.pluginInfo.name">{{ plugin.pluginInfo.name }}</h3>
               <span
                 class="format-badge"
                 :class="{ 'native-format': !plugin.guest }"
@@ -157,26 +158,35 @@
                 "
                 >{{ plugin.formatBadge?.label || '澜音' }}</span
               >
-              <h3>{{ plugin.pluginInfo.name }}</h3>
               <span class="version">{{ plugin.pluginInfo.version }}</span>
             </div>
-            <p v-if="plugin.pluginInfo.description" class="description">
+            <p
+              v-if="plugin.pluginInfo.description"
+              class="description"
+              :title="plugin.pluginInfo.description"
+            >
               {{ plugin.pluginInfo.description }}
             </p>
-            <div class="plugin-details">
-              <span class="author">{{ plugin.pluginInfo.author || '未署名作者' }}</span>
-              <span v-if="plugin.parentPluginName" class="plugin-dependency"
-                >依赖 {{ plugin.parentPluginName }}</span
+            <div class="plugin-meta">
+              <div class="plugin-details">
+                <span class="author">{{ plugin.pluginInfo.author || '未署名作者' }}</span>
+                <span v-if="plugin.parentPluginName" class="plugin-dependency"
+                  >依赖 {{ plugin.parentPluginName }}</span
+                >
+                <span v-if="isServicePlugin(plugin)">服务插件</span>
+              </div>
+              <div
+                v-if="plugin.supportedSources && Object.keys(plugin.supportedSources).length > 0"
+                class="plugin-sources"
               >
-              <span v-if="isServicePlugin(plugin)">服务插件</span>
-            </div>
-            <div
-              v-if="plugin.supportedSources && Object.keys(plugin.supportedSources).length > 0"
-              class="plugin-sources"
-            >
-              <span v-for="source in plugin.supportedSources" :key="source.name" class="source-tag">
-                {{ source.name }}
-              </span>
+                <span
+                  v-for="source in plugin.supportedSources"
+                  :key="source.name"
+                  class="source-tag"
+                >
+                  {{ source.name }}
+                </span>
+              </div>
             </div>
             <div v-if="plugin.loadError" class="plugin-load-error">
               <t-icon name="error-circle" /> {{ plugin.loadError }}
@@ -737,14 +747,11 @@ const openPluginSettings = (pluginId: string, view: string) =>
 
 function getPluginConfiguration(plugin: Plugin): { title: string; view: string } | undefined {
   const manifest = plugin.manifest
-  const configuration = (
+  const configuration =
     manifest?.contributes?.settingsPages?.[0] ??
     manifest?.contributes?.commands?.find((command: any) =>
-      manifest.modules?.surfaces?.some(
-        (surface: any) => surface.id === command.view
-      )
+      manifest.modules?.surfaces?.some((surface: any) => surface.id === command.view)
     )
-  )
   return configuration?.view ? { title: configuration.title, view: configuration.view } : undefined
 }
 function openPluginConfiguration(plugin: Plugin) {
@@ -778,7 +785,8 @@ async function selectPlugin(plugin: Plugin) {
     // The contribution refresh fills new platforms and preserves existing selections.
     syncAfterPluginChange()
     MessagePlugin.success(`已使用 ${plugin.pluginInfo.name}`)
-    if (activation?.viewError) MessagePlugin.warning(`插件已启用，配置页打开失败：${activation.viewError}`)
+    if (activation?.viewError)
+      MessagePlugin.warning(`插件已启用，配置页打开失败：${activation.viewError}`)
   } catch (error: any) {
     MessagePlugin.error(error.message || '启动插件失败')
   } finally {
@@ -1539,6 +1547,7 @@ onMounted(async () => {
   overflow-wrap: anywhere;
 }
 .page {
+  container: plugin-settings / inline-size;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1551,13 +1560,13 @@ onMounted(async () => {
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
-  padding: 30px 28px;
+  padding: 22px 28px;
   max-width: 1120px;
   margin-inline: auto;
 }
 .plugin-actions-hearder {
   flex-shrink: 0;
-  margin-bottom: 24px;
+  margin-bottom: 14px;
 }
 .plugins-title-row {
   display: flex;
@@ -1574,10 +1583,9 @@ onMounted(async () => {
   letter-spacing: -0.6px;
 }
 .plugins-title-row > :deep(.t-button) {
-  height: 38px;
-  padding-inline: 18px;
-  border-radius: 9px;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--td-brand-color) 20%, transparent);
+  height: 32px;
+  padding-inline: 14px;
+  border-radius: 7px;
 }
 .plugins-subtitle {
   margin: 5px 0 0;
@@ -1587,13 +1595,12 @@ onMounted(async () => {
 .plugin-toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 24px;
-  padding: 10px;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 6px 8px;
   background: var(--td-bg-color-container, #fff);
   border: 1px solid color-mix(in srgb, var(--td-component-stroke) 70%, transparent);
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgb(28 33 46 / 3%);
+  border-radius: 8px;
 }
 .plugin-search {
   flex: 1;
@@ -1708,83 +1715,73 @@ onMounted(async () => {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   align-content: start;
-  padding: 2px 12px 24px 2px;
+  padding: 2px 8px 12px 2px;
   display: grid;
-  gap: 18px;
-  padding-bottom: 12px;
+  gap: 8px;
 }
 .plugin-item {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: start;
-  gap: 22px;
-  padding: 26px;
+  gap: 12px;
+  padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--td-component-stroke, #eaecf0) 80%, transparent);
-  border-radius: 16px;
+  border-radius: 10px;
   background: var(--td-bg-color-container, #fff);
-  box-shadow:
-    0 2px 3px rgb(28 33 46 / 2%),
-    0 10px 28px rgb(28 33 46 / 4%);
   transition:
     border-color 160ms ease,
-    box-shadow 160ms ease;
+    background-color 160ms ease;
+}
+.plugin-item:hover {
+  background: var(--td-bg-color-container-hover, #f7f8fa);
 }
 .plugin-item.selected {
   border-color: color-mix(in srgb, var(--td-brand-color) 24%, var(--td-component-stroke));
-  box-shadow:
-    0 2px 3px rgb(28 33 46 / 2%),
-    0 10px 28px color-mix(in srgb, var(--td-brand-color) 7%, transparent);
 }
 .plugin-mark {
   display: grid;
   place-items: center;
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   color: #3d4051;
-  background: linear-gradient(
-    145deg,
-    var(--td-bg-color-container),
-    var(--td-bg-color-secondarycontainer)
-  );
+  background: var(--td-bg-color-secondarycontainer);
   border: 1px solid color-mix(in srgb, var(--td-component-stroke) 60%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 45%),
-    0 5px 12px rgb(28 33 46 / 5%);
 }
 .plugin-record {
-  width: 72px;
-  height: 72px;
-  filter: drop-shadow(0 3px 2px rgb(28 33 46 / 18%));
+  width: 40px;
+  height: 40px;
 }
 .plugin-mark.is-adapter {
   color: var(--td-brand-color);
-  background: linear-gradient(145deg, var(--td-bg-color-container), var(--td-brand-color-light));
+  background: var(--td-brand-color-light);
 }
 .plugin-info {
   min-width: 0;
 }
 .plugin-heading {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-top: 1px;
+  gap: 8px;
+  min-height: 24px;
 }
 .plugin-heading h3 {
   margin: 0;
-  font-size: 18px;
-  line-height: 26px;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 24px;
   font-weight: 600;
   letter-spacing: -0.2px;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .format-badge {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  padding: 2px 9px;
-  border-radius: 999px;
+  padding: 0 6px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
@@ -1801,45 +1798,52 @@ onMounted(async () => {
   gap: 8px;
 }
 .version {
+  flex-shrink: 0;
   font-size: 11px;
   color: var(--td-text-color-secondary);
   white-space: nowrap;
-  border: 1px solid var(--td-component-stroke);
-  padding: 0 6px;
-  border-radius: 5px;
   line-height: 18px;
 }
 .description {
-  margin: 9px 0 8px;
-  max-width: 64ch;
+  margin: 3px 0 0;
   color: var(--td-text-color-secondary);
   font-size: 13px;
-  line-height: 1.8;
-  overflow-wrap: anywhere;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
 }
 .plugin-details {
   display: flex;
-  gap: 16px;
-  color: var(--td-text-color-placeholder);
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--td-text-color-secondary);
   font-size: 12px;
   line-height: 20px;
 }
 .plugin-sources {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 18px;
-  padding-top: 15px;
-  border-top: 1px solid color-mix(in srgb, var(--td-component-stroke) 65%, transparent);
+  gap: 4px;
+  min-width: 0;
 }
 .source-tag {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--td-text-color-secondary);
-  line-height: 24px;
-  padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--td-component-stroke) 70%, transparent);
-  border-radius: 6px;
-  background: var(--td-bg-color-container-hover, #f7f8fa);
+  line-height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+  background: var(--td-bg-color-secondarycontainer, #f7f8fa);
 }
 .current-tag {
   margin-left: 8px;
@@ -1856,6 +1860,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 280px;
   gap: 4px;
   padding-top: 1px;
 }
@@ -1863,15 +1869,12 @@ onMounted(async () => {
   border-radius: 7px;
 }
 .plugin-use-button {
-  min-width: 76px;
-  margin-right: 8px;
+  min-width: 60px;
+  margin-right: 4px;
 }
-.plugin-use-button:deep(.t-button--theme-primary) {
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--td-brand-color) 18%, transparent);
-}
-@media (max-width: 860px) {
+@container plugin-settings (max-width: 680px) {
   .plugins-container {
-    padding: 22px 16px;
+    padding: 16px;
   }
   .plugin-toolbar {
     flex-wrap: wrap;
@@ -1882,22 +1885,22 @@ onMounted(async () => {
     max-width: none;
   }
   .plugin-item {
-    grid-template-columns: 60px minmax(0, 1fr);
-    gap: 16px;
-    padding: 22px;
-  }
-  .plugin-mark {
-    width: 60px;
-    height: 60px;
-    border-radius: 16px;
-  }
-  .plugin-record {
-    width: 56px;
-    height: 56px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 12px;
   }
   .plugin-actions {
     grid-column: 2;
-    padding-top: 2px;
+    justify-content: flex-start;
+    max-width: none;
+    padding-top: 0;
+  }
+  .plugin-heading {
+    flex-wrap: wrap;
+  }
+  .plugin-heading h3 {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .guest-row {
     flex-wrap: wrap;

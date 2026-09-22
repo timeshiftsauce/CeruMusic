@@ -11,6 +11,7 @@ export interface AIConfig {
 }
 
 export interface UserInfo {
+  lastPlaySongKey?: string
   lastPlaySongId?: number | string | null
   currentTime?: number
   volume?: number

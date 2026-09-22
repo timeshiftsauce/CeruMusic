@@ -1,4 +1,5 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises'
+ import {existsSync} from 'node:fs'
 import {resolve,dirname,join} from 'node:path'
 import {createRequire} from 'node:module'
 import {pathToFileURL} from 'node:url'
@@ -12,11 +13,13 @@ const output=resolve('.workflow/community-navigation')
 await mkdir(output,{recursive:true})
 let styles=[]
 const mock={
- '@renderer/api/community':'export const communityAPI={listPosts:args=>window.listPosts(args),getPost:async id=>window.fixturePosts.find(p=>p.id===id),listComments:async id=>({items:Array.from({length:25},(_,i)=>({id:id+String(i),postId:id,userId:2,username:"评论用户",content:"评论内容，不应触发笔记切换。",createdAt:new Date().toISOString(),likeCount:0}))}),toggleLike:async()=>({liked:true})}',
+ '@renderer/api/community':'export const communityAPI={listPosts:args=>window.listPosts(args),getPost:async id=>window.fixturePosts.find(p=>p.id===id),listComments:async id=>({items:Array.from({length:25},(_,i)=>({id:id+String(i),postId:id,userId:2,username:"评论用户",content:"评论内容，不应触发笔记切换。",createdAt:new Date().toISOString(),likeCount:0}))}),toggleLike:async()=>({liked:true}),createComment:async()=>({id:"c-mock",postId:"p1",userId:"1",username:"作者1",content:"",createdAt:new Date().toISOString(),likeCount:0}),deleteComment:async()=>true,toggleCommentLike:async()=>({liked:true}),report:async()=>true,deletePost:async()=>true,createPost:async()=>({}),updatePost:async()=>({}),uploadImage:async()=>({url:"data:image/gif;base64,R0lGODlhAQABAAAAACw="})}',
+ '@renderer/store/Auth':'export const useAuthStore=()=>({isAuthenticated:true,user:{sub:"1"}})',
  '@renderer/api/cloudSongList':'export const cloudSongListAPI={getSongListDetail:()=>new Promise(r=>window.resolvePlaylist=r)}',
  '@renderer/api/songList':'export default {getAll:async()=>({success:true,data:[]}),search:async()=>({success:true,data:[]}),create:async()=>({success:false})}',
  '@renderer/store/LocalUserDetail':'export const LocalUserDetailStore=()=>({userInfo:{}})',
- '@renderer/utils/ossImage':'export const ossAvatar=x=>x,ossCard=x=>x,ossThumb=x=>x',
+ '@renderer/utils/communitySupport':'export const showSupportNotice=()=>{}',
+ '@renderer/utils/ossImage':'export const ossAvatar=x=>x,ossCard=x=>x,ossThumb=x=>x,ossDetail=x=>x',
  'vue-router':'export const useRouter=()=>({push(){}})'
 }
 await build({stdin:{contents:`
@@ -27,7 +30,12 @@ window.fixturePosts=Array.from({length:25},(_,i)=>({id:'p'+(i+1),userId:1,userna
 window.listCalls=[];window.listPosts=args=>{window.listCalls.push(args);if(args.page===1)return Promise.resolve({items:window.fixturePosts.slice(0,20),total:25});return new Promise((resolve,reject)=>{window.releasePage=()=>resolve({items:window.fixturePosts.slice(19),total:25});window.rejectPage=()=>reject(new Error('测试分页失败'))})};
 createApp(Community).use(TDesign).mount('#app');
 `,resolveDir:root,loader:'ts'},bundle:true,format:'iife',outfile:join(output,'preview.js'),loader:{'.ttf':'dataurl'},define:{'process.env.NODE_ENV':'"production"',__VUE_OPTIONS_API__:'true',__VUE_PROD_DEVTOOLS__:'false',__VUE_PROD_HYDRATION_MISMATCH_DETAILS__:'false'},plugins:[{name:'sfc',setup(b){
-b.onResolve({filter:/.*/},a=>Object.hasOwn(mock,a.path)?{path:a.path,namespace:'mock'}:a.path.startsWith('@renderer/')?{path:resolve('src/renderer/src',a.path.slice(10))}:undefined)
+b.onResolve({filter:/.*/},a=>{
+  if(Object.hasOwn(mock,a.path))return {path:a.path,namespace:'mock'}
+  if(a.path.startsWith('@renderer/'))return {path:resolve('src/renderer/src',a.path.slice(10))}
+  if(a.path.startsWith('@common/')){const p=resolve('src/common',a.path.slice(8));return {path:existsSync(p+'.ts')?p+'.ts':p}}
+  return undefined
+})
 b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mock[a.path]}))
 b.onLoad({filter:/\.vue$/},async a=>{const {descriptor,errors}=parse(await readFile(a.path,'utf8'),{filename:a.path});if(errors.length)throw errors[0];const id='data-v-'+Buffer.from(a.path).toString('hex').slice(-18);for(const s of descriptor.styles){const compiled=await compileStyleAsync({source:s.content,filename:a.path,id,scoped:s.scoped,preprocessLang:s.lang,preprocessCustomRequire:id=>require(id==='sass'?'sass-embedded':id)});if(compiled.errors.length)throw compiled.errors[0];styles.push(compiled.code)}const script=compileScript(descriptor,{id,inlineTemplate:true,genDefaultAs:'component'});return {contents:script.content+`\ncomponent.__scopeId=${JSON.stringify(id)}; export default component`,loader:'ts',resolveDir:dirname(a.path)}})
 }}]})

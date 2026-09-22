@@ -1,10 +1,20 @@
+import { getMusicStorage, setMusicStorage } from '@renderer/services/musicDataPersistence'
+import { savedCoverDetail } from '@common/musicAppearance'
+import {
+  normalizeMusicItem,
+  sameSong,
+  songKey,
+  restoredSong,
+  type MusicItem
+} from '@common/musicItem'
+import { canPersistMusicData, musicStartupReady } from '@renderer/services/musicDataPersistence'
 import { defineStore } from 'pinia'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { analyzeImageColors, Color } from '@renderer/utils/color/colorExtractor'
-import { toPlayerLyrics } from '@common/pluginMusic'
+import { filterLyricInfo, toPlayerLyrics } from '@common/pluginMusic'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { reactive, computed, watch, toRaw, onScopeDispose, type ComputedRef } from 'vue'
+import { reactive, ref, computed, watch, toRaw, onScopeDispose, type ComputedRef } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { contributionsRevision } from '@renderer/services/pluginState'
@@ -207,8 +217,71 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     })
 
+    const history = ref<MusicItem[]>([])
+    let appearanceSongKey: string | undefined
+    function reloadSnapshot() {
+      try {
+        const saved = JSON.parse(getMusicStorage('globalPlayStatus') || '{}')
+        const snapshot = saved.player ?? saved
+        if (snapshot.songInfo?.songmid != null) {
+          player.songInfo = normalizeMusicItem(snapshot.songInfo)
+          player.songId = String(player.songInfo.songmid)
+          player.cover = player.songInfo.img || defaultCover
+          const appearance = savedCoverDetail(snapshot.coverDetail)
+          if (appearance) {
+            player.coverDetail = appearance
+            appearanceSongKey = songKey(player.songInfo)
+          }
+        }
+        history.value = (Array.isArray(saved.history) ? saved.history : [])
+          .flatMap((value) => {
+            try {
+              return [normalizeMusicItem(value)]
+            } catch {
+              return []
+            }
+          })
+          .slice(0, 200)
+      } catch {
+        /* Repair retains unreadable originals; startup remains usable. */
+      }
+    }
+    reloadSnapshot()
+    function persistSnapshot() {
+      if (!canPersistMusicData()) return
+      const song =
+        player.songInfo?.songmid != null ? normalizeMusicItem(toRaw(player.songInfo)) : undefined
+      setMusicStorage(
+        'globalPlayStatus',
+        JSON.stringify({
+          schemaVersion: 2,
+          player: song
+            ? {
+                songId: String(song.songmid),
+                songInfo: song,
+                ...(appearanceSongKey === songKey(song)
+                  ? { coverDetail: savedCoverDetail(player.coverDetail) }
+                  : {})
+              }
+            : {},
+          history: history.value
+        })
+      )
+    }
+    function recordHistory(value: any) {
+      if (!musicStartupReady.value || value?.songmid == null || !value.source) return
+      const song = normalizeMusicItem(value)
+      history.value = [song, ...history.value.filter((item) => !sameSong(item, song))].slice(0, 200)
+      persistSnapshot()
+    }
+    watch(() => [player.songInfo, player.coverDetail], persistSnapshot, {
+      deep: true,
+      flush: 'sync'
+    })
+
     let currentBlobUrl: string | null = null
     let metadataRevision = 0
+    let preparedSongKey: string | undefined
     const lyricWarnings = new Map<string, number>()
     function reportLocalLyricError(id: string, error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
@@ -217,7 +290,7 @@ export const useGlobalPlayStatusStore = defineStore(
       lyricWarnings.set(id, Date.now())
       void MessagePlugin.warning(`本地歌词无法显示：${message}`)
     }
-    const keyOf = (song: any) => String(song?.source) + ':' + String(song?.songmid)
+    const keyOf = songKey
     const withDeadline = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
@@ -232,7 +305,14 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     }
 
-    async function prepareSong(song: SongList, signal?: AbortSignal) {
+    async function prepareSong(
+      song: SongList,
+      signal?: AbortSignal,
+      onArtwork?: (
+        cover: string,
+        colors: Awaited<ReturnType<typeof analyzeImageColors>> | null
+      ) => void
+    ) {
       const clean = JSON.parse(JSON.stringify(toRaw(song))) as SongList
       const localMetadata =
         clean.source === 'local'
@@ -279,7 +359,9 @@ export const useGlobalPlayStatusStore = defineStore(
           if (!parsed) return undefined
           if (parsed.error || parsed.format !== 'crlyric')
             throw new Error(parsed?.error || '没有可用的歌词转换结果，请检查歌词转换插件')
-          return parsed
+          return playSettingStore.getIsGrepLyricInfo
+            ? filterLyricInfo(parsed, playSettingStore.getStrictGrep)
+            : parsed
         }
         const result = await window.api.music.requestSdk('getLyric', {
           source: clean.source,
@@ -287,10 +369,23 @@ export const useGlobalPlayStatusStore = defineStore(
           grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
           useStrictMode: playSettingStore.getStrictGrep
         })
-        return result?.crlyric
+        const lyric = result?.crlyric
+        return lyric && playSettingStore.getIsGrepLyricInfo
+          ? filterLyricInfo(lyric, playSettingStore.getStrictGrep)
+          : lyric
       }
-      const [cover, crlyric] = await Promise.all([
-        withDeadline(loadCover(), defaultCover),
+      const [artwork, crlyric] = await Promise.all([
+        withDeadline(loadCover(), defaultCover).then(async (cover) => {
+          const cached =
+            appearanceSongKey === songKey(song) && song.img === player.songInfo?.img
+              ? savedCoverDetail(player.coverDetail)
+              : undefined
+          const colors = cached
+            ? { dominantColor: cached.ColorObject, useBlackText: cached.useBlackText }
+            : await withDeadline(analyzeImageColors(cover), null)
+          if (!signal?.aborted) onArtwork?.(cover, colors)
+          return { cover, colors }
+        }),
         withDeadline<import('@shiqianjiang/ceru-plugin-sdk').CrLyric | undefined>(
           loadLyrics().catch((error) => {
             if (clean.source === 'local' && !signal?.aborted)
@@ -300,15 +395,10 @@ export const useGlobalPlayStatusStore = defineStore(
           undefined
         )
       ])
+      const { cover, colors } = artwork
       const dispose = () => {
         if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
       }
-      if (signal?.aborted) {
-        dispose()
-        signal.throwIfAborted()
-      }
-      // Decode and analyse before committing metadata so the background changes with the cover.
-      const colors = await withDeadline(analyzeImageColors(cover), null)
       if (signal?.aborted) {
         dispose()
         signal.throwIfAborted()
@@ -325,6 +415,7 @@ export const useGlobalPlayStatusStore = defineStore(
 
     function commitPrepared(prepared: Awaited<ReturnType<typeof prepareSong>>) {
       metadataRevision++
+      preparedSongKey = songKey(prepared.song)
       if (currentBlobUrl && currentBlobUrl !== prepared.cover) URL.revokeObjectURL(currentBlobUrl)
       currentBlobUrl = prepared.cover.startsWith('blob:') ? prepared.cover : null
       player.songInfo = prepared.song
@@ -334,7 +425,12 @@ export const useGlobalPlayStatusStore = defineStore(
       player.lyrics.lines = prepared.lines
       player.lyrics.raw = {}
       player.isLoading = false
-      const color = prepared.colors
+      applyCoverColors(prepared.colors)
+      updateCommon(prepared.song)
+    }
+
+    function applyCoverColors(color: Awaited<ReturnType<typeof analyzeImageColors>> | null) {
+      appearanceSongKey = player.songInfo?.songmid != null ? songKey(player.songInfo) : undefined
       if (color) {
         const { dominantColor, useBlackText } = color
         const base = useBlackText ? '0, 0, 0' : '255, 255, 255'
@@ -360,14 +456,20 @@ export const useGlobalPlayStatusStore = defineStore(
           playBgHover: 'var(--player-btn-bg-hover-idle)',
           useBlackText: false
         }
-      updateCommon(prepared.song)
     }
 
     async function updatePlayerInfo(song: SongList, force = false) {
-      if (!force && keyOf(player.songInfo) === keyOf(song)) return
+      // Hydrating songInfo is not the same as loading its artwork and lyrics.
+      if (!force && preparedSongKey === keyOf(song)) return
       const revision = ++metadataRevision
       player.isLoading = true
-      const prepared = await prepareSong(song)
+      const prepared = await prepareSong(song, undefined, (cover, colors) => {
+        if (revision !== metadataRevision || !sameSong(player.songInfo, song)) return
+        if (currentBlobUrl && currentBlobUrl !== cover) URL.revokeObjectURL(currentBlobUrl)
+        currentBlobUrl = cover.startsWith('blob:') ? cover : null
+        player.cover = cover
+        applyCoverColors(colors)
+      })
       if (revision !== metadataRevision) {
         prepared.dispose()
         return
@@ -379,8 +481,13 @@ export const useGlobalPlayStatusStore = defineStore(
       localUserStore.list = localUserStore.list.map((item) =>
         item.source === 'local' && String(item.songmid) === oldSongmid ? { ...item, ...song } : item
       )
-      if (String(localUserStore.userInfo.lastPlaySongId) === oldSongmid)
+      if (
+        player.songInfo?.source === 'local' &&
+        String(localUserStore.userInfo.lastPlaySongId) === oldSongmid
+      ) {
         localUserStore.userInfo.lastPlaySongId = song.songmid
+        localUserStore.userInfo.lastPlaySongKey = songKey(song)
+      }
       if (player.songInfo?.source === 'local' && String(player.songInfo.songmid) === oldSongmid) {
         void updatePlayerInfo({ ...toRaw(player.songInfo), ...song } as SongList, true)
       }
@@ -388,18 +495,23 @@ export const useGlobalPlayStatusStore = defineStore(
     onScopeDispose(stopTagListener)
     watch(
       [
-        () => localUserStore.userInfo.lastPlaySongId,
+        () => localUserStore.userInfo.lastPlaySongKey || localUserStore.userInfo.lastPlaySongId,
         () => localUserStore.list,
-        contributionsRevision
+        contributionsRevision,
+        musicStartupReady
       ],
-      ([id], previous) => {
-        if (!id) return
-        const song = localUserStore.list.find((item) => item.songmid === id)
+      (_selection, previous) => {
+        if (!musicStartupReady.value) return
+        const song = restoredSong(
+          localUserStore.list,
+          localUserStore.userInfo,
+          player.songInfo as SongList
+        )
         if (!song) return
         // Startup metadata can finish before plugins and their routing are restored.
         // Retry from the saved selection, even if the first metadata request is still pending.
         const retryLyrics = previous[2] !== contributionsRevision.value && !player.lyrics.crlyric
-        if (String(id) === player.songId && !retryLyrics) return
+        if (sameSong(song, player.songInfo) && player.lyrics.crlyric && !retryLyrics) return
         void updatePlayerInfo(song, retryLyrics)
       },
       { immediate: true }
@@ -479,6 +591,9 @@ export const useGlobalPlayStatusStore = defineStore(
 
     return {
       player,
+      history,
+      recordHistory,
+      reloadSnapshot,
       prepareSong,
       commitPrepared,
       updatePlayerInfo,

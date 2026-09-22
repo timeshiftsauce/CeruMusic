@@ -69,7 +69,7 @@ export interface SongRef {
   /** kg 源等需要的 hash 字段（拉流必需） */
   hash?: string
   /** 支持的音质类型列表 —— member 切音质用 */
-  types?: string[]
+  types?: import('@common/musicItem').MusicItem['types']
   /** 歌词原始文本 —— 公共数据可以传，避免 member 重新拉歌词 */
   lrc?: string | null
   /**

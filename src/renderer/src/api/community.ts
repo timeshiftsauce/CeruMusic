@@ -36,6 +36,17 @@ export interface PostAttachment {
   preview?: Array<Record<string, any>>
 }
 
+/** 自伤信号命中时,后端随发布响应下发的援助信息(对应后端 action='review') */
+export interface SelfHarmSupport {
+  title: string
+  text: string
+  /** 援助热线,前端可直接做拨号链接 */
+  hotline?: string
+}
+
+/** 发布类响应 —— 可能带一条援助提示,客户端应弹窗而不是静默忽略 */
+export type PublishResult<T> = T & { support?: SelfHarmSupport }
+
 export interface CommunityPost {
   id: string
   userId: string
@@ -45,6 +56,8 @@ export interface CommunityPost {
   /** 新格式 {url,w,h};兼容老格式 string */
   images: PostImageOrUrl[]
   attachment: PostAttachment | null
+  /** IP 归属地快照(如 "福建·厦门"),旧数据为空 */
+  ipLocation?: string | null
   likeCount: number
   commentCount: number
   createdAt: string
@@ -63,18 +76,27 @@ export interface CommunityComment {
   parentId: string | null
   /** "回复 @某某"显示用 */
   replyToUsername: string | null
+  /** IP 归属地快照(如 "福建·厦门"),旧数据为空 */
+  ipLocation?: string | null
   /** 点赞数 */
   likeCount: number
   /** 当前用户是否已点赞(后端拼装) */
   liked: boolean
   createdAt: string
+  /** 仅一级评论:该评论的回复总数 —— 首屏只带回前 50 条,剩下的点「加载更多回复」 */
+  replyCount?: number
 }
 
 export interface ListResult<T> {
   items: T[]
+  /** 评论列表里是「全部评论数(含回复)」,帖子列表里就是总数 */
   total: number
   page: number
   pageSize: number
+  /** 仅评论列表返回:一级评论数 —— 分页单位是它,判断还有没有下一页要用它 */
+  rootTotal?: number
+  /** 仅评论列表返回:后端算好的"还有下一页" */
+  hasMore?: boolean
 }
 
 export const communityAPI = {
@@ -85,12 +107,8 @@ export const communityAPI = {
     return unwrap<PostImage>(request.post(`${BASE}/upload-image`, fd))
   },
 
-  createPost(payload: {
-    content: string
-    images?: PostImageOrUrl[]
-    attachment?: PostAttachment
-  }) {
-    return unwrap<CommunityPost>(request.post(`${BASE}/posts`, payload))
+  createPost(payload: { content: string; images?: PostImageOrUrl[]; attachment?: PostAttachment }) {
+    return unwrap<PublishResult<CommunityPost>>(request.post(`${BASE}/posts`, payload))
   },
 
   listPosts(params: {
@@ -99,11 +117,19 @@ export const communityAPI = {
     pageSize?: number
     userId?: string
   }) {
-    return unwrap<ListResult<CommunityPost>>(request.get(`${BASE}/posts`, { params }))
+    return unwrap<ListResult<CommunityPost>>(request.getPublic(`${BASE}/posts`, { params }))
   },
 
   getPost(id: string) {
-    return unwrap<CommunityPost>(request.get(`${BASE}/posts/${id}`))
+    return unwrap<CommunityPost>(request.getPublic(`${BASE}/posts/${id}`))
+  },
+
+  /** 编辑自己的帖子 —— 字段与发帖一致,全量覆盖 */
+  updatePost(
+    id: string,
+    payload: { content: string; images?: PostImageOrUrl[]; attachment?: PostAttachment }
+  ) {
+    return unwrap<PublishResult<CommunityPost>>(request.patch(`${BASE}/posts/${id}`, payload))
   },
 
   deletePost(id: string) {
@@ -116,7 +142,14 @@ export const communityAPI = {
 
   listComments(id: string, page = 1, pageSize = 20) {
     return unwrap<ListResult<CommunityComment>>(
-      request.get(`${BASE}/posts/${id}/comments`, { params: { page, pageSize } })
+      request.getPublic(`${BASE}/posts/${id}/comments`, { params: { page, pageSize } })
+    )
+  },
+
+  /** 某条一级评论的回复(按根评论分页,正序)—— 首屏由 listComments 各带 50 条 */
+  listReplies(rootId: string, page = 1, pageSize = 50) {
+    return unwrap<ListResult<CommunityComment>>(
+      request.getPublic(`${BASE}/comments/${rootId}/replies`, { params: { page, pageSize } })
     )
   },
 
@@ -124,9 +157,10 @@ export const communityAPI = {
     postId: string
     content: string
     parentId?: string
+    replyToCommentId?: string
     replyToUsername?: string
   }) {
-    return unwrap<CommunityComment>(request.post(`${BASE}/comments`, payload))
+    return unwrap<PublishResult<CommunityComment>>(request.post(`${BASE}/comments`, payload))
   },
 
   deleteComment(id: string) {

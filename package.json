@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -35,7 +35,8 @@
     "release:preview": "bash scripts/preview-release-notes.sh",
     "cleanup:win-aumid": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-windows-aumid.ps1",
     "test": "jest",
-    "test:electron": "node scripts/test-electron-runtime.mjs"
+    "test:electron": "node scripts/test-electron-runtime.mjs",
+    "setup": "node scripts/setup-dependencies.mjs"
   },
   "dependencies": {
     "@applemusic-like-lyrics/lyric": "1.1.0",
@@ -45,8 +46,8 @@
     "@langchain/core": "^0.3.71",
     "@langchain/deepseek": "^0.1.0",
     "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-core": "0.3.6",
-    "@shiqianjiang/ceru-plugin-sdk": "0.3.6",
+    "@shiqianjiang/ceru-plugin-core": "file:vendor/shiqianjiang-ceru-plugin-core-0.3.7.tgz",
+    "@shiqianjiang/ceru-plugin-sdk": "file:vendor/shiqianjiang-ceru-plugin-sdk-0.3.7.tgz",
     "@xmldom/xmldom": "0.9.12",
     "axios": "^1.13.2",
     "better-sqlite3": "13.0.3",
@@ -153,7 +154,9 @@
     "**/vitest/vite": "7.1.2",
     "buffer": "^6.0.3",
     "@langchain/core": "^0.3.71",
-    "@langchain/openai": "^0.6.7"
+    "@langchain/openai": "^0.6.7",
+    "@shiqianjiang/ceru-plugin-sdk": "file:vendor/shiqianjiang-ceru-plugin-sdk-0.3.7.tgz",
+    "@shiqianjiang/ceru-plugin-issuer": "file:vendor/shiqianjiang-ceru-plugin-issuer-0.3.7.tgz"
   },
   "engines": {
     "node": ">=22.14.0"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { restoredSong } from '@common/musicItem'
 import { getQualityDisplayName } from '@common/utils/quality'
 import {
   ref,
@@ -183,7 +184,10 @@ const refreshLikeState = async () => {
       likeState.value = false
       return
     }
-    const hasRes = await songListAPI.hasSong(cachedFavoritesId, userInfo.value.lastPlaySongId)
+    const hasRes = await songListAPI.hasSong(
+      cachedFavoritesId,
+      userInfo.value.lastPlaySongKey || userInfo.value.lastPlaySongId
+    )
     likeState.value = !!(hasRes.success && hasRes.data)
   } catch {
     likeState.value = false
@@ -191,7 +195,7 @@ const refreshLikeState = async () => {
 }
 
 watch(
-  () => userInfo.value.lastPlaySongId,
+  () => userInfo.value.lastPlaySongKey || userInfo.value.lastPlaySongId,
   () => refreshLikeState()
 )
 onMounted(() => refreshLikeState())
@@ -639,7 +643,7 @@ const handleIdleChange = (idle: boolean) => {
 const onToggleLike = async () => {
   try {
     // 获取当前播放歌曲对象
-    const currentSong = list.value.find((s) => s.songmid === userInfo.value.lastPlaySongId)
+    const currentSong = restoredSong(list.value, userInfo.value, songInfo.value)
     if (!currentSong) {
       MessagePlugin.warning('当前没有正在播放的歌曲')
       return
@@ -681,7 +685,7 @@ const onToggleLike = async () => {
     if (likeState.value) {
       const removeRes = await songListAPI.removeSong(
         favoritesId!,
-        userInfo.value.lastPlaySongId as any
+        (userInfo.value.lastPlaySongKey || userInfo.value.lastPlaySongId) as any
       )
       if (removeRes.success && removeRes.data) {
         likeState.value = false
@@ -864,7 +868,7 @@ const switchQuality = async (quality: string) => {
   }
 
   const src = (songInfo.value as any).source
-  const currentSong = list.value.find((s) => s.songmid === userInfo.value.lastPlaySongId)
+  const currentSong = restoredSong(list.value, userInfo.value, songInfo.value)
   if (!currentSong) {
     MessagePlugin.warning('当前没有正在播放的歌曲')
     return
@@ -1976,9 +1980,10 @@ watch(showFullPlay, (val) => {
 .player-container {
   box-shadow: 0px -2px 20px 0px #00000039;
   position: fixed;
-  bottom: 0;
+  // Cover Chromium's fractional-DPI rounding pixel at the window edges.
+  bottom: -1px;
   left: 0;
-  right: 0;
+  right: -1px;
   transition:
     transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
     background 0.3s;
@@ -1987,7 +1992,7 @@ watch(showFullPlay, (val) => {
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   z-index: 1000;
-  height: var(--play-bottom-height);
+  height: calc(var(--play-bottom-height) + 1px);
   display: flex;
   flex-direction: column;
 

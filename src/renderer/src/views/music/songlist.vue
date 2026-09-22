@@ -1645,7 +1645,7 @@ onDeactivated(() => {
         </div>
         <div class="import-content-wrapper">
           <div class="import-content">
-            <p>
+            <p class="import-description">
               {{ selectedImporter?.description || '粘贴歌单链接或 ID，将歌曲导入到本地歌单。' }}
             </p>
             <t-input
@@ -1657,14 +1657,22 @@ onDeactivated(() => {
               @enter="confirmNetworkImport"
             />
             <div class="import-tips">
-              <p class="tip-title">支持的输入格式</p>
-              <ul class="tip-list">
+              <p class="tip-title">
+                {{ selectedImporter?.examples?.length ? '支持的输入格式' : '导入说明' }}
+              </p>
+              <ul v-if="selectedImporter?.examples?.length" class="tip-list">
                 <li v-for="example in selectedImporter?.examples || []" :key="example.value">
                   {{ example.label }}：{{ example.value }}
                 </li>
               </ul>
+              <p v-else class="tip-fallback">
+                {{ selectedImporter?.placeholder || '从所选平台复制歌单分享链接，或输入歌单 ID。' }}
+              </p>
               <p v-for="note in selectedImporter?.instructions || []" :key="note" class="tip-note">
                 {{ note }}
+              </p>
+              <p v-if="!selectedImporter?.instructions?.length" class="tip-note">
+                请使用可公开访问的歌单；具体支持的链接格式以当前插件为准。
               </p>
             </div>
           </div>
@@ -1790,53 +1798,29 @@ onDeactivated(() => {
 .network-import-content {
   max-height: 60vh;
   overflow-y: auto;
-  scrollbar-width: none;
-  padding: 0 10px;
-  // 自定义滚动条样式
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-
-    &:hover {
-      background: #a8a8a8;
-    }
-  }
+  padding: 0 4px;
 
   .platform-selector {
-    margin-bottom: 2rem;
-    position: sticky;
-    top: 0;
-    background: var(--td-bg-color-container);
-    z-index: 10;
-    padding: 0.5rem 0;
-    margin: -0.5rem 0 1.5rem 0;
-    border-bottom: 1px solid var(--local-border);
+    margin-bottom: 20px;
 
     .form-label {
       display: block;
-      margin-bottom: 1rem;
+      margin-bottom: 10px;
       font-weight: 600;
-      color: var(--local-text-primary);
-      font-size: 15px;
+      color: var(--td-text-color-primary);
+      font-size: 14px;
     }
 
     :deep(.t-radio-group) {
       width: 100%;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       height: auto;
       grid-auto-rows: 36px;
-      gap: 4px;
-      padding: 4px;
+      gap: 6px;
+      padding: 6px;
+      border-radius: 10px;
+      background: var(--td-bg-color-secondarycontainer);
     }
 
     :deep(.t-radio-button) {
@@ -1845,119 +1829,71 @@ onDeactivated(() => {
       display: flex;
       justify-content: center;
       align-items: center;
+      border-radius: 6px;
+
+      &::before,
+      &::after {
+        display: none;
+      }
 
       .t-radio-button__label {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
         font-weight: 500;
         text-align: center;
-
-        .iconfont {
-          font-size: 16px;
-          transition: all 0.2s ease;
-        }
-      }
-
-      &.t-is-checked .t-radio-button__label .iconfont {
-        transform: scale(1.1);
       }
     }
-  }
-
-  .import-content-wrapper {
-    position: relative;
-    min-height: 200px;
-    flex: 1;
   }
 
   .import-content {
     .import-description {
-      margin-bottom: 1.25rem;
-      color: var(--local-text-secondary);
-      font-size: 14px;
+      margin-bottom: 12px;
+      color: var(--td-text-color-secondary);
+      font-size: 13px;
       line-height: 1.6;
-      padding: 1rem;
-      background: var(--local-tips-bg);
-      border-radius: 8px;
-      border-left: 4px solid var(--td-brand-color-4);
     }
 
     .url-input {
-      margin-bottom: 1.5rem;
+      margin-bottom: 16px;
     }
 
     .import-tips {
-      background: var(--local-tips-bg);
-      border-radius: 12px;
-      padding: 1.25rem;
-      border: 1px solid var(--local-border);
-      position: relative;
-      overflow: hidden;
-
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 4px;
-        height: 100%;
-        background: linear-gradient(to bottom, var(--td-brand-color-4), var(--td-brand-color-6));
-      }
+      background: var(--td-bg-color-secondarycontainer);
+      border-radius: 10px;
+      padding: 16px;
+      border: 1px solid var(--td-component-stroke);
 
       .tip-title {
-        margin: 0 0 0.75rem 0;
+        margin: 0 0 10px;
         font-weight: 600;
-        color: var(--local-text-primary);
-        font-size: 15px;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-
-        &::before {
-          content: '💡';
-          font-size: 16px;
-        }
+        color: var(--td-text-color-primary);
+        font-size: 14px;
       }
 
       .tip-list {
-        margin: 0 0 0.75rem 0;
-        padding-left: 1.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
 
         li {
-          color: var(--local-text-secondary);
+          color: var(--td-text-color-secondary);
           font-size: 13px;
-          margin-bottom: 0.5rem;
-          font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-          padding: 0.25rem 0.5rem;
-          background: var(--local-code-bg);
-          border-radius: 4px;
-          transition: all 0.2s ease;
-
-          &:hover {
-            background: var(--local-code-hover-bg);
-            transform: translateX(4px);
-          }
+          line-height: 1.7;
+          margin-bottom: 6px;
+          overflow-wrap: anywhere;
         }
       }
 
-      .tip-note {
-        margin: 0;
-        color: var(--local-text-tertiary);
-        font-size: 12px;
-        font-style: italic;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem;
-        background: var(--local-note-bg);
-        border-radius: 6px;
+      .tip-fallback {
+        color: var(--td-text-color-secondary);
+        font-size: 13px;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+      }
 
-        &::before {
-          content: '✨';
-          font-size: 14px;
-        }
+      .tip-note {
+        margin: 10px 0 0;
+        color: var(--td-text-color-secondary);
+        font-size: 12px;
+        line-height: 1.7;
       }
     }
   }

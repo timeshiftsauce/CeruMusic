@@ -55,4 +55,6 @@ next:
 | 添加账号菜单和原生歌单页 | [账号与原生音乐库项目](./tutorial-account-native/) |
 | 查询某个参数 | 左侧按功能分类的 API 参考 |
 
+第一次需要查 `ctx` 能做什么时，先看 [PluginContext API 总览](./plugin-context)；它按实际开发任务整理了配置、权限、HTTP、Provider、歌词、UI、存储和日志入口，再跳转到各领域的详细页。
+
 工具源码：[CLI 与 SDK](https://github.com/CeruMusic/CeruMusic-Plugin-Cli)。示例源码：[插件模板](https://github.com/CeruMusic/CeruMusic-Plugin-Template)。

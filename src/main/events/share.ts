@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 import * as crypto from 'crypto'
 import pluginService from '../services/plugin'
 import { createShareDescriptor, readShareDescriptor } from '../services/plugin/sharing'
+import { normalizeMusicItem } from '@common/musicItem'
+import { toPluginTrack } from '@common/pluginMusic'
 
 /**
  * 分享相关 IPC：仅暴露最小必要能力 —— 获取当前插件的源码 + md5 指纹。
@@ -22,7 +24,7 @@ export default function InitShareService() {
     for (const source of [...new Set(sources)]) {
       if (source === 'local')
         throw new Error('歌单包含本地歌曲，无法使用音源插件在网页播放；可关闭网页播放后分享')
-      const provider = pluginService.getV2Provider(source, undefined, 'tracks.resolve')
+      const provider = pluginService.getV2Provider(source, undefined, 'tracks.resolve', true)
       if (!provider) throw new Error(`没有可解析 ${source} 的音源插件`)
       const qualities: string[] = provider.host.getSupportedSources()[source]?.qualitys ?? []
       commonQualities = commonQualities
@@ -61,11 +63,12 @@ export default function InitShareService() {
     }
   })
   ipcMain.handle('share:resolver:export', async (_event, source: string, song: any) => {
-    const provider = pluginService.getV2Provider(
-      source,
-      song?.pluginResource?.pluginId,
-      'tracks.resolve'
-    )
+    // Provider-scoped tracks are public platform IDs and may use another
+    // implementation's share resolver (for example, 聆澜 for 网易云账号的 wy).
+    // Private resources must remain bound to their owning plugin.
+    const resource = song?.pluginResource
+    const ownerId = resource?.scope === 'provider' ? undefined : resource?.pluginId
+    const provider = pluginService.getV2Provider(source, ownerId, 'tracks.resolve', true)
     if (!provider) throw new Error('请先使用提供该歌曲播放解析的插件')
     const code = await provider.host.getShareResolverCode()
     if (Buffer.byteLength(code, 'utf8') > 200 * 1024)
@@ -86,21 +89,19 @@ export default function InitShareService() {
           ...song,
           source
         }
-        delete value.pluginResource
-        return value
+        return normalizeMusicItem(value)
       })()
     }
   })
   ipcMain.handle('share:descriptor:create', async (_event, source: string, song: any) => {
-    const provider = pluginService.getV2Provider(source, undefined, 'sharing.describe')
+    song = normalizeMusicItem(song)
+    const provider = pluginService.getV2Provider(
+      source,
+      song.pluginResource?.pluginId,
+      'sharing.describe'
+    )
     if (!provider) throw new Error('请先安装提供该音源的插件')
-    const ref = song.pluginResource ?? {
-      pluginId: provider.host.getPluginInfo().id,
-      providerId: source,
-      kind: 'track',
-      id: String(song.songmid),
-      data: { song }
-    }
+    const ref = { ...toPluginTrack(song).ref, pluginId: provider.host.getPluginInfo().id }
     const descriptor = await provider.host.invokeV2Provider(source, 'sharing.describe', [ref, {}])
     return createShareDescriptor(descriptor)
   })

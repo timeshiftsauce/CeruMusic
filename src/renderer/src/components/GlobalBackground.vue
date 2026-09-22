@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 
@@ -8,7 +8,9 @@ const { settings } = storeToRefs(settingsStore)
 
 const bgSettings = computed(() => settings.value.globalBackground)
 
-const isEnabled = computed(() => bgSettings.value?.enable && bgSettings.value?.url)
+const isEnabled = computed(() =>
+  Boolean(bgSettings.value?.enable && bgSettings.value?.url && bgType.value !== 'none')
+)
 const bgType = computed(() => bgSettings.value?.type || 'none')
 const bgUrl = computed(() => bgSettings.value?.url || '')
 const bgOpacity = computed(() => bgSettings.value?.opacity ?? 0.5)
@@ -17,87 +19,34 @@ const bgBrightness = computed(() => bgSettings.value?.brightness ?? 0.8)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 
+// Include the template ref so restored video wallpapers start after the media element mounts.
 watch(
-  [bgType, bgUrl, isEnabled],
-  ([type, _url, enabled]) => {
-    if (enabled && type === 'video' && videoRef.value) {
-      videoRef.value.load()
-      videoRef.value.play().catch((e) => console.error('Video auto-play failed:', e))
+  [videoRef, bgUrl, isEnabled],
+  ([video, _url, enabled]) => {
+    if (enabled && video) {
+      video.load()
+      video.play().catch((error) => {
+        if (error.name !== 'AbortError') console.error('Video auto-play failed:', error)
+      })
     }
   },
-  { immediate: true }
+  { flush: 'post' }
 )
 
-const appContainerStyle = computed(() => {
-  if (isEnabled.value) {
-    // When background is enabled, we need to make some main containers transparent
-    return {
-      '--td-bg-color-container': 'transparent',
-      '--td-bg-color-page': 'transparent',
-      '--td-bg-color-secondarycontainer': 'transparent'
-    }
-  }
-  return {}
+// Theme changes only alter theme-mode/data-theme; keep wallpaper activation independent.
+watch(
+  isEnabled,
+  (enabled) => document.documentElement.classList.toggle('has-global-background', enabled),
+  { immediate: true, flush: 'sync' }
+)
+
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('has-global-background')
 })
-
-// Dynamically inject styles into body or #app to make them transparent if needed
-const styleElement = document.createElement('style')
-styleElement.id = 'global-bg-transparency'
-
-watch(
-  [isEnabled, () => settings.value.isDarkMode],
-  ([enabled, isDark]) => {
-    const appEl = document.getElementById('app')
-    if (enabled) {
-      if (appEl) appEl.style.backgroundColor = 'transparent'
-      document.body.style.backgroundColor = 'transparent'
-      if (!document.head.contains(styleElement)) {
-        document.head.appendChild(styleElement)
-      }
-      const containerColor = isDark ? '36, 36, 36' : '255, 255, 255'
-      const pageColor = isDark ? '24, 24, 24' : '243, 243, 243'
-      const hoverColor = isDark ? '255, 255, 255' : '0, 0, 0'
-      // Add custom styles to make components slightly transparent
-      styleElement.innerHTML = `
-        :root, body[theme-mode="dark"], body[theme-mode="light"] {
-          --td-bg-color-container: rgba(${containerColor}, 0.3) !important;
-          --td-bg-color-page: transparent !important;
-          --td-bg-color-secondarycontainer: rgba(${pageColor}, 0.2) !important;
-          --td-bg-color-component: rgba(${containerColor}, 0.3) !important;
-          --td-bg-color-component-hover: rgba(${hoverColor}, 0.05) !important;
-          --td-bg-color-component-active: rgba(${hoverColor}, 0.1) !important;
-          --list-content-bg: rgba(${containerColor}, 0.3) !important;
-        }
-        .home-container .sidebar {
-          background-image: none !important;
-          background-color: rgba(${containerColor}, 0.2) !important;
-          backdrop-filter: blur(10px);
-        }
-        .home-container .header {
-          background-color: transparent !important;
-        }
-        .mainContent {
-          background-color: transparent !important;
-        }
-        .scrollable-content {
-          background: rgba(${containerColor}, 0.3) !important;
-          backdrop-filter: blur(8px);
-        }
-      `
-    } else {
-      if (appEl) appEl.style.backgroundColor = ''
-      document.body.style.backgroundColor = ''
-      if (document.head.contains(styleElement)) {
-        document.head.removeChild(styleElement)
-      }
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <template>
-  <div v-if="isEnabled" class="global-background-container" :style="appContainerStyle">
+  <div v-if="isEnabled" class="global-background-container">
     <div
       class="global-background-media"
       :style="{
@@ -115,7 +64,7 @@ watch(
         playsinline
         class="bg-video"
       ></video>
-      <div v-else class="bg-image" :style="{ backgroundImage: `url('${bgUrl}')` }"></div>
+      <img v-else class="bg-image" :src="bgUrl" alt="" draggable="false" />
     </div>
   </div>
 </template>
@@ -125,12 +74,12 @@ watch(
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -999;
+  right: -1px;
+  bottom: -1px;
+  z-index: -1;
   pointer-events: none;
   overflow: hidden;
-  background-color: var(--td-bg-color-page);
+  background-color: rgb(var(--wallpaper-page-rgb));
 }
 
 .global-background-media {
@@ -142,17 +91,72 @@ watch(
   transition: all 0.3s ease;
 }
 
-.bg-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
+.bg-video,
 .bg-image {
   width: 100%;
   height: 100%;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  object-fit: cover;
+  object-position: center;
+}
+</style>
+
+<style>
+/* Read the effective theme from the same root attribute as the theme styles, including
+   follow-system changes. No JS snapshot of isDarkMode or injected style ordering. */
+:root.has-global-background {
+  --wallpaper-container-rgb: 255, 255, 255;
+  --wallpaper-page-rgb: 243, 243, 243;
+  --wallpaper-hover-rgb: 0, 0, 0;
+  --td-bg-color-container: rgba(var(--wallpaper-container-rgb), 0.3) !important;
+  --td-bg-color-page: transparent !important;
+  --td-bg-color-secondarycontainer: rgba(var(--wallpaper-page-rgb), 0.2) !important;
+  --td-bg-color-component: rgba(var(--wallpaper-container-rgb), 0.3) !important;
+  --td-bg-color-component-hover: rgba(var(--wallpaper-hover-rgb), 0.05) !important;
+  --td-bg-color-component-active: rgba(var(--wallpaper-hover-rgb), 0.1) !important;
+  --list-content-bg: rgba(var(--wallpaper-container-rgb), 0.3) !important;
+}
+
+:root.has-global-background[data-theme='dark'] {
+  --wallpaper-container-rgb: 36, 36, 36;
+  --wallpaper-page-rgb: 24, 24, 24;
+  --wallpaper-hover-rgb: 255, 255, 255;
+}
+
+/* Keep the negative wallpaper layer inside the provider, above its own background. */
+:root.has-global-background .app-provider {
+  isolation: isolate;
+}
+
+:root.has-global-background .home-container .sidebar {
+  background-image: none !important;
+  background-color: rgba(var(--wallpaper-container-rgb), 0.2) !important;
+  backdrop-filter: blur(10px);
+}
+
+:root.has-global-background .home-container .content {
+  background-image: none !important;
+}
+
+:root.has-global-background .home-container .header,
+:root.has-global-background .mainContent {
+  background: transparent !important;
+}
+
+:root.has-global-background .scrollable-content {
+  background: rgba(var(--wallpaper-container-rgb), 0.3) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Wallpaper transparency belongs to the page, not foreground dialogs or their controls. */
+:root.has-global-background .t-dialog {
+  --td-bg-color-container: rgb(var(--wallpaper-container-rgb));
+  --td-bg-color-page: rgb(var(--wallpaper-page-rgb));
+  --td-bg-color-secondarycontainer: rgb(var(--wallpaper-page-rgb));
+  --td-bg-color-component: rgba(var(--wallpaper-hover-rgb), 0.06);
+  --td-bg-color-component-hover: rgba(var(--wallpaper-hover-rgb), 0.1);
+  --td-bg-color-component-active: rgba(var(--wallpaper-hover-rgb), 0.14);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  box-shadow: 0 20px 64px rgba(0, 0, 0, 0.24);
 }
 </style>

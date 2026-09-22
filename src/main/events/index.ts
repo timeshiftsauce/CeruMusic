@@ -1,3 +1,4 @@
+import './musicDataRepair'
 import InitPluginService from './plugins'
 import InitShareService from './share'
 import '../services/musicSdk/index'

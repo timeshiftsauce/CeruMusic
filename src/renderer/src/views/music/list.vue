@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { songKey } from '@common/musicItem'
 import { calculateBestQuality } from '@common/utils/quality'
 import PlaylistLoadError from '@renderer/components/Music/PlaylistLoadError.vue'
 import { playlistLoadErrorMessage } from '@renderer/utils/playlist/loadError'
 import { readPluginPlaylistRef } from '@renderer/services/pluginPlaybackBridge'
-import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { pluginQualityOrder, batchQualityChoices } from '@renderer/utils/pluginQuality'
 import { cloudSongListAPI, type CloudSongDto } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
@@ -45,21 +45,7 @@ import {
 import { useRoute } from 'vue-router'
 import shareAPI from '@renderer/api/share'
 
-interface MusicItem {
-  pluginResource?: ResourceRef
-  singer: string
-  name: string
-  albumName: string
-  albumId: number
-  source: string
-  interval: string
-  songmid: number
-  img: string
-  lrc: null | string
-  types: string[]
-  _types: Record<string, any>
-  typeUrl: Record<string, any>
-}
+type MusicItem = import('@common/musicItem').MusicItem
 
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
@@ -83,6 +69,10 @@ const hasMore = ref(true)
 const currentPage = ref(1)
 const networkNextCursor = ref<string | undefined>(undefined)
 const pageSize = 50
+/** 音源分页异常保护:整页没有新增歌曲时连续计数,达到阈值就停止翻页。 */
+let networkBarrenPages = 0
+/** 拉全量分页(播放全部 / 导入 / 同步)时的页数安全阀,防止音源分页异常导致死循环。 */
+const MAX_PREFETCH_PAGES = 300
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
 const playlistInfo = ref({
@@ -119,11 +109,7 @@ const hasCurrentPlayingSong = computed(() => {
   ) {
     return false
   }
-  return displaySongs.value.some(
-    (s) =>
-      String(s.songmid) === String(currentPlayingSongInfo.value!.songmid) &&
-      s.source === currentPlayingSongInfo.value!.source
-  )
+  return displaySongs.value.some((s) => songKey(s) === songKey(currentPlayingSongInfo.value))
 })
 
 const showLocateCurrentBtn = ref(false)
@@ -188,7 +174,7 @@ const locateCurrentSong = () => {
       locateScrollFallbackTimer = null
     }, 800)
     songListRef.value.scrollToSong(
-      currentPlayingSongInfo.value.songmid,
+      songKey(currentPlayingSongInfo.value),
       currentPlayingSongInfo.value.source
     )
   }
@@ -521,8 +507,9 @@ const fetchPlaylistShareSongs = async (reset = false) => {
       playlistShareNextPos.value = lastSong.pos
     }
 
+    // 空页兜底:返回空页说明确实到底了,避免调用方(导入 / 播放全部)的分页循环空转。
     const total = detail.playlist.total || 0
-    hasMore.value = songs.value.length < total
+    hasMore.value = pageSongs.length > 0 && songs.value.length < total
   } catch (error: any) {
     console.error('获取分享歌单失败:', error)
     MessagePlugin.error('获取分享歌单失败: ' + (error.message || '未知错误'))
@@ -597,8 +584,11 @@ const checkCloudSync = async () => {
 
         // 原子化更新本地数据库（先清空再添加，确保一致性）
         // 注意：对于超大歌单（如8000首），这可能会有短暂的IO耗时
-        await window.api.songList.clearSongs(playlistInfo.value.id)
-        await window.api.songList.addSongs(playlistInfo.value.id, localMappedSongs)
+        const replaced = await window.api.songList.replaceSongs(
+          playlistInfo.value.id,
+          localMappedSongs
+        )
+        if (!replaced.success) throw new Error(replaced.error || '保存云端歌单失败，本地数据已保留')
 
         const newMeta = await syncLocalMetaWithCloudUpdate(
           playlistInfo.value.id,
@@ -652,6 +642,7 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       networkNextCursor.value = undefined
       hasMore.value = true
       songs.value = []
+      networkBarrenPages = 0
       loading.value = true
     } else {
       if (!hasMore.value) return
@@ -703,7 +694,13 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
         const resource = song.pluginResource
         return JSON.stringify(
           resource
-            ? [resource.pluginId, resource.providerId, resource.connectionId, resource.kind, resource.id]
+            ? [
+                resource.pluginId,
+                resource.providerId,
+                resource.connectionId,
+                resource.kind,
+                resource.id
+              ]
             : [song.source, song.songmid]
         )
       }
@@ -743,7 +740,12 @@ const fetchNetworkPlaylistSongs = async (reset = false) => {
       // 更新分页状态
       currentPage.value += 1
       const total = Number(apiTotal || result.info?.total || playlistInfo.value.total || 0)
-      if (resource) {
+      // 音源分页异常保护:整页都是已存在的歌曲(重复页 / 去重后为空)时 songs.length 追不上 total,
+      // 继续翻页就是死循环(导入 700+ 首的歌单踩过)。连续两页没有新增歌曲即停止。
+      networkBarrenPages = appendedCount === 0 ? networkBarrenPages + 1 : 0
+      if (networkBarrenPages >= 2) {
+        hasMore.value = false
+      } else if (resource) {
         networkNextCursor.value = result.nextCursor
         hasMore.value = Boolean(result.nextCursor)
       } else if (total > 0) {
@@ -946,10 +948,10 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
       const cloudId = playlistInfo.value.meta?.cloudId || playlistInfo.value.id
       if (!cloudId) throw new Error('缺少云歌单ID')
 
-      await cloudSongListAPI.removeSongsFromList(cloudId, [String(song.songmid)])
+      await cloudSongListAPI.removeSongsFromList(cloudId, [songKey(song)])
 
       // 更新前端数据
-      const index = songs.value.findIndex((s) => s.songmid === song.songmid)
+      const index = songs.value.findIndex((s) => songKey(s) === songKey(song))
       if (index !== -1) {
         songs.value.splice(index, 1)
         playlistInfo.value.total = Math.max(0, (playlistInfo.value.total || 0) - 1)
@@ -964,11 +966,11 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
   }
 
   try {
-    const result = await window.api.songList.removeSongs(playlistInfo.value.id, [song.songmid])
+    const result = await window.api.songList.removeSongs(playlistInfo.value.id, [songKey(song)])
 
     if (result.success) {
       // 从当前歌曲列表中移除
-      const index = songs.value.findIndex((s) => s.songmid === song.songmid)
+      const index = songs.value.findIndex((s) => songKey(s) === songKey(song))
       if (index !== -1) {
         songs.value.splice(index, 1)
         // 更新歌单信息中的歌曲总数
@@ -980,7 +982,7 @@ const handleRemoveFromLocalPlaylist = async (song: MusicItem) => {
       if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
         console.log('Syncing delete to cloud:', playlistInfo.value.meta.cloudId)
         cloudSongListAPI
-          .removeSongsFromList(playlistInfo.value.meta.cloudId, [String(song.songmid)])
+          .removeSongsFromList(playlistInfo.value.meta.cloudId, [songKey(song)])
           .then(async (res) => {
             if (res && res.updatedAt) {
               const newMeta = await syncLocalMetaWithCloudUpdate(
@@ -1016,7 +1018,7 @@ const handleMoveToPosition = (song: MusicItem) => {
   if (!isLocalPlaylist.value) return
   const visible: MusicItem[] = songListRef.value?.sortedSongs ?? displaySongs.value
   const total = visible.length
-  const fromVis = visible.findIndex((s) => String(s.songmid) === String(song.songmid))
+  const fromVis = visible.findIndex((s) => songKey(s) === songKey(song))
   if (fromVis < 0) {
     MessagePlugin.warning('无法定位到当前歌曲')
     return
@@ -1063,8 +1065,8 @@ const handleMoveToPosition = (song: MusicItem) => {
       if (isDefaultOrder) {
         // 可见列表 = 自然顺序的过滤子集 → 用锚点的自然索引做 moveSong（O(|Δ|)）
         const anchor = visible[toVis]
-        const naturalTo = songs.value.findIndex((s) => String(s.songmid) === String(anchor.songmid))
-        const fromNat = songs.value.findIndex((s) => String(s.songmid) === String(song.songmid))
+        const naturalTo = songs.value.findIndex((s) => songKey(s) === songKey(anchor))
+        const fromNat = songs.value.findIndex((s) => songKey(s) === songKey(song))
         if (naturalTo < 0 || fromNat < 0) {
           MessagePlugin.error('定位失败')
           return
@@ -1075,7 +1077,7 @@ const handleMoveToPosition = (song: MusicItem) => {
         const prev = songs.value
         songs.value = next
         try {
-          const res = await songListAPI.moveSong(playlistInfo.value.id, song.songmid, naturalTo)
+          const res = await songListAPI.moveSong(playlistInfo.value.id, songKey(song), naturalTo)
           if (!res.success) {
             songs.value = prev
             MessagePlugin.error(res.error || '排序失败')
@@ -1091,8 +1093,8 @@ const handleMoveToPosition = (song: MusicItem) => {
         const newVisible = visible.slice()
         const [moved] = newVisible.splice(fromVis, 1)
         newVisible.splice(toVis, 0, moved)
-        const visibleIds = new Set(newVisible.map((s) => String(s.songmid)))
-        const nonVisible = songs.value.filter((s) => !visibleIds.has(String(s.songmid)))
+        const visibleIds = new Set(newVisible.map(songKey))
+        const nonVisible = songs.value.filter((s) => !visibleIds.has(songKey(s)))
         const finalOrder = [...newVisible, ...nonVisible]
 
         const prev = songs.value
@@ -1100,10 +1102,7 @@ const handleMoveToPosition = (song: MusicItem) => {
         // 重置客户端排序，让用户直接看到移动生效后的新自然顺序
         songListRef.value?.resetSort?.()
         try {
-          const res = await songListAPI.reorderSongs(
-            playlistInfo.value.id,
-            finalOrder.map((s) => s.songmid)
-          )
+          const res = await songListAPI.reorderSongs(playlistInfo.value.id, finalOrder.map(songKey))
           if (!res.success) {
             songs.value = prev
             MessagePlugin.error(res.error || '排序失败')
@@ -1133,11 +1132,11 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
     const cloudId = playlistInfo.value.meta?.cloudId || playlistInfo.value.id
     if (!cloudId) throw new Error('缺少云歌单ID')
 
-    const mids = batchSongs.map((s: any) => String(s.songmid))
+    const mids = batchSongs.map(songKey)
     await cloudSongListAPI.removeSongsFromList(cloudId, mids)
 
     const set = new Set(mids)
-    songs.value = songs.value.filter((s) => !set.has(String(s.songmid)))
+    songs.value = songs.value.filter((s) => !set.has(songKey(s)))
     playlistInfo.value.total = Math.max(0, (playlistInfo.value.total || 0) - mids.length)
 
     MessagePlugin.success(`已从云歌单移除 ${mids.length} 首歌曲`)
@@ -1155,18 +1154,18 @@ const handleRemoveBatchSelected = async (batchSongs: any[]) => {
   }
 
   try {
-    const mids = batchSongs.map((s: any) => s.songmid)
+    const mids = batchSongs.map(songKey)
     if (route.query.type === 'cloud_user') {
       await cloudSongListAPI.removeSongsFromList(playlistInfo.value.id, mids.map(String))
       const set = new Set(mids.map(String))
-      songs.value = songs.value.filter((s) => !set.has(String(s.songmid)))
+      songs.value = songs.value.filter((s) => !set.has(songKey(s)))
       playlistInfo.value.total = songs.value.length
       MessagePlugin.success(`已移除 ${mids.length} 首歌曲`)
     } else {
       const result = await window.api.songList.removeSongs(playlistInfo.value.id, mids)
       if (result.success) {
         const set = new Set(mids)
-        songs.value = songs.value.filter((s) => !set.has(s.songmid))
+        songs.value = songs.value.filter((s) => !set.has(songKey(s)))
         playlistInfo.value.total = songs.value.length
 
         if (playlistInfo.value.meta?.cloudId && playlistInfo.value.meta?.isSynced) {
@@ -1359,7 +1358,8 @@ const playAll = (shouldShuffle = false) => {
     let loadingMsg: Promise<any> | null = null
     if (!isLocalPlaylist.value && hasMore.value) {
       loadingMsg = MessagePlugin.loading('正在加载全部歌曲...', 0)
-      while (hasMore.value) {
+      let pageGuard = 0
+      while (hasMore.value && pageGuard++ < MAX_PREFETCH_PAGES) {
         if (route.query.type === 'cloud_user') {
           await fetchCloudUserPlaylist(false)
         } else if (route.query.type === 'playlist_share') {
@@ -1472,7 +1472,9 @@ const handleSyncPlaylist = async () => {
     return
   }
 
-  while (true) {
+  // 页数安全阀:音源若一直返回重复且非空的页,上面两个 break 都不会命中。
+  let pageGuard = 0
+  while (pageGuard++ < MAX_PREFETCH_PAGES) {
     if (detailResult.total < new_songs.length) break
     page++
     const { list: songsList } = await getListDetail(page)
@@ -1583,7 +1585,8 @@ const handleSaveToLocal = async () => {
       const loadingMsg = MessagePlugin.loading('正在保存到本地...', 0)
       try {
         if (hasMore.value) {
-          while (hasMore.value) {
+          let pageGuard = 0
+          while (hasMore.value && pageGuard++ < MAX_PREFETCH_PAGES) {
             if (isPlaylistShare.value) {
               await fetchPlaylistShareSongs(false)
             } else {
@@ -1781,12 +1784,8 @@ const handleSyncFromCloud = async () => {
     )
     const localSongs = cloudSongs.map(mapCloudSongToLocal)
 
-    // Replace local songs
-    const currentMids = songs.value.map((s) => s.songmid)
-    if (currentMids.length > 0) {
-      await window.api.songList.removeSongs(playlistInfo.value.id, currentMids)
-    }
-    await window.api.songList.addSongs(playlistInfo.value.id, localSongs)
+    const replacement = await window.api.songList.replaceSongs(playlistInfo.value.id, localSongs)
+    if (!replacement.success) throw new Error(replacement.error || '替换歌单失败')
 
     // Update view
     songs.value = localSongs
