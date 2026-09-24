@@ -8,6 +8,7 @@ import {
 } from '@common/types/hotkeys'
 import lyricWindow from '../../windows/lyric-window'
 import { configManager } from '../ConfigManager'
+import { isMediaKeyAccelerator } from '@common/hotkeyAccelerators'
 
 type ApplyResult = { success: true } | { success: false; errors: string[] }
 
@@ -125,6 +126,19 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
   const failedActions = new Set<HotkeyAction>()
   const actionErrors: Partial<Record<HotkeyAction, string[]>> = {}
   const tryRegister = (action: HotkeyAction, acc: string, cb: () => void) => {
+    // 媒体键交给系统媒体会话处理（渲染进程的 navigator.mediaSession 已经接管播放/暂停与上/下一首）：
+    // 注册为 globalShortcut 会关闭本应用的 SMTC 发布，系统媒体卡片、媒体键与其它集成都会看不到本应用。
+    // Media keys belong to the system media session (the renderer already handles play/pause and next/previous through
+    // navigator.mediaSession): registering them as global shortcuts disables this app's SMTC publishing, so the system media card, the
+    // media keys themselves, and other integrations would all stop seeing this app.
+    if (isMediaKeyAccelerator(acc)) {
+      failedActions.add(action)
+      const msg = `媒体键不能作为全局快捷键（会关闭系统媒体控制，媒体键请交给系统处理）：${actionLabel[action]}（${acc}）`
+      errors.push(msg)
+      actionErrors[action] = [...(actionErrors[action] || []), msg]
+      return
+    }
+
     const ok = globalShortcut.register(acc, cb)
     if (!ok) {
       failedActions.add(action)

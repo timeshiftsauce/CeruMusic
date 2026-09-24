@@ -1,4 +1,5 @@
 import type { HotkeyAction } from '@common/types/hotkeys'
+import { isMediaKeyAccelerator, resolveMediaKeyFromEventKey } from '@common/hotkeyAccelerators'
 
 export type RecordingState = {
   visible: boolean
@@ -21,6 +22,11 @@ const normalizeKeyPart = (e: KeyboardEvent): string => {
     if (key.length === 1) {
       parts.push(key.toUpperCase())
     } else {
+      // 媒体键先归一成 Electron 加速器名（MediaTrackNext → MediaNextTrack 等），录制器才能在下游拒绝它，
+      // 预览也显示系统使用的名字。
+      // Media keys are normalised into Electron accelerator names first (MediaTrackNext → MediaNextTrack and so on), so the recorder
+      // can reject them downstream and the preview shows the name the system uses.
+      const mediaKey = resolveMediaKeyFromEventKey(key)
       const map: Record<string, string> = {
         ' ': 'Space',
         ArrowUp: 'Up',
@@ -38,7 +44,7 @@ const normalizeKeyPart = (e: KeyboardEvent): string => {
         PageDown: 'PageDown',
         Insert: 'Insert'
       }
-      parts.push(map[key] || key)
+      parts.push(mediaKey || map[key] || key)
     }
   }
   return parts.join('+')
@@ -63,6 +69,13 @@ export function createHotkeyRecorder(options: {
   onPreviewChange: (preview: string) => void
   onCapture: (acc: string) => void
   onCancel: () => void
+  /**
+   * 按下的键是媒体键时触发：媒体键交给系统媒体会话处理，不能注册为全局快捷键
+   * （注册会关闭本应用的 SMTC 发布），录制器因此不捕获它。
+   * Raised when a media key is pressed: media keys belong to the system media session and cannot be registered as global shortcuts
+   * (doing so disables this app's SMTC publishing), so the recorder never captures them.
+   */
+  onRejected?: () => void
 }) {
   const onKeyDown = (e: KeyboardEvent) => {
     e.preventDefault()
@@ -79,6 +92,10 @@ export function createHotkeyRecorder(options: {
 
     const preview = normalizeKeyPart(e)
     options.onPreviewChange(preview)
+    if (isMediaKeyAccelerator(preview)) {
+      options.onRejected?.()
+      return
+    }
     if (isCompleteAccelerator(preview)) {
       options.onCapture(preview)
     }

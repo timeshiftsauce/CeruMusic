@@ -119,22 +119,32 @@ const recording = ref<{
   action: HotkeyAction | null
   preview: string
   captured: string
+  rejectedMediaKey: boolean
 }>({
   visible: false,
   action: null,
   preview: '',
-  captured: ''
+  captured: '',
+  rejectedMediaKey: false
 })
 let recorder: ReturnType<typeof createHotkeyRecorder> | null = null
 
 const beginRecord = (action: HotkeyAction) => {
-  recording.value = { visible: true, action, preview: '', captured: bindings.value[action] || '' }
+  recording.value = {
+    visible: true,
+    action,
+    preview: '',
+    captured: bindings.value[action] || '',
+    rejectedMediaKey: false
+  }
   recorder?.unmount()
   recorder = createHotkeyRecorder({
     onPreviewChange: (preview) => {
       recording.value.preview = preview
+      recording.value.rejectedMediaKey = false
     },
     onCapture: (acc) => {
+      recording.value.rejectedMediaKey = false
       if (recording.value.action) {
         const conflict = Object.entries(bindings.value).find(
           ([k, v]) =>
@@ -149,6 +159,10 @@ const beginRecord = (action: HotkeyAction) => {
       }
       recording.value.captured = acc
     },
+    onRejected: () => {
+      // 媒体键由系统媒体会话处理，不能绑定为全局快捷键（会关闭系统媒体控制）。
+      recording.value.rejectedMediaKey = true
+    },
     onCancel: () => {
       cancelRecord()
     }
@@ -157,7 +171,13 @@ const beginRecord = (action: HotkeyAction) => {
 }
 
 const cancelRecord = () => {
-  recording.value = { visible: false, action: null, preview: '', captured: '' }
+  recording.value = {
+    visible: false,
+    action: null,
+    preview: '',
+    captured: '',
+    rejectedMediaKey: false
+  }
   recorder?.unmount()
   recorder = null
 }
@@ -291,6 +311,9 @@ const recordCanSave = computed(() => {
         <div class="preview">{{ recordPreview }}</div>
         <div class="preview sub">
           {{ recording.captured ? acceleratorToDisplay(recording.captured) : '等待输入...' }}
+        </div>
+        <div v-if="recording.rejectedMediaKey" class="rejected-hint">
+          媒体键由系统媒体控制处理，不能绑定为全局快捷键
         </div>
         <div class="tips">
           <div>按 Esc 取消</div>
@@ -426,6 +449,12 @@ const recordCanSave = computed(() => {
 
 .preview.sub {
   font-weight: 600;
+}
+
+.rejected-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--td-error-color);
 }
 
 .tips {
