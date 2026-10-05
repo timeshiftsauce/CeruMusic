@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -46,8 +46,8 @@
     "@langchain/core": "^0.3.71",
     "@langchain/deepseek": "^0.1.0",
     "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-core": "file:vendor/shiqianjiang-ceru-plugin-core-0.3.7.tgz",
-    "@shiqianjiang/ceru-plugin-sdk": "file:vendor/shiqianjiang-ceru-plugin-sdk-0.3.7.tgz",
+    "@shiqianjiang/ceru-plugin-core": "0.3.12",
+    "@shiqianjiang/ceru-plugin-sdk": "0.3.12",
     "@xmldom/xmldom": "0.9.12",
     "axios": "^1.13.2",
     "better-sqlite3": "13.0.3",
@@ -62,6 +62,7 @@
     "p-limit": "^3.1.0",
     "registry-js": "^1.16.1",
     "socket.io-client": "^4.8.3",
+    "socks-proxy-agent": "^8.0.5",
     "upnp-mediarenderer-client": "^1.4.0",
     "uuid": "^13.0.0",
     "zlib": "^1.0.5"
@@ -106,6 +107,7 @@
     "crypto-js": "^4.2.0",
     "cross-env": "^10.1.0",
     "dompurify": "^3.2.6",
+    "echarts": "^6.1.0",
     "electron": "44.4.3",
     "electron-builder": "^26.8.1",
     "electron-icon-builder": "^2.0.1",
@@ -155,8 +157,8 @@
     "buffer": "^6.0.3",
     "@langchain/core": "^0.3.71",
     "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-sdk": "file:vendor/shiqianjiang-ceru-plugin-sdk-0.3.7.tgz",
-    "@shiqianjiang/ceru-plugin-issuer": "file:vendor/shiqianjiang-ceru-plugin-issuer-0.3.7.tgz"
+    "@shiqianjiang/ceru-plugin-sdk": "0.3.12",
+    "@shiqianjiang/ceru-plugin-issuer": "0.3.12"
   },
   "engines": {
     "node": ">=22.14.0"

@@ -19,6 +19,19 @@ const restore = (values: Record<string, string | null>) => {
 }
 
 let baseline: { raw: Record<string, string | null>; inspection: any } | undefined
+
+/**
+ * 启动预检是否已判定「需要修复」。
+ *
+ * 欢迎页据此决定要不要提前预加载播放状态：
+ * 需要修复时先别加载（反正修复后会 reloadSnapshot 覆盖），避免白干一次。
+ * 只需同步判断，故基于 main.ts 里已完成的 inspectMusicDataAtStartup 结果。
+ */
+export function startupNeedsRepair(): boolean {
+  if (localStorage.getItem('ceru-music-data-version') !== '2') return true
+  return !!baseline?.inspection?.needsRepair
+}
+
 export async function inspectMusicDataAtStartup() {
   const raw = snapshot()
   try {

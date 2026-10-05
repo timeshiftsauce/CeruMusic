@@ -151,6 +151,22 @@ export const searchItems: SearchItem[] = [
     keywords: ['快捷键', 'key', 'shortcut']
   },
 
+  // Network
+  {
+    id: 'network-proxy',
+    category: 'network',
+    title: '网络代理',
+    description: '配置应用网络请求是否使用系统代理或自定义代理',
+    keywords: ['代理', 'proxy', '网络', 'socks5', 'http', '系统代理', '直连', '封面']
+  },
+  {
+    id: 'network-trust-ca',
+    category: 'network',
+    title: '信任系统证书',
+    description: '让插件与下载等 Node 侧请求信任 Windows 系统证书库（兼容抓包代理）',
+    keywords: ['证书', 'ca', 'tls', 'ssl', '抓包', 'reqable', 'charles', '代理']
+  },
+
   // Plugins
   {
     id: 'plugin-settings',

@@ -63,6 +63,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { startupHomeAvailable, refreshPluginContributions } from '@renderer/services/pluginState'
+import { musicStartupReady } from '@renderer/services/musicDataPersistence'
+import { startupNeedsRepair } from '@renderer/services/musicDataRepair'
 import { useRouter } from 'vue-router'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -89,12 +91,23 @@ const features = showNewYear.value
   ? ['岁岁长安', '功不唐捐', '马年吉祥', '马越新程']
   : ['Hi-Res Audio', 'Minimalist', 'Plugins', 'Offline']
 
+/** 欢迎页最短展示时长：避免准备工作过快时进度条一闪而过 */
+const MIN_WELCOME_MS = 900
+
 async function prepareStartup() {
+  const startedAt = Date.now()
   startupError.value = false
   if (progressTimer) clearInterval(progressTimer)
   loadingPercent.value = 0
+
+  // 进度条是「观感」而非「计量」：真实步骤（尤其缓存命中时）往往几十毫秒就完成，
+  // 直接跳到 100 会让人以为卡了一下。所以让计时器匀速推进到 90%，
+  // 真实工作结束后再平滑补齐到 100%。
   progressTimer = setInterval(() => {
-    if (loadingPercent.value < 75) loadingPercent.value = Math.min(75, loadingPercent.value + 2)
+    if (loadingPercent.value >= 90) return
+    // 固定小步长，曲线平滑；临近上限时收窄步长避免顶格后长时间不动
+    const step = loadingPercent.value > 80 ? 1.5 : 6
+    loadingPercent.value = Math.min(90, loadingPercent.value + step)
   }, 100)
 
   // 获取版本号
@@ -106,11 +119,11 @@ async function prepareStartup() {
   }
 
   loadingText.value = '读取插件列表...'
-  loadingPercent.value = 15
+  loadingPercent.value = Math.max(loadingPercent.value, 15)
   try {
     await window.electron.ipcRenderer.invoke('service-plugin-initialize-system')
     loadingText.value = '恢复已启用插件和首页...'
-    loadingPercent.value = 35
+    loadingPercent.value = Math.max(loadingPercent.value, 35)
     await refreshPluginContributions()
   } catch (e) {
     console.error('Plugin init failed', e)
@@ -122,20 +135,43 @@ async function prepareStartup() {
     }
     return
   }
-  loadingPercent.value = 80
+
   loadingText.value = '恢复上次歌曲和播放进度...'
   try {
-    // Playback restoration is gated until the post-welcome repair decision.
+    // 在欢迎页就把播放器装好并恢复上次歌曲（预取音频 URL / 封面 / 歌词），
+    // 这样进入首页时封面、歌词、进度都已就绪，不会「进去再慢慢加载」。
+    //
+    // 例外：若预检判定需要「数据修复」，先不加载 ——
+    // 修复会在首页弹窗进行并回滚数据，之后 reloadSnapshot 会用新数据覆盖，
+    // 提前加载等于白做一次。
+    if (startupNeedsRepair()) {
+      console.log('[启动] 检测到需要数据修复，跳过欢迎页预加载')
+    } else {
+      musicStartupReady.value = true
+      const { initPlayback } = await import('@renderer/utils/audio/globaPlayList')
+      await initPlayback()
+    }
   } catch (error) {
     // Playback restoration is best-effort; the home page can still be used.
     console.warn('恢复播放状态失败:', error)
   }
+
+  // 停掉自动推进。CSS 已有 `transition: width .3s ease-out`，直接设为 100 即可平滑补齐。
   if (progressTimer) {
     clearInterval(progressTimer)
     progressTimer = null
   }
-  loadingPercent.value = 100
   loadingText.value = '准备就绪'
+
+  // 保底展示时长：工作太快时也让进度条至少走完一段，避免闪烁感
+  const elapsed = Date.now() - startedAt
+  if (elapsed < MIN_WELCOME_MS) {
+    await new Promise((resolve) => setTimeout(resolve, MIN_WELCOME_MS - elapsed))
+  }
+
+  loadingPercent.value = 100
+  // 等 CSS 过渡走完再切页，避免进度条还没到头的瞬间就跳走
+  await new Promise((resolve) => setTimeout(resolve, 320))
   await router.replace(startupHomeAvailable.value ? '/home/find' : '/home/local')
   if (settings.value.autoUpdate) void checkForUpdates()
 }

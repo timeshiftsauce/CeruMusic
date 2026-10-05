@@ -108,7 +108,13 @@ try {
               '@renderer/store/Settings':
                 "import {reactive,ref} from 'vue';const settings=reactive({settings:ref({autoUpdate:false}),shouldUseSpringFestivalTheme:()=>false});export const useSettingsStore=()=>settings;",
               '@renderer/services/pluginState':
-                'export const contributionsLoaded=s.ready, contributionsRevision=s.revision, homeSections=s.sections; export const refreshPluginContributions=()=>{s.events.push("restore");return s.restore};',
+                'export const contributionsLoaded=s.ready, contributionsRevision=s.revision, homeSections=s.sections; export const refreshPluginContributions=()=>{s.events.push("restore");return s.restore}; export const startupHomeAvailable={get value(){return globalThis.__startupTest?.hasHome !== false}}, pluginRestorationComplete={value:true};',
+              '@renderer/services/musicDataPersistence':
+                'export const musicStartupReady={value:false};',
+              '@renderer/services/musicDataRepair':
+                'export const coordinateMusicDataRepair=async()=>false; export const startupNeedsRepair=()=>false;',
+              '@renderer/services/pluginPlaybackBridge':
+                'export const openPluginPlaylist=async()=>{};',
               '@renderer/services/listenTogetherInvite':
                 'export const tryShowListenTogetherInvite=async()=>{};',
               '@renderer/utils/audio/globaPlayList':

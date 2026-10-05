@@ -156,7 +156,10 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       source: song.source,
       songInfo: song as any,
       quality,
-      isCache
+      isCache,
+      // 主进程用它判断两件事：① 该音质是否高于缓存上限（高于则不缓存）
+      // ② 缓存里的音质是否低于本次请求（低则视为未命中，回源重取）
+      qualityOrder: order
     })
 
     // message.success(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)

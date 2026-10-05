@@ -1,4 +1,3 @@
-import { songKey } from '@common/musicItem'
 import {
   SearchArg,
   SearchResult,
@@ -23,6 +22,7 @@ import {
 } from '@common/pluginMusic'
 import { parseLocalLyrics, exportBuiltinLyrics } from '@common/localLyrics'
 import { filterLyricInfo } from '@common/pluginLyrics'
+import { normalizeTypes } from '@common/utils/quality'
 import { resolveLocalLyrics } from '../localLyrics'
 import { localMusicIndexService } from '../LocalMusicIndex'
 import { readTags } from '../../utils/tagUtils'
@@ -41,7 +41,9 @@ export async function resolveDownloadUrl(task: {
   const result = await main(task.songInfo.source).getMusicUrl({
     pluginId: task.pluginId ?? '',
     songInfo: task.songInfo,
-    quality: task.quality
+    quality: task.quality,
+    // 下载任务没有渲染层的音源音质表，退而用歌曲自身声明的音质做顺序
+    qualityOrder: normalizeTypes(task.songInfo.types)
   })
   if (typeof result !== 'string') throw new Error(result.error)
   return result
@@ -135,7 +137,7 @@ function main(source: string = 'wy') {
       }
     },
 
-    async getMusicUrl({ songInfo, quality, isCache }: GetMusicUrlArg) {
+    async getMusicUrl({ songInfo, quality, isCache, qualityOrder }: GetMusicUrlArg) {
       try {
         const resource = normalizeAppTrackRef(songInfo.pluginResource)
         if (resource) {
@@ -155,11 +157,19 @@ function main(source: string = 'wy') {
             : retargetTrackRef(resource, provider.host.getPluginInfo().id)
           : undefined
         // Resolve selection first: changing playback implementations must also change the cache.
-        const songId = JSON.stringify([provider.pluginId, songKey(songInfo), quality])
+        //
+        // 一首歌一个 key（不含 connectionId），音频文件 / 歌词 / 封面共用。
+        // 本地音乐不缓存（文件本就在磁盘上）。
+        const cacheable = isCache !== false && musicCacheService.isCacheable(songInfo)
+        const songId = musicCacheService.songCacheKey(songInfo)
 
-        // 先检查缓存（isCache !== false 时）
-        if (isCache !== false) {
-          const cachedUrl = await musicCacheService.getCachedMusicUrl(songId)
+        // 先检查缓存（带上音质：缓存音质低于本次请求时视为未命中，会回源重取）
+        if (cacheable) {
+          const cachedUrl = await musicCacheService.getCachedMusicUrl(
+            songId,
+            quality,
+            qualityOrder ?? []
+          )
           if (cachedUrl) {
             return cachedUrl
           }
@@ -172,10 +182,12 @@ function main(source: string = 'wy') {
           quality
         )
         // 按需异步缓存，不阻塞返回
-        if (isCache !== false) {
-          musicCacheService.cacheMusic(songId, originalUrl).catch((error) => {
-            console.warn('缓存歌曲失败:', error)
-          })
+        if (cacheable) {
+          musicCacheService
+            .cacheMusic(songId, originalUrl, quality, qualityOrder ?? [])
+            .catch((error) => {
+              console.warn('缓存歌曲失败:', error)
+            })
         }
 
         return originalUrl
@@ -189,7 +201,11 @@ function main(source: string = 'wy') {
     async getPic({ songInfo }: GetMusicPicArg) {
       try {
         const { provider, song, currentSource } = songActionTarget('artwork.get', songInfo)
-        return songInfo.img || (await provider?.host.getPic(currentSource, song))
+        // 优先向插件要「新鲜」链接。不能优先用 songInfo.img —— 歌单里存的多是
+        // 带签名的临时链接，重启后多半已过期，直接用它会导致封面加载失败。
+        // 只在插件拿不到时才退回 songInfo.img。
+        const fresh = await provider?.host.getPic(currentSource, song)
+        return (typeof fresh === 'string' && fresh ? fresh : songInfo.img) || ''
       } catch (e: any) {
         return {
           error: '获取歌曲失败 ' + (e.message || e.error || String(e))
@@ -216,6 +232,27 @@ function main(source: string = 'wy') {
           'tracks.lyrics'
         )
         if (!provider) throw new Error('请安装这首歌曲所需的插件')
+
+        // 缓存「原始」结构化歌词（不含过滤结果）。
+        // 关键：过滤（grepLyricInfo / useStrictMode）是展示层偏好，会随设置变化，
+        // 若把过滤后的结果写进缓存，用户一改设置就得重新联网取。
+        // 因此这里只要求是「播放展示用」（非导出格式）且可缓存（非本地音乐），
+        // 过滤照旧由渲染层做。
+        const isDisplayLyric =
+          useFormat === null && musicCacheService.isCacheable(songInfo)
+        // 与音频、封面同一个 key：同一首歌的元信息只有一份，与音质无关。
+        const lyricKey = isDisplayLyric ? musicCacheService.songCacheKey(songInfo) : ''
+        if (isDisplayLyric) {
+          const cached = await musicCacheService.getCachedLyricObject<import('@shiqianjiang/ceru-plugin-sdk').CrLyric>(
+            lyricKey
+          )
+          // 命中也要套用当前的过滤偏好，保证与「未命中」路径的返回值形态一致，
+          // 否则用户改了过滤设置却只在首次播放生效。
+          if (cached) {
+            return { crlyric: grepLyricInfo ? filterLyricInfo(cached, useStrictMode) : cached }
+          }
+        }
+
         const res = await provider.host.invokeV2Provider(currentSource, 'tracks.lyrics', [
           resource
             ? isProviderTrackRef(resource)
@@ -239,6 +276,7 @@ function main(source: string = 'wy') {
             })
           ).text
         }
+        if (isDisplayLyric && res) musicCacheService.cacheLyricObject(lyricKey, res)
         return { crlyric: grepLyricInfo ? filterLyricInfo(res, useStrictMode) : res }
       } catch (e: any) {
         return {

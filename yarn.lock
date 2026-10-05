@@ -2608,27 +2608,30 @@
   resolved "https://registry.npmmirror.com/@shikijs/vscode-textmate/-/vscode-textmate-10.0.2.tgz"
   integrity sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==
 
-"@shiqianjiang/ceru-plugin-core@file:vendor/shiqianjiang-ceru-plugin-core-0.3.7.tgz":
-  version "0.3.7"
-  resolved "file:vendor/shiqianjiang-ceru-plugin-core-0.3.7.tgz#a17fec3add5e3d227cf9d7ee3860c38f380255b6"
+"@shiqianjiang/ceru-plugin-core@0.3.12":
+  version "0.3.12"
+  resolved "https://registry.npmjs.org/@shiqianjiang/ceru-plugin-core/-/ceru-plugin-core-0.3.12.tgz#f76a16e6e84796db8209a5d2409337a569b3ddc7"
+  integrity sha512-uRTx0WRkrR7YBrV00gCT92ASxmh7X6HDGq0v50oZxnFIJLp7q6KOlII3cjhoZmJ7siOTByOk9EiNNc9Lndcv0A==
   dependencies:
-    "@shiqianjiang/ceru-plugin-issuer" "0.3.7"
-    "@shiqianjiang/ceru-plugin-sdk" "0.3.7"
+    "@shiqianjiang/ceru-plugin-issuer" "0.3.12"
+    "@shiqianjiang/ceru-plugin-sdk" "0.3.12"
     axios "^1.13.2"
     socket.io-client "^4.8.3"
     ws "^8.21.3"
 
-"@shiqianjiang/ceru-plugin-issuer@0.3.7", "@shiqianjiang/ceru-plugin-issuer@file:vendor/shiqianjiang-ceru-plugin-issuer-0.3.7.tgz":
-  version "0.3.7"
-  resolved "file:vendor/shiqianjiang-ceru-plugin-issuer-0.3.7.tgz#e4f875be2983d92ff8504da8396c3fdd1b7d4605"
+"@shiqianjiang/ceru-plugin-issuer@0.3.12":
+  version "0.3.12"
+  resolved "https://registry.npmjs.org/@shiqianjiang/ceru-plugin-issuer/-/ceru-plugin-issuer-0.3.12.tgz#4bb06f5fa6788b98c01a38900cd8429a273418ef"
+  integrity sha512-UMNvGSnedE7t+/jfzh9b1DSs6LDzLF7qVS/5CHsAWeeIroOzlM5Cid2xce5we2LuetlXoJ2DMbUT8toyr6KKIw==
   dependencies:
-    "@shiqianjiang/ceru-plugin-sdk" "0.3.7"
+    "@shiqianjiang/ceru-plugin-sdk" "0.3.12"
     acorn "^8.18.0"
     ajv "^8.20.0"
 
-"@shiqianjiang/ceru-plugin-sdk@0.3.7", "@shiqianjiang/ceru-plugin-sdk@file:vendor/shiqianjiang-ceru-plugin-sdk-0.3.7.tgz":
-  version "0.3.7"
-  resolved "file:vendor/shiqianjiang-ceru-plugin-sdk-0.3.7.tgz#634448209c8516756b048e1509b4421aac095e99"
+"@shiqianjiang/ceru-plugin-sdk@0.3.12":
+  version "0.3.12"
+  resolved "https://registry.npmjs.org/@shiqianjiang/ceru-plugin-sdk/-/ceru-plugin-sdk-0.3.12.tgz#f17b21897f2cba45affdf33a031fef14bf1f981b"
+  integrity sha512-KYqHS25qwp5IYsPUPHS1q5EbvBW5H2UagQBreZ8Pol9vpxXwWhIWiuce+H7FKrs44yTdnpWYx+LXDXnFKXvL1w==
   dependencies:
     "@types/lodash" "^4.17.25"
     buffer "^6.0.3"

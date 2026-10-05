@@ -4,6 +4,7 @@ import {
   normalizeMusicItem,
   sameSong,
   songKey,
+  songCacheKey,
   restoredSong,
   type MusicItem
 } from '@common/musicItem'
@@ -21,6 +22,7 @@ import { contributionsRevision } from '@renderer/services/pluginState'
 import _ from 'lodash'
 import defaultCover from '/default-cover.png'
 import { playSetting } from './playSetting'
+import mediaSessionController from '@renderer/utils/audio/useSmtc'
 
 interface Player {
   songId?: string
@@ -101,9 +103,35 @@ export interface CommentResponse {
   maxPage: number
 }
 
-async function getBlobUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
+/**
+ * 封面 URL → 可用的 Blob URL（联网下载，并回写本地缓存）。
+ *
+ * 调用方需先自行查过本地缓存（`loadCover` 第 1 步已做），这里只负责下载与回写。
+ * 回写用 `blob.arrayBuffer()` 而不是 `response.clone()` —— body 已被 blob() 消费，
+ * clone 会抛 "Response body is already used"。
+ *
+ * @param cacheId 这首歌的缓存标识（与音频/歌词共用），用于回写
+ */
+/** 元信息耗时超过该阈值才打日志，避免正常情况刷屏（用于排查切歌变慢） */
+const METADATA_SLOW_MS = 400
+
+/**
+ * 切歌时等待歌词的上限。
+ *
+ * 封面与歌词都要就绪后才切歌（避免中间态），但歌词来自插件接口、可能很慢甚至挂住。
+ * 超过这个时间就放弃等待、先切过去 —— 宁可不显示歌词，也不能让用户干等。
+ */
+const LYRICS_WAIT_TIMEOUT_MS = 3000
+
+async function getBlobUrlFromUrl(
+  url: string,
+  signal?: AbortSignal,
+  cacheId?: string
+): Promise<string> {
   if (!url) return ''
+  // 已是本地/内联资源，无需处理
   if (/^(data:|blob:|file:)/i.test(url)) return url
+
   try {
     const response = await fetch(url, {
       signal: signal
@@ -112,10 +140,53 @@ async function getBlobUrlFromUrl(url: string, signal?: AbortSignal): Promise<str
     })
     if (!response.ok) return ''
     const blob = await response.blob()
+
+    // 回写本地缓存（失败不影响本次播放）
+    if (cacheId) {
+      void blob
+        .arrayBuffer()
+        .then((buf) => {
+          const ext = coverExtFromMime(blob.type) || coverExtFromUrl(url)
+          return window.api.musicCache.putCoverFile(cacheId, buf, ext)
+        })
+        .catch((e) => console.warn('写入封面缓存失败:', e))
+    }
+
     return URL.createObjectURL(blob)
   } catch (e) {
     console.error('封面转Blob失败:', e)
     return ''
+  }
+}
+
+/** 由 MIME 推断封面扩展名（缓存文件用） */
+function coverExtFromMime(mime: string | undefined): string {
+  if (!mime) return ''
+  const m = mime.split(';')[0].trim().toLowerCase()
+  switch (m) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return '.jpg'
+    case 'image/png':
+      return '.png'
+    case 'image/webp':
+      return '.webp'
+    case 'image/gif':
+      return '.gif'
+    case 'image/bmp':
+      return '.bmp'
+    default:
+      return ''
+  }
+}
+
+/** 由 URL 推断封面扩展名（MIME 缺失时兜底） */
+function coverExtFromUrl(url: string): string {
+  try {
+    const ext = new URL(url).pathname.match(/\.(jpe?g|png|webp|gif|bmp)$/i)?.[0]
+    return ext ? ext.toLowerCase() : '.jpg'
+  } catch {
+    return '.jpg'
   }
 }
 
@@ -226,7 +297,10 @@ export const useGlobalPlayStatusStore = defineStore(
         if (snapshot.songInfo?.songmid != null) {
           player.songInfo = normalizeMusicItem(snapshot.songInfo)
           player.songId = String(player.songInfo.songmid)
-          player.cover = player.songInfo.img || defaultCover
+          // 这里只恢复「封面颜色」等外观，不用 songInfo.img 设封面 ——
+          // 那个链接多半已过期，会先闪一下再被真正的加载结果覆盖。
+          // 封面交给 prepareSong 统一加载（本地缓存 → 插件）。
+          player.cover = defaultCover
           const appearance = savedCoverDetail(snapshot.coverDetail)
           if (appearance) {
             player.coverDetail = appearance
@@ -282,6 +356,14 @@ export const useGlobalPlayStatusStore = defineStore(
     let currentBlobUrl: string | null = null
     let metadataRevision = 0
     let preparedSongKey: string | undefined
+    /**
+     * 正在加载元信息的歌曲 key（加载完成后保留，直到下一首）。
+     *
+     * 用于去重：playSong 在改 lastPlaySongKey 之前就会发起 prepareSong，
+     * 该写入又会触发下方的 watch；若无此守卫，同一首歌会被加载两次
+     * （表现为重复请求歌词、切歌更慢）。
+     */
+    let inFlightMetadataKey: string | undefined
     const lyricWarnings = new Map<string, number>()
     function reportLocalLyricError(id: string, error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
@@ -291,13 +373,17 @@ export const useGlobalPlayStatusStore = defineStore(
       void MessagePlugin.warning(`本地歌词无法显示：${message}`)
     }
     const keyOf = songKey
-    const withDeadline = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
+    const withDeadline = async <T>(
+      task: Promise<T>,
+      fallback: T,
+      timeoutMs = 20000
+    ): Promise<T> => {
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
         return await Promise.race([
           task.catch(() => fallback),
           new Promise<T>((resolve) => {
-            timer = setTimeout(() => resolve(fallback), 20000)
+            timer = setTimeout(() => resolve(fallback), timeoutMs)
           })
         ])
       } finally {
@@ -313,6 +399,9 @@ export const useGlobalPlayStatusStore = defineStore(
         colors: Awaited<ReturnType<typeof analyzeImageColors>> | null
       ) => void
     ) {
+      // 标记「这首歌的元信息正在加载」—— playSong 与 updatePlayerInfo 都会走到这里，
+      // 下方的 watch 凭此跳过重复加载（否则同一首歌会被请求两次歌词）。
+      inFlightMetadataKey = keyOf(song)
       const clean = JSON.parse(JSON.stringify(toRaw(song))) as SongList
       const localMetadata =
         clean.source === 'local'
@@ -325,9 +414,32 @@ export const useGlobalPlayStatusStore = defineStore(
         ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
         : AbortSignal.timeout(20000)
       const loadCover = async () => {
-        let url = clean.img
-        if (clean.source === 'local') url = (await localMetadata)?.img || ''
-        else if (!url) {
+        // 本地音乐不缓存：封面直接读本地文件的元数据，没必要落一份缓存副本。
+        // 这样既省空间，也避免本地曲目把缓存预算吃掉。
+        const isLocal = clean.source === 'local'
+        // 与主进程 songCacheKey 保持同一构造，才能命中同一份封面缓存
+        const coverCacheId = isLocal ? '' : songCacheKey(clean)
+
+        // 1) 本地封面缓存优先 —— 不依赖 song.img 是否还有效。
+        // 旧缓存/旧歌单里存的 img 常是过期签名链接，若先拿它去联网必然失败。
+        // 命中即返回 file://，不做解码校验（校验留给加载失败时的兜底路径，
+        // 否则每次启动都要多等一次图片解码）。
+        if (coverCacheId) {
+          try {
+            const local = await window.api.musicCache.getCoverFile(coverCacheId)
+            if (local) return local
+          } catch (e) {
+            console.warn('读取封面缓存失败，回退网络:', e)
+          }
+        }
+
+        // 2) 本地没有：向插件要一个「新鲜」的图片链接。
+        // getPic 内部已保证优先返回插件给的新链接（songInfo.img 只作兜底），
+        // 因为歌单里存的 img 多是带签名的临时链接、重启后已失效。
+        let url = ''
+        if (isLocal) {
+          url = (await localMetadata)?.img || ''
+        } else {
           const value = await window.api.music.requestSdk('getPic', {
             source: clean.source,
             songInfo: clean
@@ -336,7 +448,16 @@ export const useGlobalPlayStatusStore = defineStore(
         }
         coverSignal.throwIfAborted()
         if (!url) return defaultCover
-        const cover = await getBlobUrlFromUrl(url, coverSignal)
+
+        // 3) 下载并回写缓存（此时本地一定没有，传 cacheId 只为回写）
+        const cover = await getBlobUrlFromUrl(url, coverSignal, coverCacheId)
+
+        // 4) 兜底：下载失败时，若此前有本地缓存文件（可能损坏），清掉它，
+        //    避免下次仍然命中一个加载不出来的文件。
+        if (!cover && coverCacheId) {
+          await window.api.musicCache.invalidateCoverFile(coverCacheId).catch(() => {})
+        }
+
         if (signal?.aborted) {
           if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
           signal.throwIfAborted()
@@ -357,8 +478,10 @@ export const useGlobalPlayStatusStore = defineStore(
             }
           })
           if (!parsed) return undefined
-          if (parsed.error || parsed.format !== 'crlyric')
-            throw new Error(parsed?.error || '没有可用的歌词转换结果，请检查歌词转换插件')
+          // parseLyrics 成功时返回的是纯 CrLyric（没有 format 字段），
+          // 只有失败才返回 { error }。内置解析器已覆盖 lrc/enhanced-lrc/yrc/ttml 等格式，
+          // 未安装歌词转换插件也不该被判定为失败。
+          if (parsed.error) throw new Error(parsed.error)
           return playSettingStore.getIsGrepLyricInfo
             ? filterLyricInfo(parsed, playSettingStore.getStrictGrep)
             : parsed
@@ -374,31 +497,59 @@ export const useGlobalPlayStatusStore = defineStore(
           ? filterLyricInfo(lyric, playSettingStore.getStrictGrep)
           : lyric
       }
-      const [artwork, crlyric] = await Promise.all([
-        withDeadline(loadCover(), defaultCover).then(async (cover) => {
-          const cached =
-            appearanceSongKey === songKey(song) && song.img === player.songInfo?.img
-              ? savedCoverDetail(player.coverDetail)
-              : undefined
-          const colors = cached
-            ? { dominantColor: cached.ColorObject, useBlackText: cached.useBlackText }
-            : await withDeadline(analyzeImageColors(cover), null)
-          if (!signal?.aborted) onArtwork?.(cover, colors)
-          return { cover, colors }
-        }),
-        withDeadline<import('@shiqianjiang/ceru-plugin-sdk').CrLyric | undefined>(
-          loadLyrics().catch((error) => {
+      const __t0 = performance.now()
+
+      // 封面始终等待：它很快（缓存命中约 10ms）且直接决定视觉，缺了会闪空。
+      const lyricsPromise = withDeadline<
+        import('@shiqianjiang/ceru-plugin-sdk').CrLyric | undefined
+      >(
+        loadLyrics()
+          .then((r) => {
+            const cost = performance.now() - __t0
+            if (cost > METADATA_SLOW_MS) {
+              console.warn(`[切歌耗时] ${clean.name} 歌词=${cost.toFixed(0)}ms（偏慢）`)
+            }
+            return r
+          })
+          .catch((error) => {
             if (clean.source === 'local' && !signal?.aborted)
               reportLocalLyricError(String(clean.songmid), error)
             throw error
           }),
-          undefined
-        )
-      ])
+        undefined,
+        LYRICS_WAIT_TIMEOUT_MS
+      )
+
+      const artwork = await withDeadline(loadCover(), defaultCover).then(async (cover) => {
+        const __tCover = performance.now()
+        const cached =
+          appearanceSongKey === songKey(song) && song.img === player.songInfo?.img
+            ? savedCoverDetail(player.coverDetail)
+            : undefined
+        const colors = cached
+          ? { dominantColor: cached.ColorObject, useBlackText: cached.useBlackText }
+          : await withDeadline(analyzeImageColors(cover), null)
+        const __tColors = performance.now()
+        if (__tColors - __t0 > METADATA_SLOW_MS) {
+          console.log(
+            `[切歌耗时] ${clean.name} 封面=${(__tCover - __t0).toFixed(0)}ms ` +
+              `颜色分析=${(__tColors - __tCover).toFixed(0)}ms`
+          )
+        }
+        if (!signal?.aborted) onArtwork?.(cover, colors)
+        return { cover, colors }
+      })
+
       const { cover, colors } = artwork
       const dispose = () => {
         if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
       }
+      if (signal?.aborted) {
+        dispose()
+        signal.throwIfAborted()
+      }
+      // 默认等歌词一起就绪：切歌时「封面 + 歌词」同时到位，不出现中间态。
+      const crlyric = await lyricsPromise
       if (signal?.aborted) {
         dispose()
         signal.throwIfAborted()
@@ -427,6 +578,18 @@ export const useGlobalPlayStatusStore = defineStore(
       player.isLoading = false
       applyCoverColors(prepared.colors)
       updateCommon(prepared.song)
+
+      // SMTC 统一在此同步：UI 提交了什么，系统媒体卡片就显示什么。
+      // 封面用已加载好的那张(prepared.cover)，由 useSmtc 转成 data URL，
+      // 避免 song.img 为空/不可达时卡片显示问号或停留在上一首歌。
+      try {
+        mediaSessionController.updateMetadata({
+          title: prepared.song.name,
+          artist: prepared.song.singer,
+          album: prepared.song.albumName || '未知专辑',
+          artworkUrl: prepared.cover
+        })
+      } catch {}
     }
 
     function applyCoverColors(color: Awaited<ReturnType<typeof analyzeImageColors>> | null) {
@@ -493,6 +656,32 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     })
     onScopeDispose(stopTagListener)
+
+    /**
+     * 启动时的封面快速通道：只用已落盘的封面缓存，不等音乐数据/插件就绪。
+     *
+     * 封面缓存在磁盘上是独立且确定的，没理由跟歌词、颜色分析一起排在
+     * `musicStartupReady` 后面 —— 那会导致进首页后要等一会才出现封面。
+     */
+    let startupCoverToken = 0
+    async function hydrateStartupCover() {
+      const song = player.songInfo as SongList | undefined
+      if (!song?.songmid || song.source === 'local') return
+      const cacheId = songCacheKey(song)
+      if (!cacheId) return
+      const token = ++startupCoverToken
+      try {
+        const local = await window.api.musicCache.getCoverFile(cacheId)
+        // 期间用户可能已切歌 / 已有更新流程接管，过期结果直接丢弃
+        if (!local || token !== startupCoverToken) return
+        if (!sameSong(player.songInfo, song) || player.cover !== defaultCover) return
+        player.cover = local
+      } catch {
+        // 启动期封面失败无所谓，后续 updatePlayerInfo 会兜底
+      }
+    }
+    void hydrateStartupCover()
+
     watch(
       [
         () => localUserStore.userInfo.lastPlaySongKey || localUserStore.userInfo.lastPlaySongId,
@@ -508,9 +697,17 @@ export const useGlobalPlayStatusStore = defineStore(
           player.songInfo as SongList
         )
         if (!song) return
-        // Startup metadata can finish before plugins and their routing are restored.
-        // Retry from the saved selection, even if the first metadata request is still pending.
-        const retryLyrics = previous[2] !== contributionsRevision.value && !player.lyrics.crlyric
+        const key = keyOf(song)
+        // 插件列表变化时，旧歌词可能来自已被卸载的插件，需要重新拉取。
+        const pluginsChanged = previous?.[2] !== contributionsRevision.value
+        const retryLyrics = pluginsChanged && !player.lyrics.crlyric
+
+        // playSong 在改 lastPlaySongKey 之前就已发起 prepareSong（其中歌词是异步的），
+        // 该写入会走到这里。若不加判断会重复加载同一首歌（实测歌词会被请求两次）。
+        // 注意：歌词现在是「稍后填充」，所以不能靠 player.lyrics.crlyric 判断是否已加载，
+        // 必须用 inFlightMetadataKey（它标记的是这首歌的元信息是否已被接管）。
+        if (inFlightMetadataKey === key && !pluginsChanged) return
+
         if (sameSong(song, player.songInfo) && player.lyrics.crlyric && !retryLyrics) return
         void updatePlayerInfo(song, retryLyrics)
       },

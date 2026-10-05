@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron'
+import { BrowserWindow, app, shell, net } from 'electron'
 import fs from 'fs'
 import path from 'node:path'
 import { autoUpdater as electronAutoUpdater } from 'electron-updater'
@@ -75,7 +75,7 @@ async function dohResolve(hostname: string): Promise<string> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), 5000)
   try {
-    const res = await fetch(
+    const res = await net.fetch(
       `https://1.1.1.1/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
       { headers: { Accept: 'application/dns-json' }, signal: ctrl.signal }
     )
@@ -105,12 +105,18 @@ async function fetchWithDohFallback(
 
   // 先按原 URL 跑
   try {
-    const res = await fetch(url, { ...rest, signal: ctrl.signal })
+    const res = await net.fetch(url, { ...rest, signal: ctrl.signal })
     return res
   } catch (err: any) {
     const code = err?.code || err?.cause?.code || ''
-    // 只在 DNS 解析失败时回退,其它错误 (超时/连接拒绝等) 直接抛出
-    if (code !== 'ENOTFOUND' && code !== 'EAI_AGAIN') throw err
+    const message = String(err?.message || '')
+    // 只在 DNS 解析失败时回退,其它错误 (超时/连接拒绝等) 直接抛出。
+    // net.fetch 的 DNS 失败表现为 net::ERR_NAME_NOT_RESOLVED 文案。
+    const isDnsError =
+      code === 'ENOTFOUND' ||
+      code === 'EAI_AGAIN' ||
+      /ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED/.test(message)
+    if (!isDnsError) throw err
 
     const u = new URL(url)
     let ip: string
@@ -124,7 +130,7 @@ async function fetchWithDohFallback(
     const ipUrl = `${u.protocol}//${ip}${u.pathname}${u.search}`
     const headers = new Headers(rest.headers)
     headers.set('Host', u.hostname)
-    return fetch(ipUrl, { ...rest, headers, signal: ctrl.signal })
+    return net.fetch(ipUrl, { ...rest, headers, signal: ctrl.signal })
   } finally {
     clearTimeout(timer)
   }

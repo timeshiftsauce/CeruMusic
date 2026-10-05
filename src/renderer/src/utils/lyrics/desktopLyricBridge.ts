@@ -3,6 +3,7 @@ import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { storeToRefs } from 'pinia'
 import { watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
+import { useAppBackground } from '@renderer/composables/useAppBackground'
 
 interface LyricWord {
   word: string
@@ -17,6 +18,17 @@ interface LyricLine {
 let installed = false
 // 保存定时器ID以便清理
 let playStateInterval: number | null = null
+// 音频元素 seeked 监听解绑函数（槽位切换时重建）
+let unbindSeekedRelay: (() => void) | null = null
+// 后台兜底驱动定时器（窗口后台 rAF 停摆时替代）
+let backgroundTimer: number | null = null
+
+function stopBackgroundTimer(): void {
+  if (backgroundTimer !== null) {
+    clearInterval(backgroundTimer)
+    backgroundTimer = null
+  }
+}
 
 function buildLyricPayload(lines: LyricLine[]) {
   return JSON.parse(JSON.stringify(lines || []))
@@ -44,6 +56,15 @@ export function installDesktopLyricBridge() {
   const { userInfo } = storeToRefs(localUserStore)
 
   let lastIndex = -1
+
+  // 读取真实播放时间（毫秒）。优先取音频元素实时时间：窗口被后台节流时
+  // 渲染循环停摆，store 里的 currentTime 会冻结，导致进度推送失真。
+  const readLiveTimeMs = (): number => {
+    const a = controlAudio.Audio
+    const liveTime = a?.audio?.currentTime
+    const seconds = Number.isFinite(liveTime) ? (liveTime as number) : a?.currentTime || 0
+    return Math.round(seconds * 1000)
+  }
 
   // 监听歌词变化
   watch(
@@ -97,8 +118,7 @@ export function installDesktopLyricBridge() {
         'play-lyric-change',
         buildLyricPayload(currentLines)
       )
-      const a = controlAudio.Audio
-      let ms = Math.round((a?.currentTime || 0) * 1000)
+      let ms = readLiveTimeMs()
       if (ms <= 0) {
         const lastId = userInfo.value?.lastPlaySongId
         const songId = currentSong?.songmid
@@ -144,12 +164,33 @@ export function installDesktopLyricBridge() {
     }
   )
 
-  // 使用 RAF 替代 setInterval
+  // 主窗口被后台节流时 rAF 循环会停摆；seek 这类离散事件仍需要即时同步，
+  // 否则桌面歌词的本地插值会与原曲偏移。A/B 槽位切换后重新绑定。
+  watch(
+    () => controlAudio.Audio.audio,
+    (el) => {
+      unbindSeekedRelay?.()
+      unbindSeekedRelay = null
+      if (el) {
+        el.addEventListener('seeked', pushSnapshot)
+        unbindSeekedRelay = () => {
+          try {
+            el.removeEventListener('seeked', pushSnapshot)
+          } catch {}
+        }
+      }
+    },
+    { immediate: true }
+  )
+
+  const { isAppBackground } = useAppBackground()
+
+  // 前台用 RAF 驱动；后台（最小化 / 隐藏到托盘）由兜底定时器驱动（见下方 driveLoop），
+  // 避免主窗口 rAF 停摆时进度校准推送长时间中断，桌面歌词行切换滞后。
   const loop = () => {
     if (!installed) return
 
-    const a = controlAudio.Audio
-    let ms = Math.round((a?.currentTime || 0) * 1000)
+    let ms = readLiveTimeMs()
     if (ms <= 0) {
       const currentSong = player.value.songInfo as any
       const lastId = userInfo.value?.lastPlaySongId
@@ -183,10 +224,51 @@ export function installDesktopLyricBridge() {
       lastIndex = idx
       ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
     }
-    playStateInterval = requestAnimationFrame(loop)
+    // 后台时不排帧：由兜底定时器驱动下一拍（见 driveLoop）
+    if (!isAppBackground.value) {
+      playStateInterval = requestAnimationFrame(loop)
+    }
   }
 
-  playStateInterval = requestAnimationFrame(loop)
+  // 驱动调度：前台 rAF；后台用定时器兜底，保证推送不因 rAF 停摆而中断
+  const driveLoop = () => {
+    if (!installed) return
+    if (isAppBackground.value) {
+      if (playStateInterval !== null) {
+        cancelAnimationFrame(playStateInterval)
+        playStateInterval = null
+      }
+      if (backgroundTimer === null) {
+        backgroundTimer = window.setInterval(() => {
+          if (!installed || !isAppBackground.value) return
+          loop()
+        }, 500)
+      }
+      return
+    }
+    stopBackgroundTimer()
+    if (playStateInterval === null) {
+      playStateInterval = requestAnimationFrame(loop)
+    }
+  }
+
+  watch(isAppBackground, () => {
+    // [诊断] 回声（排查托盘降载用，定位后可移除）
+    try {
+      ;(window as any)?.electron?.ipcRenderer?.send?.('app-window-background-ack', {
+        source: 'bridge',
+        isAppBackground: isAppBackground.value
+      })
+    } catch {}
+    // 前后台切换：清理旧驱动后按新状态重建
+    if (playStateInterval !== null) {
+      cancelAnimationFrame(playStateInterval)
+      playStateInterval = null
+    }
+    driveLoop()
+  })
+
+  driveLoop()
 }
 
 // 导出清理函数，用于清除所有定时器
@@ -195,6 +277,9 @@ export function uninstallDesktopLyricBridge() {
     cancelAnimationFrame(playStateInterval)
     playStateInterval = null
   }
+  stopBackgroundTimer()
+  unbindSeekedRelay?.()
+  unbindSeekedRelay = null
 
   installed = false
   console.log('Desktop lyric bridge uninstalled')

@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import NotificationCenter from '@renderer/components/notifications/NotificationCenter.vue'
 import { onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import { coordinateMusicDataRepair } from '@renderer/services/musicDataRepair'
+import { coordinateMusicDataRepair, startupNeedsRepair } from '@renderer/services/musicDataRepair'
 import {
   musicStartupReady,
   getMusicStorage,
@@ -55,13 +55,22 @@ watch(
   (path) => {
     if (isAuxiliaryWindow || (!path.startsWith('/home') && path !== '/settings')) return
     startupDecision ??= (async () => {
-      await nextTick()
-      // Let the welcome exit transition finish before showing an in-app modal.
-      await new Promise((resolve) => setTimeout(resolve, 600))
+      // 播放恢复（含音频 URL / 封面 / 歌词预取）已在欢迎页完成。
+      // 这里只处理「数据修复」这件必须在主界面做的事：
+      // 大多数用户不需要修复，coordinateMusicDataRepair 会立即返回。
       const force = sessionStorage.getItem('ceru-open-music-repair') === '1'
       sessionStorage.removeItem('ceru-open-music-repair')
+
+      // 只有真的会弹修复窗时，才等欢迎页退场动画结束，避免弹窗盖在转场上。
+      if (force || startupNeedsRepair()) {
+        await nextTick()
+        await new Promise((resolve) => setTimeout(resolve, 600))
+      }
+
       const repaired = await coordinateMusicDataRepair(force)
+
       if (repaired) {
+        // 只有真的回滚/修复了数据，才需要用新数据覆盖已恢复的状态。
         setMusicDataPersistence(false)
         const store = LocalUserDetailStore()
         store.list = JSON.parse(getMusicStorage('songList') || '[]')
@@ -71,8 +80,10 @@ watch(
         await nextTick()
         setMusicDataPersistence(true)
       }
+
       musicStartupReady.value = true
       updateQueueReady()
+      // 幂等：欢迎页已初始化时这里会直接返回，不会重复安装。
       const { initPlayback } = await import('@renderer/utils/audio/globaPlayList')
       await initPlayback()
     })().catch((error) => {

@@ -66,6 +66,38 @@ export function sameSong(a: any, b: any): boolean {
   return !!a && !!b && songKey(a) === songKey(b)
 }
 
+/**
+ * 缓存 key —— 音频文件、歌词、封面共用同一个 key，即「一首歌一份缓存」。
+ *
+ * 与 songKey() 的区别（各有用途，不要混用）：
+ * - songKey(): 用于「是不是同一首歌」的业务判断，私有引用会带上 connectionId。
+ * - songCacheKey(): 只用于缓存寻址，**刻意不含 connectionId** —— 它会随入口
+ *   （搜索结果 / 歌单 / 一起听）变化，带上就永远命中不了缓存。
+ *
+ * **刻意不含音质**（重要）：
+ * - 歌词与封面本来就与音质无关，若 key 含音质，换一档音质就会再存一份歌词/封面；
+ * - 音频的「音质是否满足」由 MusicCacheService.getCachedMusicUrl 的入参比较决定，
+ *   不体现在 key 里 —— 缓存仍在磁盘上只留一份（更高音质可替换更低的那份）。
+ *
+ * 主进程与渲染层必须用同一实现，否则封面/歌词会各算各的 key、互相命中不了。
+ * provider 的解析顺序（pluginResource.providerId → song.source）在此统一固定，
+ * 调用方不要再自行传 providerId，避免两边取值口径不同。
+ */
+export function songCacheKey(song: {
+  pluginResource?: any
+  songmid?: string | number
+  hash?: string
+  name?: string
+  singer?: string
+  source?: string
+}): string {
+  const ref = song?.pluginResource
+  const provider = String(ref?.providerId || song?.source || '')
+  const stableId =
+    ref?.id ?? song?.hash ?? song?.songmid ?? `${song?.name ?? ''}-${song?.singer ?? ''}`
+  return JSON.stringify([provider, String(stableId)])
+}
+
 /** Legacy scalar selectors are accepted only when unambiguous. */
 export function selectSong<T extends MusicItem>(
   songs: readonly T[],

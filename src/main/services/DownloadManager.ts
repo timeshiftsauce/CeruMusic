@@ -17,6 +17,8 @@ log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'lo
 
 import { ConfigManager } from './ConfigManager'
 import { playbackRequestHeaders } from './plugin/playbackRequests'
+import { getCurrentProxyRule } from './networkProxy'
+import { TRUST_SYSTEM_CA_KEY } from './systemCaTrust'
 import { normalizeLyricFormat } from '@common/lyricFormats'
 
 export default class DownloadManager extends EventEmitter {
@@ -262,7 +264,14 @@ export default class DownloadManager extends EventEmitter {
         }
       }
 
-      const worker = new Worker(workerPath)
+      // 代理规则随当前网络设置注入(直连时为 null),下载/封面/歌词请求均遵循；
+      // “信任系统证书”同样传快照(worker 为独立线程，需在本线程内自行应用)
+      const worker = new Worker(workerPath, {
+        workerData: {
+          proxyRule: getCurrentProxyRule(),
+          trustSystemCa: ConfigManager.getInstance().get<boolean>(TRUST_SYSTEM_CA_KEY, false)
+        }
+      })
       this.activeDownloads.set(taskId, worker)
       this.initializingTasks.delete(taskId)
 

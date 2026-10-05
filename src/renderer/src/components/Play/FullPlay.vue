@@ -17,6 +17,7 @@ import {
 } from 'vue'
 import { useBackgroundBeat } from '@renderer/composables/useBackgroundBeat'
 import { usePlayerBackground } from '@renderer/composables/usePlayerBackground'
+import { useAppBackground } from '@renderer/composables/useAppBackground'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import {
   Fullscreen1Icon,
@@ -575,7 +576,19 @@ const jumpTime = (e) => {
   }
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
-const isAppActive = ref(!document.hidden)
+// 窗口后台（最小化 / 隐藏到托盘 / 页面不可见）时暂停高开销动画与渲染。
+// 注意：隐藏到托盘时 document.hidden 不会变化，状态以主进程推送为准。
+const { isAppBackground } = useAppBackground()
+const isAppActive = computed(() => !isAppBackground.value)
+// [诊断] 后台状态变化回声（排查托盘降载用，定位后可移除）
+watch(isAppActive, (active) => {
+  try {
+    ;(window as any)?.electron?.ipcRenderer?.send?.('app-window-background-ack', {
+      source: 'fullplay',
+      isAppActive: active
+    })
+  } catch {}
+})
 const { ready: bgInitialized } = usePlayerBackground(backgroundContainer, {
   renderer: () => playSetting.getBackgroundRenderer,
   album: () => actualCoverImage.value,
@@ -764,13 +777,6 @@ useBackgroundBeat(
   }
 )
 
-const handleVisibilityChange = () => {
-  isAppActive.value = !document.hidden
-}
-
-const handleWindowFocus = () => {
-  isAppActive.value = !document.hidden
-}
 // --- 后台暂停动画逻辑 End ---
 
 // 保存 debounce 函数引用以便后续移除
@@ -780,9 +786,6 @@ onMounted(() => {
   window.addEventListener('resize', debouncedCheckOverflow)
   document.addEventListener('click', handleClickOutside)
   window.addEventListener('keydown', handleKeyDown)
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  // window.addEventListener('blur', handleWindowBlur)
-  window.addEventListener('focus', handleWindowFocus)
   // 初始检查
   setTimeout(checkOverflow, 500)
 })
@@ -791,9 +794,6 @@ onUnmounted(() => {
   window.removeEventListener('resize', debouncedCheckOverflow)
   document.removeEventListener('click', handleClickOutside)
   window.removeEventListener('keydown', handleKeyDown)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  // window.removeEventListener('blur', handleWindowBlur)
-  window.removeEventListener('focus', handleWindowFocus)
 })
 // removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---
@@ -945,6 +945,7 @@ onUnmounted(() => {
           :current-time="effectiveLyricTime"
           :word-fade-width="0.5"
           :playing="isAudioPlaying"
+          :disabled="!isAppActive"
           class="lyric-player"
           :align-position="
             playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34
@@ -966,7 +967,12 @@ onUnmounted(() => {
       class="audio-visualizer-container"
       :class="{ idle: isIdle }"
     >
-      <AudioVisualizer :show="Audio.isPlay" :height="70" :bar-count="80" :color="mainColor" />
+      <AudioVisualizer
+        :show="Audio.isPlay && isAppActive"
+        :height="70"
+        :bar-count="80"
+        :color="mainColor"
+      />
     </div>
 
     <div ref="floatActionRef" class="float-action" :class="{ idle: isIdle }">

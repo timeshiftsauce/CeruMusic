@@ -1,76 +1,74 @@
 <template>
   <div class="directory-settings">
-    <t-card title="存储目录配置" hover-shadow>
-      <template #actions>
-        <t-button theme="default" size="small" @click="resetDirectories"> 重置为默认 </t-button>
-      </template>
+    <div class="directory-toolbar">
+      <t-button theme="default" variant="text" size="small" @click="resetDirectories">
+        重置为默认
+      </t-button>
+    </div>
 
-      <div class="directory-section">
-        <h4>缓存目录</h4>
-        <p class="directory-description">用于存储歌曲缓存文件，提高播放速度</p>
+    <div class="directory-section">
+      <div class="section-head">
+        <div class="section-title">缓存目录</div>
+        <div class="section-desc">用于存储歌曲缓存文件，提高播放速度</div>
+      </div>
 
-        <div class="directory-item">
-          <div class="directory-info">
-            <div class="directory-path">
-              <t-input
-                v-model="directories.cacheDir"
-                readonly
-                placeholder="缓存目录路径"
-                class="path-input"
-              />
-            </div>
-            <div class="directory-size">
-              <t-tag theme="primary" variant="light">
-                {{ cacheDirSize.formatted }}
-              </t-tag>
-            </div>
+      <div class="directory-item">
+        <div class="directory-info">
+          <div class="directory-path">
+            <t-input
+              v-model="directories.cacheDir"
+              readonly
+              placeholder="缓存目录路径"
+              class="path-input"
+            />
           </div>
-
-          <div class="directory-actions">
-            <t-button theme="default" @click="selectCacheDir"> 选择目录 </t-button>
-            <t-button theme="default" variant="outline" @click="openCacheDir"> 打开目录 </t-button>
+          <div class="directory-size">
+            <t-tag theme="primary" variant="light">{{ cacheDirSize.formatted }}</t-tag>
           </div>
         </div>
-      </div>
 
-      <t-divider />
-
-      <div class="directory-section">
-        <h4>下载目录</h4>
-        <p class="directory-description">用于存储下载的音乐文件</p>
-
-        <div class="directory-item">
-          <div class="directory-info">
-            <div class="directory-path">
-              <t-input
-                v-model="directories.downloadDir"
-                readonly
-                placeholder="下载目录路径"
-                class="path-input"
-              />
-            </div>
-            <div class="directory-size">
-              <t-tag theme="success" variant="light">
-                {{ downloadDirSize.formatted }}
-              </t-tag>
-            </div>
-          </div>
-
-          <div class="directory-actions">
-            <t-button theme="default" @click="selectDownloadDir"> 选择目录 </t-button>
-            <t-button theme="default" variant="outline" @click="openDownloadDir">
-              打开目录
-            </t-button>
-          </div>
+        <div class="directory-actions">
+          <t-button theme="default" variant="outline" @click="selectCacheDir"> 选择目录 </t-button>
+          <t-button theme="default" variant="text" @click="openCacheDir"> 打开目录 </t-button>
         </div>
       </div>
+    </div>
 
-      <div class="save-section">
-        <t-button theme="primary" size="large" :loading="isSaving" @click="saveDirectories">
-          保存设置
-        </t-button>
+    <div class="directory-section">
+      <div class="section-head">
+        <div class="section-title">下载目录</div>
+        <div class="section-desc">用于存储下载的音乐文件</div>
       </div>
-    </t-card>
+
+      <div class="directory-item">
+        <div class="directory-info">
+          <div class="directory-path">
+            <t-input
+              v-model="directories.downloadDir"
+              readonly
+              placeholder="下载目录路径"
+              class="path-input"
+            />
+          </div>
+          <div class="directory-size">
+            <t-tag theme="success" variant="light">{{ downloadDirSize.formatted }}</t-tag>
+          </div>
+        </div>
+
+        <div class="directory-actions">
+          <t-button theme="default" variant="outline" @click="selectDownloadDir">
+            选择目录
+          </t-button>
+          <t-button theme="default" variant="text" @click="openDownloadDir"> 打开目录 </t-button>
+        </div>
+      </div>
+    </div>
+
+    <div class="save-section">
+      <t-button theme="primary" :loading="isSaving" @click="saveDirectories">
+        保存目录设置
+      </t-button>
+    </div>
   </div>
 </template>
 
@@ -264,39 +262,58 @@ onMounted(() => {
 .directory-settings {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 1rem;
+}
+
+.directory-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -0.25rem;
 }
 
 .directory-section {
-  margin-bottom: 24px;
+  padding: 1rem;
+  background: var(--settings-feature-bg);
+  border: 1px solid var(--settings-feature-border);
+  border-radius: 0.625rem;
+  transition: border-color 0.2s ease;
 
-  h4 {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
+  &:hover {
+    border-color: var(--td-brand-color-3);
   }
 
-  .directory-description {
-    margin: 0 0 16px 0;
-    font-size: 14px;
-    color: var(--td-text-color-secondary);
+  .section-head {
+    margin-bottom: 0.75rem;
+
+    .section-title {
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--settings-text-primary);
+    }
+
+    .section-desc {
+      margin-top: 0.25rem;
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      color: var(--settings-text-secondary);
+    }
   }
 }
 
 .directory-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .directory-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
 
   .directory-path {
     flex: 1;
+    min-width: 0;
 
     .path-input {
       width: 100%;
@@ -310,18 +327,14 @@ onMounted(() => {
 
 .directory-actions {
   display: flex;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .save-section {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--td-border-level-1-color);
-  text-align: center;
-}
-
-.cache-management {
-  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
 }
 
 /* 响应式设计 */

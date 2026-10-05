@@ -12,6 +12,8 @@ const mocks = {
   '@renderer/services/pluginState': `export const startupHomeAvailable={get value(){return globalThis.state.hasHome}}; export const refreshPluginContributions=async()=>{globalThis.state.pluginStarted=true};`,
   './pluginIntegrations': `export const pluginHomeTabs={value:[]};`,
   '@renderer/utils/audio/globaPlayList': `export const initPlayback=async()=>{globalThis.state.playbackStarted=true};`,
+  '@renderer/services/musicDataPersistence': `export const musicStartupReady={value:false};`,
+  '@renderer/services/musicDataRepair': `export const startupNeedsRepair=()=>globalThis.state.needsRepair===true;`,
   '@renderer/composables/useAutoUpdate': `export const useAutoUpdate=()=>({checkForUpdates:()=>{}});`,
   '@renderer/store/Settings': `export const useSettingsStore=()=>({shouldUseSpringFestivalTheme:()=>false,settings:{autoUpdate:false}});`,
   pinia: `export const storeToRefs=s=>({settings:{value:s.settings}});`
@@ -27,19 +29,36 @@ const result = await build({
     })
   }}]
 })
-for (const hasHome of [false,true]) {
-  const state = {hasHome}
-  const module = {exports:{}}
-  runInNewContext(result.outputFiles[0].text, {
-    module, exports:module.exports, state, console,
-    window:{electron:{ipcRenderer:{invoke:async channel=>channel==='get-app-version'?'test':true}}},
-    setInterval,
-    clearInterval
-  })
-  module.exports.default.setup({}, {expose(){}})
-  await state.mount()
-  assert.equal(state.route, hasHome ? '/home/find' : '/home/local')
-  assert.notEqual(state.playbackStarted, true, 'welcome leaves playback restoration to the post-welcome repair gate')
+for (const hasHome of [false, true]) {
+  for (const needsRepair of [false, true]) {
+    const state = { hasHome, needsRepair }
+    const module = { exports: {} }
+    runInNewContext(result.outputFiles[0].text, {
+      module,
+      exports: module.exports,
+      state,
+      console,
+      window: {
+        electron: { ipcRenderer: { invoke: async (channel) => (channel === 'get-app-version' ? 'test' : true) } }
+      },
+      setInterval,
+      clearInterval,
+      setTimeout,
+      clearTimeout
+    })
+    module.exports.default.setup({}, { expose() {} })
+    await state.mount()
+    assert.equal(state.route, hasHome ? '/home/find' : '/home/local')
+    // 欢迎页会在预检无需修复时提前恢复播放（封面/歌词/进度进首页即就绪）；
+    // 需要修复时则跳过，交由修复后的 reloadSnapshot 处理。
+    assert.equal(
+      state.playbackStarted === true,
+      !needsRepair,
+      needsRepair
+        ? 'welcome skips playback restore when data needs repair'
+        : 'welcome preloads playback when no repair is needed'
+    )
+  }
 }
 
 // Exercise the real contribution state while the restored runtime is still pending.

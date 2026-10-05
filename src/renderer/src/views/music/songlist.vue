@@ -694,10 +694,13 @@ watch(libraryRevision, () => {
   void loadPlaylists()
 })
 
-// 从网络歌单导入
+// 从网络歌单导入 / 插件自己的导入面板
 const openPluginImport = async (entry: { pluginId: string; id: string }) => {
   if (importMenuBusy.value) return
   importMenuBusy.value = true
+  // 菜单项背后的动作可能是宿主歌单导入弹窗（playlistImporters），也可能是插件自己的面板
+  // （菜单 action 直接开抽屉）。先关掉「选择导入方式」，否则会和后续界面叠在一起。
+  showImportDialog.value = false
   try {
     await window.api.plugins.openPlaylistImportMenu(entry.pluginId, entry.id)
   } catch (error) {

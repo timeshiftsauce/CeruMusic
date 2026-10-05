@@ -225,7 +225,8 @@ const pushWindowProgress = (force = false) => {
   if (!appApi?.setProgress) return
   const info: any = songInfo.value || {}
   const dur = Audio.value.duration || 0
-  const cur = Audio.value.currentTime || 0
+  // 直读音频元素实时时间：窗口后台被节流时，store 的 currentTime 会冻结/降频
+  const cur = Audio.value.audio?.currentTime ?? Audio.value.currentTime ?? 0
   if (!info.songmid || !dur || !isFinite(dur)) {
     appApi.setProgress(-1)
     lastProgressPushAt = 0

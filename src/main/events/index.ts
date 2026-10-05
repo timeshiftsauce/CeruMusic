@@ -10,6 +10,17 @@ import { type BrowserWindow, ipcMain } from 'electron'
 import lyricWindow from '../windows/lyric-window'
 import { initDlnaService } from './dlna'
 import { configManager } from '../services/ConfigManager'
+import {
+  applyNetworkProxyConfig,
+  getNetworkProxyConfig,
+  testNetworkProxy,
+  type NetworkProxyConfig
+} from '../services/networkProxy'
+import {
+  applyTrustSystemCertificates,
+  isSystemCaTrustSupported,
+  TRUST_SYSTEM_CA_KEY
+} from '../services/systemCaTrust'
 
 export default function InitEventServices(mainWindow: BrowserWindow) {
   InitPluginService()
@@ -127,5 +138,52 @@ function basisEvent(mainWindow: BrowserWindow) {
   // 主进程读取 closeToTray 当前值（保险查询）
   ipcMain.handle('settings:get-close-to-tray', () => {
     return configManager.get<boolean>('closeToTray', true)
+  })
+
+  // 网络代理设置 IPC：读取 / 保存并立即生效 / 连通性测试
+  ipcMain.handle('settings:get-network-proxy', () => {
+    return getNetworkProxyConfig()
+  })
+
+  ipcMain.handle(
+    'settings:set-network-proxy',
+    async (_, value: Partial<NetworkProxyConfig> | null) => {
+      try {
+        const config = await applyNetworkProxyConfig(value, true)
+        return { success: true, config }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'settings:test-network-proxy',
+    async (_, value: Partial<NetworkProxyConfig> | null) => {
+      try {
+        return await testNetworkProxy(value)
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }
+    }
+  )
+
+  // 信任系统证书（Node 侧 TLS）：读取 / 保存并立即生效
+  ipcMain.handle('settings:get-trust-system-certificates', () => ({
+    enabled: configManager.get<boolean>(TRUST_SYSTEM_CA_KEY, false),
+    supported: isSystemCaTrustSupported()
+  }))
+
+  ipcMain.handle('settings:set-trust-system-certificates', (_, value: boolean) => {
+    const enabled = !!value
+    configManager.set<boolean>(TRUST_SYSTEM_CA_KEY, enabled)
+    const applied = applyTrustSystemCertificates(enabled)
+    return { success: true, applied }
   })
 }

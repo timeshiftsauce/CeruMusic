@@ -21,6 +21,9 @@ const localUserStore = LocalUserDetailStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 
+/** 切歌各阶段耗时超过该阈值才打日志，避免正常情况刷屏（用于排查切歌变慢） */
+const SWITCH_SLOW_MS = 300
+
 const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number | string }>({
   songmid: null,
   hash: '',
@@ -378,7 +381,12 @@ const playSong = async (
     let urlToPlay = ''
     // let usedAutoSwitch = false
     try {
+      const __pt0 = performance.now()
       urlToPlay = await getSongRealUrl(toRaw(song))
+      const cost = performance.now() - __pt0
+      if (cost > SWITCH_SLOW_MS) {
+        console.warn(`[切歌耗时] ${song.name} 取URL=${cost.toFixed(0)}ms（偏慢）`)
+      }
     } catch (error: any) {
       // 检查是否已过期
       if (currentPlayRequestId !== requestId) return
@@ -470,10 +478,15 @@ const playSong = async (
         a.removeAttribute('src')
         a.load()
       }
+      const __ptSet = performance.now()
       setUrl(urlToPlay)
       try {
         if (Audio.value.audio) {
           await waitForAudioReady(Audio.value.audio)
+        }
+        const readyCost = performance.now() - __ptSet
+        if (readyCost > SWITCH_SLOW_MS) {
+          console.warn(`[切歌耗时] ${song.name} 音频就绪=${readyCost.toFixed(0)}ms（偏慢）`)
         }
         if (currentPlayRequestId !== requestId) return
         /* 一起听:audio ready 之后再广播 —— 确保 member 拿到的是真的能播的 URL,
@@ -535,24 +548,21 @@ const playSong = async (
 
     if (currentPlayRequestId !== requestId) return
 
+    // 等到「封面 + 歌词」全部就绪后再提交并出声 —— 切歌时不出现中间态。
+    // （prepareSong 内部会 await 这两者。）
     const prepared = await preparedPromise
     if (currentPlayRequestId !== requestId) {
       prepared.dispose()
       return
     }
-    // Commit every displayed part before allowing playback to start.
     metadataStore.commitPrepared(prepared)
     metadataCommitted = true
+
     songInfo.value = { ...song }
     userInfo.value.lastPlaySongId = song.songmid
     userInfo.value.lastPlaySongKey = songKey(song)
-    // 音频已就绪后再更新 SMTC，避免切换时空隙
-    mediaSessionController.updateMetadata({
-      title: song.name,
-      artist: song.singer,
-      album: song.albumName || '未知专辑',
-      artworkUrl: song.img || defaultCoverImg
-    })
+    // SMTC 元数据由 commitPrepared 统一更新(使用已加载好的封面)，
+    // 此处不再重复调用，避免用 song.img(可能为空/不可达)覆盖。
     isLoadingSong.value = false
     if (options.shouldAutoStart && !options.shouldAutoStart()) {
       mediaSessionController.updatePlaybackState('paused')
@@ -573,6 +583,21 @@ const playSong = async (
       currentPlaybackPlayingHandler = () => {
         isLoadingSong.value = false
         currentPlaybackPlayingHandler = null
+        // 最终一致性兜底：音频真正开始播放时，把当前歌曲重新推给系统媒体卡片。
+        // 后台（窗口最小化）场景切歌链路可能与前台不同，任一环节掉队都会让
+        // 卡片停留在旧歌；这里以“实际出声”为准强制对齐一次。
+        try {
+          const gp = useGlobalPlayStatusStore()
+          const cur = gp.player?.songInfo as SongList | undefined
+          if (cur && cur.name) {
+            mediaSessionController.updateMetadata({
+              title: cur.name,
+              artist: cur.singer,
+              album: cur.albumName || '未知专辑',
+              artworkUrl: gp.player?.cover || cur.img || ''
+            })
+          }
+        } catch {}
       }
       Audio.value.audio.addEventListener('playing', currentPlaybackPlayingHandler, { once: true })
       currentPlaybackErrorHandler = async () => {
@@ -1119,18 +1144,17 @@ const installPlayback = async () => {
   })
 
   savePositionInterval = window.setInterval(() => {
-    if (Audio.value.isPlay) {
-      userInfo.value.currentTime = Audio.value.currentTime
-    }
+    if (!Audio.value.isPlay) return
+    // 使用真实音频元素时间：窗口进入后台被节流时渲染循环停摆，store 的 currentTime 会冻结，
+    // 直接保存会导致重启后从进入后台时的旧位置恢复。
+    const activeEl = Audio.value.audio
+    userInfo.value.currentTime = activeEl ? activeEl.currentTime : Audio.value.currentTime
   }, 1000)
 
   {
+    const gp = useGlobalPlayStatusStore()
     const restoreSelection = selectionSequence
-    const lastPlayedSong = restoredSong(
-      list.value,
-      userInfo.value,
-      useGlobalPlayStatusStore().player.songInfo as SongList
-    )
+    const lastPlayedSong = restoredSong(list.value, userInfo.value, gp.player.songInfo as SongList)
     if (lastPlayedSong) {
       // Resolve old scalar selections before asynchronous plugin work.
       userInfo.value.lastPlaySongId = lastPlayedSong.songmid
@@ -1148,12 +1172,13 @@ const installPlayback = async () => {
           if (selectionSequence !== restoreSelection || !playbackInstalled) return
           setUrl(url)
           Audio.value.currentTime = savedPosition
-          // SMTC 元数据在音频准备好后再更新，避免切换时空隙
+          // SMTC 元数据在音频准备好后再更新，避免切换时空隙。
+          // 优先用已加载好的封面(player.cover)，避免空/不可达 URL 导致卡片异常。
           mediaSessionController.updateMetadata({
             title: lastPlayedSong.name,
             artist: lastPlayedSong.singer,
             album: lastPlayedSong.albumName || '未知专辑',
-            artworkUrl: lastPlayedSong.img || defaultCoverImg
+            artworkUrl: gp.player.cover || lastPlayedSong.img || defaultCoverImg
           })
           if (savedPosition && Audio.value.audio) {
             await waitForAudioReady(Audio.value.audio)
@@ -1173,7 +1198,7 @@ const installPlayback = async () => {
           title: lastPlayedSong.name,
           artist: lastPlayedSong.singer,
           album: lastPlayedSong.albumName || '未知专辑',
-          artworkUrl: lastPlayedSong.img || defaultCoverImg
+          artworkUrl: gp.player.cover || lastPlayedSong.img || defaultCoverImg
         })
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(

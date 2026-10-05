@@ -6,7 +6,8 @@ import type { HotkeyConfigPayload } from '@common/types/hotkeys'
 const api = {
   musicDataRepair: {
     inspect: () => ipcRenderer.invoke('music:repair-inspect'),
-    begin: (storage: Record<string, string | null>, restoreMissing: boolean) => ipcRenderer.invoke('music:repair-begin', storage, restoreMissing),
+    begin: (storage: Record<string, string | null>, restoreMissing: boolean) =>
+      ipcRenderer.invoke('music:repair-begin', storage, restoreMissing),
     finish: () => ipcRenderer.invoke('music:repair-finish'),
     rollback: () => ipcRenderer.invoke('music:repair-rollback'),
     rollbackComplete: () => ipcRenderer.invoke('music:repair-rollback-complete'),
@@ -26,6 +27,13 @@ const api = {
   minimize: () => {
     console.log('preload: 发送 window-minimize 事件')
     ipcRenderer.send('window-minimize')
+  },
+  /** 窗口后台状态（最小化 / 隐藏到托盘）—— 渲染层据此暂停高开销动画与渲染 */
+  getWindowBackgroundState: (): Promise<boolean> => ipcRenderer.invoke('app:get-window-background'),
+  onWindowBackgroundChange: (callback: (isBackground: boolean) => void): (() => void) => {
+    const handler = (_: Electron.IpcRendererEvent, value: boolean): void => callback(!!value)
+    ipcRenderer.on('app-window-background', handler)
+    return () => ipcRenderer.removeListener('app-window-background', handler)
   },
   // 阻止系统息屏
   powerSaveBlocker: {
@@ -253,13 +261,30 @@ const api = {
     syncCloseToTray: (value: boolean) => {
       ipcRenderer.send('settings:sync-close-to-tray', value)
     },
-    getCloseToTray: () => ipcRenderer.invoke('settings:get-close-to-tray')
+    getCloseToTray: () => ipcRenderer.invoke('settings:get-close-to-tray'),
+    // 网络代理设置：读取 / 保存并立即生效 / 连通性测试
+    getNetworkProxy: () => ipcRenderer.invoke('settings:get-network-proxy'),
+    setNetworkProxy: (config: any) => ipcRenderer.invoke('settings:set-network-proxy', config),
+    testNetworkProxy: (config: any) => ipcRenderer.invoke('settings:test-network-proxy', config),
+    getTrustSystemCertificates: () => ipcRenderer.invoke('settings:get-trust-system-certificates'),
+    setTrustSystemCertificates: (value: boolean) =>
+      ipcRenderer.invoke('settings:set-trust-system-certificates', value)
   },
   // 音频缓存管理
   musicCache: {
     getInfo: () => ipcRenderer.invoke('music-cache:get-info'),
     clear: () => ipcRenderer.invoke('music-cache:clear'),
-    getSize: () => ipcRenderer.invoke('music-cache:get-size')
+    getSize: () => ipcRenderer.invoke('music-cache:get-size'),
+    getPolicy: () => ipcRenderer.invoke('music-cache:get-policy'),
+    setPolicy: (policy: { maxBytes?: number; maxQuality?: string }) =>
+      ipcRenderer.invoke('music-cache:set-policy', policy),
+    enforceLimit: () => ipcRenderer.invoke('music-cache:enforce-limit'),
+    getCoverFile: (songCacheKey: string) =>
+      ipcRenderer.invoke('music-cache:get-cover-file', songCacheKey),
+    putCoverFile: (songCacheKey: string, data: ArrayBuffer, ext: string) =>
+      ipcRenderer.invoke('music-cache:put-cover-file', songCacheKey, data, ext),
+    invalidateCoverFile: (songCacheKey: string) =>
+      ipcRenderer.invoke('music-cache:invalidate-cover', songCacheKey)
   },
   // 文件读取
   file: {
@@ -316,7 +341,8 @@ const api = {
 
   // 歌单管理 API
   songList: {
-    replaceSongs: (id: string, songs: any[]) => ipcRenderer.invoke('songlist:replace-songs', id, songs),
+    replaceSongs: (id: string, songs: any[]) =>
+      ipcRenderer.invoke('songlist:replace-songs', id, songs),
     // === 歌单管理 ===
     create: (name: string, description?: string, source?: string, meta?: Record<string, any>) =>
       ipcRenderer.invoke('songlist:create', name, description, source, meta),

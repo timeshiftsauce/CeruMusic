@@ -16,6 +16,7 @@ import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
 import { crossfadeState } from '@renderer/utils/audio/crossfade'
+import { useAppBackground } from '@renderer/composables/useAppBackground'
 
 type AudioSlot = 'A' | 'B'
 
@@ -286,18 +287,50 @@ const handlePlay = (slot: AudioSlot): void => {
 }
 
 let rafId: number | null = null
+let backgroundIntervalId: number | null = null
+const { isAppBackground } = useAppBackground()
+
+const progressTick = (): void => {
+  const activeEl = audioStore.Audio.audio
+  if (activeEl && !activeEl.paused) {
+    audioStore.publish('timeupdate')
+    audioStore.setCurrentTime(activeEl.currentTime || 0)
+  }
+}
+
+const stopProgressDriver = (): void => {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+  if (backgroundIntervalId !== null) {
+    clearInterval(backgroundIntervalId)
+    backgroundIntervalId = null
+  }
+}
+
 const startSetupInterval = (): void => {
-  if (rafId !== null) return
+  if (rafId !== null || backgroundIntervalId !== null) return
+  if (isAppBackground.value) {
+    // 后台（最小化 / 隐藏到托盘）：进度发布降为 1s 一次，避免 rAF 全速空转
+    backgroundIntervalId = window.setInterval(progressTick, 1000)
+    return
+  }
   const onFrame = () => {
-    const activeEl = audioStore.Audio.audio
-    if (activeEl && !activeEl.paused) {
-      audioStore.publish('timeupdate')
-      audioStore.setCurrentTime(activeEl.currentTime || 0)
-    }
+    progressTick()
     rafId = requestAnimationFrame(onFrame)
   }
   rafId = requestAnimationFrame(onFrame)
 }
+
+// 前后台切换时重建驱动：前台 rAF 全速，后台降为 1s 定时器
+watch(isAppBackground, () => {
+  stopProgressDriver()
+  const activeEl = audioStore.Audio.audio
+  if (activeEl && !activeEl.paused) {
+    startSetupInterval()
+  }
+})
 
 const handlePause = (slot: AudioSlot): void => {
   if (!isPrimarySlot(slot)) return

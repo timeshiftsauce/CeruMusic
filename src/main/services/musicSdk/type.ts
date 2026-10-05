@@ -30,6 +30,8 @@ export interface GetMusicUrlArg {
   songInfo: MusicItem
   quality: string
   isCache?: boolean
+  /** 该音源的音质顺序（从低到高），用于判断是否超过缓存音质上限 */
+  qualityOrder?: string[]
 }
 
 export interface GetMusicPicArg {

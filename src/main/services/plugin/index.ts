@@ -5,6 +5,7 @@ import { createHash } from 'crypto'
 import { dialog } from 'electron'
 import { getAppDirPath } from '../../utils/path'
 import axios from 'axios'
+import { getRequestAgentsFor } from '../networkProxy'
 
 import CeruMusicPluginHost from './manager/PluginHost'
 import { cancelPluginUI, pluginChanged } from './uiBridge'
@@ -728,9 +729,13 @@ const pluginService = {
 
   async downloadFile(url: string): Promise<string> {
     try {
+      const agents = getRequestAgentsFor(url)
       const response = await axios.get(url, {
         timeout: 30000, // 30秒超时
         responseType: 'text',
+        // 代理由主进程网络设置决定;显式关闭以避免环境变量代理干扰
+        proxy: false,
+        ...(agents ? { httpAgent: agents.httpAgent, httpsAgent: agents.httpsAgent } : {}),
         headers: {
           'User-Agent': 'CeruMusic/1.0'
         }

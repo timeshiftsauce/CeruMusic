@@ -10,6 +10,7 @@ import {
   TreeRoundDotIcon,
   MusicIcon,
   SaveIcon,
+  InternetIcon,
   InfoCircleIcon
 } from 'tdesign-icons-vue-next'
 
@@ -21,6 +22,7 @@ import HotkeySection from './sections/HotkeySection.vue'
 import PluginSection from './sections/PluginSection.vue'
 import MusicSourceSection from './sections/MusicSourceSection.vue'
 import StorageSection from './sections/StorageSection.vue'
+import NetworkSection from './sections/NetworkSection.vue'
 import AboutSection from './sections/AboutSection.vue'
 import SettingsSearch from '@renderer/components/SettingsSearch.vue'
 import type { SearchItem } from './searchIndex'
@@ -76,6 +78,12 @@ const settingsCategories = [
     description: '缓存管理和存储设置'
   },
   {
+    key: 'network',
+    label: '网络设置',
+    icon: InternetIcon,
+    description: '代理与网络连接配置'
+  },
+  {
     key: 'about',
     label: '关于',
     icon: InfoCircleIcon,
@@ -91,6 +99,7 @@ const sectionComponents: Record<string, any> = {
   plugins: PluginSection,
   music: MusicSourceSection,
   storage: StorageSection,
+  network: NetworkSection,
   about: AboutSection
 }
 

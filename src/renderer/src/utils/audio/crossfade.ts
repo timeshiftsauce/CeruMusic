@@ -9,8 +9,6 @@ import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { isLtInRoom } from '@renderer/utils/listenTogether/state'
 import { getCandidateSongs, waitForAudioReady } from './audioHelpers'
 import AudioManager from './audioManager'
-import mediaSessionController from './useSmtc'
-import defaultCoverImg from '/default-cover.png'
 import type { SongList } from '@renderer/types/audio'
 
 type GetNextSong = () => SongList | null
@@ -137,6 +135,18 @@ const updateMarkRange = () => {
   }
 }
 
+/**
+ * 读取当前主音频元素的真实播放时间（秒）。
+ * store 的 currentTime 由渲染循环同步，窗口后台时可能被冻结或降频；
+ * 过渡判定应以媒体时钟为准（元素时间不受渲染帧率影响）。
+ */
+const readLiveCurrentTime = (): number => {
+  const audioStore = ControlAudioStore()
+  const el = audioStore.Audio.audio
+  const live = el?.currentTime
+  return typeof live === 'number' && Number.isFinite(live) ? live : audioStore.Audio.currentTime
+}
+
 // ------- RMS 观察 -------
 
 const startRmsWatch = () => {
@@ -163,7 +173,7 @@ const startRmsWatch = () => {
       const avgRms = _rmsWindow.reduce((a, b) => a + b, 0) / Math.max(1, _rmsWindow.length)
 
       const duration = audioStore.Audio.duration
-      const current = audioStore.Audio.currentTime
+      const current = readLiveCurrentTime()
       const remaining = duration - current
       if (remaining <= 0) {
         stopRmsWatch()
@@ -208,7 +218,7 @@ const onTimeUpdate = () => {
     if (crossfadeState.scheduled || crossfadeState.active) return
 
     const duration = audioStore.Audio.duration
-    const current = audioStore.Audio.currentTime
+    const current = readLiveCurrentTime()
     if (!duration || duration < MIN_SONG_DURATION) return
     const remaining = duration - current
     if (remaining > OBSERVATION_WINDOW) return
@@ -274,7 +284,7 @@ const onSeeked = () => {
   // 一旦 active，槽位已翻转到新歌，seek 是用户在新歌上操作，不影响老歌淡出
   if (!crossfadeState.scheduled || crossfadeState.active) return
   const audioStore = ControlAudioStore()
-  const remaining = audioStore.Audio.duration - audioStore.Audio.currentTime
+  const remaining = audioStore.Audio.duration - readLiveCurrentTime()
   if (remaining > OBSERVATION_WINDOW + 1) {
     cancelCrossfade()
   }
@@ -444,7 +454,7 @@ const beginCrossfade = async () => {
   }
 
   // 3. 计算过渡时长
-  const remaining = audioStore.Audio.duration - audioStore.Audio.currentTime
+  const remaining = audioStore.Audio.duration - readLiveCurrentTime()
   const fadeTime = Math.min(MAX_FADE_TIME, Math.max(MIN_FADE_TIME, remaining - FADE_SAFETY_MARGIN))
 
   // 4. 启动 gain 包络 + 低通扫频
@@ -505,14 +515,7 @@ const beginCrossfade = async () => {
   try {
     globalPlayStatus.commitPrepared(prepared)
   } catch {}
-  try {
-    mediaSessionController.updateMetadata({
-      title: nextSong.name,
-      artist: nextSong.singer,
-      album: nextSong.albumName || '未知专辑',
-      artworkUrl: nextSong.img || defaultCoverImg
-    })
-  } catch {}
+  // SMTC 元数据由 commitPrepared 统一更新(使用已加载好的封面)，此处不再重复调用。
 
   // 在新歌开头打上淡入标记：0 ~ fadeTime 秒
   // 淡入完成后再保留 8 秒，让用户看到"这里是淡入段"

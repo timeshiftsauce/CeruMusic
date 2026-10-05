@@ -30,6 +30,9 @@ interface CustomAPI {
   show: () => void
   toggleFullscreen: () => void
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void
+  /** 窗口后台状态（最小化 / 隐藏到托盘） */
+  getWindowBackgroundState: () => Promise<boolean>
+  onWindowBackgroundChange: (callback: (isBackground: boolean) => void) => () => void
   onMusicCtrl: (callback: (event: Event, args: any) => void) => () => void
 
   music: {
@@ -43,9 +46,53 @@ interface CustomAPI {
   }
 
   musicCache: {
-    getInfo: () => Promise<any>
-    clear: () => Promise
+    getInfo: () => Promise<{
+      count: number
+      size: number
+      sizeFormatted: string
+      maxBytes: number
+      maxFormatted: string
+      maxQuality: string
+      percent: number
+      breakdown: Array<{
+        key: 'audio' | 'cover' | 'lyric'
+        count: number
+        size: number
+        sizeFormatted: string
+        percent: number
+      }>
+      /** 按音质聚合（仅音频），用于设置页的扇形图 */
+      qualityBreakdown: Array<{
+        quality: string
+        count: number
+        size: number
+        sizeFormatted: string
+        percent: number
+      }>
+    }>
+    clear: () => Promise<{ success: boolean; message: string }>
     getSize: () => Promise<string>
+    getPolicy: () => Promise<{ maxBytes: number; maxQuality: string }>
+    setPolicy: (policy: {
+      maxBytes?: number
+      maxQuality?: string
+    }) => Promise<{ success: boolean; evicted?: number; freedBytes?: number; message?: string }>
+    enforceLimit: () => Promise<{
+      success: boolean
+      evicted?: number
+      freedBytes?: number
+      message?: string
+    }>
+    /** 读取已落盘的封面图片，返回 file:// URL；未缓存返回 null */
+    getCoverFile: (songCacheKey: string) => Promise<string | null>
+    /** 把已下载的封面图片写入缓存，返回 file:// URL */
+    putCoverFile: (
+      songCacheKey: string,
+      data: ArrayBuffer,
+      ext: string
+    ) => Promise<string | null>
+    /** 清除某首歌的封面缓存（图片损坏时用） */
+    invalidateCoverFile: (songCacheKey: string) => Promise<{ success: boolean }>
   }
 
   // 下载管理
@@ -129,6 +176,21 @@ interface CustomAPI {
   settings: {
     syncCloseToTray: (value: boolean) => void
     getCloseToTray: () => Promise<boolean>
+    getNetworkProxy: () => Promise<import('../main/services/networkProxy').NetworkProxyConfig>
+    setNetworkProxy: (
+      config: Partial<import('../main/services/networkProxy').NetworkProxyConfig>
+    ) => Promise<
+      | { success: true; config: import('../main/services/networkProxy').NetworkProxyConfig }
+      | { success: false; error: string }
+    >
+    testNetworkProxy: (
+      config: Partial<import('../main/services/networkProxy').NetworkProxyConfig>
+    ) => Promise<import('../main/services/networkProxy').NetworkProxyTestResult>
+    /** 信任系统证书（Node 侧 TLS，兼容抓包代理） */
+    getTrustSystemCertificates: () => Promise<{ enabled: boolean; supported: boolean }>
+    setTrustSystemCertificates: (
+      value: boolean
+    ) => Promise<{ success: boolean; applied: boolean }>
   }
 
   // 插件管理API

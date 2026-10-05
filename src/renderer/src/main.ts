@@ -15,6 +15,7 @@ import { Request } from '@renderer/utils/request'
 // router
 import router from './router'
 import { useSettingsStore } from '@renderer/store/Settings'
+import { useAppBackground } from './composables/useAppBackground'
 // pinia
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
@@ -33,6 +34,10 @@ const appConfig: LogtoConfig = {
 const logtoClient = new LogtoClient(appConfig)
 Request.setLogtoClient(logtoClient)
 config.instance = logtoClient
+
+// 尽早建立“窗口后台状态”订阅（最小化 / 隐藏到托盘 → 渲染层降载），
+// 不依赖具体页面组件是否已挂载。
+useAppBackground()
 
 // 挂载
 const app = createApp(App)

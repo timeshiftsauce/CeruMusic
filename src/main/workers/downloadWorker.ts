@@ -5,10 +5,41 @@ import fs from 'fs'
 import fsPromise from 'fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'url'
-import { parentPort, isMainThread } from 'worker_threads'
+import { parentPort, isMainThread, workerData } from 'worker_threads'
 import type { DownloadTask } from '../types/download'
 import { parseLocalLyrics, exportBuiltinLyrics } from '@common/localLyrics'
 import { lyricFileExtension, normalizeLyricFormat } from '@common/lyricFormats'
+import {
+  createProxyAgentPair,
+  isLocalOrPrivateHostname,
+  type ProxyRule
+} from '../utils/proxyAgents'
+import { applyTrustSystemCertificates } from '../services/systemCaTrust'
+
+// 下载 worker 由主进程在创建时传入当前网络代理规则(直连时为 null)
+const proxyRule = (workerData as { proxyRule?: ProxyRule | null } | null)?.proxyRule ?? null
+// “信任系统证书”快照：worker 是独立线程，默认 CA 需要在本线程内应用
+if ((workerData as { trustSystemCa?: boolean } | null)?.trustSystemCa) {
+  applyTrustSystemCertificates(true)
+}
+let cachedProxyAgents: ReturnType<typeof createProxyAgentPair> | null = null
+let cachedProxyAgentsKey = ''
+
+/** 目标 URL 应使用的代理 agents(直连/本地目标返回 null);单 worker 内缓存一份 */
+function buildProxyAgents(url: string) {
+  if (!proxyRule) return null
+  try {
+    if (isLocalOrPrivateHostname(new URL(url).hostname)) return null
+  } catch {
+    return null
+  }
+  const key = `${proxyRule.protocol}//${proxyRule.host}:${proxyRule.port}`
+  if (!cachedProxyAgents || cachedProxyAgentsKey !== key) {
+    cachedProxyAgents = createProxyAgentPair(proxyRule)
+    cachedProxyAgentsKey = key
+  }
+  return cachedProxyAgents
+}
 
 if (!isMainThread) {
   parentPort?.on('message', async (message: DownloadTask | { type: 'pause' | 'cancel' }) => {
@@ -191,11 +222,15 @@ async function download(task: DownloadTask): Promise<any> {
         headers.Range = `bytes=${startByte}-`
       }
 
+      const agents = buildProxyAgents(url)
       const response = await axios({
         method: 'GET',
         url: url,
         responseType: 'stream',
-        headers
+        headers,
+        // 代理由主进程网络设置决定;显式关闭以避免环境变量代理干扰
+        proxy: false,
+        ...(agents ? { httpAgent: agents.httpAgent, httpsAgent: agents.httpsAgent } : {})
       })
       currentResponseStream = response.data
 
@@ -298,9 +333,15 @@ async function processSongFiles(songPath: string, songInfo: any, tagWriteOptions
   try {
     if (tagWriteOptions.cover && songInfo?.img) {
       try {
+        const coverAgents = buildProxyAgents(songInfo.img)
         const coverRes = await axios.get(songInfo.img, {
           responseType: 'arraybuffer',
-          timeout: 10000
+          timeout: 10000,
+          // 代理由主进程网络设置决定;显式关闭以避免环境变量代理干扰
+          proxy: false,
+          ...(coverAgents
+            ? { httpAgent: coverAgents.httpAgent, httpsAgent: coverAgents.httpsAgent }
+            : {})
         })
         const ct = (coverRes.headers?.['content-type'] as string) || undefined
         const coverExt = resolveCoverExt(songInfo.img, ct)

@@ -96,218 +96,271 @@ const getTagOptionsStatus = () => {
 
 <template>
   <div class="settings-section">
-    <t-card title="旧版音乐数据" class="setting-group" style="margin-bottom: 20px">
-      <p>备份并修复歌曲、播放历史和歌单数据。</p>
-      <t-button variant="outline" @click="openMusicDataRepair">检查并修复</t-button>
-    </t-card>
-    <div id="storage-directory">
-      <DirectorySettings
-        ref="directorySettingsRef"
-        class="setting-group"
-        @directory-changed="handleDirectoryChanged"
-        @cache-cleared="handleCacheCleared"
-      />
-    </div>
-    <div id="storage-cache" style="margin-top: 20px" class="setting-group">
-      <MusicCache ref="musicCacheRef" @cache-cleared="handleCacheCleared" />
-    </div>
+    <section class="setting-group">
+      <div class="group-header">
+        <div class="group-title">旧版音乐数据</div>
+        <div class="group-desc">备份并修复歌曲、播放历史和歌单数据</div>
+      </div>
+      <div class="group-body">
+        <t-button variant="outline" @click="openMusicDataRepair">检查并修复</t-button>
+      </div>
+    </section>
+
+    <section id="storage-directory" class="setting-group">
+      <div class="group-header">
+        <div class="group-title">存储目录配置</div>
+        <div class="group-desc">设置歌曲缓存与下载文件在磁盘上的存放位置</div>
+      </div>
+      <div class="group-body">
+        <DirectorySettings
+          ref="directorySettingsRef"
+          @directory-changed="handleDirectoryChanged"
+          @cache-cleared="handleCacheCleared"
+        />
+      </div>
+    </section>
+
+    <section id="storage-cache" class="setting-group">
+      <div class="group-header">
+        <div class="group-title">本地歌曲缓存</div>
+        <div class="group-desc">播放时缓存歌曲文件，加速后续播放</div>
+      </div>
+      <div class="group-body">
+        <MusicCache ref="musicCacheRef" @cache-cleared="handleCacheCleared" />
+      </div>
+    </section>
 
     <!-- 缓存策略 -->
-    <div id="storage-cache-strategy" class="setting-group">
-      <h3>缓存策略</h3>
-      <div class="setting-item">
-        <div class="item-info">
-          <div class="item-title">自动缓存音乐</div>
-          <div class="item-desc">播放时自动读取/写入缓存，加速后续播放</div>
-        </div>
-        <t-switch
-          v-model="settings.autoCacheMusic"
-          @change="settingsStore.updateSettings({ autoCacheMusic: settings.autoCacheMusic })"
-        />
+    <section id="storage-cache-strategy" class="setting-group">
+      <div class="group-header">
+        <div class="group-title">缓存策略</div>
+        <div class="group-desc">控制缓存写入时机与容量上限</div>
       </div>
-    </div>
+      <div class="group-body">
+        <div class="setting-item">
+          <div class="item-info">
+            <div class="item-title">自动缓存音乐</div>
+            <div class="item-desc">播放时自动读取/写入缓存，加速后续播放</div>
+          </div>
+          <t-switch
+            v-model="settings.autoCacheMusic"
+            @change="settingsStore.updateSettings({ autoCacheMusic: settings.autoCacheMusic })"
+          />
+        </div>
+      </div>
+    </section>
 
     <!-- 下载文件名格式设置 -->
-    <div id="storage-filename" class="setting-group">
-      <h3>下载文件名格式设置</h3>
-      <p>选择下载歌曲时要保存的文件名格式</p>
-
-      <div class="template-tip">
-        <div class="template-tip-item">
-          <t-tag>%t</t-tag>
-          <span>歌曲名称</span>
-        </div>
-        <div class="template-tip-item">
-          <t-tag>%s</t-tag>
-          <span>歌手</span>
-        </div>
-        <div class="template-tip-item">
-          <t-tag>%a</t-tag>
-          <span>专辑</span>
-        </div>
-        <div class="template-tip-item">
-          <t-tag>%u</t-tag>
-          <span>平台</span>
-        </div>
-        <t-tooltip content="例如:128k/320k/flac/hires/master...">
+    <section id="storage-filename" class="setting-group">
+      <div class="group-header">
+        <div class="group-title">下载文件名格式</div>
+        <div class="group-desc">选择下载歌曲时要保存的文件名格式</div>
+      </div>
+      <div class="group-body">
+        <div class="template-tip">
           <div class="template-tip-item">
-            <t-tag>%q</t-tag>
-            <span style="display: flex; align-items: center">
-              音质
-              <t-icon name="info-circle" size="12" style="margin-left: 0.2em" />
-            </span>
+            <t-tag>%t</t-tag>
+            <span>歌曲名称</span>
           </div>
-        </t-tooltip>
-        <div class="template-tip-item">
-          <t-tag>%d</t-tag>
-          <span>日期</span>
+          <div class="template-tip-item">
+            <t-tag>%s</t-tag>
+            <span>歌手</span>
+          </div>
+          <div class="template-tip-item">
+            <t-tag>%a</t-tag>
+            <span>专辑</span>
+          </div>
+          <div class="template-tip-item">
+            <t-tag>%u</t-tag>
+            <span>平台</span>
+          </div>
+          <t-tooltip content="例如:128k/320k/flac/hires/master...">
+            <div class="template-tip-item">
+              <t-tag>%q</t-tag>
+              <span style="display: flex; align-items: center">
+                音质
+                <t-icon name="info-circle" size="12" style="margin-left: 0.2em" />
+              </span>
+            </div>
+          </t-tooltip>
+          <div class="template-tip-item">
+            <t-tag>%d</t-tag>
+            <span>日期</span>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <t-input
+            v-model="filenameTemplate"
+            placeholder="文件名格式"
+            @change="updateFilenameTemplate"
+          />
+        </div>
+
+        <div class="preview-container">
+          <div>预览：</div>
+          <div class="preview-value">
+            {{ formatMusicInfo(filenameTemplate || '%t - %s', previewSongInfo) }}
+          </div>
         </div>
       </div>
-
-      <div class="setting-item">
-        <t-input
-          v-model="filenameTemplate"
-          placeholder="文件名格式"
-          @change="updateFilenameTemplate"
-        />
-      </div>
-
-      <div class="preview-container">
-        <div>预览：</div>
-        <div>{{ formatMusicInfo(filenameTemplate || '%t - %s', previewSongInfo) }}</div>
-      </div>
-    </div>
+    </section>
 
     <!-- 标签写入设置 -->
-    <div id="storage-tags" class="setting-group">
-      <h3>下载标签写入设置</h3>
-      <p>选择下载歌曲时要写入的标签信息</p>
+    <section id="storage-tags" class="setting-group">
+      <div class="group-header">
+        <div class="group-title">下载标签写入设置</div>
+        <div class="group-desc">选择下载歌曲时要写入的标签信息</div>
+      </div>
+      <div class="group-body">
+        <div class="tag-options">
+          <div class="tag-option">
+            <t-checkbox v-model="tagWriteOptions.basicInfo" @change="updateTagWriteOptions">
+              基础信息
+            </t-checkbox>
+            <p class="option-desc">包括歌曲标题、艺术家、专辑名称等基本信息</p>
+          </div>
 
-      <div class="tag-options">
-        <div class="tag-option">
-          <t-checkbox v-model="tagWriteOptions.basicInfo" @change="updateTagWriteOptions">
-            基础信息
-          </t-checkbox>
-          <p class="option-desc">包括歌曲标题、艺术家、专辑名称等基本信息</p>
-        </div>
+          <div class="tag-option">
+            <t-checkbox v-model="tagWriteOptions.cover" @change="updateTagWriteOptions">
+              封面
+            </t-checkbox>
+            <p class="option-desc">将专辑封面嵌入到音频文件中</p>
+          </div>
 
-        <div class="tag-option">
-          <t-checkbox v-model="tagWriteOptions.cover" @change="updateTagWriteOptions">
-            封面
-          </t-checkbox>
-          <p class="option-desc">将专辑封面嵌入到音频文件中</p>
-        </div>
+          <div class="tag-option">
+            <t-checkbox v-model="tagWriteOptions.lyrics" @change="updateTagWriteOptions">
+              歌词信息
+            </t-checkbox>
+            <p class="option-desc">将歌词信息写入音频文件的元信息中</p>
+          </div>
 
-        <div class="tag-option">
-          <t-checkbox v-model="tagWriteOptions.lyrics" @change="updateTagWriteOptions">
-            歌词信息
-          </t-checkbox>
-          <p class="option-desc">将歌词信息写入音频文件的元信息中</p>
-        </div>
+          <div class="tag-option">
+            <t-checkbox v-model="tagWriteOptions.downloadLyrics" @change="updateTagWriteOptions">
+              单独下载歌词文件
+            </t-checkbox>
+            <p class="option-desc">在音频文件所在目录保存同名歌词文件</p>
+          </div>
 
-        <div class="tag-option">
-          <t-checkbox v-model="tagWriteOptions.downloadLyrics" @change="updateTagWriteOptions">
-            单独下载歌词文件
-          </t-checkbox>
-          <p class="option-desc">在音频文件所在目录保存同名歌词文件</p>
-        </div>
-
-        <div class="tag-option lyric-format-options">
-          <label>歌词导出格式</label>
-          <t-select
-            v-model="tagWriteOptions.lyricFormat"
-            :options="lyricFormats.map(({ value, label }) => ({ value, label }))"
-            :disabled="!tagWriteOptions.lyrics && !tagWriteOptions.downloadLyrics"
-            @change="updateTagWriteOptions"
-          />
-          <p class="option-desc">
-            内嵌与外置歌词使用同一格式；标准 LRC 和 LYL 仅保留逐行时间，TTML
-            可保留翻译、音译及对唱信息。
-          </p>
-        </div>
-        <div class="tag-option lyric-format-options">
-          <label>外置歌词文件后缀</label>
-          <t-radio-group
-            v-model="tagWriteOptions.lyricExtensionMode"
-            :disabled="!tagWriteOptions.downloadLyrics"
-            @change="updateTagWriteOptions"
-          >
-            <t-radio-button value="auto">跟随导出格式</t-radio-button>
-            <t-radio-button value="custom">指定后缀</t-radio-button>
-          </t-radio-group>
-          <template v-if="tagWriteOptions.lyricExtensionMode === 'custom'">
+          <div class="tag-option lyric-format-options">
+            <label>歌词导出格式</label>
             <t-select
-              v-model="extensionChoice"
-              :disabled="!tagWriteOptions.downloadLyrics"
-              :options="[
-                ...extensionPresets.map((value) => ({ value, label: '.' + value })),
-                { value: 'custom', label: '自定义' }
-              ]"
-              @change="changeExtensionPreset"
-            />
-            <t-input
-              v-if="extensionChoice === 'custom'"
-              v-model="tagWriteOptions.lyricExtension"
-              :disabled="!tagWriteOptions.downloadLyrics"
-              placeholder="输入后缀，例如 lyrics"
+              v-model="tagWriteOptions.lyricFormat"
+              :options="lyricFormats.map(({ value, label }) => ({ value, label }))"
+              :disabled="!tagWriteOptions.lyrics && !tagWriteOptions.downloadLyrics"
               @change="updateTagWriteOptions"
             />
-          </template>
-          <p v-if="extensionPreview.error" class="option-desc" role="alert">
-            {{ extensionPreview.error }}
-          </p>
-          <p v-else class="option-desc">
-            文件示例：歌曲名.{{ extensionPreview.value }}。修改后缀不会改变歌词内容；逐字 LRC
-            默认使用 .lrc。
-          </p>
+            <p class="option-desc">
+              内嵌与外置歌词使用同一格式；标准 LRC 和 LYL 仅保留逐行时间，TTML
+              可保留翻译、音译及对唱信息。
+            </p>
+          </div>
+          <div class="tag-option lyric-format-options">
+            <label>外置歌词文件后缀</label>
+            <t-radio-group
+              v-model="tagWriteOptions.lyricExtensionMode"
+              :disabled="!tagWriteOptions.downloadLyrics"
+              @change="updateTagWriteOptions"
+            >
+              <t-radio-button value="auto">跟随导出格式</t-radio-button>
+              <t-radio-button value="custom">指定后缀</t-radio-button>
+            </t-radio-group>
+            <template v-if="tagWriteOptions.lyricExtensionMode === 'custom'">
+              <t-select
+                v-model="extensionChoice"
+                :disabled="!tagWriteOptions.downloadLyrics"
+                :options="[
+                  ...extensionPresets.map((value) => ({ value, label: '.' + value })),
+                  { value: 'custom', label: '自定义' }
+                ]"
+                @change="changeExtensionPreset"
+              />
+              <t-input
+                v-if="extensionChoice === 'custom'"
+                v-model="tagWriteOptions.lyricExtension"
+                :disabled="!tagWriteOptions.downloadLyrics"
+                placeholder="输入后缀，例如 lyrics"
+                @change="updateTagWriteOptions"
+              />
+            </template>
+            <p v-if="extensionPreview.error" class="option-desc" role="alert">
+              {{ extensionPreview.error }}
+            </p>
+            <p v-else class="option-desc">
+              文件示例：歌曲名.{{ extensionPreview.value }}。修改后缀不会改变歌词内容；逐字 LRC
+              默认使用 .lrc。
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div class="tag-options-status">
-        <div class="status-summary">
-          <span class="status-label">当前配置：</span>
-          <span class="status-value">
-            {{ getTagOptionsStatus() }}
-          </span>
+        <div class="tag-options-status">
+          <div class="status-summary">
+            <span class="status-label">当前配置：</span>
+            <span class="status-value">
+              {{ getTagOptionsStatus() }}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <style lang="scss" scoped>
 .settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
   animation: fadeInUp 0.4s ease-out;
   animation-fill-mode: both;
 }
 
 .setting-group {
   background: var(--settings-group-bg);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  border-radius: 0.875rem;
+  padding: 1.25rem 1.5rem 1.5rem;
   border: 1px solid var(--settings-group-border);
-  box-shadow: 0 1px 3px var(--settings-group-shadow);
+  box-shadow: 0 1px 2px var(--settings-group-shadow);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
   animation: fadeInUp 0.4s ease-out;
   animation-fill-mode: both;
 
-  @for $i from 1 through 5 {
+  &:hover {
+    border-color: var(--settings-feature-border);
+    box-shadow: 0 4px 16px var(--settings-group-shadow);
+  }
+
+  @for $i from 1 through 6 {
     &:nth-child(#{$i}) {
-      animation-delay: #{$i * 0.1}s;
+      animation-delay: #{$i * 0.06}s;
     }
   }
 
-  h3 {
-    margin: 0 0 0.5rem;
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--settings-text-primary);
+  .group-header {
+    padding-bottom: 0.875rem;
+    margin-bottom: 1.125rem;
+    border-bottom: 1px solid var(--settings-feature-border);
+
+    .group-title {
+      font-size: 1rem;
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--settings-text-primary);
+    }
+
+    .group-desc {
+      margin-top: 0.25rem;
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      color: var(--settings-text-secondary);
+    }
   }
 
-  > p {
-    margin: 0 0 1.5rem;
-    color: var(--settings-text-secondary);
-    font-size: 0.875rem;
+  .group-body {
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -315,28 +368,33 @@ const getTagOptionsStatus = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   padding: 0.875rem 1rem;
   border: 1px solid var(--settings-feature-border);
   background: var(--settings-feature-bg);
-  border-radius: 0.5rem;
-  margin-top: 0.75rem;
+  border-radius: 0.625rem;
+
+  & + .setting-item {
+    margin-top: 0.75rem;
+  }
 
   .item-info {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    min-width: 0;
 
     .item-title {
-      font-weight: 600;
+      font-weight: 500;
       color: var(--settings-text-primary);
-      font-size: 0.95rem;
-      line-height: 1.2;
+      font-size: 0.9375rem;
+      line-height: 1.3;
     }
 
     .item-desc {
       color: var(--settings-text-secondary);
-      font-size: 0.8rem;
-      line-height: 1.2;
+      font-size: 0.8125rem;
+      line-height: 1.3;
     }
   }
 }
@@ -344,47 +402,66 @@ const getTagOptionsStatus = () => {
 // 文件名模板样式
 .template-tip {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 2em;
+  gap: 0.75rem 1.5rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--settings-feature-bg);
+  border: 1px solid var(--settings-feature-border);
+  border-radius: 0.625rem;
 }
 
 .template-tip-item {
   display: flex;
+  align-items: center;
   gap: 0.5em;
+  font-size: 0.8125rem;
+  color: var(--settings-text-secondary);
 }
 
 .preview-container {
   display: flex;
   align-items: center;
   gap: 0.5em;
-  margin: 0.5em 0 0 0;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--settings-text-secondary);
+  background: var(--settings-feature-bg);
+  border: 1px solid var(--settings-feature-border);
+  border-radius: 0.625rem;
+
+  .preview-value {
+    font-weight: 500;
+    color: var(--settings-text-primary);
+    word-break: break-all;
+  }
 }
 
 // 标签写入设置样式
 .tag-options {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 0.75rem;
 
   .tag-option {
-    padding: 1rem;
-    background: var(--settings-tag-option-bg);
-    border-radius: 0.5rem;
-    border: 1px solid var(--settings-tag-option-border);
+    padding: 0.875rem 1rem;
+    background: var(--settings-feature-bg);
+    border-radius: 0.625rem;
+    border: 1px solid var(--settings-feature-border);
+    transition: border-color 0.2s ease;
+
+    &:hover {
+      border-color: var(--td-brand-color-3);
+    }
 
     .option-desc {
       margin: 0.5rem 0 0 1.5rem;
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
       color: var(--settings-text-secondary);
-      line-height: 1.4;
+      line-height: 1.5;
     }
-  }
-  .tag-options-status {
-    background: var(--settings-tag-status-bg);
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--settings-tag-status-border);
   }
 
   .lyric-format-options {
@@ -394,9 +471,26 @@ const getTagOptionsStatus = () => {
     gap: 0.75rem;
     max-width: 580px;
     padding-top: 1rem;
-    margin-top: 1rem;
-    border-top: 1px solid var(--settings-group-border);
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--settings-feature-border);
+
+    &:first-child {
+      padding-top: 0;
+      margin-top: 0;
+      border-top: none;
+    }
   }
+}
+
+.tag-options-status {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  margin-top: 1rem;
+  background: var(--settings-tag-status-bg);
+  border-radius: 0.625rem;
+  border: 1px solid var(--settings-tag-status-border);
+
   .status-summary {
     display: flex;
     align-items: center;
@@ -405,13 +499,13 @@ const getTagOptionsStatus = () => {
     .status-label {
       font-weight: 500;
       color: var(--settings-text-secondary);
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
     }
 
     .status-value {
       font-weight: 600;
       color: var(--settings-text-primary);
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
     }
   }
 }
@@ -419,7 +513,7 @@ const getTagOptionsStatus = () => {
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;

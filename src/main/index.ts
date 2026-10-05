@@ -40,6 +40,8 @@ import { deepLinkRouter } from './router'
 import { thumbarService } from './services/thumbarService'
 import { setupDeepLinks, bufferEarlyDeepLink } from './router/routes'
 import { getPendingDeepLinks, acknowledgeDeepLink, enqueueDeepLink } from './router/pendingLinks'
+import { initNetworkProxyConfig, registerProxyAuthentication } from './services/networkProxy'
+import { applyTrustSystemCertificates, TRUST_SYSTEM_CA_KEY } from './services/systemCaTrust'
 
 // Initialize deep link routes
 setupDeepLinks()
@@ -397,19 +399,9 @@ function setupDownloadManager() {
     const source = task.songInfo.source
     const format = normalizeLyricFormat(task.tagWriteOptions?.lyricFormat)
     if (!format) throw new Error('不支持的歌词导出格式')
-    const resource = task.songInfo.pluginResource
+    // 与播放共用同一个歌曲 key（不含 connectionId），仅额外按导出格式区分
     const cacheKey =
-      'lyric-export-v2:' +
-      JSON.stringify([
-        resource?.pluginId ?? task.pluginId ?? null,
-        resource?.providerId ?? source,
-        resource?.connectionId ?? null,
-        resource?.id ??
-          task.songInfo.songmid ??
-          task.songInfo.hash ??
-          `${task.songInfo.name}-${task.songInfo.singer}`,
-        format
-      ])
+      'lyric-export-v2:' + musicCacheService.songCacheKey(task.songInfo) + ':' + format
     const cachedLyric = await musicCacheService.getCachedLyric(cacheKey)
     if (cachedLyric) return cachedLyric
     const result = await musicSdkService(source).getLyric({
@@ -506,7 +498,11 @@ function createWindow(): void {
       webSecurity: false,
       nodeIntegration: true,
       contextIsolation: false,
-      backgroundThrottling: false
+      // 使用 Chromium 默认节流：窗口进入后台（最小化 / 隐藏到托盘 / 被完全遮挡）时
+      // 页面会正确进入 hidden 状态并停止出帧，显著降低后台 CPU/GPU 占用。
+      // 前台不受影响；后台所需功能（进度保存 / SMTC / 桌面歌词推送等）均已改为
+      // 不依赖 rAF 的实现，可安全容忍后台节流。
+      backgroundThrottling: true
     }
   } as BrowserWindowConstructorOptions
 
@@ -535,6 +531,31 @@ function createWindow(): void {
   if (process.platform == 'darwin') mainWindow.setWindowButtonVisibility(false)
 
   initHotkeyService(mainWindow)
+
+  // 窗口后台状态广播：最小化 / 隐藏到托盘时通知渲染进程暂停高开销渲染。
+  // 渲染层不依赖 document.visibilityState 判断托盘场景（win.hide() 不一定触发
+  // visibility 变化），状态以本广播为准。
+  let lastWindowBackground: boolean | null = null
+  const broadcastWindowBackgroundState = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    const isBackground = !mainWindow.isVisible() || mainWindow.isMinimized()
+    if (isBackground === lastWindowBackground) return
+    lastWindowBackground = isBackground
+    console.log(
+      `[window-bg] background=${isBackground} visible=${mainWindow.isVisible()} minimized=${mainWindow.isMinimized()}`
+    )
+    try {
+      mainWindow.webContents.send('app-window-background', isBackground)
+    } catch {}
+  }
+  win.on('minimize', broadcastWindowBackgroundState)
+  win.on('restore', broadcastWindowBackgroundState)
+  win.on('show', broadcastWindowBackgroundState)
+  win.on('hide', broadcastWindowBackgroundState)
+  // 低频轮询兜底：部分路径（外部 Win32 调用、系统快捷键等）可能不触发上述事件，
+  // 400ms 轮询确保窗口状态变化一定会被广播（状态未变化时零开销）。
+  const windowBackgroundPoll = setInterval(broadcastWindowBackgroundState, 400)
+  win.once('closed', () => clearInterval(windowBackgroundPoll))
 
   // 注册生产环境调试快捷键 Ctrl+S+F11
   let isSPressed = false
@@ -670,8 +691,21 @@ function createWindow(): void {
 
   InitEventServices(mainWindow)
   initPluginNotice(mainWindow)
-  // 设置背景节流
-  mainWindow.webContents.setBackgroundThrottling(false)
+  // 背景节流保持 Chromium 默认行为（webPreferences 中未禁用）：窗口后台时自动停帧；
+  // 渲染层的组件级降载依赖 app-window-background 广播，与此独立。
+
+  // 渲染层首拉窗口后台状态（事件推送之外的一次性查询兜底）
+  ipcMain.removeHandler('app:get-window-background')
+  ipcMain.handle('app:get-window-background', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return false
+    return !mainWindow.isVisible() || mainWindow.isMinimized()
+  })
+
+  // [诊断] 渲染层回声：验证窗口后台信号是否送达渲染层（排查托盘降载用，定位后可移除）
+  ipcMain.removeAllListeners('app-window-background-ack')
+  ipcMain.on('app-window-background-ack', (_event, payload) => {
+    console.log('[window-bg-ack]', JSON.stringify(payload))
+  })
 
   // === 窗口标题 / 任务栏-Dock 进度条 IPC ===
   // 启动时 BrowserWindow 默认 title 来自 index.html 的 <title> 或 productName,
@@ -730,6 +764,22 @@ registerAutoUpdateEvents()
 app.whenReady().then(async () => {
   // 尽早挂上跨域放宽 —— 首屏的通知卡片 / 插件 iframe 就要用(详见 services/iframeEmbed)
   allowCrossOriginEmbeds()
+  // 网络代理:在任何网络请求之前应用(未配置过时默认直连,不走系统代理)
+  registerProxyAuthentication()
+  try {
+    await initNetworkProxyConfig()
+  } catch (error) {
+    console.warn('[network] 初始化网络代理失败:', error)
+  }
+  // “信任系统证书”（默认关闭）：开启后 Node 侧 TLS 信任系统证书库，
+  // 用于兼容 Reqable / Charles 等抓包代理的 HTTPS 解密。对所有新建连接生效。
+  try {
+    if (configManager.get<boolean>(TRUST_SYSTEM_CA_KEY, false)) {
+      applyTrustSystemCertificates(true)
+    }
+  } catch (error) {
+    console.warn('[system-ca] 初始化系统证书信任失败:', error)
+  }
   // 清理上次安装残留的安装包（仅限临时目录）
   try {
     await cleanupDownloadedInstallers()
@@ -842,6 +892,8 @@ app.whenReady().then(async () => {
   // 应用退出前销毁所有插件 worker，避免 worker 阻塞主进程退出
   app.on('before-quit', () => {
     pluginService.disposeAll().catch(() => {})
+    // 把防抖中的缓存命中计数立即落盘，避免重启后淘汰依据丢失
+    musicCacheService.flushCacheIndex().catch(() => {})
   })
 
   // 仅在主进程初始化一次托盘

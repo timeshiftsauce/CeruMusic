@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { HttpsProxyAgent, HttpProxyAgent } from 'hpagent'
 
 // 常量定义
 const DEFAULT_TIMEOUT = 15000
@@ -7,66 +6,33 @@ const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36'
 const debugRequest = false
 
-const httpsRxp = /^https:/
-
-// 代理配置对象
-let proxy = {
-  enable: false,
-  host: '',
-  port: 0,
-  username: '',
-  password: '',
-  envProxy: null
-}
-
 /**
- * 设置代理配置
- * @param {Object} proxyConfig - 代理配置
+ * 代理 agent 注入点:由主进程 networkProxy 服务注册。
+ * provider(url) 返回 { httpAgent, httpsAgent }(null 表示直连)。
+ * 未注册时所有请求直连(避免隐式读取环境变量代理)。
  */
-export const setProxy = (proxyConfig) => {
-  proxy = { ...proxy, ...proxyConfig }
-}
+let requestAgentProvider = null
 
 /**
- * 获取代理配置
+ * 注册代理解析器
+ * @param {(url: string) => { httpAgent?: any, httpsAgent?: any } | null} provider
  */
-export const getProxy = () => {
-  return { ...proxy }
+export const setRequestAgentProvider = (provider) => {
+  requestAgentProvider = typeof provider === 'function' ? provider : null
 }
 
 /**
- * 清除代理配置
- */
-export const clearProxy = () => {
-  proxy = {
-    enable: false,
-    host: '',
-    port: 0,
-    username: '',
-    password: '',
-    envProxy: null
-  }
-}
-
-/**
- * 获取请求代理
+ * 获取目标 URL 对应的代理 agents(未启用代理或本地/私网目标时返回 null)
  * @param {string} url - 请求URL
  */
-const getRequestAgent = (url) => {
-  let proxyUrl
-  if (proxy.enable && proxy.host) {
-    const auth = proxy.username && proxy.password ? `${proxy.username}:${proxy.password}@` : ''
-    proxyUrl = `http://${auth}${proxy.host}:${proxy.port}`
-  } else if (proxy.envProxy) {
-    proxyUrl = `http://${proxy.envProxy.host}:${proxy.envProxy.port}`
+const getRequestAgents = (url) => {
+  if (!requestAgentProvider) return null
+  try {
+    return requestAgentProvider(url) || null
+  } catch (err) {
+    console.warn('解析请求代理失败:', err)
+    return null
   }
-
-  if (proxyUrl) {
-    return httpsRxp.test(url)
-      ? new HttpsProxyAgent({ proxy: proxyUrl })
-      : new HttpProxyAgent({ proxy: proxyUrl })
-  }
-  return undefined
 }
 
 /**
@@ -188,13 +154,15 @@ const fetchData = async (url, method = 'get', options = {}) => {
     }
   }
 
+  const agents = getRequestAgents(url)
   const axiosConfig = {
     method: method.toLowerCase(),
     url,
     headers: requestHeaders,
     timeout,
-    httpsAgent: getRequestAgent(url),
-    httpAgent: getRequestAgent(url),
+    // 代理由主进程 networkProxy 统一决定;显式关闭以避免环境变量代理干扰
+    proxy: false,
+    ...(agents ? { httpsAgent: agents.httpsAgent, httpAgent: agents.httpAgent } : {}),
     ...restOptions
   }
 
