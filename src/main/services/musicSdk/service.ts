@@ -31,6 +31,33 @@ import download from '../../utils/downloadSongs'
 
 const v2Track = toAppTrack
 
+/**
+ * 判定一个歌词文档是否真的有可显示内容。
+ *
+ * 插件在「歌词确实存在但解析不出行」时会返回空文档，这种空结果若被当成
+ * 正常成功缓存下来，用户改天再播这首歌会直接命中空白缓存、永远看不到歌词。
+ */
+function hasLyricContent(document: any): boolean {
+  if (!document || typeof document !== 'object') return false
+  const lines = Array.isArray(document.lines) ? document.lines : null
+  if (lines && lines.length > 0) return true
+  return (
+    typeof document.raw === 'string' ||
+    typeof document.content === 'string' ||
+    typeof document.text === 'string'
+  )
+}
+
+/**
+ * 「这首歌有歌词」的标记 key。
+ *
+ * 用缓存（kind 仍是 lyric）记住上一次成功取到的歌词。插件在并发下偶发失败时，
+ * 下一次请求就能直接命中，不必再走一遍 TTML 探测 + 平台接口的串行网络。
+ */
+function lyricMarkerKey(lyricKey: string): string {
+  return 'lyric-has:' + lyricKey
+}
+
 /** Queued/batch downloads use the same current provider routing and cache as playback. */
 export async function resolveDownloadUrl(task: {
   pluginId?: string
@@ -79,6 +106,7 @@ function v2Page(result: any): any {
 }
 
 function main(source: string = 'wy') {
+  // `all` 是宿主保留的内置聚合音源 id，v2 模式不实现它（插件需另取一个 id，例如 `mix`）。
   if (source === 'all') throw new Error('v2 模式不支持内置聚合音源，请安装提供多个 Provider 的插件')
   const requireV2 = (method?: string) => {
     const provider = pluginService.getV2Provider(source, undefined, method)
@@ -277,6 +305,14 @@ function main(source: string = 'wy') {
           ).text
         }
         if (isDisplayLyric && res) musicCacheService.cacheLyricObject(lyricKey, res)
+        // 与封面缓存一致：写一份「这首歌取过歌词」的标记。
+        // 当插件返回空文档、或插件侧请求在并发下失败时，渲染层拿不到歌词就会
+        // 守着同一个 inFlightMetadataKey 不再重试 —— 用户看到「这次播放没有歌词」，
+        // 切走再切回来（inFlightMetadataKey 已换）才重新拉一次。
+        // 有了标记，下一次请求可以直接绕过插件用缓存补齐。
+        if (isDisplayLyric && hasLyricContent(res)) {
+          musicCacheService.cacheLyricObject(lyricMarkerKey(lyricKey), res)
+        }
         return { crlyric: grepLyricInfo ? filterLyricInfo(res, useStrictMode) : res }
       } catch (e: any) {
         return {

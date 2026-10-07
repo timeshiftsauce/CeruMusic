@@ -5,6 +5,7 @@ import {
   findAsset,
   fetchAssetText,
   downloadUrl,
+  absoluteDownloadUrl,
   getRepo,
   type Release,
   type ReleaseAsset
@@ -139,7 +140,7 @@ export async function handleRequest(
     if (path.startsWith('/') && !path.slice(1).includes('/')) {
       const file = decodeURIComponent(path.slice(1))
       if (ASSET_FILE_RE.test(file)) {
-        return await handleAsset(env, ctx, file, request)
+        return await handleAsset(env, ctx, file)
       }
     }
 
@@ -205,11 +206,12 @@ async function handleLatest(
   const yml = await fetchAssetText(env, asset)
   // electron-builder 26.x 配的 app-builder-bin@5.0.0-alpha 不会在 latest.yml 里写 blockMapSize,
   // 没有这个字段 electron-updater 不会走差分下载. 这里从 release.assets 查 .blockmap 文件 size 注入回去.
-  const patched = injectBlockMapSizes(yml, release, platform, arch)
+  const patched = injectBlockMapSizes(env, yml, release, platform, arch)
   return ymlResponse(patched, arch)
 }
 
 function injectBlockMapSizes(
+  env: Env,
   yml: string,
   release: Release,
   platform: string,
@@ -253,6 +255,18 @@ function injectBlockMapSizes(
     const blockmap = release.assets?.find((a) => a.name === `${file.url}.blockmap`)
     if (blockmap && typeof blockmap.size === 'number') {
       file.blockMapSize = blockmap.size
+      mutated = true
+    }
+  }
+
+  // 把 files[].url 全部换成 GitHub 直链(必须放在上面按相对名匹配 .blockmap 之后)。
+  // 保持相对名时 electron-updater 会拼上本服务 origin，等于让 Worker 再反代一次二进制；
+  // 换成直链后 Worker 只负责发版本信息，下载由客户端直连 GitHub。
+  for (const file of info.files) {
+    if (!file || typeof file.url !== 'string') continue
+    const absolute = absoluteDownloadUrl(env, release, file.url)
+    if (absolute !== file.url) {
+      file.url = absolute
       mutated = true
     }
   }
@@ -310,6 +324,12 @@ async function tryMergeMac(
         : allFiles
   const finalFiles = filtered.length > 0 ? filtered : allFiles
 
+  // 与 injectBlockMapSizes 一致:交付给客户端的 url 一律为 GitHub 直链,
+  // 否则 electron-updater 会拼回本服务 origin 走 Worker 代理。
+  for (const f of finalFiles) {
+    if (f && typeof f.url === 'string') f.url = absoluteDownloadUrl(env, release, f.url)
+  }
+
   const base = finalFiles[0]
   const merged: UpdateInfo = {
     ...parsed[0],
@@ -351,49 +371,6 @@ interface AssetMetadata {
 interface MultipartPart {
   range: NormalizedRange
   data: Uint8Array
-}
-
-interface UpstreamSegment {
-  start: number
-  end: number
-  ranges: NormalizedRange[]
-}
-
-function isMultiRangeRequest(request: Request): boolean {
-  const range = request.headers.get('Range')
-  return Boolean(range?.includes(','))
-}
-
-function parseRangeHeader(rangeHeader: string, size: number): NormalizedRange[] | null {
-  const match = rangeHeader.match(/^bytes=(.+)$/i)
-  if (!match) return null
-
-  const ranges: NormalizedRange[] = []
-  for (const rawPart of match[1].split(',')) {
-    const part = rawPart.trim()
-    if (!part) return null
-
-    const [startPart, endPart] = part.split('-', 2)
-    let start: number
-    let end: number
-
-    if (!startPart) {
-      const suffixLength = Number.parseInt(endPart, 10)
-      if (!Number.isFinite(suffixLength) || suffixLength <= 0) return null
-      start = Math.max(size - suffixLength, 0)
-      end = size - 1
-    } else {
-      start = Number.parseInt(startPart, 10)
-      if (!Number.isFinite(start) || start < 0) return null
-      end = endPart ? Number.parseInt(endPart, 10) : size - 1
-      if (!Number.isFinite(end)) return null
-    }
-
-    if (start >= size || end < start) return null
-    ranges.push({ start, end: Math.min(end, size - 1) })
-  }
-
-  return ranges
 }
 
 function buildMultipartHeader(
@@ -443,221 +420,11 @@ export function buildMultipartCompatibleChunks(
   return chunks
 }
 
-async function fetchUpstream(
-  url: string,
-  method: 'GET' | 'HEAD',
-  headers: Headers
-): Promise<Response> {
-  let target = url
-  let upstream = await fetch(target, {
-    method,
-    headers,
-    redirect: 'manual'
-  })
-
-  if (upstream.status >= 300 && upstream.status < 400) {
-    const location = upstream.headers.get('location')
-    if (location) {
-      target = location
-      upstream = await fetch(target, {
-        method,
-        headers,
-        redirect: 'follow'
-      })
-    }
-  }
-
-  return upstream
-}
-
-async function getAssetMetadata(url: string): Promise<AssetMetadata> {
-  const headers = new Headers({ 'User-Agent': 'CeruMusic-UpdateServer' })
-  let upstream = await fetchUpstream(url, 'HEAD', headers)
-
-  const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
-  const contentLength = upstream.headers.get('content-length')
-  if (upstream.ok && contentLength) {
-    return {
-      size: Number.parseInt(contentLength, 10),
-      contentType,
-      etag: upstream.headers.get('etag'),
-      lastModified: upstream.headers.get('last-modified')
-    }
-  }
-
-  headers.set('Range', 'bytes=0-0')
-  upstream = await fetchUpstream(url, 'GET', headers)
-  const contentRange = upstream.headers.get('content-range') || ''
-  const totalMatch = contentRange.match(/\/(\d+)$/)
-  if (upstream.status !== 206 || !totalMatch) {
-    throw new Error(`cannot determine asset size, upstream status ${upstream.status}`)
-  }
-
-  return {
-    size: Number.parseInt(totalMatch[1], 10),
-    contentType: upstream.headers.get('content-type') || contentType,
-    etag: upstream.headers.get('etag'),
-    lastModified: upstream.headers.get('last-modified')
-  }
-}
-
-function buildAssetResponseHeaders(upstream: Response): Headers {
-  const respHeaders = new Headers()
-  const passThrough = [
-    'content-type',
-    'content-length',
-    'content-range',
-    'accept-ranges',
-    'etag',
-    'last-modified'
-  ]
-  for (const h of passThrough) {
-    const v = upstream.headers.get(h)
-    if (v) respHeaders.set(h, v)
-  }
-  if (!respHeaders.has('accept-ranges')) respHeaders.set('Accept-Ranges', 'bytes')
-  respHeaders.set('Cache-Control', 'public, max-age=86400, s-maxage=86400')
-  return respHeaders
-}
-
-function rangeNotSatisfiable(size: number): Response {
-  return new Response('range not satisfiable', {
-    status: 416,
-    headers: {
-      'Content-Range': `bytes */${size}`,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=86400, s-maxage=86400'
-    }
-  })
-}
-
-function mergeRangesForUpstream(ranges: NormalizedRange[]): UpstreamSegment[] {
-  if (ranges.length === 0) return []
-
-  const sorted = [...ranges].sort((a, b) => a.start - b.start)
-  const maxGap = 64 * 1024
-  const maxSegmentSize = 4 * 1024 * 1024
-  const segments: UpstreamSegment[] = []
-
-  let current: UpstreamSegment = {
-    start: sorted[0].start,
-    end: sorted[0].end,
-    ranges: [sorted[0]]
-  }
-
-  for (let i = 1; i < sorted.length; i++) {
-    const range = sorted[i]
-    const nextEnd = Math.max(current.end, range.end)
-    const gap = range.start - current.end - 1
-    const nextSize = nextEnd - current.start + 1
-
-    if (gap <= maxGap && nextSize <= maxSegmentSize) {
-      current.end = nextEnd
-      current.ranges.push(range)
-      continue
-    }
-
-    segments.push(current)
-    current = {
-      start: range.start,
-      end: range.end,
-      ranges: [range]
-    }
-  }
-
-  segments.push(current)
-  return segments
-}
-
-async function handleMultiRangeRequest(url: string, request: Request): Promise<Response> {
-  const rangeHeader = request.headers.get('Range')
-  if (!rangeHeader) return new Response('missing range header', { status: 400 })
-
-  const metadata = await getAssetMetadata(url)
-  const ranges = parseRangeHeader(rangeHeader, metadata.size)
-  if (!ranges?.length) return rangeNotSatisfiable(metadata.size)
-
-  const boundary = `ceru-${crypto.randomUUID()}`
-
-  if (request.method === 'HEAD') {
-    const headHeaders = new Headers({
-      'Content-Type': `multipart/byteranges; boundary=${boundary}`,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=86400, s-maxage=86400'
-    })
-    if (metadata.etag) headHeaders.set('ETag', metadata.etag)
-    if (metadata.lastModified) headHeaders.set('Last-Modified', metadata.lastModified)
-    return new Response(null, { status: 206, headers: headHeaders })
-  }
-
-  const baseHeaders = new Headers({ 'User-Agent': 'CeruMusic-UpdateServer' })
-  for (const h of ['If-Range', 'If-Modified-Since', 'If-None-Match']) {
-    const v = request.headers.get(h)
-    if (v) baseHeaders.set(h, v)
-  }
-
-  const parts: MultipartPart[] = []
-  const segments = mergeRangesForUpstream(ranges)
-  for (const segment of segments) {
-    const partHeaders = new Headers(baseHeaders)
-    partHeaders.set('Range', `bytes=${segment.start}-${segment.end}`)
-    const upstream = await fetchUpstream(url, 'GET', partHeaders)
-    if (upstream.status !== 206) {
-      throw new Error(`upstream range fetch failed with status ${upstream.status}`)
-    }
-    const data = new Uint8Array(await upstream.arrayBuffer())
-    const expectedSegmentLength = segment.end - segment.start + 1
-    if (data.byteLength !== expectedSegmentLength) {
-      throw new Error(
-        `segment size mismatch, expected ${expectedSegmentLength}, got ${data.byteLength}`
-      )
-    }
-
-    for (const range of segment.ranges) {
-      const offsetStart = range.start - segment.start
-      const offsetEnd = range.end - segment.start + 1
-      const partData = data.slice(offsetStart, offsetEnd)
-      const expectedLength = range.end - range.start + 1
-      if (partData.byteLength !== expectedLength) {
-        throw new Error(
-          `range size mismatch, expected ${expectedLength}, got ${partData.byteLength}`
-        )
-      }
-      parts.push({ range, data: partData })
-    }
-  }
-
-  const chunks = buildMultipartCompatibleChunks(boundary, metadata, parts)
-  const responseHeaders = new Headers({
-    'Content-Type': `multipart/byteranges; boundary=${boundary}`,
-    'Content-Length': String(calculateMultipartContentLength(boundary, metadata, parts)),
-    'Accept-Ranges': 'bytes',
-    'Cache-Control': 'public, max-age=86400, s-maxage=86400'
-  })
-  if (metadata.etag) responseHeaders.set('ETag', metadata.etag)
-  if (metadata.lastModified) responseHeaders.set('Last-Modified', metadata.lastModified)
-
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      try {
-        for (const chunk of chunks) {
-          controller.enqueue(chunk)
-        }
-        controller.close()
-      } catch (err) {
-        controller.error(err)
-      }
-    }
-  })
-
-  return new Response(body, { status: 206, headers: responseHeaders })
-}
 
 async function handleAsset(
   env: Env,
   _ctx: ExecutionContext,
-  file: string,
-  request: Request
+  file: string
 ): Promise<Response> {
   if (!file || file.includes('/') || file.includes('..') || file.startsWith('.')) {
     return new Response('bad request', { status: 400 })
@@ -688,56 +455,15 @@ async function handleAsset(
 
   const url = downloadUrl(env, release, file)
 
-  if (isMultiRangeRequest(request)) {
-    try {
-      return await handleMultiRangeRequest(url, request)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      return new Response(`upstream multi-range fetch failed: ${msg}`, { status: 502 })
+  // 只做「发直链」:302 到 GitHub Release 资产。不再由 Worker 反代二进制,
+  // 客户端直连 GitHub 下载,Worker 不承担流量与稳定性风险。
+  // 用 302(临时) 而非 301:资产地址随 tag 变化,避免客户端长期缓存错误跳转。
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: url,
+      'Cache-Control': 'no-store'
     }
-  }
-
-  // 反向代理: Worker 拉 GitHub → 流式吐给客户端,绕开国内访问 github 困难的问题。
-  // 仅转发跟范围下载/缓存校验相关的 header,避免泄漏客户端凭据。
-  const upstreamHeaders = new Headers()
-  for (const h of ['Range', 'If-Range', 'If-Modified-Since', 'If-None-Match']) {
-    const v = request.headers.get(h)
-    if (v) upstreamHeaders.set(h, v)
-  }
-  upstreamHeaders.set('User-Agent', 'CeruMusic-UpdateServer')
-
-  let upstream: Response
-  try {
-    let target = url
-    let first = await fetch(target, {
-      method: request.method === 'HEAD' ? 'HEAD' : 'GET',
-      headers: upstreamHeaders,
-      redirect: 'manual'
-    })
-    if (first.status >= 300 && first.status < 400) {
-      const loc = first.headers.get('location')
-      if (loc) {
-        target = loc
-        // 第二跳 (实际 CDN) 才打开 CF 缓存,让边缘节点缓存最终的二进制.
-        first = await fetch(target, {
-          method: request.method === 'HEAD' ? 'HEAD' : 'GET',
-          headers: upstreamHeaders,
-          redirect: 'follow'
-        })
-      }
-    }
-    upstream = first
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return new Response(`upstream fetch failed: ${msg}`, { status: 502 })
-  }
-
-  // 仅透传跟内容/缓存相关的 header,过滤掉上游的 Set-Cookie 等
-  const respHeaders = buildAssetResponseHeaders(upstream)
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: respHeaders
   })
 }
 

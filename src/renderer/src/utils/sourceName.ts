@@ -8,7 +8,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   git: 'GitCode',
   local: '本地',
   share: '分享',
-  all: '聚合'
+  all: '聚合',
+  mix: '聚合'
 }
 
 export const sourceLabel = (s?: string | null): string => {

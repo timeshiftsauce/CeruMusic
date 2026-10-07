@@ -95,7 +95,7 @@ _开发构建界面示意；仅展示演示插件声明。_
 | `account`                        | account.profile                                      | 基本账号资料                                                              |
 | `libraryRead / libraryManage`    | library.read / library.write                         | 分别用于读取、导入或修改歌单                                              |
 | `guestPlugins`                   | guests.manage、guests.run                            | 安装与运行子插件                                                          |
-| `libraryDelete`                  | library.delete                                       | SDK 声明，桌面无通用删除接口                                              |
+| `libraryDelete`                  | library.delete                                       | 从歌单移除歌曲或清空歌单；不会创建或删除歌单本体                          |
 | `playbackRead / playbackControl` | player.read / player.control、playback.fallback.hold | 播放器状态与控制服务已接入；仍需检查能力和资源归属                        |
 | 其他组                           | 文件、下载、剪贴板、设备、AI、后台任务等             | 查阅[逐方法支持表](./host-services)和[完整权限目录](./reference#资源目录) |
 

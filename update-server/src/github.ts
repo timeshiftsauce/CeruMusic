@@ -121,3 +121,18 @@ export function downloadUrl(env: Env, release: Release, filename: string): strin
   const name = encodeURIComponent(filename)
   return `https://github.com/${getRepo(env)}/releases/download/${tag}/${name}`
 }
+
+/**
+ * 把 latest.yml 里的相对文件名改写成 GitHub 直链。
+ *
+ * 背景:electron-updater 拿到相对 url 会拼上本服务 origin，等于又让 Worker 反代一次
+ * 二进制。Worker 只应负责「查版本 + 发直链」，下载交给客户端直连 GitHub。
+ *
+ * 已是绝对地址(含 `http(s)://` 或协议相对 `//`)时原样返回，避免二次拼接。
+ */
+export function absoluteDownloadUrl(env: Env, release: Release, url: string): string {
+  if (!url) return url
+  if (/^(https?:)?\/\//i.test(url)) return url
+  const name = url.split('/').pop() || url
+  return downloadUrl(env, release, name)
+}

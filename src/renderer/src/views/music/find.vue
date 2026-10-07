@@ -446,7 +446,7 @@ onDeactivated(() => {
             <PlaylistGrid
               v-else-if="recommendPlaylists.length"
               :items="recommendPlaylists"
-              :show-source="userSource.source === 'all'"
+              :show-source="userSource.source === 'mix'"
               @open="(index) => playPlaylist(recommendPlaylists[index])"
             />
 

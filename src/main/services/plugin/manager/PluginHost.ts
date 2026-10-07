@@ -57,12 +57,30 @@ const canonical = (value: any): string =>
     : JSON.stringify(value)
 const fingerprint = (p: Permission) => p.key + ':' + p.name + ':' + canonical(p.scope ?? {})
 
+// 等 SDK 0.3.13 发布后换成从 SDK 导入的 assertRemovableTracks。
+// 插件传入的 items 在到达渲染层前必须先校验，渲染层不承担这个责任。
+const assertRemovableTracks = (value: unknown): void => {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 1000)
+    throw new Error('无效的待移除歌曲列表')
+  for (const item of value) {
+    const ref = (item as { ref?: { kind?: string; id?: unknown } } | null)?.ref
+    if (!ref || ref.kind !== 'track' || typeof ref.id !== 'string' || !ref.id)
+      throw new Error('歌单只接受标准歌曲')
+  }
+}
+
 const SERVICE_CAPABILITIES = {
   account: { methods: ['getSession', 'getProfile', 'openLogin'], permissionGroups: ['account'] },
   app: { methods: ['getInfo', 'openSettings', 'openExternal'], permissionGroups: ['external'] },
   library: {
-    methods: ['playlists.list', 'playlists.getTracks', 'playlists.import'],
-    permissionGroups: ['libraryRead', 'libraryManage']
+    methods: [
+      'playlists.list',
+      'playlists.getTracks',
+      'playlists.import',
+      'playlists.removeTracks',
+      'playlists.clearPlaylist'
+    ],
+    permissionGroups: ['libraryRead', 'libraryManage', 'libraryDelete']
   },
   player: {
     methods: ['getState', 'play', 'pause', 'next', 'previous', 'seek', 'setVolume', 'setMode'],
@@ -718,6 +736,7 @@ export default class PluginHost {
           'network.socket': '网络连接',
           'library.read': '歌单读取',
           'library.write': '歌单修改',
+          'library.delete': '歌单删除',
           'account.profile': '账号资料',
           'player.read': '播放状态读取',
           'player.control': '播放控制',
@@ -864,14 +883,20 @@ export default class PluginHost {
     if (method === 'storage.get' || method === 'storage.set' || method === 'storage.delete')
       return this.storage!.invoke(method.slice(8) as 'get' | 'set' | 'delete', data.key, data.value)
     if (method.startsWith('library.playlists.')) {
-      await this.authorize(
-        data.permissionKey,
-        method.endsWith('.import') ? 'library.write' : 'library.read'
-      )
+      const libraryCapability = method.endsWith('.import')
+        ? 'library.write'
+        : method.endsWith('.removeTracks') || method.endsWith('.clearPlaylist')
+          ? 'library.delete'
+          : 'library.read'
+      await this.authorize(data.permissionKey, libraryCapability)
       if (method.endsWith('.import')) {
         assertContentPage({ items: data.items })
         if (data.items.some((item: any) => item.ref.kind !== 'track'))
           throw new Error('歌单只接收标准歌曲')
+      }
+      if (method.endsWith('.removeTracks')) {
+        // 批量校验，避免未校验的引用被转发到渲染层。
+        assertRemovableTracks(data.items)
       }
       if (!method.endsWith('.import')) return callPluginUI(this.pluginId!, method, data)
       if (typeof data.requestId !== 'string' || !data.requestId || data.requestId.length > 256)

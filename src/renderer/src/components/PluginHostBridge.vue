@@ -66,6 +66,7 @@ import { useDlnaStore } from '@renderer/store/dlna'
 import songListAPI from '@renderer/api/songList'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
+import { songKey } from '@common/musicItem'
 import { toAppTrack, toPluginTrack } from '@common/pluginMusic'
 import {
   pluginImportRequest,
@@ -156,6 +157,19 @@ async function choosePlaylist(suggestedName?: string) {
   if (selected.id === 'new')
     selected.id = unwrap(await songListAPI.create(selected.name, '', 'local')).id
   return { id: selected.id, location: 'local' }
+}
+/**
+ * 云歌单删除会为每个待匹配项调用 selectSong，未命中的行不会计入 removed。
+ * 删除后不再单独记录 updatedAt：libraryRevision 已负责通知界面刷新。
+ */
+async function removeCloudTracks(cloudId: string, songs: any[]): Promise<number> {
+  if (!songs.length) return 0
+  const removed = songs.filter((song) => !!song?.songmid).length
+  await cloudSongListAPI.removeSongsFromList(
+    cloudId,
+    songs.map((song) => songKey(song))
+  )
+  return removed
 }
 async function handle(request: any, signal?: AbortSignal): Promise<any> {
   const { method, data: payload = {}, pluginId } = request
@@ -341,6 +355,47 @@ async function handle(request: any, signal?: AbortSignal): Promise<any> {
       added: typeof added === 'number' ? added : (added?.added ?? 0),
       skipped: added?.skipped ?? 0
     }
+  }
+  if (method === 'library.playlists.removeTracks') {
+    const target = payload.target
+    const items = (payload.items ?? []) as any[]
+    if (target.location === 'cloud') {
+      if (!auth.isAuthenticated) throw new Error('请先登录澜音')
+      // 云歌单的删除接口按 songKey 选择行，这里复用插件轨道的同一套映射。
+      const songs = mapSongsToCloud(items.map(toAppTrack))
+      const removed = await removeCloudTracks(target.id, songs)
+      if (removed > 0) libraryRevision.value++
+      return { removed, notFound: items.length - removed }
+    }
+    const songs = items.map(toAppTrack)
+    const songmids = songs.map((song: any) => songKey(song))
+    const result = unwrap(await songListAPI.removeSongs(target.id, songmids)) as
+      | { removed?: number }
+      | number
+      | undefined
+    const removed =
+      typeof result === 'number'
+        ? Math.max(0, Math.min(result, items.length))
+        : typeof result?.removed === 'number'
+          ? Math.max(0, Math.min(result.removed, items.length))
+          : 0
+    libraryRevision.value++
+    return { removed, notFound: items.length - removed }
+  }
+  if (method === 'library.playlists.clearPlaylist') {
+    const target = payload.target
+    if (target.location === 'cloud') {
+      if (!auth.isAuthenticated) throw new Error('请先登录澜音')
+      const existing = await cloudSongListAPI.getSongListDetail(target.id)
+      if (existing.list.length) {
+        const removed = await removeCloudTracks(target.id, existing.list)
+        if (removed > 0) libraryRevision.value++
+      }
+      return null
+    }
+    unwrap(await songListAPI.clearSongs(target.id))
+    libraryRevision.value++
+    return null
   }
   if (method === 'ui.progress.create') {
     const id = crypto.randomUUID()

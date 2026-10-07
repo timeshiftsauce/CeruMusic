@@ -116,12 +116,14 @@ export interface CommentResponse {
 const METADATA_SLOW_MS = 400
 
 /**
- * 切歌时等待歌词的上限。
+ * 切歌时「兜底等待」歌词的上限 —— 超时只是不再阻塞切歌，**不再丢弃结果**。
  *
- * 封面与歌词都要就绪后才切歌（避免中间态），但歌词来自插件接口、可能很慢甚至挂住。
- * 超过这个时间就放弃等待、先切过去 —— 宁可不显示歌词，也不能让用户干等。
+ * 封面与歌词都要就绪后才切歌（避免中间态），但不该让外链歌词拖住切歌节奏：
+ * 插件侧取歌词要串两次网络（先试 TTML 库，404/超时后再回退平台接口），
+ * 实测无缓存歌曲常见 10s+（`scripts` 里的插件日志可见 TTML 段单独就 10s）。
+ * 这里只决定「什么时候先切过去」，真正的结果到达后由下方回填补齐。
  */
-const LYRICS_WAIT_TIMEOUT_MS = 3000
+const LYRICS_WAIT_TIMEOUT_MS = 8000
 
 async function getBlobUrlFromUrl(
   url: string,
@@ -391,6 +393,76 @@ export const useGlobalPlayStatusStore = defineStore(
       }
     }
 
+    /**
+     * 只补歌词，不动封面/颜色/其它元信息。
+     *
+     * 用于「歌曲已加载但歌词缺失」的场景：`prepareSong` 的歌词等待超时后会先切歌
+     * （`crlyric` 为 undefined），此时重跑整条 `prepareSong` 代价过高，而且第二次
+     * 请求的空结果还会覆盖掉迟到的回填。这里只做一次歌词请求，命中缓存即可返回。
+     */
+    async function reloadLyricsOnly(song: SongList) {
+      const key = keyOf(song)
+      const clean = JSON.parse(JSON.stringify(toRaw(song))) as SongList
+      try {
+        if (clean.source === 'local') {
+          const metadata = await readLocalMusicMetadata(String(clean.songmid))
+          const parsed = await window.api.music.requestSdk('parseLyrics', {
+            source: 'local',
+            text: metadata?.lrc || '',
+            track: {
+              pluginId: 'local.library',
+              providerId: 'local',
+              kind: 'track',
+              id: String(clean.songmid)
+            }
+          })
+          if (parsed?.error) return
+          // 期间用户可能已切走或已被别的路径填上，过期结果直接丢弃
+          if (key !== keyOf(player.songInfo as SongList) || player.lyrics.crlyric) return
+          if (parsed) {
+            player.lyrics.crlyric = playSettingStore.getIsGrepLyricInfo
+              ? filterLyricInfo(parsed, playSettingStore.getStrictGrep)
+              : parsed
+            player.lyrics.lines = sanitizeLyricLines(toPlayerLyrics(parsed))
+          }
+          return
+        }
+        const result = await window.api.music.requestSdk('getLyric', {
+          source: clean.source,
+          songInfo: clean,
+          grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
+          useStrictMode: playSettingStore.getStrictGrep
+        })
+        if (key !== keyOf(player.songInfo as SongList) || player.lyrics.crlyric) return
+        backfillLyrics(song, result?.crlyric)
+      } catch (error) {
+        if (clean?.source === 'local') reportLocalLyricError(String(song.songmid), error)
+      }
+    }
+
+    /**
+     * 歌词迟到时的回填。
+     *
+     * `prepareSong` 等歌词有超时上限（`LYRICS_WAIT_TIMEOUT_MS`），但插件取歌词
+     * 本身要串行两次网络（先探 TTML 库、再回退平台接口），实测常超过上限。
+     * 超时只该让切歌先过去，不该让结果作废 —— 否则本次播放就永远是空白歌词，
+     * 用户切走再切回来才重新拉取（那时结果已进缓存，所以「又有了」）。
+     *
+     * 判断刻意与 `commitPrepared` / `updatePlayerInfo` 用同一套 songKey，
+     * 避免把上一首的歌词贴到新歌上。
+     */
+    function backfillLyrics(song: SongList, crlyric: unknown) {
+      if (!crlyric) return
+      // 已经通过正常路径拿到了歌词，无需回填
+      if (player.lyrics.crlyric) return
+      // 用户已经切走 —— 迟到的结果属于上一首
+      if (keyOf(song) !== keyOf(player.songInfo as SongList)) return
+      const lines = sanitizeLyricLines(toPlayerLyrics(crlyric as any))
+      if (!lines.length) return
+      player.lyrics.crlyric = crlyric as any
+      player.lyrics.lines = lines
+    }
+
     async function prepareSong(
       song: SongList,
       signal?: AbortSignal,
@@ -509,6 +581,14 @@ export const useGlobalPlayStatusStore = defineStore(
             if (cost > METADATA_SLOW_MS) {
               console.warn(`[切歌耗时] ${clean.name} 歌词=${cost.toFixed(0)}ms（偏慢）`)
             }
+            // 迟到的歌词不能白白丢掉：超时只是先切歌，结果到了就补上。
+            //
+            // 这里**不能**判断 signal.aborted —— 该 signal 由 playSong 的
+            // metadataController 持有，一旦音频就绪后发生重入（play() 会再次触发
+            // 加载流程）它就被 abort 了。但 abort 只代表「这次请求不再阻塞切歌」，
+            // 不代表结果作废：歌词已经成功取回，此时用户往往还停在这首歌上。
+            // 是否该写入交给 backfillLyrics 用 songKey 判断（它只认「当前歌是否就是这首」）。
+            void backfillLyrics(clean, r)
             return r
           })
           .catch((error) => {
@@ -566,15 +646,28 @@ export const useGlobalPlayStatusStore = defineStore(
 
     function commitPrepared(prepared: Awaited<ReturnType<typeof prepareSong>>) {
       metadataRevision++
-      preparedSongKey = songKey(prepared.song)
+      const nextKey = songKey(prepared.song)
+      // 是否换歌了 —— 必须在覆盖 preparedSongKey / player.songInfo 之前判断
+      const songChanged = preparedSongKey !== nextKey
+      preparedSongKey = nextKey
       if (currentBlobUrl && currentBlobUrl !== prepared.cover) URL.revokeObjectURL(currentBlobUrl)
       currentBlobUrl = prepared.cover.startsWith('blob:') ? prepared.cover : null
       player.songInfo = prepared.song
       player.songId = String(prepared.song.songmid)
       player.cover = prepared.cover
-      player.lyrics.crlyric = prepared.crlyric
-      player.lyrics.lines = prepared.lines
-      player.lyrics.raw = {}
+      // 只在真有歌词时写入。超时提交会带来 crlyric === undefined，
+      // 而此时可能已经有「迟到的回填」把歌词补上了（backfillLyrics），
+      // 无条件赋值会把已经显示出来的歌词抹掉，让用户看到歌词闪一下又没了。
+      if (prepared.crlyric) {
+        player.lyrics.crlyric = prepared.crlyric
+        player.lyrics.lines = prepared.lines
+        player.lyrics.raw = {}
+      } else if (songChanged) {
+        // 换了首歌且这首歌没拿到歌词 —— 清空上一首的，避免串词
+        player.lyrics.crlyric = undefined
+        player.lyrics.lines = []
+        player.lyrics.raw = {}
+      }
       player.isLoading = false
       applyCoverColors(prepared.colors)
       updateCommon(prepared.song)
@@ -623,7 +716,13 @@ export const useGlobalPlayStatusStore = defineStore(
 
     async function updatePlayerInfo(song: SongList, force = false) {
       // Hydrating songInfo is not the same as loading its artwork and lyrics.
-      if (!force && preparedSongKey === keyOf(song)) return
+      if (!force && preparedSongKey === keyOf(song)) {
+        // 歌曲已经加载过、只差歌词（超时提交的典型状态）：只补歌词，
+        // 不重跑封面/颜色/插件链路 —— 重复的 tracks.lyrics 请求既慢，
+        // 又会用它的空结果覆盖掉迟到的回填（backfillLyrics）。
+        if (!player.lyrics.crlyric) void reloadLyricsOnly(song)
+        return
+      }
       const revision = ++metadataRevision
       player.isLoading = true
       const prepared = await prepareSong(song, undefined, (cover, colors) => {

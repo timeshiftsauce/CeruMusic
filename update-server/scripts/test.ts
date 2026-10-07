@@ -58,11 +58,19 @@ test('GET /latest.yml returns YAML for Windows', async () => {
   assert.match(body, /version:/)
   assert.match(body, /files:/)
   assert.match(body, /blockMapSize:\s*\d+/, 'blockMapSize should be injected by worker')
-  const x64Index = body.indexOf('ceru-music-1.11.1-win-x64-setup.exe')
-  const ia32Index = body.indexOf('ceru-music-1.11.1-win-ia32-setup.exe')
-  if (x64Index !== -1 && ia32Index !== -1) {
-    assert.ok(x64Index < ia32Index, 'x64 entry should appear before ia32 entry')
-  }
+  // 关键:yml 里的 url/path 必须是 GitHub 直链,客户端才不会回头找 Worker 反代。
+  assert.match(
+    body,
+    /url:\s*https:\/\/github\.com\/.+\/releases\/download\/.+/,
+    'files[].url should be a GitHub direct link'
+  )
+  assert.match(
+    body,
+    /path:\s*https:\/\/github\.com\/.+\/releases\/download\/.+/,
+    'top-level path should be a GitHub direct link'
+  )
+  // 不应残留相对文件名(以 .exe 结尾但不是 URL 的裸值)
+  assert.doesNotMatch(body, /url:\s*ceru-music-[\w.-]+\.exe\s*$/m, 'url should not be relative')
   console.log('  size:', body.length, 'bytes')
 })
 
@@ -87,37 +95,29 @@ test('GET /latest-linux.yml returns YAML', async () => {
   assert.equal(res.status, 200)
 })
 
-test('GET /<file>.dmg streams from GitHub (no redirect)', async () => {
-  // 用 Range 头只拉前 1KB,验证代理能透传 Range
-  const res = await get('/ceru-music-1.10.1-x64.dmg', {
-    redirect: 'manual',
-    headers: { Range: 'bytes=0-1023' }
-  })
-  // wrangler dev 本地模拟器对 objects.githubusercontent.com 多级跳转有时会 internal error;
-  // 这种情况只验证不出现 redirect 就行,真实部署后由生产环境验证.
-  if (res.status === 502) {
-    const body = await res.text()
-    console.log('  [skipped] dev runtime upstream issue:', body.slice(0, 100))
-    return
-  }
-  assert.ok(res.status === 206 || res.status === 200, `expected 206/200, got ${res.status}`)
-  assert.ok(!res.headers.get('location'), 'should not redirect')
-  const buf = await res.arrayBuffer()
-  assert.ok(buf.byteLength > 0 && buf.byteLength <= 2048, `byteLength=${buf.byteLength}`)
-  console.log('  status:', res.status, 'bytes:', buf.byteLength)
+test('GET /<file>.dmg returns 302 to GitHub (no proxying)', async () => {
+  // 资产请求不再由 Worker 反代，而是 302 到 GitHub Release 直链。
+  const res = await get('/ceru-music-1.10.1-x64.dmg', { redirect: 'manual' })
+  assert.equal(res.status, 302, `expected 302, got ${res.status}`)
+  const location = res.headers.get('location') || ''
+  assert.match(
+    location,
+    /^https:\/\/github\.com\/.+\/releases\/download\/.+\/ceru-music-1\.10\.1-x64\.dmg$/,
+    `unexpected location: ${location}`
+  )
+  console.log('  location:', location)
 })
 
-test('GET /<file>.blockmap streams (no redirect)', async () => {
-  const res = await get('/ceru-music-1.10.1-x64.dmg.blockmap', {
-    redirect: 'manual',
-    headers: { Range: 'bytes=0-127' }
-  })
-  if (res.status === 502) {
-    console.log('  [skipped] dev runtime upstream issue')
-    return
-  }
-  assert.ok(res.status === 206 || res.status === 200, `expected 206/200, got ${res.status}`)
-  assert.ok(!res.headers.get('location'))
+test('GET /<file>.blockmap returns 302 to GitHub', async () => {
+  const res = await get('/ceru-music-1.10.1-x64.dmg.blockmap', { redirect: 'manual' })
+  assert.equal(res.status, 302, `expected 302, got ${res.status}`)
+  const location = res.headers.get('location') || ''
+  assert.match(
+    location,
+    /^https:\/\/github\.com\/.+\/releases\/download\/.+\/ceru-music-1\.10\.1-x64\.dmg\.blockmap$/,
+    `unexpected location: ${location}`
+  )
+  console.log('  location:', location)
 })
 
 test('multipart chunks are compatible with electron-updater DataSplitter', async () => {

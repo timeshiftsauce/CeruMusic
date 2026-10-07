@@ -50,7 +50,7 @@ const sourceicon = {
   tx: 'tx',
   kw: 'kw',
   git: 'git',
-  all: 'all'
+  mix: 'mix'
 }
 const source = ref('kugouyinle')
 const currentProviderIcon = computed(
@@ -175,7 +175,7 @@ const selectSource = (sourceKey: string) => {
   LocalUserDetail.userInfo.selectSources = sourceKey
 
   // 聚合模式不需要写入质量映射，质量由单曲自身 source 决定
-  if (sourceKey !== 'all') {
+  if (sourceKey !== 'mix') {
     const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
     if (!LocalUserDetail.userInfo.sourceQualityMap) {
       LocalUserDetail.userInfo.sourceQualityMap = {}
@@ -413,7 +413,7 @@ function checkGuide() {
                     class="icon provider-logo"
                     alt=""
                   />
-                  <span v-else-if="source === 'all'" class="source-fallback">聚</span>
+                  <span v-else-if="source === 'mix'" class="source-fallback">聚</span>
                   <span
                     v-else-if="!Object.values(sourceicon).includes(source)"
                     class="source-fallback"
@@ -444,7 +444,7 @@ function checkGuide() {
                           class="source-icon provider-logo"
                           alt=""
                         />
-                        <span v-else-if="item.key === 'all'" class="source-fallback">聚</span>
+                        <span v-else-if="item.key === 'mix'" class="source-fallback">聚</span>
                         <span v-else-if="!sourceicon[item.key]" class="source-fallback">{{
                           item.name.slice(0, 1)
                         }}</span>

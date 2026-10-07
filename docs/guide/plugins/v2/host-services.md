@@ -49,7 +49,7 @@ if (!service.available) {
 | capabilities.list / get                                                       | 返回每项服务的精确 `methods`；未知服务为 unsupported                                     | 无业务权限                                                  |
 | account.getSession / getProfile / openLogin                                   | 返回登录状态和插件作用域账号 ID，或打开软件登录流程                                      | account.profile；不返回 token、邮箱、电话                   |
 | app.getInfo / openSettings / openExternal                                     | 返回版本、平台、语言和主题；打开设置或 HTTP(S) 外链                                      | openExternal 需要 external.open                             |
-| library.playlists.list / getTracks / import                                   | 读写本地或云端歌单，详见[歌单](./playlist-import)                                        | library.read / library.write；云端需要登录                  |
+| library.playlists.list / getTracks / import / removeTracks / clearPlaylist           | 读写本地或云端歌单，详见[歌单](./playlist-import)                                        | library.read / library.write / library.delete；云端需要登录  |
 | player.getState / play / pause / next / previous / seek / setVolume / setMode | 读取和控制当前播放器；指定歌曲播放时，歌曲必须已在队列中                                 | player.read / player.control                                |
 | queue.get / append / replace / remove / reorder                               | 返回带 revision 的完整队列；排序必须提交当前全部歌曲和匹配的 revision                    | player.read / player.control；一起听中拒绝修改              |
 | favorites.contains / add / remove                                             | 操作本地“我喜欢”歌单；add 的歌曲必须能从当前队列解析                                     | library.read / library.write                                |

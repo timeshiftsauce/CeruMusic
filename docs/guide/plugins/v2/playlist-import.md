@@ -97,11 +97,13 @@ const tracks = await ctx.library.playlists.getTracks({
 
 调用前应检查 `items.length`；示例仅展示签名。清单需要 `{ key: 'read-library', name: 'library.read', reason: '选择导入目标' }`。
 
-| 方法                  | 输入                                                                  | 返回                    |
-| --------------------- | --------------------------------------------------------------------- | ----------------------- |
-| `playlists.list`      | `location?, cursor?, permissionKey, operation`                        | `Page<LibraryPlaylist>` |
-| `playlists.getTracks` | `target, cursor?, permissionKey, operation`                           | `Page<ContentEntity>`   |
-| `playlists.import`    | `items, requestId, permissionKey, operation, target?, suggestedName?` | PlaylistImportResult    |
+| 方法                    | 输入                                                                  | 返回                      |
+| ----------------------- | --------------------------------------------------------------------- | ------------------------- |
+| `playlists.list`        | `location?, cursor?, permissionKey, operation`                        | `Page<LibraryPlaylist>`   |
+| `playlists.getTracks`   | `target, cursor?, permissionKey, operation`                           | `Page<ContentEntity>`     |
+| `playlists.import`      | `items, requestId, permissionKey, operation, target?, suggestedName?` | `PlaylistImportResult`    |
+| `playlists.removeTracks` | `target, items, permissionKey, operation`                            | `{ removed, notFound }`   |
+| `playlists.clearPlaylist` | `target, permissionKey, operation`                                  | `void`                    |
 
 目标 `PlaylistReference` 为 `{ id: string, location: 'local' | 'cloud' }`。LibraryPlaylist 包含 ref、name、writable，以及可选 description、trackCount。
 
@@ -127,3 +129,27 @@ if (!result.cancelled) {
 requestId 为非空字符串，最长 256 个代码单元。同一批重试使用同一 ID，不同批次使用新 ID。桌面在插件运行期间缓存最近最多 **200 项**导入结果，键包含 requestId 与目标；它不是永久的跨重启事务凭证。
 
 结果 `{ cancelled, target?, added, skipped }` 表达实际处理数量；授权拒绝、账号未登录、网络失败或非法歌曲会拒绝 Promise。工作台直接调用 library.playlists.\* 会明确报未接入，不能用它验证真实持久化成功。
+
+## 移除与清空
+
+```ts
+const removal = await ctx.library.playlists.removeTracks({
+  target: lists.items[0].ref,
+  items: removedTracks,
+  permissionKey: 'delete-library',
+  operation
+})
+ctx.log.info('删除完成', removal) // { removed, notFound }
+
+await ctx.library.playlists.clearPlaylist({
+  target: lists.items[0].ref,
+  permissionKey: 'delete-library',
+  operation
+})
+```
+
+`items` 只接受 `ref.kind === 'track'` 的内容实体，上限 1000 项；传入其他类型或空数组会在到达宿主前就抛错。`removeTracks` 不提供 `target` 选择器：删除永远只作用于调用方明确给出的歌单，宿主不会弹出歌单选择框。
+
+返回的 `removed + notFound` 恒等于 `items.length`。宿主无法对账这个等式时会拒绝 Promise，因此不要把 `removed: 0` 当作失败——它只表示歌曲本来就不在歌单里，这正是双向同步需要的幂等语义。
+
+两个方法都需要在清单中声明 `library.delete`（权限组 `libraryDelete`）。它们只删除歌单内的歌曲，不会创建、重命名或删除歌单本身；要删除整个歌单需要用户在软件内操作。

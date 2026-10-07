@@ -1084,6 +1084,19 @@ export interface PlaylistImportResult {
     added: number;
     skipped: number;
 }
+export interface PlaylistRemoveRequest {
+    target: PlaylistReference;
+    /** Only `kind: 'track'` entities are accepted. */
+    items: ContentEntity[];
+    permissionKey: string;
+    operation: OperationContext;
+}
+export interface PlaylistRemoveResult {
+    /** Tracks that were actually in the playlist and are now gone. */
+    removed: number;
+    /** Tracks that matched nothing, so the caller can tell a no-op from a failure. */
+    notFound: number;
+}
 export interface PlaylistImporterImplementation {
     /** Resolve a pasted link/ID and return one page. Host owns paging and the import UI. */
     getTracks(request: {
@@ -1113,6 +1126,17 @@ export interface LibraryAPI {
         }): Promise<Page<ContentEntity>>;
         /** Host handles destination selection, auth, deduplication, persistence and cloud sync. */
         import(request: PlaylistImportRequest): Promise<PlaylistImportResult>;
+        /**
+         * Delete tracks from an existing playlist. Requires `library.delete`; never
+         * creates or relocates a playlist. `removed + notFound` equals `items.length`.
+         */
+        removeTracks(request: PlaylistRemoveRequest): Promise<PlaylistRemoveResult>;
+        /** Empty a playlist while keeping the playlist itself. Requires `library.delete`. */
+        clearPlaylist(request: {
+            target: PlaylistReference;
+            permissionKey: string;
+            operation: OperationContext;
+        }): Promise<void>;
     };
 }
 ```
@@ -1701,11 +1725,12 @@ export interface PluginModules {
 ::: details host-library.d.ts
 
 ```ts
-import type { LibraryAPI, LibraryPlaylist, PlaylistImportRequest, PlaylistLocation, PlaylistReference } from './library.js';
+import type { LibraryAPI, LibraryPlaylist, PlaylistImportRequest, PlaylistLocation, PlaylistReference, PlaylistRemoveResult } from './library.js';
 import type { ContentEntity, OperationContext, Page } from './index.js';
+type LibraryCapability = 'library.read' | 'library.write' | 'library.delete';
 /** Bind these functions to existing app services. No database, account or UI is created here. */
 export interface HostLibraryServices {
-    authorize(permissionKey: string, capability: 'library.read' | 'library.write', operation: OperationContext, target?: PlaylistReference): Promise<void>;
+    authorize(permissionKey: string, capability: LibraryCapability, operation: OperationContext, target?: PlaylistReference): Promise<void>;
     chooseTarget(suggestedName: string | undefined, operation: OperationContext): Promise<PlaylistReference | null>;
     list(location: PlaylistLocation | undefined, cursor: string | undefined, operation: OperationContext): Promise<Page<LibraryPlaylist>>;
     getTracks(target: PlaylistReference, cursor: string | undefined, operation: OperationContext): Promise<Page<ContentEntity>>;
@@ -1716,6 +1741,13 @@ export interface HostLibraryServices {
         added: number;
         skipped: number;
     }>;
+    /**
+     * Delete the given tracks from an existing playlist and report how many rows
+     * were actually there. Cloud targets may need a paginated lookup first.
+     */
+    remove(target: PlaylistReference, items: ContentEntity[], operation: OperationContext): Promise<PlaylistRemoveResult>;
+    /** Keep the playlist, drop its tracks. */
+    clear(target: PlaylistReference, operation: OperationContext): Promise<void>;
     /** Notify the existing store/event bus only after persistence succeeds. */
     changed(target: PlaylistReference): void;
 }
@@ -1775,13 +1807,6 @@ declare module '@ceru/encoding' {
 declare module '@ceru/legacy-http' {
   export const createLegacyHttpBridge: typeof import('./legacy-http.js').createLegacyHttpBridge
 }
-```
-
-:::
-
-::: details legacy-http.d.ts
-
-```ts
 import type { OperationContext, PluginContext } from './index.js';
 export interface LegacyOptions {
     method?: string;
@@ -1807,6 +1832,20 @@ export declare function createLegacyHttpBridge(host: PluginContext): {
     ensurePermission: (key: string, _origin: string, operation: OperationContext) => Promise<void>;
     permissionKey: () => string;
 };
+```
+
+:::
+
+::: details validate.d.ts
+
+```ts
+import type { ContentEntity } from './index.js';
+/**
+ * Reject anything that is not a plain track list before a destructive call.
+ * Hosts pass untrusted renderer input here, so this must not depend on the
+ * caller having already validated shapes.
+ */
+export declare function assertRemovableTracks(value: unknown): asserts value is ContentEntity[];
 ```
 
 :::
