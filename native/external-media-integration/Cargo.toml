@@ -51,6 +51,7 @@ objc2-media-player = { version = "0.3", features = [
     "MPNowPlayingInfoCenter",
     "MPRemoteCommand",
     "MPRemoteCommandCenter",
+    "MPRemoteCommandEvent",
     "MPRemoteControlTypes",
 ] }
 block2 = "0.6"

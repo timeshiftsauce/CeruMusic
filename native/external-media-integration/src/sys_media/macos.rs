@@ -14,7 +14,7 @@ use std::{
 use anyhow::Result;
 use block2::RcBlock;
 use objc2::{
-    AnyThread, Message,
+    AnyThread,
     rc::Retained,
     runtime::{AnyObject, ProtocolObject},
 };
@@ -25,7 +25,7 @@ use objc2_media_player::{
     MPMediaItemPropertyArtwork, MPMediaItemPropertyPlaybackDuration, MPMediaItemPropertyTitle,
     MPNowPlayingInfoCenter, MPNowPlayingInfoPropertyElapsedPlaybackTime,
     MPNowPlayingInfoPropertyPlaybackRate, MPNowPlayingPlaybackState, MPRemoteCommandCenter,
-    MPRemoteCommandHandlerStatus,
+    MPRemoteCommandEvent, MPRemoteCommandHandlerStatus,
 };
 use tracing::{error, trace};
 
@@ -84,21 +84,25 @@ impl MacosImpl {
         event_type: SystemMediaEventType,
     ) {
         let handler = self.event_handler.clone();
-        let block = RcBlock::new(move |_event: NonNull<AnyObject>| -> MPRemoteCommandHandlerStatus {
-            let guard = match handler.lock() {
-                Ok(g) => g,
-                Err(_) => return MPRemoteCommandHandlerStatus::CommandFailed,
-            };
-            if let Some(tsfn) = guard.as_ref() {
-                let _ = tsfn.call(
-                    SystemMediaEvent::new(event_type).to_json(),
-                    napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
-                );
-                MPRemoteCommandHandlerStatus::Success
-            } else {
-                MPRemoteCommandHandlerStatus::CommandFailed
-            }
-        });
+        // objc2 0.6: handler 参数要求 NonNull<MPRemoteCommandEvent>，
+        // 且 addTargetWithHandler 接受 &DynBlock（不是 &RcBlock）→ 用 &*block 解引用。
+        let block = RcBlock::new(
+            move |_event: NonNull<MPRemoteCommandEvent>| -> MPRemoteCommandHandlerStatus {
+                let guard = match handler.lock() {
+                    Ok(g) => g,
+                    Err(_) => return MPRemoteCommandHandlerStatus::CommandFailed,
+                };
+                if let Some(tsfn) = guard.as_ref() {
+                    let _ = tsfn.call(
+                        SystemMediaEvent::new(event_type).to_json(),
+                        napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                    MPRemoteCommandHandlerStatus::Success
+                } else {
+                    MPRemoteCommandHandlerStatus::CommandFailed
+                }
+            },
+        );
 
         let token = unsafe { command.addTargetWithHandler(&block) };
         if let Ok(mut tokens) = self.target_tokens.lock() {
@@ -189,7 +193,7 @@ impl SystemMediaControls for MacosImpl {
     }
 
     fn update_metadata(&self, payload: MetadataPayload) {
-        let Ok(mut info) = self.info.lock() else {
+        let Ok(info) = self.info.lock() else {
             error!("macOS info 字典锁中毒");
             return;
         };
@@ -251,7 +255,7 @@ impl SystemMediaControls for MacosImpl {
     }
 
     fn update_playback_rate(&self, rate: f64) {
-        if let Ok(mut info) = self.info.lock() {
+        if let Ok(info) = self.info.lock() {
             unsafe {
                 let num = NSNumber::new_f64(rate);
                 info.setObject_forKey(
@@ -269,7 +273,7 @@ impl SystemMediaControls for MacosImpl {
     }
 
     fn update_timeline(&self, payload: TimelinePayload) {
-        if let Ok(mut info) = self.info.lock() {
+        if let Ok(info) = self.info.lock() {
             unsafe {
                 let elapsed = NSNumber::new_f64(payload.current_time / 1000.0);
                 info.setObject_forKey(
