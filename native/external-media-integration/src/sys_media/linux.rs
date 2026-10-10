@@ -90,19 +90,19 @@ fn run_mpris_worker(mut rx: UnboundedReceiver<MprisCommand>) -> Result<()> {
         // MPRIS 事件 → JS
         {
             let cb = callback.clone();
-            player.connect_next(|_| {
+            player.connect_next(move |_| {
                 dispatch(&cb, SystemMediaEvent::new(SystemMediaEventType::NextSong));
             });
             let cb = callback.clone();
-            player.connect_previous(|_| {
+            player.connect_previous(move |_| {
                 dispatch(&cb, SystemMediaEvent::new(SystemMediaEventType::PreviousSong));
             });
             let cb = callback.clone();
-            player.connect_play_pause(|_| {
+            player.connect_play_pause(move |_| {
                 dispatch(&cb, SystemMediaEvent::new(SystemMediaEventType::Play));
             });
             let cb = callback.clone();
-            player.connect_stop(|_| {
+            player.connect_stop(move |_| {
                 dispatch(&cb, SystemMediaEvent::new(SystemMediaEventType::Stop));
             });
         }
