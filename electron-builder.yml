@@ -29,6 +29,12 @@ files:
   - '!scripts/*'
   - '!assets/*'
   - '!docs/*'
+  # Rust 原生模块只保留编译产物 (.node)；源码与 target/ 不打包。
+  - '!native/*/src/**'
+  - '!native/*/target/**'
+  - '!native/*/Cargo.toml'
+  - '!native/*/Cargo.lock'
+  - '!native/*/build.rs'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,.idea,.kiro,.codebuddy}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
@@ -50,6 +56,10 @@ asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/bindings/**
   - node_modules/file-uri-to-path/**
+  # 系统媒体控件原生模块（SMTC / MPRIS / NowPlayingInfoCenter）。
+  # 必须解包到 app.asar.unpacked —— .node 无法从 asar 内被 dlopen 加载。
+  # 与 nativeMediaService.resolveNativePath() 中的路径保持一致。
+  - native/external-media-integration/**
   - '**/*.node'
 win:
   executableName: ceru-music

@@ -3,6 +3,7 @@ import {
   SearchResult,
   GetMusicUrlArg,
   GetMusicPicArg,
+  GetHiresPicArg,
   GetLyricArg,
   PlaylistResult,
   GetSongListDetailsArg,
@@ -233,11 +234,72 @@ function main(source: string = 'wy') {
         // 带签名的临时链接，重启后多半已过期，直接用它会导致封面加载失败。
         // 只在插件拿不到时才退回 songInfo.img。
         const fresh = await provider?.host.getPic(currentSource, song)
+        // 注意：UI/低清封面保持原样 —— 高清封面走「高清封面协议」
+        // （`getHiresPic`），只在系统媒体控件需要时按设置单独调用。
         return (typeof fresh === 'string' && fresh ? fresh : songInfo.img) || ''
       } catch (e: any) {
         return {
           error: '获取歌曲失败 ' + (e.message || e.error || String(e))
         }
+      }
+    },
+
+    /**
+     * 高清封面协议（可选）。带给系统媒体控件（SMTC）用的大图，仅当插件
+     * 实现了 `tracks.artworkHires` 时才生效。未实现 / 取不到 / 出错都返回空字符串，
+     * 调用方据此回落原有封面，绝不因此打断播放或抛出。
+     *
+     * 画质不限定：`targetSize` 只是提示，最终用插件返回的地址。
+     */
+    async getHiresPic({ songInfo, artworkUrl, targetSize }: GetHiresPicArg) {
+      const label = `[SMTC-高清] [${songInfo?.source ?? '?'}] 「${songInfo?.name ?? '未知歌曲'}」`
+      try {
+        // 注意：`tracks.artworkHires` 是 **provider 方法**（不是 action），
+        // 必须走 getV2Provider（带 method 才会校验 supportsV2Provider）——
+        // 用 getV2Action('artwork.hires') 会因插件未注册同名 action 而路由失败。
+        const resource = normalizeAppTrackRef(songInfo?.pluginResource)
+        if (resource && !isProviderTrackRef(resource)) assertResourceRef(resource)
+        const currentSource = resource?.providerId || songInfo?.source || source
+        const provider = pluginService.getV2Provider(
+          currentSource,
+          resource?.scope === 'provider' ? undefined : resource?.pluginId,
+          'tracks.artworkHires'
+        )
+        if (!provider) {
+          console.log(
+            `${label} 无插件实现 tracks.artworkHires（音源 ${currentSource}）→ 回落原封面`
+          )
+          return ''
+        }
+        const ownerId = provider.host.getPluginInfo().id
+        const song =
+          resource && provider
+            ? {
+                ...songInfo,
+                source: currentSource,
+                pluginResource: isProviderTrackRef(resource)
+                  ? targetAppTrackRef(resource, ownerId)
+                  : retargetTrackRef(resource, ownerId)
+              }
+            : songInfo
+        console.log(`${label} 命中插件 ${provider.pluginId}；调用 tracks.artworkHires`)
+        const hires = await provider.host.getHiresPic(
+          currentSource,
+          song,
+          artworkUrl || '',
+          targetSize
+        )
+        if (typeof hires === 'string' && hires) {
+          const changed = hires !== artworkUrl
+          console.log(`${label} 插件返回高清封面（${changed ? '已改写' : '与原一致'}）: ${hires}`)
+          return hires
+        }
+        console.log(`${label} 插件未返回可用高清（返回空/未实现）→ 回落原封面`)
+        return ''
+      } catch (e: any) {
+        // 高清封面是「增强」而非必需：任何失败都静默回落，不报错。
+        console.warn(`${label} 获取高清封面失败，回落原封面:`, e?.message || e)
+        return ''
       }
     },
 

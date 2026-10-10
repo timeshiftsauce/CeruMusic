@@ -1,6 +1,37 @@
 import { NotifyPlugin, DialogPlugin } from 'tdesign-vue-next'
 
-import { reactive, h } from 'vue'
+import { reactive, h, ref } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+
+/** 更新说明以 Markdown 渲染（marked + DOMPurify）。同步返回，便于在弹窗 body 里直接用。 */
+function renderNotesMarkdown(notes?: string): string {
+  const source = (notes || '').trim()
+  if (!source) return '<p>暂无更新说明</p>'
+  try {
+    const html = marked.parse(source, { async: false, gfm: true, breaks: true }) as string
+    return DOMPurify.sanitize(html)
+  } catch (e) {
+    console.warn('更新说明 Markdown 渲染失败，回退为纯文本:', e)
+    return DOMPurify.sanitize(`<pre>${source}</pre>`)
+  }
+}
+
+/** 弹窗正文：标题行 + Markdown 更新说明 + 尾部追问。 */
+function notesBody(options: { releaseDate: string; notes?: string; tail?: string }) {
+  const { releaseDate, notes, tail } = options
+  return h('div', { style: 'max-height: 60vh; overflow-y: auto' }, [
+    h('div', { style: 'margin-bottom: 6px; font-weight: 600' }, `发布时间: ${releaseDate}`),
+    h('div', { style: 'margin-bottom: 6px; font-weight: 600' }, '更新说明:'),
+    h('div', {
+      class: 'ceru-update-notes',
+      innerHTML: renderNotesMarkdown(notes)
+    }),
+    tail
+      ? h('div', { style: 'margin-top: 10px; white-space: pre-line' }, tail)
+      : null
+  ])
+}
 
 export interface DownloadProgress {
   percent: number
@@ -111,9 +142,11 @@ export class AutoUpdateService {
   }
 
   // 下载更新
-  async downloadUpdate(mode?: 'differential' | 'full') {
+  //  - mode: 'differential' | 'full'
+  //  - mirror: GitHub 代理前缀（空 = 原生直连）
+  async downloadUpdate(mode?: 'differential' | 'full', mirror = '') {
     try {
-      await window.api.autoUpdater.downloadUpdate(mode)
+      await window.api.autoUpdater.downloadUpdate(mode, mirror)
     } catch (error) {
       console.error('下载更新失败:', error)
       NotifyPlugin.error({
@@ -175,14 +208,12 @@ export class AutoUpdateService {
         if (updateTask.status === 'paused') {
           const dialog = DialogPlugin.confirm({
             header: `发现未完成的更新 ${updateInfo.name}`,
-            body: () => {
-              const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否继续在后台下载安装？`
-              return h(
-                'div',
-                { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
-                content
-              )
-            },
+            body: () =>
+              notesBody({
+                releaseDate,
+                notes: updateInfo.notes,
+                tail: '是否继续在后台下载安装？'
+              }),
             confirmBtn: '继续下载',
             cancelBtn: '稍后再说',
             closeBtn: true,
@@ -209,14 +240,12 @@ export class AutoUpdateService {
     if (path) {
       const dialog = DialogPlugin.confirm({
         header: `新版本 ${updateInfo.name} 已下载`,
-        body: () => {
-          const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}\n\n是否立即安装？`
-          return h(
-            'div',
-            { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
-            content
-          )
-        },
+        body: () =>
+          notesBody({
+            releaseDate,
+            notes: updateInfo.notes,
+            tail: '是否立即安装？'
+          }),
         confirmBtn: '立即安装',
         cancelBtn: '稍后再说',
         closeBtn: true,
@@ -230,34 +259,141 @@ export class AutoUpdateService {
 
     const dialog = DialogPlugin.confirm({
       header: `发现新版本 ${updateInfo.name}`,
-      body: () => {
-        const tail = updateInfo.supportsDifferential
-          ? '\n\n是否立即下载此更新？(下一步可选择更新方式)'
-          : '\n\n是否立即下载此更新？'
-        const content = `发布时间: ${releaseDate}\n\n更新说明:\n${updateInfo.notes || '暂无更新说明'}${tail}`
-        return h(
-          'div',
-          { style: 'white-space: pre-line; max-height: 60vh; overflow-y: auto' },
-          content
-        )
-      },
+      body: () =>
+        notesBody({
+          releaseDate,
+          notes: updateInfo.notes,
+          tail: updateInfo.supportsDifferential
+            ? '是否立即下载此更新？(下一步可选择更新方式)'
+            : '是否立即下载此更新？'
+        }),
       confirmBtn: '立即下载',
       cancelBtn: '稍后提醒',
       closeBtn: true,
       onClose: () => dialog.destroy(),
       onConfirm: () => {
         dialog.hide()
-        if (updateInfo.supportsDifferential) {
-          this.askModeAndDownload()
-        } else {
-          this.downloadUpdate('full')
-        }
+        // 先选「下载方式」（原生直连 / 代理镜像），再进入差分/全量选择。
+        this.askChannelAndDownload()
       }
     })
   }
 
+  /**
+   * 「选择下载方式」面板：**一个列表**并列「原生直连 + 服务端下发的全部镜像」。
+   *
+   * 第一行固定是原生直连（同时显示其延迟），其余镜像按延迟升序；
+   * 测速失败的镜像保留在末尾并标「超时」（置灰，可手动选作备用）。
+   * 列表可滚动，默认选中第一行（直连）。测速期间显示「测速中…」。
+   */
+  private async askChannelAndDownload() {
+    // 占位框：先渲染「测速中」，测完替换为列表。
+    const dialog = DialogPlugin.confirm({
+      header: '选择下载方式',
+      body: () =>
+        h(
+          'div',
+          { style: 'min-height: 80px; line-height: 1.8' },
+          '正在测速全部镜像，请稍候…（首次可能需要几秒）'
+        ),
+      confirmBtn: '取消',
+      cancelBtn: '取消',
+      closeBtn: true,
+      onClose: () => dialog.destroy(),
+      onConfirm: () => dialog.hide(),
+      onCancel: () => dialog.hide()
+    })
+
+    let ranked: Array<{ url: string; ms: number | null }> = []
+    try {
+      ranked = (await window.api.autoUpdater.probeMirrors()) || []
+    } catch (e) {
+      console.warn('镜像测速失败:', e)
+    }
+    dialog.destroy()
+
+    // 兜底：测速完全失败时也要能选（至少给出「原生直连」）。
+    if (!ranked.length) ranked = [{ url: '', ms: null }]
+
+    const choice = ref<number>(0)
+    // 可用（含直连）的数量：用于表头统计。直连即使超时也要计入。
+    const okCount = ranked.filter((r) => r.ms != null).length
+
+    const picker = DialogPlugin.confirm({
+      header: `选择下载方式（可用 ${okCount}/${ranked.length}，按延迟升序）`,
+      body: () =>
+        h(
+          'div',
+          { style: 'max-height: 50vh; overflow-y: auto; padding-right: 4px' },
+          ranked.map((item, index) => {
+            const isDirect = item.url === ''
+            const failed = item.ms == null
+            const label = isDirect ? '原生直连（GitHub）' : item.url
+            const speed = failed ? '超时' : `${item.ms} ms`
+            return h(
+              'label',
+              {
+                key: (isDirect ? 'direct' : item.url) + index,
+                style:
+                  'display:flex;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;' +
+                  (failed ? 'opacity:0.5;' : '') +
+                  (index ? 'border-top:1px solid var(--td-component-stroke,rgba(0,0,0,.06));' : '')
+              },
+              [
+                h('input', {
+                  type: 'radio',
+                  name: 'ceru-update-channel',
+                  value: String(index),
+                  checked: choice.value === index,
+                  onChange: () => {
+                    choice.value = index
+                  }
+                }),
+                h(
+                  'span',
+                  {
+                    style: `flex:1;word-break:break-all${isDirect ? ';font-weight:600' : ''}`
+                  },
+                  label
+                ),
+                h(
+                  'span',
+                  {
+                    style:
+                      'white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--td-text-color-secondary,#888);'
+                  },
+                  speed
+                )
+              ]
+            )
+          })
+        ),
+      confirmBtn: '开始下载',
+      cancelBtn: '取消',
+      closeBtn: true,
+      onClose: () => picker.destroy(),
+      onConfirm: () => {
+        const chosen = ranked[choice.value]
+        picker.hide()
+        // url 为空串 = 原生直连
+        this.afterChannelChosen(chosen?.url || '')
+      },
+      onCancel: () => picker.hide()
+    })
+  }
+
+  /** 下载方式确定后：若支持差分则再问差分/全量，否则直接全量。 */
+  private afterChannelChosen(mirror: string) {
+    const info = downloadState.updateInfo
+    if (info?.supportsDifferential) {
+      this.askModeAndDownload(mirror)
+    } else {
+      this.downloadUpdate('full', mirror)
+    }
+  }
+
   // 询问用户选择更新方式 (差分/全量)
-  private askModeAndDownload() {
+  private askModeAndDownload(mirror = '') {
     const dialog = DialogPlugin.confirm({
       header: '选择更新方式',
       body: () => {
@@ -274,11 +410,11 @@ export class AutoUpdateService {
       closeBtn: true,
       onClose: () => dialog.destroy(),
       onConfirm: () => {
-        this.downloadUpdate('differential')
+        this.downloadUpdate('differential', mirror)
         dialog.hide()
       },
       onCancel: () => {
-        this.downloadUpdate('full')
+        this.downloadUpdate('full', mirror)
         dialog.hide()
       }
     })

@@ -38,6 +38,15 @@ export interface GetMusicPicArg {
   songInfo: MusicItem
 }
 
+/** 高清封面协议入参（宿主 → 插件，用于系统媒体控件的大图）。 */
+export interface GetHiresPicArg {
+  songInfo: MusicItem
+  /** 宿主当前已持有的封面地址（多为缩略图，也可能是 blob:/data:）。 */
+  artworkUrl?: string
+  /** 期望长边像素提示（插件可忽略，画质不限定）。 */
+  targetSize?: number
+}
+
 export interface GetLyricArg {
   songInfo: MusicItem
   grepLyricInfo?: boolean

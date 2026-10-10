@@ -581,6 +581,36 @@ export default class PluginHost {
   async getPic(source: string, song: any) {
     return this.invokeV2Action('artwork.get', { source, song })
   }
+  /**
+   * 高清封面协议（可选）。
+   *
+   * 走 provider 方法 `tracks.artworkHires`（不是 action）——它天然与 provider 绑定，
+   * 宿主只在插件确实实现了它时才调用（`supportsV2Provider(source, 'tracks.artworkHires')`）。
+   * 插件未实现时本方法返回 undefined，调用方回落原封面。
+   *
+   * 请求体带上**完整 songInfo**：插件通常直接用它已有的 `img` 做尺寸转换即可
+   * （无需新请求）；需要时也能据此自行发起请求。
+   */
+  async getHiresPic(source: string, song: any, artworkUrl: string, targetSize?: number) {
+    if (!this.supportsV2Provider(source, 'tracks.artworkHires')) {
+      console.log(
+        `[SMTC-高清] [${this.getPluginInfo().id}] 插件未实现 tracks.artworkHires（source=${source}）→ 不支持`
+      )
+      return undefined
+    }
+    console.log(
+      `[SMTC-高清] [${this.getPluginInfo().id}] 调用 tracks.artworkHires source=${source} ` +
+        `targetSize=${targetSize ?? '默认'} artworkUrl=${artworkUrl ? artworkUrl.slice(0, 140) : '（空）'}`
+    )
+    const result = await this.invokeV2Provider(source, 'tracks.artworkHires', [
+      this.resource(source, song),
+      { song, artworkUrl, targetSize }
+    ])
+    console.log(
+      `[SMTC-高清] [${this.getPluginInfo().id}] 插件返回: ${typeof result === 'string' ? result.slice(0, 140) : String(result)}`
+    )
+    return typeof result === 'string' && result ? result : undefined
+  }
   async getLyric(source: string, song: any) {
     const document = await this.invokeV2Provider(source, 'tracks.lyrics', [
       this.resource(source, song)

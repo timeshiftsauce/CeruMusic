@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "2.2.1",
+  "version": "2.3.1",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -46,8 +46,8 @@
     "@langchain/core": "^0.3.71",
     "@langchain/deepseek": "^0.1.0",
     "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-core": "0.3.12",
-    "@shiqianjiang/ceru-plugin-sdk": "0.3.12",
+    "@shiqianjiang/ceru-plugin-core": "0.3.14",
+    "@shiqianjiang/ceru-plugin-sdk": "0.3.14",
     "@xmldom/xmldom": "0.9.12",
     "axios": "^1.13.2",
     "better-sqlite3": "13.0.3",
@@ -157,8 +157,8 @@
     "buffer": "^6.0.3",
     "@langchain/core": "^0.3.71",
     "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-sdk": "0.3.12",
-    "@shiqianjiang/ceru-plugin-issuer": "0.3.12"
+    "@shiqianjiang/ceru-plugin-sdk": "0.3.14",
+    "@shiqianjiang/ceru-plugin-issuer": "0.3.14"
   },
   "engines": {
     "node": ">=22.14.0"

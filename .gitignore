@@ -33,3 +33,14 @@ docs/.vitepress/cache
 /.workflow/font-tools/
 __pycache__/
 *.py[cod]
+
+# Rust 原生模块 (external-media-integration) 构建产物
+# target/ 是 cargo 的输出目录，体积大且可重建
+native/*/target/
+native/*/Cargo.lock
+# napi 产出的 .node 二进制，由 yarn build:native:emi 生成
+native/*/*.node
+native/*/*.d.ts
+# napi 在 crate 根目录生成的 npm 元数据目录
+native/*/npm/
+

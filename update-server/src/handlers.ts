@@ -11,6 +11,7 @@ import {
   type ReleaseAsset
 } from './github.js'
 import type { Env } from './worker.js'
+import { UPDATE_MIRRORS } from './mirrors.js'
 
 const ASSET_FILE_RE = /\.(exe|dmg|zip|AppImage|deb|snap|blockmap|yml|yaml)$/i
 
@@ -517,7 +518,10 @@ async function handleHazel(
       url: asset.browser_download_url,
       name: release.tag_name,
       notes: release.body || '',
-      pub_date: release.published_at
+      pub_date: release.published_at,
+      // GitHub 代理镜像池（gh-proxy 风格前缀）。客户端「选择下载方式」时会
+      // 并发测速这些前缀，取最快的前几个；不传也不影响（客户端有内置兜底）。
+      mirrors: UPDATE_MIRRORS
     }),
     {
       headers: {

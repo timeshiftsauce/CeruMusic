@@ -400,8 +400,11 @@ const api = {
   // 自动更新相关
   autoUpdater: {
     checkForUpdates: () => ipcRenderer.invoke('auto-updater:check-for-updates'),
-    downloadUpdate: (mode?: 'differential' | 'full') =>
-      ipcRenderer.invoke('auto-updater:download-update', mode),
+    downloadUpdate: (mode?: 'differential' | 'full', mirror?: string) =>
+      ipcRenderer.invoke('auto-updater:download-update', mode, mirror),
+    /** 探测更新镜像速度 → [{ url, ms }]（按 ms 升序，失败的已剔除） */
+    probeMirrors: (mirrors?: string[]) =>
+      ipcRenderer.invoke('auto-updater:probe-mirrors', mirrors),
     quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
     getDownloadedPath: (updateInfo?: any) =>
       ipcRenderer.invoke('auto-updater:get-downloaded-path', updateInfo),
@@ -654,6 +657,58 @@ const api = {
     setTitle: (title: string) => ipcRenderer.send('app:set-title', title),
     setProgress: (progress: number, options?: { paused?: boolean }) =>
       ipcRenderer.send('app:set-progress', progress, options || null)
+  },
+  /**
+   * 系统媒体控件原生集成 (SMTC / MPRIS / NowPlayingInfoCenter) 桥。
+   *
+   * 与浏览器 mediaSession 的区别:封面以**原始字节**交给系统,
+   * 因此系统卡片能显示高清封面(mediaSession 只能给 URL,会被二次压缩)。
+   *
+   * 渲染端应先 `isAvailable()` 探测;不可用时继续用 mediaSession。
+   */
+  emi: {
+    isAvailable: (): Promise<boolean> => ipcRenderer.invoke('emi:is-available'),
+    updateMetadata: (payload: {
+      songName: string
+      authorName: string
+      albumName: string
+      coverData?: Uint8Array | null
+      ncmId?: number | null
+      duration?: number | null
+    }) => ipcRenderer.send('emi:update-metadata', payload),
+    updatePlaybackStatus: (status: 'Playing' | 'Paused') =>
+      ipcRenderer.send('emi:update-playback-status', status),
+    updateTimeline: (payload: { currentTime: number; totalTime: number }) =>
+      ipcRenderer.send('emi:update-timeline', payload),
+    updatePlaybackRate: (rate: number) => ipcRenderer.send('emi:update-playback-rate', rate),
+    updatePlayMode: (payload: { repeatMode: 'Track' | 'List' | 'None'; isShuffling: boolean }) =>
+      ipcRenderer.send('emi:update-play-mode', payload),
+    /** 系统媒体按键事件回调 —— 主进程发 'emi:media-event' */
+    onMediaEvent: (
+      callback: (event: {
+        type:
+          | 'Play'
+          | 'Pause'
+          | 'Stop'
+          | 'NextSong'
+          | 'PreviousSong'
+          | 'ToggleShuffle'
+          | 'ToggleRepeat'
+          | 'SetRate'
+          | 'SetVolume'
+          | 'Seek'
+        positionMs?: number | null
+        rate?: number | null
+        volume?: number | null
+      }) => void
+    ) => {
+      const handler = (_event: unknown, payload: Parameters<typeof callback>[0]): void => {
+        console.log('[emi-preload] 收到 emi:media-event:', payload)
+        callback(payload)
+      }
+      ipcRenderer.on('emi:media-event', handler)
+      return () => ipcRenderer.removeListener('emi:media-event', handler)
+    }
   }
 }
 

@@ -868,10 +868,7 @@ onUnmounted(() => {
         'single-column': !showLeftPanel
       }"
     >
-      <div
-        class="left"
-        :style="player.lyrics.lines.length <= 0 && showLeftPanel ? 'width:100vw' : ''"
-      >
+      <div class="left" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 }">
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <img
             class="pointer"
@@ -881,15 +878,8 @@ onUnmounted(() => {
           />
           <div
             class="cd-container"
-            :class="{ playing: isAudioPlaying }"
-            :style="
-              !isAudioPlaying
-                ? 'animation-play-state: paused;'
-                : '' +
-                  (player.lyrics.lines.length <= 0
-                    ? 'width:70vh;height:70vh; transition: width 0.3s ease, height 0.3s ease; transition-delay: 0.8s;'
-                    : '')
-            "
+            :class="{ playing: isAudioPlaying, 'no-lyric': player.lyrics.lines.length <= 0 }"
+            :style="!isAudioPlaying ? 'animation-play-state: paused;' : ''"
           >
             <!-- 黑胶唱片 -->
             <div class="vinyl-record"></div>
@@ -1243,9 +1233,9 @@ onUnmounted(() => {
     -webkit-drop-filter: blur(80px);
     padding: 0 10vw;
     -webkit-drop-filter: blur(80px);
-    overflow: hidden;
     display: flex;
     position: relative;
+    --cd-size: var(--cd-width-auto);
     --cd-width-auto: max(200px, min(30vw, 700px, calc(100vh - var(--play-bottom-height) - 250px)));
 
     .left {
@@ -1254,6 +1244,11 @@ onUnmounted(() => {
       transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
       opacity: 1;
       transform: translateX(0);
+
+      // 无歌词时右侧不渲染，左侧占满整行
+      &.no-lyric {
+        width: 100%;
+      }
     }
 
     .right {
@@ -1272,9 +1267,9 @@ onUnmounted(() => {
         user-select: none;
         -webkit-user-drag: none;
         position: absolute;
-        width: calc(var(--cd-width-auto) / 3.5);
+        width: calc(var(--cd-size) / 3.5);
         left: calc(50% - 1.8vh);
-        top: calc(50% - var(--cd-width-auto) / 2 - calc(var(--cd-width-auto) / 3.5) - 1vh);
+        top: calc(50% - var(--cd-size) / 2 - calc(var(--cd-size) / 3.5) - 1vh);
         transform: rotate(-20deg);
         transform-origin: 1.8vh 1.8vh;
         z-index: 2;
@@ -1286,15 +1281,23 @@ onUnmounted(() => {
       }
 
       .cd-container {
-        width: var(--cd-width-auto);
-        height: var(--cd-width-auto);
+        width: var(--cd-size);
+        height: var(--cd-size);
         position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
         animation: rotateRecord 33s linear infinite;
-        transition: filter 0.3s ease;
+        transition:
+          filter 0.3s ease,
+          width 0.3s ease,
+          height 0.3s ease;
         filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.6));
+
+        /* 无歌词时唱片放大，唱针随 --cd-size 同步 */
+        &.no-lyric {
+          --cd-size: 50vh;
+        }
 
         &:hover {
           filter: drop-shadow(0 20px 45px rgba(0, 0, 0, 0.7));
@@ -1502,6 +1505,12 @@ onUnmounted(() => {
         flex-direction: column;
         justify-content: center;
         align-items: flex-start;
+
+        // 无歌词时右侧不渲染，左侧占满整行并居中
+        &.no-lyric {
+          width: 100%;
+          align-items: center;
+        }
       }
       .right {
         padding-left: 3vw;
@@ -1535,21 +1544,27 @@ onUnmounted(() => {
 
     .cover-layout-container {
       width: 100%;
+      height: calc(100vh - var(--play-bottom-height) - 40px);
       display: flex;
       flex-direction: column;
+      align-items: center;
+      justify-content: center;
       gap: 40px;
       margin-top: calc(var(--play-bottom-height) / 2);
-      max-height: calc(100vh - 200px);
 
       .cover-wrapper-square {
         width: 100%;
-        max-width: min(480px, 45vh);
+        // 由可用宽度与「扣除歌名区后的可用高度」共同约束，居中放大但不溢出
+        max-width: min(100%, calc(100vh - var(--play-bottom-height) - 200px));
+        max-height: 100%;
         aspect-ratio: 1/1;
+        flex-shrink: 1;
+        min-height: 0;
         border-radius: 24px;
-        overflow: hidden;
-        box-shadow:
-          0 25px 50px -12px rgba(0, 0, 0, 0.5),
-          0 0 0 1px rgba(255, 255, 255, 0.1);
+        overflow: hidden; // 保留：裁封面圆角
+        // box-shadow:
+        //   0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        //   0 0 0 1px rgba(255, 255, 255, 0.1);
         transition: transform 0.44s cubic-bezier(0.44, 2, 0.64, 1);
         margin: 0 auto;
         transform: scale(0.8);

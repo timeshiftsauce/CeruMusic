@@ -21,7 +21,10 @@ export const playSetting = defineStore('playSetting', {
     isSeamlessTransition: false, // 是否开启无感过渡（智能交叉淡化）
     useAmlLyricRenderer: true, // 使用 AppleMusicLike 的歌词组件渲染
     isGrepLyricInfo: false, // 是否开启歌词信息 grep
-    strictGrep: false // 是否开启严格歌词信息 grep
+    strictGrep: false, // 是否开启严格歌词信息 grep
+    // 系统媒体控件（SMTC）是否使用高清封面：开启后按「高清封面协议」向插件
+    // 单独取大图；插件未实现 / 取不到时自动回落原有封面。默认关闭（保持现状）。
+    smtcHiresCover: false
   }),
   getters: {
     getisJumpLyric: (state) => state.isJumpLyric,
@@ -42,7 +45,8 @@ export const playSetting = defineStore('playSetting', {
     getIsSeamlessTransition: (state) => state.isSeamlessTransition,
     getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer,
     getIsGrepLyricInfo: (state) => state.isGrepLyricInfo,
-    getStrictGrep: (state) => state.strictGrep
+    getStrictGrep: (state) => state.strictGrep,
+    getSmtcHiresCover: (state) => state.smtcHiresCover
   },
   actions: {
     setIsDumpLyric(isDumpLyric: boolean) {
@@ -53,6 +57,13 @@ export const playSetting = defineStore('playSetting', {
     },
     setIsBlurLyric(isBlurLyric: boolean) {
       this.isBlurLyric = isBlurLyric
+    },
+    setSmtcHiresCover(enabled: boolean) {
+      this.smtcHiresCover = enabled
+      console.log(
+        `[SMTC-高清] 设置变更：系统媒体控件高清封面 = ${enabled ? '开启' : '关闭'}` +
+          `（${enabled ? '下次推送元数据时会向插件请求高清封面' : '恢复使用原有封面'}）`
+      )
     },
     setBgPlaying(bgPlaying: boolean) {
       this.bgPlaying = bgPlaying

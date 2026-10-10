@@ -86,11 +86,7 @@ interface CustomAPI {
     /** 读取已落盘的封面图片，返回 file:// URL；未缓存返回 null */
     getCoverFile: (songCacheKey: string) => Promise<string | null>
     /** 把已下载的封面图片写入缓存，返回 file:// URL */
-    putCoverFile: (
-      songCacheKey: string,
-      data: ArrayBuffer,
-      ext: string
-    ) => Promise<string | null>
+    putCoverFile: (songCacheKey: string, data: ArrayBuffer, ext: string) => Promise<string | null>
     /** 清除某首歌的封面缓存（图片损坏时用） */
     invalidateCoverFile: (songCacheKey: string) => Promise<{ success: boolean }>
   }
@@ -188,9 +184,7 @@ interface CustomAPI {
     ) => Promise<import('../main/services/networkProxy').NetworkProxyTestResult>
     /** 信任系统证书（Node 侧 TLS，兼容抓包代理） */
     getTrustSystemCertificates: () => Promise<{ enabled: boolean; supported: boolean }>
-    setTrustSystemCertificates: (
-      value: boolean
-    ) => Promise<{ success: boolean; applied: boolean }>
+    setTrustSystemCertificates: (value: boolean) => Promise<{ success: boolean; applied: boolean }>
   }
 
   // 插件管理API
@@ -434,6 +428,49 @@ interface CustomAPI {
     prepareCapture: () => Promise<boolean>
     getDefaultScreenSourceId: () => Promise<string>
     getAllScreenSourceIds: () => Promise<string[]>
+  }
+
+  /**
+   * 系统媒体控件原生集成 (SMTC / MPRIS / NowPlayingInfoCenter)。
+   *
+   * 与浏览器 mediaSession 的区别: 封面以原始字节交给系统,
+   * 所以系统卡片能显示高清封面。不可用时渲染端应回落到 mediaSession。
+   */
+  emi: {
+    isAvailable: () => Promise<boolean>
+    updateMetadata: (payload: {
+      songName: string
+      authorName: string
+      albumName: string
+      coverData?: Uint8Array | null
+      ncmId?: number | null
+      duration?: number | null
+    }) => void
+    updatePlaybackStatus: (status: 'Playing' | 'Paused') => void
+    updateTimeline: (payload: { currentTime: number; totalTime: number }) => void
+    updatePlaybackRate: (rate: number) => void
+    updatePlayMode: (payload: {
+      repeatMode: 'Track' | 'List' | 'None'
+      isShuffling: boolean
+    }) => void
+    onMediaEvent: (
+      callback: (event: {
+        type:
+          | 'Play'
+          | 'Pause'
+          | 'Stop'
+          | 'NextSong'
+          | 'PreviousSong'
+          | 'ToggleShuffle'
+          | 'ToggleRepeat'
+          | 'SetRate'
+          | 'SetVolume'
+          | 'Seek'
+        positionMs?: number | null
+        rate?: number | null
+        volume?: number | null
+      }) => void
+    ) => () => void
   }
 }
 

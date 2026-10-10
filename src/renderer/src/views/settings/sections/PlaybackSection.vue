@@ -8,7 +8,8 @@ import EqualizerSettings from '@renderer/components/Settings/EqualizerSettings.v
 import AudioEffectSettings from '@renderer/components/Settings/AudioEffectSettings.vue'
 
 const playSettingStore = usePlaySetting()
-const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingStore)
+const { isJumpLyric, bgPlaying, isAudioVisualizer, smtcHiresCover } =
+  storeToRefs(playSettingStore)
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
 </script>
@@ -74,6 +75,20 @@ const { settings } = storeToRefs(settingsStore)
         <t-switch
           :value="settings.routePreloadEnabled"
           @change="(val) => settingsStore.updateSettings({ routePreloadEnabled: Boolean(val) })"
+        />
+      </div>
+
+      <div id="playback-smtc-hires" class="setting-item">
+        <div class="item-info">
+          <div class="item-title">系统媒体控件高清封面</div>
+          <div class="item-desc">
+            系统媒体卡片（SMTC）改用「高清封面协议」向音源插件获取大图，需插件支持；
+            不支持或获取失败时自动回落原有封面。关闭则一律使用原有封面。
+          </div>
+        </div>
+        <t-switch
+          v-model="smtcHiresCover"
+          @change="playSettingStore.setSmtcHiresCover(smtcHiresCover)"
         />
       </div>
     </div>

@@ -12,7 +12,7 @@ import {
   initPlaylistEventListeners,
   destroyPlaylistEventListeners
 } from '@renderer/utils/playlist/playlistManager'
-import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
+import { waitForAudioReady, getCandidateSongs, parseInterval } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 
@@ -594,9 +594,16 @@ const playSong = async (
               title: cur.name,
               artist: cur.singer,
               album: cur.albumName || '未知专辑',
-              artworkUrl: gp.player?.cover || cur.img || ''
+              artworkUrl: gp.player?.cover || cur.img || '',
+              duration: (parseInterval(cur.interval) || 0) * 1000 || undefined,
+              songInfo: cur,
+              // 上游原链接用于高清转换；为空时 useSmtc 会退而用 cur.img。
+              sourceArtworkUrl: gp.player?.coverSourceUrl
             })
           }
+          // 元数据刷新后显式重申「正在播放」——updateMetadata 之后卡片状态可能
+          // 被系统重置，这行保证卡片与「已经出声」的事实一致。
+          mediaSessionController.updatePlaybackState('playing')
         } catch {}
       }
       Audio.value.audio.addEventListener('playing', currentPlaybackPlayingHandler, { once: true })
@@ -757,6 +764,13 @@ const ensureShuffleOrder = (rebuild = false) => {
 watch(
   () => playMode.value,
   (mode) => {
+    // 同步到系统媒体控件的随机/循环指示（仅原生通道生效，浏览器通道内部 no-op）。
+    try {
+      mediaSessionController.updatePlayMode(
+        mode === PlayMode.SINGLE ? 'Track' : mode === PlayMode.SEQUENCE ? 'List' : 'None',
+        mode === PlayMode.RANDOM
+      )
+    } catch {}
     if (mode === PlayMode.RANDOM) {
       ensureShuffleOrder()
       return
@@ -1178,7 +1192,9 @@ const installPlayback = async () => {
             title: lastPlayedSong.name,
             artist: lastPlayedSong.singer,
             album: lastPlayedSong.albumName || '未知专辑',
-            artworkUrl: gp.player.cover || lastPlayedSong.img || defaultCoverImg
+            artworkUrl: gp.player.cover || lastPlayedSong.img || defaultCoverImg,
+            songInfo: lastPlayedSong,
+            sourceArtworkUrl: gp.player.coverSourceUrl
           })
           if (savedPosition && Audio.value.audio) {
             await waitForAudioReady(Audio.value.audio)
@@ -1198,7 +1214,9 @@ const installPlayback = async () => {
           title: lastPlayedSong.name,
           artist: lastPlayedSong.singer,
           album: lastPlayedSong.albumName || '未知专辑',
-          artworkUrl: gp.player.cover || lastPlayedSong.img || defaultCoverImg
+          artworkUrl: gp.player.cover || lastPlayedSong.img || defaultCoverImg,
+          songInfo: lastPlayedSong,
+          sourceArtworkUrl: gp.player.coverSourceUrl
         })
         if (Audio.value.audio) {
           mediaSessionController.updatePlaybackState(

@@ -1076,3 +1076,106 @@ video {
   }
 }
 </style>
+
+<!-- 更新弹窗里的 Markdown 说明（非 scoped：内容由 DialogPlugin 渲染在组件之外） -->
+<style>
+.ceru-update-notes {
+  font-size: 13px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.ceru-update-notes > :first-child {
+  margin-top: 0;
+}
+
+.ceru-update-notes > :last-child {
+  margin-bottom: 0;
+}
+
+.ceru-update-notes h1,
+.ceru-update-notes h2,
+.ceru-update-notes h3,
+.ceru-update-notes h4,
+.ceru-update-notes h5,
+.ceru-update-notes h6 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ceru-update-notes p {
+  margin: 6px 0;
+}
+
+.ceru-update-notes ul,
+.ceru-update-notes ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.ceru-update-notes li {
+  margin: 2px 0;
+}
+
+.ceru-update-notes a {
+  color: var(--td-brand-color, #0052d9);
+  text-decoration: none;
+}
+
+.ceru-update-notes a:hover {
+  text-decoration: underline;
+}
+
+.ceru-update-notes code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Consolas, Monaco, monospace;
+  font-size: 0.9em;
+  background: var(--td-bg-color-container-hover, rgba(0, 0, 0, 0.05));
+}
+
+.ceru-update-notes pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: var(--td-bg-color-container-hover, rgba(0, 0, 0, 0.05));
+}
+
+.ceru-update-notes pre code {
+  padding: 0;
+  background: none;
+}
+
+.ceru-update-notes blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--td-brand-color, #0052d9);
+  color: var(--td-text-color-secondary, #888);
+}
+
+.ceru-update-notes table {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+}
+
+.ceru-update-notes th,
+.ceru-update-notes td {
+  padding: 6px 10px;
+  border: 1px solid var(--td-component-stroke, rgba(0, 0, 0, 0.1));
+  text-align: left;
+}
+
+.ceru-update-notes hr {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--td-component-stroke, rgba(0, 0, 0, 0.1));
+}
+
+.ceru-update-notes img {
+  max-width: 100%;
+}
+</style>

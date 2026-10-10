@@ -91,46 +91,64 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
     .map(([k, v]) => [k as HotkeyAction, normalizeAccelerator(v)] as [HotkeyAction, string])
     .filter(([, v]) => !!v)
 
-  const duplicates: string[] = []
-  const seen = new Map<string, HotkeyAction>()
-  for (const [action, acc] of bindings) {
-    const key = acc.toLowerCase()
-    const existed = seen.get(key)
-    if (existed && existed !== action) duplicates.push(acc)
-    else seen.set(key, action)
-  }
-  if (duplicates.length > 0) {
-    const uniq = [...new Set(duplicates)]
-    const failed = new Set<HotkeyAction>()
-    const actionErrors: Partial<Record<HotkeyAction, string[]>> = {}
+  // ---- 冲突检测 ----
+  // 注意：冲突**不阻断**整体应用。只把冲突的这几个动作标为失败并跳过注册，
+  // 其余动作照常注册、配置照常落盘 —— 否则用户一旦撞键，所有快捷键都会失效，
+  // 且由于下面不保存配置，连改回来都做不到。
+  const conflictActions = new Set<HotkeyAction>()
+  const conflictErrors: Partial<Record<HotkeyAction, string[]>> = {}
+  {
+    const byAcc = new Map<string, HotkeyAction[]>()
     for (const [action, acc] of bindings) {
-      if (uniq.includes(acc)) {
-        failed.add(action)
-        actionErrors[action] = [...(actionErrors[action] || []), `快捷键冲突：${acc}`]
+      const key = acc.toLowerCase()
+      const list = byAcc.get(key)
+      if (list) list.push(action)
+      else byAcc.set(key, [action])
+    }
+    for (const [, actions] of byAcc) {
+      if (actions.length < 2) continue
+      // 同一按键被多个动作占用：所有占用者都算冲突（无法判断该保留谁）。
+      for (const action of actions) {
+        conflictActions.add(action)
+        const msg = `快捷键冲突：${actionLabel[action]} 与其它功能占用了同一按键（${cfg.bindings?.[action]}）`
+        conflictErrors[action] = [...(conflictErrors[action] || []), msg]
       }
     }
-    lastStatus = { failedActions: Array.from(failed), actionErrors }
-    return { success: false, errors: uniq.map((a) => `快捷键冲突：${a}`) }
   }
 
+  // 先注销旧的，再注册新的（无论是否有冲突都要走这一步，
+  // 保证「不冲突的那些」能正常生效）。
   for (const accelerator of registeredAppHotkeys) globalShortcut.unregister(accelerator)
   registeredAppHotkeys.clear()
 
-  if (!cfg.enabled) {
-    configManager.set('hotkeys', cfg)
-    lastStatus = { failedActions: [], actionErrors: {} }
-    return { success: true }
+  // 收集本轮所有失败项与错误（冲突 + 注册失败 + 媒体键）。
+  const errors: string[] = []
+  const failedActions = new Set<HotkeyAction>(conflictActions)
+  const actionErrors: Partial<Record<HotkeyAction, string[]>> = { ...conflictErrors }
+  for (const [, msgs] of Object.entries(conflictErrors)) {
+    for (const m of msgs || []) errors.push(m)
   }
 
-  const errors: string[] = []
-  const failedActions = new Set<HotkeyAction>()
-  const actionErrors: Partial<Record<HotkeyAction, string[]>> = {}
+  // 配置总是落盘：让用户改得动、能逐步消解冲突。
+  const persist = () => configManager.set('hotkeys', cfg)
+
+  if (!cfg.enabled) {
+    persist()
+    // 禁用时保留「冲突提示」，否则用户看不到为什么某些项标红；
+    // 若没有任何问题则清空状态。
+    lastStatus = {
+      failedActions: Array.from(failedActions),
+      actionErrors
+    }
+    return failedActions.size > 0 ? { success: false, errors } : { success: true }
+  }
+
   const tryRegister = (action: HotkeyAction, acc: string, cb: () => void) => {
+    // 冲突项：跳过注册，但错误已在上面记好。
+    if (conflictActions.has(action)) return
+
     // 媒体键交给系统媒体会话处理（渲染进程的 navigator.mediaSession 已经接管播放/暂停与上/下一首）：
     // 注册为 globalShortcut 会关闭本应用的 SMTC 发布，系统媒体卡片、媒体键与其它集成都会看不到本应用。
-    // Media keys belong to the system media session (the renderer already handles play/pause and next/previous through
-    // navigator.mediaSession): registering them as global shortcuts disables this app's SMTC publishing, so the system media card, the
-    // media keys themselves, and other integrations would all stop seeing this app.
     if (isMediaKeyAccelerator(acc)) {
       failedActions.add(action)
       const msg = `媒体键不能作为全局快捷键（会关闭系统媒体控制，媒体键请交给系统处理）：${actionLabel[action]}（${acc}）`
@@ -158,14 +176,9 @@ const applyHotkeys = (mainWindow: BrowserWindow, nextConfig: HotkeyConfig): Appl
     tryRegister(action, acc, cb)
   }
 
-  if (errors.length > 0) {
-    lastStatus = { failedActions: Array.from(failedActions), actionErrors }
-    return { success: false, errors }
-  }
-
-  configManager.set('hotkeys', cfg)
-  lastStatus = { failedActions: [], actionErrors: {} }
-  return { success: true }
+  persist()
+  lastStatus = { failedActions: Array.from(failedActions), actionErrors }
+  return errors.length > 0 ? { success: false, errors } : { success: true }
 }
 
 export function initHotkeyService(mainWindow: BrowserWindow) {

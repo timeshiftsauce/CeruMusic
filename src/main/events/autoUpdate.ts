@@ -4,7 +4,8 @@ import {
   checkForUpdates,
   downloadUpdate,
   quitAndInstall,
-  getDownloadedUpdatePath
+  getDownloadedUpdatePath,
+  probeMirrors
 } from '../autoUpdate'
 
 // 注册自动更新相关的IPC事件
@@ -17,9 +18,19 @@ export function registerAutoUpdateEvents() {
     }
   })
 
-  // 下载更新 (mode: 'differential' | 'full' | undefined - undefined 时主进程自动选)
-  ipcMain.handle('auto-updater:download-update', (_event, mode?: 'differential' | 'full') => {
-    downloadUpdate(mode)
+  // 下载更新
+  //  - mode: 'differential' | 'full' | undefined（undefined 时主进程自动选）
+  //  - mirror: GitHub 代理前缀（空/undefined = 原生直连）
+  ipcMain.handle(
+    'auto-updater:download-update',
+    (_event, mode?: 'differential' | 'full', mirror?: string) => {
+      downloadUpdate(mode, mirror)
+    }
+  )
+
+  // 探测更新镜像速度：返回按 RTT 升序的 [{ url, ms }]（失败的已剔除）
+  ipcMain.handle('auto-updater:probe-mirrors', async (_event, mirrors?: string[]) => {
+    return await probeMirrors(mirrors)
   })
 
   // 安装更新

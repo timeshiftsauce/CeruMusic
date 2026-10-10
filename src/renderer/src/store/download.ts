@@ -126,9 +126,11 @@ export const useDownloadStore = defineStore('download', {
     updateTask(updatedTask: DownloadTask) {
       const index = this.tasks.findIndex((t) => t.id === updatedTask.id)
       if (index !== -1) {
-        // Update reactive properties
-        // We can merge or replace, but direct assignment of the object in the array might lose reactivity if not careful with Vue 2, but fine in Vue 3 Pinia
-        this.tasks[index] = updatedTask
+        // 用「整体重建数组」而不是 `this.tasks[index] = x`：
+        // 后者虽是合法的 Vue3 响应式写法，但在本页（t-tabs 之外渲染列表）
+        // 实测不触发重渲染，而 validateFiles 的 `this.tasks = [...]` 可以。
+        // 统一为不可变替换，行为与 validateFiles 一致。
+        this.tasks = this.tasks.map((t, i) => (i === index ? updatedTask : t))
       } else {
         // If for some reason we don't have it (e.g. loaded after add), add it
         this.tasks.push(updatedTask)

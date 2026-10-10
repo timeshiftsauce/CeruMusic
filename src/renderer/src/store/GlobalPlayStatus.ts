@@ -23,12 +23,20 @@ import _ from 'lodash'
 import defaultCover from '/default-cover.png'
 import { playSetting } from './playSetting'
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
+import { parseInterval } from '@renderer/utils/audio/audioHelpers'
 
 interface Player {
   songId?: string
   songInfo?: Omit<SongList, 'songmid'> & { songmid: null | number | string }
   // base64编码 封面
   cover?: string
+  /**
+   * 上游 CDN 封面原链接（http(s)）。
+   *
+   * 与 `cover` 严格区分：`cover` 是显示用的 blob:/file: 地址，本字段才是
+   * 可交给「高清封面协议」做转换的上游 URL。缓存命中或走兜底图时为空。
+   */
+  coverSourceUrl?: string
   // 封面详情
   coverDetail: {
     ColorObject?: Color
@@ -492,6 +500,11 @@ export const useGlobalPlayStatusStore = defineStore(
         // 与主进程 songCacheKey 保持同一构造，才能命中同一份封面缓存
         const coverCacheId = isLocal ? '' : songCacheKey(clean)
 
+        // 「原链接」= 插件给出的**上游 CDN 地址**。它与最终用于显示的
+        // blob:/file: 完全不同 —— 只有它才能交给「高清封面协议」再转换。
+        // 缓存命中的 file:// 是本地文件、defaultCover 是兜底图，都不是原链接。
+        let sourceUrl = ''
+
         // 1) 本地封面缓存优先 —— 不依赖 song.img 是否还有效。
         // 旧缓存/旧歌单里存的 img 常是过期签名链接，若先拿它去联网必然失败。
         // 命中即返回 file://，不做解码校验（校验留给加载失败时的兜底路径，
@@ -499,7 +512,8 @@ export const useGlobalPlayStatusStore = defineStore(
         if (coverCacheId) {
           try {
             const local = await window.api.musicCache.getCoverFile(coverCacheId)
-            if (local) return local
+            // 命中缓存：显示用它，但原链接仍要向插件补取（缓存文件无法反推上游）。
+            if (local) return { cover: local, sourceUrl: '' }
           } catch (e) {
             console.warn('读取封面缓存失败，回退网络:', e)
           }
@@ -519,7 +533,8 @@ export const useGlobalPlayStatusStore = defineStore(
           if (typeof value === 'string') url = value
         }
         coverSignal.throwIfAborted()
-        if (!url) return defaultCover
+        if (!url) return { cover: defaultCover, sourceUrl: '' }
+        sourceUrl = url
 
         // 3) 下载并回写缓存（此时本地一定没有，传 cacheId 只为回写）
         const cover = await getBlobUrlFromUrl(url, coverSignal, coverCacheId)
@@ -534,7 +549,8 @@ export const useGlobalPlayStatusStore = defineStore(
           if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
           signal.throwIfAborted()
         }
-        return cover || defaultCover
+        // 下载成功 → 原链接有效；下载失败 → 回落到兜底图，此时原链接不再可信。
+        return { cover: cover || defaultCover, sourceUrl: cover ? sourceUrl : '' }
       }
       const loadLyrics = async () => {
         if (clean.source === 'local') {
@@ -600,27 +616,29 @@ export const useGlobalPlayStatusStore = defineStore(
         LYRICS_WAIT_TIMEOUT_MS
       )
 
-      const artwork = await withDeadline(loadCover(), defaultCover).then(async (cover) => {
-        const __tCover = performance.now()
-        const cached =
-          appearanceSongKey === songKey(song) && song.img === player.songInfo?.img
-            ? savedCoverDetail(player.coverDetail)
-            : undefined
-        const colors = cached
-          ? { dominantColor: cached.ColorObject, useBlackText: cached.useBlackText }
-          : await withDeadline(analyzeImageColors(cover), null)
-        const __tColors = performance.now()
-        if (__tColors - __t0 > METADATA_SLOW_MS) {
-          console.log(
-            `[切歌耗时] ${clean.name} 封面=${(__tCover - __t0).toFixed(0)}ms ` +
-              `颜色分析=${(__tColors - __tCover).toFixed(0)}ms`
-          )
+      const artwork = await withDeadline(loadCover(), { cover: defaultCover, sourceUrl: '' }).then(
+        async ({ cover, sourceUrl }) => {
+          const __tCover = performance.now()
+          const cached =
+            appearanceSongKey === songKey(song) && song.img === player.songInfo?.img
+              ? savedCoverDetail(player.coverDetail)
+              : undefined
+          const colors = cached
+            ? { dominantColor: cached.ColorObject, useBlackText: cached.useBlackText }
+            : await withDeadline(analyzeImageColors(cover), null)
+          const __tColors = performance.now()
+          if (__tColors - __t0 > METADATA_SLOW_MS) {
+            console.log(
+              `[切歌耗时] ${clean.name} 封面=${(__tCover - __t0).toFixed(0)}ms ` +
+                `颜色分析=${(__tColors - __tCover).toFixed(0)}ms`
+            )
+          }
+          if (!signal?.aborted) onArtwork?.(cover, colors)
+          return { cover, sourceUrl, colors }
         }
-        if (!signal?.aborted) onArtwork?.(cover, colors)
-        return { cover, colors }
-      })
+      )
 
-      const { cover, colors } = artwork
+      const { cover, sourceUrl, colors } = artwork
       const dispose = () => {
         if (cover.startsWith('blob:')) URL.revokeObjectURL(cover)
       }
@@ -637,6 +655,9 @@ export const useGlobalPlayStatusStore = defineStore(
       return {
         song: clean,
         cover,
+        // 上游 CDN 原链接（供「高清封面协议」使用；可能是空字符串）。
+        // 与 cover(blob:/file:) 严格区分，切勿混用。
+        sourceUrl,
         crlyric,
         colors,
         lines: crlyric ? sanitizeLyricLines(toPlayerLyrics(crlyric)) : [],
@@ -655,6 +676,7 @@ export const useGlobalPlayStatusStore = defineStore(
       player.songInfo = prepared.song
       player.songId = String(prepared.song.songmid)
       player.cover = prepared.cover
+      player.coverSourceUrl = prepared.sourceUrl
       // 只在真有歌词时写入。超时提交会带来 crlyric === undefined，
       // 而此时可能已经有「迟到的回填」把歌词补上了（backfillLyrics），
       // 无条件赋值会把已经显示出来的歌词抹掉，让用户看到歌词闪一下又没了。
@@ -676,11 +698,21 @@ export const useGlobalPlayStatusStore = defineStore(
       // 封面用已加载好的那张(prepared.cover)，由 useSmtc 转成 data URL，
       // 避免 song.img 为空/不可达时卡片显示问号或停留在上一首歌。
       try {
+        // interval 是 'mm:ss' 形式；parseInterval 返回秒，原生通道需要毫秒。
+        const durationSec = parseInterval(prepared.song.interval)
         mediaSessionController.updateMetadata({
           title: prepared.song.name,
           artist: prepared.song.singer,
           album: prepared.song.albumName || '未知专辑',
-          artworkUrl: prepared.cover
+          artworkUrl: prepared.cover,
+          duration: durationSec > 0 ? durationSec * 1000 : undefined,
+          // 开启「系统媒体控件高清封面」时，useSmtc 会连同完整 songInfo 一起
+          // 交给「高清封面协议」向插件换取大图（插件通常直接用其中的 img 转换）。
+          songInfo: prepared.song,
+          // 注意：传给高清转换的「原链接」必须是上游 CDN 地址，**绝非**
+          // prepared.cover（那是 blob:/file: 的显示用地址）。缓存命中时可能为空，
+          // 此时 useSmtc 会退而使用 songInfo.img。
+          sourceArtworkUrl: prepared.sourceUrl
         })
       } catch {}
     }

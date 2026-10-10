@@ -51,8 +51,8 @@ const filteredTasks = computed(() => {
     return false
   })
 
-  // Sort tasks
-  return tasks.sort((a, b) => {
+  // Sort tasks（副本排序，不动原数组）
+  return [...tasks].sort((a, b) => {
     // 最新在上：完成与失败页按创建时间降序
     if (activeTab.value === 'completed' || activeTab.value === 'failed') {
       return b.createdAt - a.createdAt

@@ -534,10 +534,32 @@ function startHostEventPublishing() {
   }, 5000)
   hostEventCleanups.push(() => window.clearInterval(playerTimer))
 
-  const publishDownload = (_event: unknown, task: any) =>
-    task?.pluginId
-      ? publishHostEvent('downloads.changed', toPluginDownloadTask(task), task.pluginId)
-      : undefined
+  // 下载任务只有「由插件发起」的才对插件可见。
+  // 反例：应用自动更新任务（songInfo.source === 'update'，pluginId 是宿主内部
+  // 标记 'autoUpdate'）——它不是歌曲，没有 songmid 等合法身份，交给
+  // toPluginTrack 必然抛「歌曲缺少有效来源或 ID」。这类任务直接跳过，不广播。
+  const isPluginDownloadTask = (task: any): boolean => {
+    if (!task?.pluginId) return false
+    // 应用更新等宿主内部任务：songInfo.source 为 'update'，不属于任何插件。
+    if (task.songInfo?.source === 'update') return false
+    // 必须能构成合法歌曲身份（有 source 且有 songmid），否则不广播给插件。
+    return (
+      typeof task.songInfo?.source === 'string' &&
+      task.songInfo.source.trim() !== '' &&
+      task.songInfo.songmid != null &&
+      String(task.songInfo.songmid).trim() !== ''
+    )
+  }
+
+  const publishDownload = (_event: unknown, task: any) => {
+    if (!isPluginDownloadTask(task)) return
+    try {
+      publishHostEvent('downloads.changed', toPluginDownloadTask(task), task.pluginId)
+    } catch (error) {
+      // 兜底：即使个别任务结构异常，也只跳过它，不影响其它下载事件与宿主自身。
+      console.warn('[下载] 跳过无法转为插件任务的下载事件:', error)
+    }
+  }
   hostEventCleanups.push(
     window.api.download.onTaskAdded(publishDownload),
     window.api.download.onTaskProgress(publishDownload),

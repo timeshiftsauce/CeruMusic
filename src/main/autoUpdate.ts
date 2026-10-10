@@ -33,6 +33,9 @@ let differentialReady = false
 let isDifferentialDownloading = false
 let electronUpdaterInitialized = false
 
+/** 本次更新下载使用的镜像前缀（空 = 原生直连）。 */
+let currentMirror = ''
+
 const UPDATE_SERVER = 'https://update.cerumusic.top'
 
 // 把 Node 的 process.arch 收敛到服务器认识的三种取值:
@@ -50,6 +53,129 @@ const CLIENT_ARCH = normalizeArchForServer(process.arch)
 console.log(`AutoUpdater initialized with arch=${process.arch}, normalizedArch=${CLIENT_ARCH}`)
 
 const UPDATE_API_URL = `${UPDATE_SERVER}/update/${process.platform}/${CLIENT_ARCH}/${app.getVersion()}`
+
+// ============================================================
+// 更新镜像（GitHub 代理）—— 「选择下载方式」用
+//
+// 用法：把原始更新 URL 直接拼在镜像前缀后，例如
+//   https://gh-proxy.org/https://github.com/owner/repo/releases/download/v1/a.exe
+// 具体规则与 gh-proxy 一致（前缀 + 原始 URL，原 URL 保留完整协议与域名）。
+//
+// 镜像池的**唯一权威来源是 update-server**（响应里的 `mirrors: string[]`，
+// 维护于 update-server/src/mirrors.ts）。这里只保留极少量应急兜底，用于
+// 更新服务器不可达时的降级 —— 不要再往这里堆列表，改服务器即可。
+// ============================================================
+const FALLBACK_MIRRORS = ['https://gh-proxy.org/', 'https://ghproxy.net/', 'https://ghfast.top/']
+
+/** 当前生效的镜像池：服务器下发优先，否则用内置兜底。 */
+let availableMirrors: string[] = [...FALLBACK_MIRRORS]
+
+/** 镜像测速的并发上限：避免一次性发起 74 个连接。 */
+const MIRROR_PROBE_CONCURRENCY = 12
+
+/** 把镜像前缀与原始下载 URL 拼成可直接下载的地址（gh-proxy 风格）。 */
+export function buildMirrorUrl(mirror: string, originalUrl: string): string {
+  if (!mirror) return originalUrl
+  const base = mirror.endsWith('/') ? mirror : mirror + '/'
+  return base + originalUrl
+}
+
+/**
+ * 探测单个镜像的 RTT（毫秒）。失败/超时返回 null。mirror 为空串 = 原生直连。
+ *
+ * 判定「可用」的标准是**能建立连接并拿到 HTTP 响应**，而不是必须 2xx ——
+ * gh-proxy 类镜像对未知路径返回 404/403 属正常（服务是活的），
+ * 若按 res.ok 判定会把可用镜像误判为超时。
+ */
+async function probeMirror(mirror: string, timeoutMs = 6000): Promise<number | null> {
+  // 用 GitHub 静态小资源作探测目标，拼接方式与真实下载完全一致。
+  // mirror 为空串时即「直连」——直接请求原始 URL，同样能反映 GitHub 直连速度。
+  const probeTarget =
+    'https://raw.githubusercontent.com/timeshiftsauce/CeruMusic/refs/heads/main/docs/assets/head.jpg'
+  const url = mirror ? buildMirrorUrl(mirror, probeTarget) : probeTarget
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  const started = Date.now()
+  try {
+    // HEAD 更省流量；部分代理不支持 HEAD，失败时降级用 GET + Range 取首字节。
+    let res = await net.fetch(url, { method: 'HEAD', signal: ctrl.signal })
+    if (!res.ok) {
+      res = await net.fetch(url, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-0' },
+        signal: ctrl.signal
+      })
+      // 读掉 body 确保首字节真正到达
+      try {
+        await res.arrayBuffer()
+      } catch {}
+    }
+    // 只要拿到了 HTTP 响应就说明链路可达（包含 404/403，说明代理服务本身活着）。
+    // 仅在连接层失败（DNS/超时/TLS）时才返回 null。
+    return Date.now() - started
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** 并发池：限制同时进行的探测数，避免一次性发起过多连接。 */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (true) {
+      const index = cursor++
+      if (index >= items.length) return
+      results[index] = await worker(items[index], index)
+    }
+  })
+  await Promise.all(runners)
+  return results
+}
+
+/**
+ * 并发探测「原生直连 + 所有镜像」的 RTT。
+ *
+ * 返回列表**第一个固定是原生直连**（url 为空串）。
+ * 其余镜像：可用的按 RTT 升序排在前面，**探测失败（超时）的保留在末尾**，
+ * 其 ms 为 null（前端渲染为「超时」并置灰，不作为默认选中项）。
+ *
+ * 用于更新弹窗：一个面板里把「直连」和全部镜像并列，用户单选。
+ * 探测受并发上限约束（MIRROR_PROBE_CONCURRENCY）。
+ */
+export async function probeMirrors(
+  mirrors?: string[]
+): Promise<Array<{ url: string; ms: number | null }>> {
+  const explicit = !!(mirrors && mirrors.length)
+  const list = (explicit ? mirrors! : availableMirrors).filter(Boolean)
+  const fromServer = !explicit && list !== FALLBACK_MIRRORS
+  updateLog.log(
+    `镜像测速开始：共 ${list.length} 个（来源：${explicit ? '调用方指定' : fromServer ? '服务器下发' : '内置兜底'}，并发 ${MIRROR_PROBE_CONCURRENCY}）`
+  )
+  const [directMs, mirrorResults] = await Promise.all([
+    probeMirror(''), // 空串 = 原生直连
+    mapWithConcurrency(list, MIRROR_PROBE_CONCURRENCY, async (mirror) => {
+      const ms = await probeMirror(mirror)
+      return { url: mirror, ms }
+    })
+  ])
+  // 可用的按延迟升序在前，超时的排在其后（保持相对顺序）
+  const ok = mirrorResults
+    .filter((r) => r.ms != null)
+    .sort((a, b) => (a.ms as number) - (b.ms as number))
+  const failed = mirrorResults.filter((r) => r.ms == null)
+  updateLog.log(
+    `镜像测速完成：可用 ${ok.length}/${list.length}，超时 ${failed.length}，直连 ${directMs == null ? '超时' : directMs + 'ms'}`
+  )
+  // 直连始终第一；其余 = 可用（升序）+ 超时（末尾）
+  return [{ url: '', ms: directMs }, ...ok, ...failed]
+}
 
 function ymlNameForPlatform(): string {
   if (process.platform === 'darwin') return 'latest-mac.yml'
@@ -292,6 +418,7 @@ export async function checkForUpdates(window?: BrowserWindow) {
 async function fetchHazelUpdateInfo(): Promise<UpdateInfo | null> {
   updateLog.log('Fetching update info from ' + UPDATE_API_URL)
   try {
+    // 更新服务器冷启动要回源 GitHub API，国内可能十几秒；超时给足 20s。
     const res = await fetchWithDohFallback(UPDATE_API_URL, {
       method: 'GET',
       headers: {
@@ -299,15 +426,25 @@ async function fetchHazelUpdateInfo(): Promise<UpdateInfo | null> {
         'User-Agent': 'CeruMusic-AutoUpdater',
         'X-Arch': CLIENT_ARCH
       },
-      timeoutMs: 10000
+      timeoutMs: 20000
     })
     if (res.status === 204) return null
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${res.statusText}`)
     }
-    const data = (await res.json()) as UpdateInfo
+    const data = (await res.json()) as UpdateInfo & { mirrors?: unknown }
     if (data && data.url) {
       data.url = resolveDownloadUrlForCurrentArch(data.url)
+    }
+    // 服务器下发的镜像池优先；没有/格式不对则沿用内置兜底。
+    if (Array.isArray(data?.mirrors)) {
+      const list = (data.mirrors as unknown[])
+        .filter((m): m is string => typeof m === 'string' && /^https?:\/\//i.test(m))
+        .map((m) => (m.endsWith('/') ? m : m + '/'))
+      if (list.length) {
+        availableMirrors = list
+        updateLog.log(`镜像池已由服务器下发：${list.length} 个`)
+      }
     }
     return data
   } catch (error: any) {
@@ -457,9 +594,16 @@ async function downloadWithDifferential() {
 async function downloadWithLegacy() {
   if (!currentUpdateInfo) throw new Error('No update info')
 
-  updateLog.log('Starting full download via DownloadManager:', currentUpdateInfo.url)
+  // 组装下载地址：选了镜像就「镜像前缀 + 原始 URL」，否则直连。
+  const originalUrl = currentUpdateInfo.url
+  const downloadUrl = currentMirror ? buildMirrorUrl(currentMirror, originalUrl) : originalUrl
+  updateLog.log(
+    currentMirror
+      ? `Starting full download via mirror: ${downloadUrl}`
+      : `Starting full download via DownloadManager: ${downloadUrl}`
+  )
 
-  const fileName = path.basename(currentUpdateInfo.url)
+  const fileName = path.basename(originalUrl)
   const downloadPath = path.join(app.getPath('temp'), fileName)
 
   const songInfo = {
@@ -478,11 +622,14 @@ async function downloadWithLegacy() {
 
   const task = downloadManager.addTask(
     songInfo,
-    currentUpdateInfo.url,
+    downloadUrl,
     downloadPath,
     { downloadLyrics: false, priority },
     priority,
-    'autoUpdate',
+    // 应用更新不是「插件发起的下载」：pluginId 必须留空。
+    // 若传 'autoUpdate'，渲染层广播下载事件时会把它当成插件任务，
+    // 而该 songInfo（source='update'，无 songmid）不是合法歌曲 → 抛错刷屏。
+    undefined,
     undefined
   )
 
@@ -541,11 +688,15 @@ async function downloadWithLegacy() {
 // 公共出口: 下载 / 安装 / 查询
 // ============================================================
 
-export async function downloadUpdate(mode?: UpdateMode) {
+export async function downloadUpdate(mode?: UpdateMode, mirror?: string) {
   if (!currentUpdateInfo) {
     sendError('No update info available')
     return
   }
+
+  // 记录本次使用的镜像（空 = 原生直连）。downloadWithLegacy 据此拼接下载地址。
+  currentMirror = mirror && typeof mirror === 'string' ? mirror.trim() : ''
+  updateLog.log(currentMirror ? `使用镜像下载：${currentMirror}` : '使用原生（直连）下载')
 
   // 用户没指定 → 优先差分(若支持)
   const chosen: UpdateMode = mode || (supportsDifferential ? 'differential' : 'full')

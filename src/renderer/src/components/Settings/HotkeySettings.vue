@@ -70,7 +70,7 @@ const load = async () => {
   }
 }
 
-const save = async () => {
+const save = async (): Promise<boolean> => {
   saving.value = true
   try {
     const plainBindings = { ...(toRaw(bindings.value) || {}) }
@@ -78,26 +78,22 @@ const save = async () => {
       enabled: enabled.value,
       bindings: plainBindings
     })
+    // 主进程已把配置落盘（含冲突项），这里**不要**用返回值回滚用户正在编辑的
+    // 绑定 —— 否则用户一撞键就改不动了。只刷新注册状态（哪些项标红/失败）。
+    const cfg = (res && res.data) as HotkeyConfig | undefined
+    if (cfg) enabled.value = !!cfg.enabled
+    updateStatus((res as any)?.status as HotkeyStatus | undefined)
+
     if (!res?.success) {
       const errs = (res?.errors || []) as string[]
-      MessagePlugin.warning(errs[0] || res?.error || '保存失败')
-      const cfg2 = (res && res.data) as HotkeyConfig | undefined
-      if (cfg2) {
-        enabled.value = !!cfg2.enabled
-        bindings.value = { ...(cfg2.bindings || {}) }
-      }
-      updateStatus((res as any)?.status as HotkeyStatus | undefined)
-      return
+      MessagePlugin.warning(errs[0] || res?.error || '保存失败：存在冲突或无法注册的快捷键')
+      return false
     }
-    const cfg = (res && res.data) as HotkeyConfig | undefined
-    if (cfg) {
-      enabled.value = !!cfg.enabled
-      bindings.value = { ...(cfg.bindings || {}) }
-    }
-    updateStatus((res as any)?.status as HotkeyStatus | undefined)
     MessagePlugin.success('已保存')
+    return true
   } catch {
     MessagePlugin.error('保存失败')
+    return false
   } finally {
     saving.value = false
   }
@@ -145,17 +141,13 @@ const beginRecord = (action: HotkeyAction) => {
     },
     onCapture: (acc) => {
       recording.value.rejectedMediaKey = false
-      if (recording.value.action) {
+      if (recording.value.action && acc) {
         const conflict = Object.entries(bindings.value).find(
-          ([k, v]) =>
-            k !== recording.value.action &&
-            (v || '').toLowerCase() === (acc || '').toLowerCase() &&
-            !!acc
+          ([k, v]) => k !== recording.value.action && (v || '').toLowerCase() === acc.toLowerCase()
         )
-        if (conflict) {
-          MessagePlugin.warning('快捷键已被其它功能占用')
-          return
-        }
+        // 只提示，不拦截：用户可以照常录入（主进程会把冲突项标为失败，
+        // 其余快捷键不受影响）。硬拦截会让用户「想改却改不了」。
+        if (conflict) MessagePlugin.warning('该按键已被其它功能占用，保存后该项会提示冲突')
       }
       recording.value.captured = acc
     },

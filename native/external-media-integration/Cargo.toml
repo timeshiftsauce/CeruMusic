@@ -1,0 +1,49 @@
+[package]
+name = "external-media-integration"
+version = "0.1.0"
+edition = "2021"
+description = "CeruMusic 原生外部媒体集成：系统媒体控件 (SMTC / MPRIS / NowPlayingInfoCenter)"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi4", "async", "serde-json"] }
+napi-derive = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media",
+    "Media_Playback",
+    "Storage_Streams",
+    "Win32_System_Com",
+] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+mpris-server = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+tempfile = "3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = "0.2"
+objc2-app-kit = "0.2"
+objc2-media-player = "0.2"
+block2 = "0.5"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+strip = true

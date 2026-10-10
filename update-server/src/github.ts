@@ -36,6 +36,44 @@ function authHeaders(env: Env, extra: Record<string, string> = {}): Record<strin
 
 const RELEASE_CACHE_KEY = 'https://internal.cache/release-latest'
 const TAG_RELEASE_CACHE_PREFIX = 'https://internal.cache/release-tag-'
+// 长期保留「最后一次成功」的副本：即使 GitHub 慢/被墙导致上游失败，
+// 也能用它兜底，避免整个更新检查 500/超时（stale-on-error）。
+const STALE_RELEASE_CACHE_PREFIX = 'https://internal.cache/stale-release-'
+
+/** 上游请求默认超时（毫秒）。GitHub API 国内直连常常十几秒，必须设上限。 */
+const GITHUB_FETCH_TIMEOUT_MS = 8000
+
+/** 带超时的 fetch：超时或网络错误抛错，由调用方决定回退策略。 */
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), GITHUB_FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** 读长期兜底缓存（不做 TTL 检查，永久保留直到被新数据覆盖）。 */
+async function readStaleRelease(cacheKey: string): Promise<Release | null> {
+  try {
+    const hit = await caches.default.match(new Request(STALE_RELEASE_CACHE_PREFIX + cacheKey))
+    return hit ? ((await hit.json()) as Release) : null
+  } catch {
+    return null
+  }
+}
+
+/** 写入长期兜底缓存。Cloudflare Cache API 的过期靠 max-age，这里给 30 天。 */
+function writeStaleRelease(ctx: ExecutionContext, cacheKey: string, data: Release) {
+  const body = new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=2592000, s-maxage=2592000'
+    }
+  })
+  ctx.waitUntil(caches.default.put(new Request(STALE_RELEASE_CACHE_PREFIX + cacheKey), body))
+}
 
 // 用 Cloudflare 边缘缓存替代 Vercel 版本里的进程内缓存。
 // Workers 是 stateless 的, 模块级变量在不同 isolate 之间不共享。
@@ -50,11 +88,21 @@ export async function getLatestRelease(env: Env, ctx: ExecutionContext): Promise
   }
 
   const repo = getRepo(env)
-  const res = await fetch(`${GH_API}/repos/${repo}/releases/latest`, {
-    headers: authHeaders(env)
-  })
+  let res: Response
+  try {
+    res = await fetchWithTimeout(`${GH_API}/repos/${repo}/releases/latest`, {
+      headers: authHeaders(env)
+    })
+  } catch (err) {
+    // 上游超时/网络错误：用「最后一次成功」兜底，而不是把失败抛给客户端。
+    const stale = await readStaleRelease(RELEASE_CACHE_KEY)
+    if (stale) return stale
+    throw err
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
+    const stale = await readStaleRelease(RELEASE_CACHE_KEY)
+    if (stale) return stale
     throw new Error(`GitHub releases/latest ${res.status}: ${body.slice(0, 200)}`)
   }
   const data = (await res.json()) as Release
@@ -66,6 +114,7 @@ export async function getLatestRelease(env: Env, ctx: ExecutionContext): Promise
     }
   })
   ctx.waitUntil(cache.put(cacheReq, cacheable))
+  writeStaleRelease(ctx, RELEASE_CACHE_KEY, data)
   return data
 }
 
@@ -84,11 +133,21 @@ export async function getReleaseByTag(
   }
 
   const repo = getRepo(env)
-  const res = await fetch(`${GH_API}/repos/${repo}/releases/tags/${tag}`, {
-    headers: authHeaders(env)
-  })
+  const staleKey = `${TAG_RELEASE_CACHE_PREFIX}${tag}`
+  let res: Response
+  try {
+    res = await fetchWithTimeout(`${GH_API}/repos/${repo}/releases/tags/${tag}`, {
+      headers: authHeaders(env)
+    })
+  } catch (err) {
+    const stale = await readStaleRelease(staleKey)
+    if (stale) return stale
+    throw err
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
+    const stale = await readStaleRelease(staleKey)
+    if (stale) return stale
     throw new Error(`GitHub releases/tags/${tag} ${res.status}: ${body.slice(0, 200)}`)
   }
   const data = (await res.json()) as Release
@@ -100,6 +159,7 @@ export async function getReleaseByTag(
     }
   })
   ctx.waitUntil(cache.put(cacheReq, cacheable))
+  writeStaleRelease(ctx, staleKey, data)
   return data
 }
 
@@ -108,7 +168,7 @@ export function findAsset(release: Release, name: string): ReleaseAsset | undefi
 }
 
 export async function fetchAssetText(env: Env, asset: ReleaseAsset): Promise<string> {
-  const res = await fetch(asset.url, {
+  const res = await fetchWithTimeout(asset.url, {
     headers: authHeaders(env, { Accept: 'application/octet-stream' }),
     redirect: 'follow'
   })

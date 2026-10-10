@@ -15,6 +15,7 @@ export const ROUTABLE_PLUGIN_CAPABILITIES: Record<string, readonly [string, stri
   'action:comments.hot': ['热门评论', '获取歌曲的热门评论'],
   'action:comments.get': ['最新评论', '分页读取歌曲评论'],
   'action:artwork.get': ['歌曲封面', '获取或补全歌曲封面'],
+  'action:artwork.hires': ['高清封面', '为系统媒体控件提供高清封面（可选）'],
   'action:playlist.parse': ['歌单链接识别', '识别歌单链接或歌单编号'],
   'action:recognize': ['听歌识曲', '根据音频片段识别歌曲'],
   'action:album.list': ['专辑歌曲', '读取专辑信息和歌曲列表']

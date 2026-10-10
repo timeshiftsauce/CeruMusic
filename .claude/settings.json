@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "allow": ["Bash(grep -v \"\\\\.map$\\\\|\\\\.d\\\\.ts:\\\\|\\\\.d\\\\.cts:\")"]
-  }
-}
