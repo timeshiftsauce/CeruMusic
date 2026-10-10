@@ -29,6 +29,8 @@
     "build:linux": "yarn run build && electron-builder --linux --config --publish never",
     "build:deps": "yarn run postinstall && yarn run build && electron-builder --win --x64 --config",
     "buildico": "electron-icon-builder --input=./resources/logo.png --output=resources --flatten",
+    "build:native:emi": "node scripts/build-native-emi.mjs",
+    "build:native:emi:debug": "node scripts/build-native-emi.mjs --debug",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
