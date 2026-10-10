@@ -67,8 +67,10 @@ impl MacosImpl {
             }
         };
         if let Some(tsfn) = guard.as_ref() {
-            let status =
-                tsfn.call(event, napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+            let status = tsfn.call(
+                event.to_json(),
+                napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking
+            );
             if status != napi::Status::Ok {
                 error!("调用 JS 回调失败, status: {status:?}");
             }

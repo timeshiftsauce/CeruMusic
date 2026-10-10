@@ -67,6 +67,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # Linux 上 mpris-server 依赖 D-Bus 开发库；缺 libdbus-1-dev/pkg-config 会导致
+      # `cargo build` 直接失败 (exit 101)。详见 docs/native-media-integration.md。
+      - name: Install Linux system deps for native module
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
       - name: Cache Rust build artifacts
         uses: actions/cache@v5
         with:

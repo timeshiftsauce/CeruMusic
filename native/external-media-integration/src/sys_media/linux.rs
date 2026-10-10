@@ -12,7 +12,6 @@ use std::{
 use anyhow::Result;
 use mpris_server::{
     LoopStatus as MprisLoopStatus, Metadata, PlaybackStatus as MprisPlaybackStatus, Player, Time,
-    zbus::zvariant::ObjectPath,
 };
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 use tokio::{
@@ -116,11 +115,15 @@ fn run_mpris_worker(mut rx: UnboundedReceiver<MprisCommand>) -> Result<()> {
                     }
                 }
                 MprisCommand::UpdateMetadata(payload) => {
-                    let metadata = Metadata::builder()
+                    let mut builder = Metadata::builder()
                         .title(payload.song_name.clone())
                         .artist([payload.author_name.clone()])
-                        .album(payload.album_name.clone())
-                        .build();
+                        .album(payload.album_name.clone());
+                    // 时长属于 Metadata（mpris-server 0.10 的 Player 无 set_length）
+                    if let Some(dur) = payload.duration {
+                        builder = builder.length(Time::from_millis(dur as i64));
+                    }
+                    let metadata = builder.build();
                     player.set_metadata(metadata).await.ok();
                 }
                 MprisCommand::UpdatePlaybackStatus(status) => {
@@ -130,15 +133,12 @@ fn run_mpris_worker(mut rx: UnboundedReceiver<MprisCommand>) -> Result<()> {
                     };
                     player.set_playback_status(s).await.ok();
                 }
-                MprisCommand::UpdateTimeline { current, total } => {
-                    player
-                        .set_position(Time::from_millis(current as i64).unwrap_or_default())
-                        .await
-                        .ok();
-                    player
-                        .set_length(Time::from_millis(total as i64).unwrap_or_default())
-                        .await
-                        .ok();
+                MprisCommand::UpdateTimeline { current, .. } => {
+                    // mpris-server 0.10：位置用同步的 set_position()（不是 async，
+                    // 也不能 await）。总时长（length）属于 Metadata，已在
+                    // UpdateMetadata 时通过 builder.length() 写入，此处不再重复设置
+                    //（Metadata 未实现 Clone，无法在此增量修改）。
+                    player.set_position(Time::from_millis(current as i64));
                 }
                 MprisCommand::UpdatePlaybackRate(rate) => {
                     player.set_rate(rate).await.ok();
@@ -160,8 +160,7 @@ fn run_mpris_worker(mut rx: UnboundedReceiver<MprisCommand>) -> Result<()> {
             }
         }
 
-        // 主动摘下 root 接口，让桌面环境的媒体卡片立刻消失。
-        let _ = ObjectPath::try_from("/org/mpris/MediaPlayer2");
+        // player drop 即摘掉 D-Bus 上的媒体卡片（mpris-server 无显式 disable）。
         Ok(())
     })
 }

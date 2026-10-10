@@ -35,9 +35,24 @@ tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
-objc2-foundation = "0.2"
-objc2-app-kit = "0.2"
-objc2-media-player = "0.2"
+# Foundation/AppKit/MediaPlayer 的绑定是按 symbol 分 feature 开关的，
+# 必须显式列出用到的符号，否则默认只导出基本的 NSObject，编译会报
+# "no `NSData` in the root" / "gated behind the `NSGeometry` feature"。
+objc2-foundation = { version = "0.2", features = [
+    "NSData",
+    "NSDictionary",
+    "NSGeometry",
+    "NSString",
+    "NSValue",
+] }
+objc2-app-kit = { version = "0.2", features = ["NSImage"] }
+objc2-media-player = { version = "0.2", features = [
+    "MPMediaItem",
+    "MPNowPlayingInfoCenter",
+    "MPRemoteCommand",
+    "MPRemoteCommandCenter",
+    "MPRemoteControlTypes",
+] }
 block2 = "0.5"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
