@@ -38,7 +38,8 @@ export type AudioSubscribeMethod = (
 export enum PlayMode {
   SEQUENCE = 'sequence', // 顺序播放
   RANDOM = 'random', // 随机播放
-  SINGLE = 'single' // 单曲循环
+  SINGLE = 'single', // 单曲循环
+  LOOP = 'loop' // 列表循环
 }
 
 export type ControlAudioState = {

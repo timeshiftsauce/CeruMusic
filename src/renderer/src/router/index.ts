@@ -23,6 +23,11 @@ const appRouter: RouteRecordRaw[] = [
         component: () => import('@renderer/views/music/songlist.vue')
       },
       {
+        path: 'platform-accounts',
+        name: 'platform-accounts',
+        component: () => import('@renderer/views/music/platformAccounts.vue')
+      },
+      {
         path: 'local',
         name: 'local',
         component: () => import('@renderer/views/music/local.vue')

@@ -36,7 +36,7 @@ import {
   uninstallDesktopLyricBridge
 } from '@renderer/utils/lyrics/desktopLyricBridge'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@renderer/store'
+import { useAuthStore } from '@renderer/store/Auth'
 import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'

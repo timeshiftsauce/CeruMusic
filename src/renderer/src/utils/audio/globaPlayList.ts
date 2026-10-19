@@ -103,7 +103,7 @@ const PluginErrorMsgs = [
 let cachedLtStore: any = null
 const getListenTogetherStore = async () => {
   if (cachedLtStore) return cachedLtStore
-  const { useListenTogetherStore } = await import('@renderer/store')
+  const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
   cachedLtStore = useListenTogetherStore()
   return cachedLtStore
 }
@@ -767,7 +767,11 @@ watch(
     // 同步到系统媒体控件的随机/循环指示（仅原生通道生效，浏览器通道内部 no-op）。
     try {
       mediaSessionController.updatePlayMode(
-        mode === PlayMode.SINGLE ? 'Track' : mode === PlayMode.SEQUENCE ? 'List' : 'None',
+        mode === PlayMode.SINGLE || mode === PlayMode.LOOP
+          ? mode === PlayMode.SINGLE
+            ? 'Track'
+            : 'List'
+          : 'None',
         mode === PlayMode.RANDOM
       )
     } catch {}
@@ -789,12 +793,16 @@ watch(
   { deep: true }
 )
 
+const setPlayMode = (mode: PlayMode) => {
+  playMode.value = mode
+  userInfo.value.playMode = mode
+}
+
 const updatePlayMode = () => {
-  const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
+  const modes = [PlayMode.RANDOM, PlayMode.SINGLE, PlayMode.LOOP, PlayMode.SEQUENCE]
   const currentIndex = modes.indexOf(playMode.value)
   const nextIndex = (currentIndex + 1) % modes.length
-  playMode.value = modes[nextIndex]
-  userInfo.value.playMode = playMode.value
+  setPlayMode(modes[nextIndex])
 }
 
 const resolveNextSong = ({
@@ -836,6 +844,9 @@ const resolveNextSong = ({
           )
         ))
   )
+  if (respectSingleMode && playMode.value === PlayMode.SEQUENCE && currentIndex >= list.value.length - 1) {
+    return null
+  }
   const nextIndex = (currentIndex + 1) % list.value.length
   return list.value[nextIndex] || null
 }
@@ -844,7 +855,7 @@ const resolveNextSong = ({
  * 计算下一首歌曲（不推进播放，仅返回引用，供无感过渡预取 URL 使用）。
  * - SINGLE 模式下返回 null（单曲循环不过渡）
  * - RANDOM 模式使用 shuffleOrder，必要时重建
- * - SEQUENCE 模式按列表顺序循环
+ * - LOOP 模式按列表顺序循环，SEQUENCE 到列表末尾停止
  * - 列表为空返回 null
  */
 const getNextSong = (): SongList | null => {
@@ -1046,6 +1057,9 @@ const onGlobalCtrl = (e: any) => {
           userInfo.value.playMode = playMode.value
         } else if (v === 'random') {
           playMode.value = PlayMode.RANDOM
+          userInfo.value.playMode = playMode.value
+        } else if (v === 'loop') {
+          playMode.value = PlayMode.LOOP
           userInfo.value.playMode = playMode.value
         } else if (v === 'toggleSingle') {
           playMode.value = playMode.value === PlayMode.SINGLE ? PlayMode.SEQUENCE : PlayMode.SINGLE
@@ -1279,6 +1293,7 @@ export {
   playNextAuto,
   playPrevious,
   updatePlayMode,
+  setPlayMode,
   togglePlayPause,
   handlePlay,
   handlePause,

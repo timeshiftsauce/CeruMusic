@@ -7,6 +7,7 @@ import aiEvents from '../events/ai'
 import initFontEvents from '../services/font/index'
 import { app, powerSaveBlocker } from 'electron'
 import { type BrowserWindow, ipcMain } from 'electron'
+import { initPlatformAccountEvents } from './platformAccounts'
 import lyricWindow from '../windows/lyric-window'
 import { initDlnaService } from './dlna'
 import { configManager } from '../services/ConfigManager'
@@ -29,6 +30,7 @@ export default function InitEventServices(mainWindow: BrowserWindow) {
   initFontEvents()
   // initLocalMusicEvents()
   initDlnaService()
+  initPlatformAccountEvents(mainWindow)
   basisEvent(mainWindow)
 }
 

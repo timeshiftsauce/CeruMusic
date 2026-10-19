@@ -228,6 +228,31 @@ const api = {
       return () => ipcRenderer.removeListener('plugin-add-link', handler)
     }
   },
+  platformAccounts: {
+    status: () => ipcRenderer.invoke('platform-accounts:status'),
+    openLogin: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo') =>
+      ipcRenderer.invoke('platform-accounts:open-login', platform),
+    kuwoLogin: (username: string, password: string) =>
+      ipcRenderer.invoke('platform-accounts:kuwo-login', username, password),
+    logout: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo') =>
+      ipcRenderer.invoke('platform-accounts:logout', platform),
+    syncPlaylists: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo', selectedIds?: string[]) =>
+      ipcRenderer.invoke('platform-accounts:sync-playlists', platform, selectedIds),
+    onChanged: (
+      callback: {
+        (event: {
+          platform: 'netease' | 'qq' | 'kugou' | 'kuwo'
+          loggedIn: boolean
+          playlistCount?: number
+          syncError?: string
+        }): void
+      }
+    ) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: any) => callback(value)
+      ipcRenderer.on('platform-accounts:changed', listener)
+      return () => ipcRenderer.removeListener('platform-accounts:changed', listener)
+    }
+  },
   // ai助手
   ai: {
     ask: (prompt: string) => ipcRenderer.invoke('ai-ask', prompt),

@@ -217,7 +217,7 @@
             </div>
 
             <!-- 歌曲信息 -->
-            <div class="col-title" @click="handleSongClick(song)">
+            <div class="col-title" @click="handleSongClick(song)" @dblclick.prevent.stop="handleSongDoubleClick(song)">
               <div v-if="song.img" class="song-cover">
                 <s-image
                   :key="song.img"
@@ -340,7 +340,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
 import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
-import { useAuthStore } from '@renderer/store'
+import { useAuthStore } from '@renderer/store/Auth'
 import { useSettingsStore } from '@renderer/store/Settings'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 
@@ -408,11 +408,6 @@ const buffer = computed(() => Number(props.bufferSize) || 10)
 const scrollTop = ref(0)
 const visibleStartIndex = ref(0)
 const visibleEndIndex = ref(0)
-
-// 点击防抖相关状态
-let clickTimer: NodeJS.Timeout | null = null
-let lastClickTime = 0
-const doubleClickDelay = 300 // 300ms 内的第二次点击视为双击
 
 // 右键菜单相关状态
 const contextMenuVisible = ref(false)
@@ -741,29 +736,12 @@ const handleAddToPlaylist = (song: Song) => {
 const handleSongClick = (song: Song) => {
   if (isMultiSelect.value) {
     toggleSelect(song)
-    return
   }
-  const currentTime = Date.now()
-  const timeDiff = currentTime - lastClickTime
+}
 
-  // 清除之前的定时器
-  if (clickTimer) {
-    clearTimeout(clickTimer)
-    clickTimer = null
-  }
-
-  if (timeDiff < doubleClickDelay && timeDiff > 0) {
-    // 双击：立即执行播放操作
-    handlePlay(song)
-    lastClickTime = 0 // 重置时间，防止三击
-  } else {
-    // 单击：延迟执行添加到播放列表
-    lastClickTime = currentTime
-    clickTimer = setTimeout(() => {
-      handleAddToPlaylist(song)
-      clickTimer = null
-    }, doubleClickDelay)
-  }
+const handleSongDoubleClick = (song: Song) => {
+  if (isMultiSelect.value) return
+  handlePlay(song)
 }
 
 // 格式化时长

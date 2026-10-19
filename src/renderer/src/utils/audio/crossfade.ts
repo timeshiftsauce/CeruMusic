@@ -1,7 +1,7 @@
 import { songKey } from '@common/musicItem'
 import { reactive, toRaw } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
-import { usePlaySettingStore } from '@renderer/store'
+import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import { useDlnaStore } from '@renderer/store/dlna'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'

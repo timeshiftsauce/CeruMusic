@@ -21,7 +21,7 @@
  * 对外 API 保持不变，调用方无需关心走的是哪条通道。
  */
 
-import { usePlaySettingStore } from '@renderer/store'
+import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import { toRaw } from 'vue'
 import type { MusicItem } from '@common/musicItem'
 

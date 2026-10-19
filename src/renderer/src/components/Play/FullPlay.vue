@@ -33,7 +33,7 @@ import { useDlnaStore } from '@renderer/store/dlna'
 import { MessagePlugin } from 'tdesign-vue-next'
 
 // 全局播放模式设置
-import { usePlaySettingStore } from '@renderer/store'
+import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import PlaySettings from './PlaySettings.vue'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
 import CommentsOverlay from './CommentsOverlay.vue'

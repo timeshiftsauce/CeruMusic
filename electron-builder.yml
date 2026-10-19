@@ -4,6 +4,7 @@ directories:
   buildResources: build
 asar: true
 files:
+  - '!resources/cmpl.png'
   - '!dist/**'
   - '!.git/**'
   - '!.github/**'
@@ -143,6 +144,10 @@ snap:
 deb:
   artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: false
+afterPack: scripts/after-pack-prune.mjs
+electronLanguages:
+  - zh-CN
+  - en-US
 publish:
   provider: generic
   url: https://update.cerumusic.top
