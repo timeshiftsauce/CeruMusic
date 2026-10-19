@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed } from 'vue'
-import { usePlaySettingStore } from '@renderer/store'
+import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { storeToRefs } from 'pinia'
 import { backgroundRenderers } from '@renderer/config/backgroundRenderers'

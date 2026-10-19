@@ -19,7 +19,7 @@ const axiosInstances: Map<string, AxiosInstance> = new Map()
 
 // 辅助函数：登出并通知
 async function logoutAndNotify() {
-  const { useAuthStore } = await import('@renderer/store')
+  const { useAuthStore } = await import('@renderer/store/Auth')
   const userStore = useAuthStore()
   userStore.outlogin()
   MessagePlugin.warning(ERROR_MESSAGES.LOGIN_EXPIRED)
@@ -106,7 +106,7 @@ export class Request {
     returnRaw = false,
     authMode: 'required' | 'optional' = 'required'
   ): Promise<T | any> {
-    const authStore = await import('@renderer/store').then((m) => m.useAuthStore())
+    const authStore = await import('@renderer/store/Auth').then((m) => m.useAuthStore())
     if (authMode === 'required' && !authStore.isAuthenticated) {
       MessagePlugin.warning('未登录，请先登录')
       throw new Error('未登录，请先登录')

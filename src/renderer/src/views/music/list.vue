@@ -210,18 +210,12 @@ onMounted(() => {
     bgImageLoaded.value = true
   }
 
-  fetchPlaylistSongs()
+  void fetchPlaylistSongs().then(() => {
+    if (route.query.autoSync === '1' && playlistInfo.value.meta?.playlistId) {
+      void handleSyncPlaylist()
+    }
+  })
   triggerLocateBtnVisible()
-
-  // 检查是否需要自动同步平台歌单 (从歌单列表页右键菜单触发)
-  if (route.query.autoSync === '1') {
-    // 延迟执行，等待 playlistInfo 初始化完成
-    setTimeout(() => {
-      if ('playlistId' in playlistInfo.value.meta) {
-        handleSyncPlaylist()
-      }
-    }, 500)
-  }
 })
 onBeforeUnmount(() => {
   clearLocateScrollTimers()
@@ -806,12 +800,29 @@ async function setPic(offset: number, source: string) {
 }
 
 // 组件事件处理函数
-const handlePlay = (song: MusicItem) => {
+const handlePlay = async (song: MusicItem) => {
   currentSong.value = song
   isPlaying.value = true
   console.log('播放歌曲:', song.name)
+  if (!isLocalPlaylist.value && hasMore.value) {
+    let pageGuard = 0
+    while (hasMore.value && pageGuard++ < MAX_PREFETCH_PAGES) {
+      if (route.query.type === 'cloud_user') {
+        await fetchCloudUserPlaylist(false)
+      } else if (route.query.type === 'playlist_share') {
+        await fetchPlaylistShareSongs(false)
+      } else {
+        await fetchNetworkPlaylistSongs(false)
+      }
+    }
+    await nextTick()
+  }
   if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
+    const sourceSongs = songListRef.value?.sortedSongs || songs.value
+    ;(window as any).musicEmitter.emit('replacePlaylistAndPlay', {
+      songs: toRaw(sourceSongs.map((item: MusicItem) => toRaw(item))),
+      song: toRaw(song)
+    })
   }
 }
 
@@ -1432,6 +1443,7 @@ const handleSyncPlaylist = async () => {
   const source = playlistInfo.value.meta?.source || playlistInfo.value.source
   const playlistId = (playlistInfo.value.meta as { playlistId: string }).playlistId
   const isLeaderboard = playlistInfo.value.isLeaderboard || playlistInfo.value.meta?.isLeaderboard
+  const isAccountPlaylist = playlistInfo.value.meta?.accountPlaylist === true
 
   const getListDetail = async (page: number) => {
     let detailResult: any
@@ -1467,6 +1479,18 @@ const handleSyncPlaylist = async () => {
   let new_songs: Array<any> = detailResult.list || []
 
   if (new_songs.length === 0) {
+    if (isAccountPlaylist) {
+      const replacement = await window.api.songList.replaceSongs(id, [])
+      load1.then((res) => res.close())
+      if (!replacement.success) {
+        MessagePlugin.error(`歌单更新失败：${replacement.error || '保存歌曲失败'}`)
+        return
+      }
+      songs.value = []
+      playlistInfo.value.total = 0
+      MessagePlugin.success('歌单已更新，当前没有歌曲')
+      return
+    }
     MessagePlugin.warning('该歌单没有歌曲')
     load1.then((res) => res.close())
     return
@@ -1482,6 +1506,32 @@ const handleSyncPlaylist = async () => {
       break
     }
     new_songs = new_songs.concat(songsList)
+  }
+
+  if (isAccountPlaylist) {
+    if (source === 'kg') {
+      load1.then((res) => res.close())
+      const coverLoading = MessagePlugin.loading('正在获取歌曲封面...')
+      try {
+        await setPicForPlaylist(new_songs, source)
+      } catch (error) {
+        console.warn('获取封面失败，但继续更新歌单:', error)
+      }
+      coverLoading.then((res) => res.close())
+    }
+    const coverUrl = detailResult.info?.img || playlistInfo.value.cover
+    if (coverUrl) await songListAPI.updateCover(id, coverUrl)
+    const replacement = await window.api.songList.replaceSongs(id, new_songs)
+    load1.then((res) => res.close())
+    if (!replacement.success) {
+      MessagePlugin.error(`歌单更新失败：${replacement.error || '保存歌曲失败'}`)
+      return
+    }
+    songs.value = new_songs
+    playlistInfo.value.total = new_songs.length
+    MessagePlugin.success(`歌单已更新，共 ${new_songs.length} 首歌曲`)
+    await fetchPlaylistSongs()
+    return
   }
 
   // 处理导入结果

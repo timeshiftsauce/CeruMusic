@@ -76,7 +76,7 @@ export default defineConfig(({ command }) => ({
            *  - vendor-vue        Vue + 周边运行时(高频共用,放在主入口附近)
            *  - vendor-tdesign    UI 组件库(体积大,跨多个页面用)
            * - vendor-amll       Apple Music 歌词渲染器(只在 FullPlay 用,可懒)
-           *  - vendor-tfjs       TensorFlow.js (仅 nsfwCheck 路径用,已 dynamic import)
+           *  - TensorFlow.js     仅由 nsfwCheck 按需加载,不要并入启动 vendor chunk
            *  - vendor-logto      Logto 鉴权
            *  - vendor-socketio   Socket.IO client (一起听用)
            *  - vendor-misc       其余 node_modules,合并防止碎片化
@@ -106,7 +106,8 @@ export default defineConfig(({ command }) => ({
               /[\\/]node_modules[\\/]@tensorflow[\\/]/.test(id) ||
               /[\\/]node_modules[\\/]nsfwjs[\\/]/.test(id)
             ) {
-              return 'vendor-tfjs'
+              // 由 nsfwCheck 的 dynamic import 单独触发加载，避免 5MB 模型运行时进入首页预加载链。
+              return undefined
             }
             if (/[\\/]node_modules[\\/]@logto[\\/]/.test(id)) {
               return 'vendor-logto'

@@ -71,6 +71,18 @@ const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { player } = storeToRefs(globalPlayStatus)
 const songInfo = computed(() => player.value.songInfo || ({} as any))
+const playModeLabel = computed(() => {
+  if (playMode.value === PlayMode.RANDOM) return '随机播放'
+  if (playMode.value === PlayMode.SINGLE) return '单曲循环'
+  if (playMode.value === PlayMode.LOOP) return '循环播放'
+  return '顺序播放'
+})
+const playModeIcon = computed(() => {
+  if (playMode.value === PlayMode.RANDOM) return 'icon-suijibofang'
+  if (playMode.value === PlayMode.SINGLE) return 'icon-bofang-xunhuanbofang'
+  if (playMode.value === PlayMode.LOOP) return 'icon-bofang-xunhuanbofang'
+  return 'icon-shunxubofangtubiao'
+})
 
 const {} = controlAudio
 
@@ -366,24 +378,6 @@ const toggleDesktopLyric = async () => {
 
 // let playbackPosition = 0
 let isFull = false
-
-// 获取播放模式图标类名
-const playModeTip = ref('')
-const playModeIconClass = computed(() => {
-  switch (playMode.value) {
-    case PlayMode.SEQUENCE:
-      playModeTip.value = '顺序播放'
-      return 'iconfont icon-shunxubofangtubiao'
-    case PlayMode.RANDOM:
-      playModeTip.value = '随机播放'
-      return 'iconfont icon-suijibofang'
-    case PlayMode.SINGLE:
-      playModeTip.value = '单曲循环'
-      return 'iconfont icon-bofang-xunhuanbofang'
-    default:
-      return 'iconfont icon-shunxubofangtubiao'
-  }
-})
 
 // 音量控制相关
 const showVolumeSlider = ref(false)
@@ -1725,17 +1719,24 @@ watch(showFullPlay, (val) => {
             </t-button>
           </t-tooltip>
 
-          <!-- 播放模式按钮 -->
-          <t-tooltip :content="playModeTip">
-            <t-button
-              class="control-btn mode-btn"
-              shape="circle"
-              variant="text"
-              @click.stop="updatePlayMode"
-            >
-              <i :class="playModeIconClass + ' ' + 'PlayMode'" style="width: 1.4em"></i>
-            </t-button>
-          </t-tooltip>
+          <!-- 单个按钮循环切换三种播放模式 -->
+          <div class="play-mode-controls" aria-label="播放模式">
+            <t-tooltip :content="playModeLabel">
+              <t-button
+                class="control-btn mode-btn"
+                shape="circle"
+                variant="text"
+                :title="`${playModeLabel}，点击切换`"
+                :aria-label="`${playModeLabel}，点击切换播放模式`"
+                @click.stop="updatePlayMode"
+              >
+                <span class="play-mode-icon-wrap">
+                  <i :class="['iconfont', playModeIcon, 'PlayMode']"></i>
+                  <span v-if="playMode === PlayMode.SINGLE" class="single-mode-mark">1</span>
+                </span>
+              </t-button>
+            </t-tooltip>
+          </div>
 
           <!-- 桌面歌词开关按钮 -->
           <t-tooltip
@@ -2388,6 +2389,13 @@ watch(showFullPlay, (val) => {
     align-items: center;
     gap: 10px;
 
+    .play-mode-controls {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex: 0 0 auto;
+    }
+
     .control-btn {
       background: transparent;
       border: none;
@@ -2403,6 +2411,22 @@ watch(showFullPlay, (val) => {
 
       .iconfont {
         font-size: 18px;
+      }
+
+      .play-mode-icon-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .single-mode-mark {
+        position: absolute;
+        right: -4px;
+        bottom: -3px;
+        font-size: 8px;
+        line-height: 10px;
+        font-weight: 700;
       }
 
       &:hover {
@@ -2562,8 +2586,12 @@ watch(showFullPlay, (val) => {
     display: none;
   }
 
-  .right-section .extra-controls .control-btn:nth-child(1) {
+  .right-section .extra-controls .lt-room-btn {
     display: none;
+  }
+
+  .right-section .extra-controls .play-mode-controls .control-btn {
+    display: flex;
   }
 }
 </style>

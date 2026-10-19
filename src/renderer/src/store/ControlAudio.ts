@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import { transitionVolume } from '@renderer/utils/audio/volume'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { usePlaySettingStore } from '@renderer/store'
+import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import { isLtInRoom } from '@renderer/utils/listenTogether/state'
 
 import type {

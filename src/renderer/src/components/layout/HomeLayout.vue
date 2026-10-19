@@ -5,7 +5,7 @@ import { SearchIcon, MicrophoneIcon } from 'tdesign-icons-vue-next'
 import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter, useRoute } from 'vue-router'
-import { useSearchStore } from '@renderer/store'
+import { searchValue as useSearchStore } from '@renderer/store/search'
 import { GuideStep } from 'tdesign-vue-next'
 import {
   homeSections,
@@ -75,6 +75,11 @@ const baseMenuList: MenuItem[] = [
     name: '歌单',
     icon: 'icon-yanchu',
     path: '/home/songlist'
+  },
+  {
+    name: '平台',
+    icon: 'icon-music',
+    path: '/home/platform-accounts'
   },
   {
     name: '本地',

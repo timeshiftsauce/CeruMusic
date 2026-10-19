@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { useSearchStore } from '@renderer/store'
+import { searchValue as useSearchStore } from '@renderer/store/search'
 import { watchDebounced } from '@vueuse/core'
 import { ref, nextTick, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
