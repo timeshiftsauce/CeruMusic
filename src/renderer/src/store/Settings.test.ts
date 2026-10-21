@@ -99,6 +99,9 @@ describe('Settings Store', () => {
     url: 'file:///G:/wallpaper.jpg',
     opacity: 0.7,
     blur: 0,
+    sidebarBlur: 10,
+    sidebarOpacity: 0.2,
+    sidebarColor: '',
     brightness: 1
   }
 
@@ -137,6 +140,29 @@ describe('Settings Store', () => {
     })
   })
 
+  it.each([0, 7, 20])('persists sidebar blur at %ipx independently of wallpaper blur', (blur) => {
+    const store = restartStore()
+    store.updateSettings({ globalBackground: { ...wallpaper, sidebarBlur: blur } })
+
+    expect(restartStore().settings.globalBackground).toEqual({ ...wallpaper, sidebarBlur: blur })
+  })
+
+  it.each([0, 0.45, 1])('persists sidebar opacity at %s with a custom color', (opacity) => {
+    const store = restartStore()
+    const background = { ...wallpaper, sidebarOpacity: opacity, sidebarColor: '#226688' }
+    store.updateSettings({ globalBackground: background })
+
+    expect(restartStore().settings.globalBackground).toEqual(background)
+  })
+
+  it('restores the theme color after clearing a custom sidebar color', () => {
+    const store = restartStore()
+    store.updateSettings({ globalBackground: { ...wallpaper, sidebarColor: '#226688' } })
+    store.settings.globalBackground!.sidebarColor = ''
+
+    expect(restartStore().settings.globalBackground!.sidebarColor).toBe('')
+  })
+
   it.each([null, '{broken'])('falls back to legacy settings when canonical data is %s', (saved) => {
     if (saved !== null) localStorage.setItem('appSettings', saved)
     localStorage.setItem('settings', JSON.stringify({ settings: { globalBackground: wallpaper } }))
@@ -161,6 +187,9 @@ describe('Settings Store', () => {
       url: 'file:///G:/a.mp4',
       opacity: 0,
       blur: 10,
+      sidebarBlur: 10,
+      sidebarOpacity: 0.2,
+      sidebarColor: '',
       brightness: 0.8
     })
   })

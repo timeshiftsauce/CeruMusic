@@ -6,7 +6,11 @@
         <div class="plugins-title-row">
           <div>
             <slot name="navigation"><h2>插件管理</h2></slot>
-            <p class="plugins-subtitle">已安装 {{ listedPlugins.length }} 个插件</p>
+            <p class="plugins-subtitle">
+              已安装 {{ listedPlugins.length }} 个插件
+              <span class="plugins-subtitle-divider" aria-hidden="true">·</span>
+              {{ enabledPluginCount }} 个运行中
+            </p>
           </div>
           <t-button theme="primary" @click="openInstallDialog">
             <template #icon><t-icon name="add" /></template> 添加插件
@@ -18,6 +22,7 @@
             v-model="pluginSearch"
             clearable
             placeholder="搜索插件名称、作者或平台"
+            aria-label="搜索插件名称、作者或平台"
             class="plugin-search"
           >
             <template #prefix-icon><t-icon name="search" /></template>
@@ -105,7 +110,15 @@
         >
       </div>
 
-      <div v-else ref="listViewport" class="plugin-list" @scroll="rememberListScroll">
+      <div
+        v-else
+        ref="listViewport"
+        class="plugin-list"
+        role="region"
+        aria-label="已安装的插件"
+        tabindex="0"
+        @scroll="rememberListScroll"
+      >
         <div
           v-for="plugin in filteredPlugins"
           :key="plugin.pluginId"
@@ -169,6 +182,13 @@
             </p>
             <div class="plugin-meta">
               <div class="plugin-details">
+                <t-tag
+                  size="small"
+                  variant="light"
+                  :theme="plugin.loadError ? 'danger' : plugin.enabled ? 'success' : 'default'"
+                >
+                  {{ plugin.loadError ? '加载异常' : plugin.enabled ? '运行中' : '未使用' }}
+                </t-tag>
                 <span class="author">{{ plugin.pluginInfo.author || '未署名作者' }}</span>
                 <span v-if="plugin.parentPluginName" class="plugin-dependency"
                   >依赖 {{ plugin.parentPluginName }}</span
@@ -223,8 +243,8 @@
             </t-button>
             <t-button
               v-if="plugin.enabled && isServicePlugin(plugin)"
-              theme="primary"
-              size="small"
+              theme="default"
+              variant="outline"
               @click.stop="openImportDialog(plugin)"
             >
               <template #icon><t-icon name="download" /></template> 导入歌单
@@ -1582,30 +1602,40 @@ onMounted(async () => {
   font-weight: 600;
   letter-spacing: -0.6px;
 }
+.plugins-title-row > div {
+  min-width: 0;
+}
 .plugins-title-row > :deep(.t-button) {
-  height: 32px;
-  padding-inline: 14px;
-  border-radius: 7px;
+  flex-shrink: 0;
+  height: 34px;
+  padding-inline: 16px;
+  border-radius: 8px;
 }
 .plugins-subtitle {
-  margin: 5px 0 0;
+  margin: 8px 0 0;
   font-size: 13px;
+  line-height: 20px;
   color: var(--td-text-color-secondary, #737985);
+}
+.plugins-subtitle-divider {
+  margin-inline: 6px;
+  color: var(--td-text-color-placeholder);
 }
 .plugin-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  padding: 6px 8px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 10px;
   background: var(--td-bg-color-container, #fff);
   border: 1px solid color-mix(in srgb, var(--td-component-stroke) 70%, transparent);
-  border-radius: 8px;
+  border-radius: 12px;
 }
 .plugin-search {
-  flex: 1;
+  flex: 1 1 220px;
   max-width: 360px;
-  min-width: 160px;
+  min-width: 0;
 }
 .plugin-search :deep(.t-input) {
   border-color: transparent;
@@ -1715,18 +1745,23 @@ onMounted(async () => {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   align-content: start;
-  padding: 2px 8px 12px 2px;
+  padding: 3px 8px 12px 3px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+.plugin-list:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: -2px;
+  border-radius: 12px;
 }
 .plugin-item {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: start;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 14px;
+  padding: 18px;
   border: 1px solid color-mix(in srgb, var(--td-component-stroke, #eaecf0) 80%, transparent);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--td-bg-color-container, #fff);
   transition:
     border-color 160ms ease,
@@ -1736,7 +1771,10 @@ onMounted(async () => {
   background: var(--td-bg-color-container-hover, #f7f8fa);
 }
 .plugin-item.selected {
-  border-color: color-mix(in srgb, var(--td-brand-color) 24%, var(--td-component-stroke));
+  border-color: color-mix(in srgb, var(--td-brand-color) 35%, var(--td-component-stroke));
+}
+.plugin-item:focus-within {
+  border-color: var(--td-brand-color);
 }
 .plugin-mark {
   display: grid;
@@ -1805,25 +1843,28 @@ onMounted(async () => {
   line-height: 18px;
 }
 .description {
-  margin: 3px 0 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 5px 0 0;
   color: var(--td-text-color-secondary);
   font-size: 13px;
-  line-height: 20px;
+  line-height: 21px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .plugin-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
-  margin-top: 6px;
+  gap: 6px 12px;
+  margin-top: 10px;
 }
 .plugin-details {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 6px 10px;
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--td-text-color-secondary);
@@ -1852,17 +1893,21 @@ onMounted(async () => {
 }
 .plugin-load-error {
   margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--td-error-color-1);
   color: var(--td-error-color);
   font-size: 12px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .plugin-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
-  max-width: 280px;
-  gap: 4px;
+  max-width: 240px;
+  gap: 6px 4px;
   padding-top: 1px;
 }
 .plugin-actions :deep(.t-button) {
@@ -1904,6 +1949,23 @@ onMounted(async () => {
   }
   .guest-row {
     flex-wrap: wrap;
+  }
+}
+@container plugin-settings (max-width: 420px) {
+  .plugins-container {
+    padding: 12px;
+  }
+  .plugins-title-row {
+    flex-wrap: wrap;
+  }
+  .plugin-toolbar :deep(.t-radio-group) {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .plugin-actions {
+    grid-column: 1 / -1;
+    padding-top: 10px;
+    border-top: 1px solid var(--td-component-stroke);
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -14,7 +14,7 @@ import { songKey } from '@common/musicItem'
  *  - 点赞/评论后本地乐观更新计数,失败回滚
  *  - 作者编辑:复用 PostCreateDialog(editPost 模式),保存走 PATCH /community/posts/:id
  */
-import { ref, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import gsap from 'gsap'
@@ -29,7 +29,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PlayCircleIcon,
-  AddIcon
+  AddIcon,
+  SmileIcon
 } from 'tdesign-icons-vue-next'
 import { communityAPI, type CommunityPost, type CommunityComment } from '@renderer/api/community'
 import { useAuthStore } from '@renderer/store/Auth'
@@ -39,7 +40,10 @@ import songListAPI from '@renderer/api/songList'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import { usePostAttachmentCover } from './usePostAttachmentCover'
 import TextNoteCover from './TextNoteCover.vue'
+import ExpandableNoteText from './ExpandableNoteText.vue'
+import CommunityCommentText from './CommunityCommentText.vue'
 import PostCreateDialog from './PostCreateDialog.vue'
+import { KAOMOJI, STICKERS } from '@renderer/utils/listenTogether/stickers'
 
 /** 无归属地 / 解析失败时统一展示的文案 */
 const IP_LOCATION_FALLBACK = '澜星'
@@ -137,7 +141,8 @@ async function onWheel(event: WheelEvent) {
     event.ctrlKey ||
     Math.abs(event.deltaX) >= Math.abs(event.deltaY) ||
     !canNavigate ||
-    isContentArea
+    isContentArea ||
+    target.closest('.comment-input, .comment-sticker-previews')
   ) {
     wheelTotal = 0
     return
@@ -343,11 +348,58 @@ const post = ref<CommunityPost | null>(props.initialPost ?? null)
 const comments = ref<CommunityComment[]>([])
 const commentsLoading = ref(true)
 const commentInput = ref('')
+const commentInputEl = ref<HTMLTextAreaElement | null>(null)
+const selectedCommentStickers = ref<(typeof STICKERS)[number][]>([])
+const commentStickerContent = computed(() =>
+  selectedCommentStickers.value.map((sticker) => '[' + sticker.id + ']').join('')
+)
+const commentCharacterCount = computed(
+  () => commentInput.value.length + commentStickerContent.value.length
+)
+const commentTooLong = computed(() => commentCharacterCount.value > COMMENT_MAX_LENGTH)
 const submittingComment = ref(false)
+const showCommentEmoji = ref(false)
+const commentEmojiTab = ref<'sticker' | 'emoji' | 'kaomoji'>('sticker')
+const COMMENT_MAX_LENGTH = 150
+const COMMENT_MAX_STICKERS = 3
+const COMMENT_EMOJIS = [
+  '😀',
+  '😄',
+  '😁',
+  '😂',
+  '🥹',
+  '😍',
+  '🥰',
+  '😘',
+  '😎',
+  '🤔',
+  '😮',
+  '😭',
+  '😔',
+  '🥺',
+  '😴',
+  '😇',
+  '👍',
+  '👏',
+  '🙌',
+  '🙏',
+  '👋',
+  '🫶',
+  '❤️',
+  '💖',
+  '🎵',
+  '🎶',
+  '🎧',
+  '🎤',
+  '🎸',
+  '✨',
+  '🌙',
+  '🎉'
+]
 const imageIdx = ref(0)
 /** 已有列表快照时保留内容，只对尚未获取的数据显示骨架。 */
 const loading = ref(!props.initialPost)
-/** 已预加载完成、当前实际展示的大图 URL —— 先预加载再换图，避免切换时闪白 */
+/** 当前选中的图片加载完成后才展示，等待期间显示骨架屏。 */
 const shownImage = ref('')
 const failedImage = ref('')
 const loadedAvatar = ref('')
@@ -377,20 +429,20 @@ const currentImage = computed(() => {
 })
 const hasImages = computed(() => !!currentImage.value)
 
-/**
- * 大图切换前先预加载 —— 预加载完成后才更新 shownImage。
- * 旧图（含模糊背景）保持可见直到新图就绪，过渡期间不会出现空白/骨架闪烁。
- */
+/** 切图立即清除旧图，过期请求不能覆盖当前图片。 */
 let imageToken = 0
 watch(
   currentImage,
-  (url) => {
-    if (!url) {
-      shownImage.value = ''
-      return
-    }
+  (url, _previous, onCleanup) => {
     const token = ++imageToken
+    shownImage.value = ''
+    failedImage.value = ''
+    if (!url) return
     const probe = new Image()
+    onCleanup(() => {
+      probe.onload = null
+      probe.onerror = null
+    })
     probe.onload = () => {
       if (token === imageToken) shownImage.value = url
     }
@@ -401,13 +453,18 @@ watch(
       if (!post.value?.images?.length) onCoverError(url)
     }
     probe.src = ossDetail(url)
+    if (probe.complete && probe.naturalWidth > 0) shownImage.value = url
   },
   { immediate: true }
 )
 
 function onImageError(event: Event) {
   const { imageUrl, coverUrl: url } = (event.target as HTMLImageElement).dataset
-  if (imageUrl) failedImage.value = imageUrl
+  if (imageUrl && imageUrl !== currentImage.value) return
+  if (imageUrl) {
+    shownImage.value = ''
+    failedImage.value = imageUrl
+  }
   if (url) onCoverError(url)
 }
 
@@ -660,12 +717,54 @@ function cancelReply() {
   replyTarget.value = null
 }
 
+function insertCommentExpression(expression: string) {
+  const input = commentInputEl.value
+  const start = input?.selectionStart ?? commentInput.value.length
+  const end = input?.selectionEnd ?? start
+  const nextValue = commentInput.value.slice(0, start) + expression + commentInput.value.slice(end)
+  commentInput.value = nextValue
+  void nextTick(() => {
+    const activeInput = commentInputEl.value
+    if (!activeInput) return
+    const cursor = start + expression.length
+    activeInput.focus()
+    activeInput.setSelectionRange(cursor, cursor)
+  })
+}
+
+function onCommentEnter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return
+  event.preventDefault()
+  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    insertCommentExpression('\n')
+    return
+  }
+  void submitComment()
+}
+
+function insertCommentSticker(id: string) {
+  const sticker = STICKERS.find((item) => item.id === id)
+  if (!sticker) return
+  if (
+    selectedCommentStickers.value.length +
+      (commentInput.value.match(/\[sticker-\d+\]/g)?.length ?? 0) >=
+    COMMENT_MAX_STICKERS
+  ) {
+    MessagePlugin.warning('每条评论最多发送 3 张贴纸')
+    return
+  }
+  selectedCommentStickers.value.push(sticker)
+  showCommentEmoji.value = false
+  void nextTick(() => commentInputEl.value?.focus())
+}
+
 async function submitComment() {
-  const text = commentInput.value.trim()
+  if (submittingComment.value || commentTooLong.value) return
+  const text = commentInput.value.trim() + commentStickerContent.value
   if (!text) return
   if (!requireLogin()) return
-  if (text.length > 300) {
-    MessagePlugin.warning('评论不超过 300 字')
+  if ((text.match(/\[sticker-\d+\]/g)?.length ?? 0) > COMMENT_MAX_STICKERS) {
+    MessagePlugin.warning('每条评论最多发送 3 张贴纸')
     return
   }
   submittingComment.value = true
@@ -689,7 +788,9 @@ async function submitComment() {
       comments.value.unshift(c)
     }
     commentInput.value = ''
+    selectedCommentStickers.value = []
     replyTarget.value = null
+    showCommentEmoji.value = false
     showSupportNotice(c.support)
     if (post.value) {
       post.value.commentCount += 1
@@ -1114,6 +1215,9 @@ function formatTime(iso: string): string {
                     @error="onImageError"
                   />
                 </Transition>
+                <div v-if="failedImage === currentImage" class="image-load-failed" role="status">
+                  图片加载失败
+                </div>
                 <button v-if="post.images.length > 1" class="nav prev" @click="prevImage">
                   <ChevronLeftIcon size="28" />
                 </button>
@@ -1129,6 +1233,7 @@ function formatTime(iso: string): string {
                   />
                 </div>
               </template>
+              <!-- 无图笔记:封面铺满左栏但按行截断,完整正文在右侧详情区 -->
               <TextNoteCover v-else :seed="post.id" :content="post.content" expanded />
             </div>
 
@@ -1171,7 +1276,7 @@ function formatTime(iso: string): string {
               </header>
 
               <div class="content-area">
-                <p v-if="post.images.length || att" class="content-text">{{ post.content }}</p>
+                <ExpandableNoteText v-if="post.content" class="content-text" :text="post.content" />
 
                 <!-- 附件:单曲走播放器卡片;歌单走简洁可点击卡片(整张点击跳转) -->
                 <template v-if="att">
@@ -1309,7 +1414,7 @@ function formatTime(iso: string): string {
                               <span v-if="isPostAuthor(c)" class="c-author">作者</span>
                               <span v-else-if="isOwnComment(c)" class="c-author me">我</span>
                             </div>
-                            <div class="c-text">{{ c.content }}</div>
+                            <div class="c-text"><CommunityCommentText :text="c.content" /></div>
                             <div class="c-meta">
                               <span class="c-time">{{ formatTime(c.createdAt) }}</span>
                               <span class="c-sep">·</span>
@@ -1356,7 +1461,9 @@ function formatTime(iso: string): string {
                                       <span class="reply-to"> 回复 @{{ r.replyToUsername }}</span>
                                     </template>
                                   </div>
-                                  <div class="c-text">{{ r.content }}</div>
+                                  <div class="c-text">
+                                    <CommunityCommentText :text="r.content" />
+                                  </div>
                                   <div class="c-meta">
                                     <span class="c-time">{{ formatTime(r.createdAt) }}</span>
                                     <span class="c-sep">·</span>
@@ -1434,15 +1541,142 @@ function formatTime(iso: string): string {
                   回复 <strong>@{{ replyTarget.username }}</strong>
                   <button class="reply-cancel" @click="cancelReply">✕</button>
                 </div>
+                <div
+                  v-if="selectedCommentStickers.length"
+                  class="comment-sticker-previews"
+                  aria-label="待发送的表情"
+                >
+                  <div
+                    v-for="(sticker, index) in selectedCommentStickers"
+                    :key="index"
+                    class="comment-sticker-preview"
+                  >
+                    <img :src="sticker.src" :alt="sticker.label" draggable="false" />
+                    <button
+                      type="button"
+                      class="remove-sticker"
+                      :aria-label="'移除表情：' + sticker.label"
+                      :title="'移除表情：' + sticker.label"
+                      @click="selectedCommentStickers.splice(index, 1)"
+                    >
+                      <CloseIcon size="12" />
+                    </button>
+                  </div>
+                  <span class="comment-sticker-count">
+                    贴纸 {{ selectedCommentStickers.length }}/{{ COMMENT_MAX_STICKERS }}
+                  </span>
+                </div>
                 <div class="comment-input">
-                  <input
+                  <Transition name="comment-picker">
+                    <div
+                      v-if="showCommentEmoji"
+                      class="comment-emoji-picker"
+                      role="dialog"
+                      aria-label="选择评论表情"
+                    >
+                      <div class="comment-emoji-tabs" role="tablist">
+                        <button
+                          type="button"
+                          role="tab"
+                          :aria-selected="commentEmojiTab === 'sticker'"
+                          :class="{ active: commentEmojiTab === 'sticker' }"
+                          @mousedown.prevent
+                          @click="commentEmojiTab = 'sticker'"
+                        >
+                          小澜的日常
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          :aria-selected="commentEmojiTab === 'emoji'"
+                          :class="{ active: commentEmojiTab === 'emoji' }"
+                          @mousedown.prevent
+                          @click="commentEmojiTab = 'emoji'"
+                        >
+                          Emoji
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          :aria-selected="commentEmojiTab === 'kaomoji'"
+                          :class="{ active: commentEmojiTab === 'kaomoji' }"
+                          @mousedown.prevent
+                          @click="commentEmojiTab = 'kaomoji'"
+                        >
+                          颜文字
+                        </button>
+                      </div>
+                      <div v-if="commentEmojiTab === 'sticker'" class="comment-sticker-grid">
+                        <button
+                          v-for="sticker in STICKERS"
+                          :key="sticker.id"
+                          type="button"
+                          class="comment-sticker"
+                          :disabled="selectedCommentStickers.length >= COMMENT_MAX_STICKERS"
+                          :title="sticker.label"
+                          :aria-label="sticker.label"
+                          @mousedown.prevent
+                          @click="insertCommentSticker(sticker.id)"
+                        >
+                          <img :src="sticker.src" :alt="sticker.label" draggable="false" />
+                        </button>
+                      </div>
+                      <div v-else-if="commentEmojiTab === 'emoji'" class="comment-emoji-grid">
+                        <button
+                          v-for="emoji in COMMENT_EMOJIS"
+                          :key="emoji"
+                          type="button"
+                          class="comment-emoji"
+                          :aria-label="emoji"
+                          @mousedown.prevent
+                          @click="insertCommentExpression(emoji)"
+                        >
+                          {{ emoji }}
+                        </button>
+                      </div>
+                      <div v-else class="comment-kaomoji-grid">
+                        <button
+                          v-for="(kaomoji, index) in KAOMOJI"
+                          :key="index"
+                          type="button"
+                          class="comment-kaomoji"
+                          @mousedown.prevent
+                          @click="insertCommentExpression(kaomoji)"
+                        >
+                          {{ kaomoji }}
+                        </button>
+                      </div>
+                    </div>
+                  </Transition>
+                  <button
+                    type="button"
+                    class="emoji-toggle"
+                    :aria-label="showCommentEmoji ? '收起表情' : '打开表情'"
+                    :aria-expanded="showCommentEmoji"
+                    title="表情"
+                    @click="showCommentEmoji = !showCommentEmoji"
+                  >
+                    <SmileIcon size="18" />
+                  </button>
+                  <textarea
+                    ref="commentInputEl"
                     v-model="commentInput"
+                    rows="1"
                     :placeholder="replyTarget ? `回复 @${replyTarget.username}` : '说点什么...'"
-                    maxlength="300"
-                    @keydown.enter="submitComment"
+                    :class="{ 'is-invalid': commentTooLong }"
+                    :aria-invalid="commentTooLong"
+                    aria-label="评论内容，最多 150 字"
+                    @keydown.enter="onCommentEnter"
+                    @keydown.esc="showCommentEmoji = false"
                   />
                   <button
-                    :disabled="!commentInput.trim() || submittingComment"
+                    type="button"
+                    class="send-comment"
+                    :disabled="
+                      (!commentInput.trim() && !selectedCommentStickers.length) ||
+                      submittingComment ||
+                      commentTooLong
+                    "
                     @click="submitComment"
                   >
                     发送
@@ -1484,7 +1718,7 @@ function formatTime(iso: string): string {
 
 <style scoped lang="scss">
 .post-modal-mask {
-  --post-modal-height: min(720px, 88vh);
+  --post-modal-height: 88dvh;
   -webkit-app-region: no-drag;
   position: fixed;
   inset: 0;
@@ -1512,7 +1746,7 @@ function formatTime(iso: string): string {
 }
 
 .post-modal-viewport {
-  width: min(1100px, 92vw);
+  width: 92vw;
   height: var(--post-modal-height);
   position: relative;
   z-index: 1;
@@ -1563,16 +1797,16 @@ function formatTime(iso: string): string {
   z-index: 10;
 }
 
-/* 作者操作入口 —— 白色圆钮,位于关闭按钮左侧 */
+/* 作者操作入口 —— 圆钮,跟随明暗主题,位于关闭按钮左侧 */
 .more-btn {
   width: 32px;
   height: 32px;
   padding: 0;
   line-height: 0;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: #fff;
-  color: #4b4b4b;
+  border: 1px solid var(--td-border-level-1-color, rgba(0, 0, 0, 0.1));
+  background: var(--td-bg-color-container, #fff);
+  color: var(--td-text-color-secondary, #4b4b4b);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1581,8 +1815,8 @@ function formatTime(iso: string): string {
     background-color 0.15s ease,
     color 0.15s ease;
   &:hover {
-    background: #f3f3f3;
-    color: #1f2329;
+    background: var(--td-bg-color-container-hover, #f3f3f3);
+    color: var(--td-text-color-primary, #1f2329);
   }
   :deep(svg) {
     display: block;
@@ -1786,6 +2020,7 @@ function formatTime(iso: string): string {
   align-items: center;
   justify-content: center;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 
   .image-backdrop {
@@ -1808,6 +2043,11 @@ function formatTime(iso: string): string {
     max-height: 100%;
     object-fit: contain;
     display: block;
+  }
+
+  .image-load-failed {
+    color: var(--td-text-color-secondary, #666);
+    font-size: 14px;
   }
 
   /* 轮播式整幅平移:新旧两张图同速、同缓动,边缘相接地滑过,
@@ -1843,6 +2083,7 @@ function formatTime(iso: string): string {
 
   .nav {
     position: absolute;
+    z-index: 2;
     top: 50%;
     transform: translateY(-50%);
     width: 36px;
@@ -1864,6 +2105,7 @@ function formatTime(iso: string): string {
   }
   .dots {
     position: absolute;
+    z-index: 2;
     bottom: 12px;
     left: 50%;
     transform: translateX(-50%);
@@ -1883,10 +2125,10 @@ function formatTime(iso: string): string {
 }
 
 .right {
-  flex: 1;
+  flex: 0 0 clamp(340px, 38%, 720px);
   display: flex;
   flex-direction: column;
-  min-width: 340px;
+  min-width: 0;
   min-height: 0;
   border-left: 1px solid var(--td-border-level-1-color, #eee);
 }
@@ -1963,8 +2205,6 @@ function formatTime(iso: string): string {
     line-height: 1.85;
     color: var(--td-text-color-primary, #333);
     margin: 0 0 18px;
-    white-space: pre-wrap;
-    word-break: break-word;
     letter-spacing: 0.01em;
     user-select: text;
     -webkit-user-select: text;
@@ -2396,29 +2636,115 @@ function formatTime(iso: string): string {
       padding: 0 2px;
     }
   }
-  .comment-input {
+  .comment-sticker-previews {
     display: flex;
+    align-items: center;
     gap: 8px;
-    height: 36px;
+    overflow-x: auto;
+    padding: 4px 0;
+    overscroll-behavior: contain;
+  }
+  .comment-sticker-count {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--td-text-color-placeholder, #999);
+    font-size: 11px;
+  }
+  .comment-sticker-preview {
+    position: relative;
+    flex: 0 0 88px;
+    width: 88px;
+    height: 88px;
+    padding: 6px;
+    box-sizing: border-box;
+    border: 1px solid var(--td-border-level-1-color, #e7e7e7);
+    border-radius: 8px;
+    background: var(--td-bg-color-component, #f7f7f7);
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .remove-sticker {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: none;
+      border-radius: 0 7px 0 7px;
+      background: var(--td-bg-color-container, #fff);
+      color: var(--td-text-color-secondary, #666);
+      cursor: pointer;
+      &:hover {
+        color: var(--td-error-color, #e34d59);
+      }
+    }
+  }
+  .comment-input {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    min-height: 36px;
     flex-shrink: 0;
-    input {
+    > textarea {
       flex: 1;
       min-width: 0;
-      padding: 8px 12px;
+      min-height: 36px;
+      max-height: 120px;
+      box-sizing: border-box;
+      field-sizing: content;
+      resize: none;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 8px 10px;
       border-radius: 18px;
       border: 1px solid var(--td-border-level-2-color, #ddd);
       outline: none;
       font-size: 13px;
+      font-family: inherit;
+      line-height: 18px;
+      color: var(--td-text-color-primary, #222);
       background: var(--td-bg-color-component, #f7f7f7);
       /* 输入内容仍可选中与编辑 */
       user-select: text;
       -webkit-user-select: text;
+      &::placeholder {
+        color: var(--td-text-color-placeholder, #999);
+      }
       &:focus {
         border-color: var(--td-brand-color, #ff2442);
       }
+      &.is-invalid {
+        border-color: var(--td-error-color, #e34d59);
+        background: var(--td-error-color-1, #fff0f0);
+      }
     }
-    button {
-      padding: 8px 16px;
+    .emoji-toggle {
+      display: grid;
+      place-items: center;
+      flex: 0 0 34px;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid var(--td-border-level-2-color, #ddd);
+      border-radius: 50%;
+      background: transparent;
+      color: var(--td-text-color-secondary, #666);
+      cursor: pointer;
+      &:hover,
+      &[aria-expanded='true'] {
+        color: var(--td-brand-color, #ff2442);
+        border-color: var(--td-brand-color, #ff2442);
+      }
+    }
+    .send-comment {
+      flex: 0 0 auto;
+      padding: 8px 14px;
       border-radius: 18px;
       border: none;
       background: var(--td-brand-color, #ff2442);
@@ -2430,13 +2756,152 @@ function formatTime(iso: string): string {
         cursor: not-allowed;
       }
     }
+    .comment-emoji-picker {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 10px);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      width: min(440px, calc(100vw - 96px));
+      max-width: 100%;
+      height: min(440px, calc(var(--post-modal-height, 88dvh) - 164px));
+      min-height: 0;
+      box-sizing: border-box;
+      padding: 12px;
+      border: 1px solid var(--td-border-level-1-color, #e7e7e7);
+      border-radius: 8px;
+      background: var(--td-bg-color-container, #fff);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+      transform-origin: bottom left;
+    }
+    .comment-picker-enter-active,
+    .comment-picker-leave-active {
+      transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+    }
+    .comment-picker-enter-from,
+    .comment-picker-leave-to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    .comment-picker-leave-active {
+      pointer-events: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .comment-picker-enter-active,
+      .comment-picker-leave-active {
+        transition: none;
+      }
+    }
+    .comment-emoji-tabs {
+      display: flex;
+      flex-shrink: 0;
+      gap: 20px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--td-border-level-1-color, #eee);
+      button {
+        padding: 7px 4px 10px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: none;
+        color: var(--td-text-color-secondary, #777);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        &.active {
+          border-bottom-color: var(--td-brand-color, #ff2442);
+          color: var(--td-brand-color, #ff2442);
+        }
+      }
+    }
+    .comment-sticker-grid,
+    .comment-emoji-grid,
+    .comment-kaomoji-grid {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      align-content: start;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    .comment-sticker-grid {
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px;
+    }
+    .comment-sticker {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1;
+      min-width: 0;
+      padding: 3px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      cursor: pointer;
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+      &:hover {
+        background: var(--td-bg-color-component-hover, #f2f2f2);
+      }
+      img {
+        width: 84px;
+        max-width: 100%;
+        height: auto;
+        aspect-ratio: 1;
+        object-fit: contain;
+      }
+    }
+    .comment-emoji-grid {
+      grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+      gap: 4px;
+    }
+    .comment-emoji {
+      min-height: 42px;
+      padding: 6px 0;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 28px;
+      &:hover {
+        background: var(--td-bg-color-component-hover, #f2f2f2);
+      }
+    }
+    .comment-kaomoji-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .comment-kaomoji {
+      min-width: 0;
+      padding: 10px 6px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--td-text-color-primary, #333);
+      cursor: pointer;
+      font: inherit;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+      &:hover {
+        background: var(--td-bg-color-component-hover, #f2f2f2);
+      }
+    }
   }
 }
 
 /* 窄屏自适应 */
-@media (max-width: 900px) {
+@media (max-width: 760px) {
   .post-modal-mask {
-    --post-modal-height: 92vh;
+    --post-modal-height: 92dvh;
+  }
+  .post-modal-viewport {
+    // 两侧各留 32px，给笔记导航圆点保留独立空间。
+    width: calc(100vw - 64px);
   }
   .post-skeleton {
     flex-direction: column;
@@ -2445,11 +2910,22 @@ function formatTime(iso: string): string {
     flex-direction: column;
   }
   .left {
-    flex: 0 0 40%;
+    flex: 0 0 35%;
   }
   .right {
+    flex: 1;
     border-left: none;
     border-top: 1px solid var(--td-border-level-1-color, #eee);
+  }
+}
+
+@media (max-width: 760px) and (max-height: 600px) {
+  .left {
+    flex-basis: 22%;
+  }
+  .author {
+    height: 64px;
+    padding-block: 10px;
   }
 }
 </style>

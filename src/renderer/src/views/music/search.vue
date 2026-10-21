@@ -152,7 +152,7 @@ const performSearch = async (reset = false) => {
       searchResults.value = [...searchResults.value, ...newSongs]
     }
 
-    setPic((currentPage.value - 1) * pageSize, source)
+    void setPic(searchResults.value.length - newSongs.length, source)
     currentPage.value += 1
     hasMore.value = searchResults.value.length <= totalItems.value
   } catch (error) {
@@ -163,26 +163,27 @@ const performSearch = async (reset = false) => {
 }
 
 async function setPic(offset: number, source: string) {
-  for (let i = offset; i < searchResults.value.length; i++) {
-    const tempImg = searchResults.value[i].img
-    if (tempImg) continue
-    // 聚合模式下每首歌使用自身 source 获取封面
-    const songSource = (searchResults.value[i] as any).source || source
-    try {
-      const url = await window.api.music.requestSdk('getPic', {
-        source: songSource,
-        songInfo: toRaw(searchResults.value[i])
-      })
-      if (typeof url !== 'object') {
-        searchResults.value[i].img = url
-      } else {
-        searchResults.value[i].img = ''
+  // 固定本批次对象，避免搜索切换后按旧下标覆盖新结果。
+  const songs = searchResults.value.slice(offset).filter((song) => !song.img)
+  let next = 0
+  const worker = async () => {
+    while (next < songs.length) {
+      const song = songs[next++]
+      if (!searchResults.value.includes(song) || song.img) continue
+      try {
+        const url = await window.api.music.requestSdk('getPic', {
+          source: song.source || source,
+          songInfo: toRaw(song)
+        })
+        if (searchResults.value.includes(song) && !song.img && typeof url === 'string') {
+          song.img = url
+        }
+      } catch {
+        // 单曲补图失败不影响其他歌曲，也不覆盖已有图片。
       }
-    } catch (e) {
-      searchResults.value[i].img = ''
-      console.log('获取失败 index' + i, e)
     }
   }
+  await Promise.all(Array.from({ length: Math.min(6, songs.length) }, worker))
 }
 // 计算是否有搜索结果
 const hasSongResults = computed(() => searchResults.value && searchResults.value.length > 0)

@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import ThemeSelector from '@renderer/components/ThemeSelector.vue'
-import LyricFontSettings from '@renderer/components/Settings/LyricFontSettings.vue'
-import DesktopLyricStyle from '@renderer/components/Settings/DesktopLyricStyle.vue'
 import GlobalBackgroundSettings from '@renderer/components/Settings/GlobalBackgroundSettings.vue'
 
 // Store initialization
@@ -20,74 +17,54 @@ const currentStyle = ref<'windows' | 'traffic-light'>(
   userInfo.value.topBarStyle ? 'traffic-light' : 'windows'
 )
 
-const switchStyle = (style: 'windows' | 'traffic-light'): void => {
+const switchStyle = (style: string | number | boolean): void => {
+  if (style !== 'windows' && style !== 'traffic-light') return
   currentStyle.value = style
   console.log(`设置成 ${style} 风格 ${style === 'windows'}`)
   userInfo.value.topBarStyle = style === 'traffic-light'
 }
-
-const isMac = computed(() => /mac/i.test(navigator.platform || navigator.userAgent))
 </script>
 
 <template>
   <div class="settings-section">
     <!-- 基础外观 -->
-    <t-card title="基础外观" class="setting-card" hover-shadow>
+    <t-card title="主题与窗口" class="setting-card">
       <div id="appearance-titlebar" class="setting-group-item">
         <div class="setting-label">
           <h4>标题栏风格</h4>
           <p>选择您喜欢的标题栏控制按钮风格</p>
         </div>
 
-        <div class="style-buttons">
-          <t-button
-            :theme="currentStyle === 'windows' ? 'primary' : 'default'"
-            @click="switchStyle('windows')"
+        <t-radio-group
+          :value="currentStyle"
+          class="style-preview"
+          aria-label="标题栏风格"
+          @change="switchStyle"
+        >
+          <t-radio
+            v-for="style in (['windows', 'traffic-light'] as const)"
+            :key="style"
+            :value="style"
+            class="preview-item"
+            :class="{ selected: currentStyle === style }"
           >
-            Windows 风格
-          </t-button>
-          <t-button
-            :theme="currentStyle === 'traffic-light' ? 'primary' : 'default'"
-            @click="switchStyle('traffic-light')"
-          >
-            红绿灯风格
-          </t-button>
-        </div>
-
-        <div class="style-preview">
-          <div class="preview-item">
-            <h4>Windows 风格</h4>
-            <div class="mock-titlebar">
-              <div class="mock-title">Windows 风格标题栏</div>
-              <TitleBarControls control-style="windows" />
-            </div>
-          </div>
-          <div class="preview-item">
-            <h4>红绿灯风格 (macOS)</h4>
-            <div class="mock-titlebar">
-              <div class="mock-title">红绿灯风格标题栏</div>
-              <TitleBarControls control-style="traffic-light" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <t-divider />
-
-      <div id="appearance-close-behavior" class="setting-group-item">
-        <div class="setting-label">
-          <h4>关闭按钮行为</h4>
-          <p>设置点击窗口关闭按钮时的行为</p>
-        </div>
-        <div class="setting-control" style="display: flex; align-items: center; gap: 10px">
-          <t-switch
-            :value="settings.closeToTray"
-            @change="(val) => settingsStore.updateSettings({ closeToTray: Boolean(val) })"
-          />
-          <span class="setting-text">{{
-            settings.closeToTray ? '最小化到托盘' : '直接退出应用'
-          }}</span>
-        </div>
+            <span class="mock-window" aria-hidden="true">
+              <span class="mock-titlebar">
+                <span class="mock-title">澜音</span>
+                <span v-if="style === 'windows'" class="mock-controls windows">
+                  <span>−</span><span>□</span><span>×</span>
+                </span>
+                <span v-else class="mock-controls lights">
+                  <span></span><span></span><span></span>
+                </span>
+              </span>
+              <span class="mock-body"><span></span><span></span><span></span></span>
+            </span>
+            <span class="preview-caption">
+              <span>{{ style === 'windows' ? 'Windows 风格' : '红绿灯风格' }}</span>
+            </span>
+          </t-radio>
+        </t-radio-group>
       </div>
 
       <t-divider />
@@ -134,43 +111,9 @@ const isMac = computed(() => /mac/i.test(navigator.platform || navigator.userAge
     </t-card>
 
     <div class="setting-spacer"></div>
-    <t-card title="全局背景" class="setting-card" hover-shadow>
+    <t-card id="appearance-background" title="全局背景" class="setting-card">
       <GlobalBackgroundSettings />
     </t-card>
-
-    <template v-if="isMac">
-      <div class="setting-spacer"></div>
-      <t-card id="appearance-mac-status-lyric" title="状态栏歌词" class="setting-card" hover-shadow>
-        <div class="setting-group-item">
-          <div class="setting-label">
-            <h4>菜单栏显示歌词</h4>
-            <p>开启后在 mac 状态栏显示当前歌词，并可通过状态栏菜单控制歌曲。</p>
-          </div>
-          <div class="setting-control" style="display: flex; align-items: center; gap: 10px">
-            <t-switch
-              :value="settings.macStatusBarLyricEnabled"
-              @change="
-                (val) => settingsStore.updateSettings({ macStatusBarLyricEnabled: Boolean(val) })
-              "
-            />
-            <span class="setting-text">{{
-              settings.macStatusBarLyricEnabled ? '已开启状态栏歌词' : '已关闭状态栏歌词'
-            }}</span>
-          </div>
-        </div>
-      </t-card>
-    </template>
-
-    <!-- 歌词设置 -->
-    <div class="setting-spacer"></div>
-    <div id="appearance-lyric-font">
-      <LyricFontSettings />
-    </div>
-
-    <div class="setting-spacer"></div>
-    <div id="appearance-desktop-lyric">
-      <DesktopLyricStyle />
-    </div>
   </div>
 </template>
 
@@ -205,53 +148,81 @@ const isMac = computed(() => /mac/i.test(navigator.platform || navigator.userAge
   }
 }
 
-.style-buttons {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-
-  .t-button {
-    transition: all 0.2s ease;
-    &:hover {
-      transform: translateY(-1px);
-    }
-  }
-}
-
 .style-preview {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.preview-item {
+  height: auto;
+  margin: 0;
+  align-items: flex-end;
+  min-width: 0;
+  :deep(.t-radio__label) { flex: 1; min-width: 0; white-space: normal; }
+  :deep(.t-radio__input) { margin-bottom: 2px; flex-shrink: 0; }
+  padding: 14px;
+  border: 1px solid var(--settings-preview-border);
+  border-radius: 12px;
+  background: var(--settings-preview-bg);
+  color: var(--settings-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 
-  .preview-item {
-    background: var(--settings-preview-bg);
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--settings-preview-border);
-
-    h4 {
-      margin: 0 0 0.75rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--settings-text-primary);
-    }
+  &:hover { border-color: var(--td-brand-color); }
+  &:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
+  &.selected {
+    border-color: var(--td-brand-color);
+    background: color-mix(in srgb, var(--td-brand-color) 6%, var(--settings-group-bg));
   }
 }
-
+.mock-window {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--settings-group-border);
+  border-radius: 7px;
+  background: var(--settings-group-bg);
+}
 .mock-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  background: var(--settings-mock-titlebar-bg);
-  border-radius: 0.375rem;
-  border: 1px solid var(--settings-mock-titlebar-border);
-
-  .mock-title {
-    font-weight: 500;
-    color: var(--settings-text-primary);
-    font-size: 0.875rem;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--settings-group-border);
+  font-size: 11px;
+  color: var(--settings-text-secondary);
+}
+.mock-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  &.windows { font-size: 15px; line-height: 1; }
+  &.lights {
+    gap: 7px;
+    span { width: 9px; height: 9px; border-radius: 50%; background: #ffbd2e; }
+    span:nth-child(2) { background: #28c840; }
+    span:nth-child(3) { background: #ff5f57; }
   }
+}
+.mock-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  span { height: 5px; width: 62%; border-radius: 3px; background: var(--settings-group-border); }
+  span:first-child { width: 34%; background: color-mix(in srgb, var(--td-brand-color) 28%, var(--settings-group-border)); }
+  span:last-child { width: 48%; }
+}
+.preview-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .setting-spacer {

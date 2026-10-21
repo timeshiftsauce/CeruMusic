@@ -20,6 +20,7 @@ import { ossAvatar, ossCard, ossThumb } from '@renderer/utils/ossImage'
 import LazyImage from './LazyImage.vue'
 import { usePostAttachmentCover } from './usePostAttachmentCover'
 import TextNoteCover from './TextNoteCover.vue'
+import { NoteText } from './noteText'
 
 const props = defineProps<{
   post: CommunityPost
@@ -91,7 +92,7 @@ const textExcerpt = computed(() => {
 
     <!-- 文字 + 底栏 -->
     <div class="body">
-      <p class="title">{{ post.content }}</p>
+      <p class="title"><NoteText :text="post.content" /></p>
       <div class="meta">
         <div class="author">
           <img
@@ -144,6 +145,7 @@ const textExcerpt = computed(() => {
 
   .multi-badge {
     position: absolute;
+    z-index: 2;
     top: 8px;
     right: 8px;
     background: rgba(0, 0, 0, 0.55);

@@ -23,7 +23,8 @@ try {
       const providers = platforms.slice(0,index?5:6).map((name,i)=>({id:String(i),name,qualities:['128k','flac']}))
       return {pluginId:String(index),enabled:index===0,pluginInfo:{name,version:'0.1.0',author:'澜音',description:index?'导入洛雪音源，使用熟悉的搜索、歌单和排行榜。':'提供音乐搜索、歌单、排行榜与歌词，支持多平台音源。'},manifest:{name,version:'0.1.0',author:'澜音',contributes:{providers,...(index?{guestAdapters:[{id:"lx",format:"lx",title:"洛雪插件",badge:{label:"LX",backgroundColor:"#16875d",textColor:"#ffffff"}}]}:{})},permissions:[]},supportedSources:Object.fromEntries(providers.map(p=>[p.id,{name:p.name,qualitys:p.qualities}]))}
     })
-    window.guestFixtures = ['洛雪音源 A','洛雪音源 B'].map((name,index)=>({id:String(index),adapterId:'lx',name,version:'1.0.0',author:'音源开发者',selected:false,state:'stopped',providers:[]}))
+    // Keep the list overflowing even when settings spacing becomes more compact.
+    window.guestFixtures = Array.from({length:12},(_,index)=>({id:String(index),adapterId:'lx',name:`洛雪音源 ${index+1}`,version:'1.0.0',author:'音源开发者',selected:false,state:'stopped',providers:[]}))
     window.fixtures[0].providerMethods=Object.fromEntries(window.fixtures[0].manifest.contributes.providers.map(p=>[p.id,['tracks.search','tracks.resolve','tracks.lyrics','playlists.search','playlists.categories','playlists.list','playlists.get','charts.list','charts.getTracks']]))
     window.fixtures[0].actionIds=['search.tips','search.hot','comments.hot','comments.get','artwork.get','playlist.parse','recognize','album.list']
     window.testStore={initialization:true,userInfo:{pluginId:'0'},init(){}}

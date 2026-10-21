@@ -112,7 +112,7 @@ onUnmounted(() => motion?.kill())
 .note-position {
   position: fixed;
   z-index: 2002;
-  right: calc((100vw - min(1100px, 92vw)) / 4 - 11px);
+  right: calc(2vw - 11px);
   top: 50%;
   transform: translateY(-50%);
   width: 22px;
@@ -181,6 +181,11 @@ onUnmounted(() => motion?.kill())
   background: var(--td-brand-color, #fff);
   box-shadow: inset 1px 0 1px rgba(255, 255, 255, 0.35);
   transform-origin: center;
+}
+@media (max-width: 760px) {
+  .note-position {
+    right: 5px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .position-dot::before {

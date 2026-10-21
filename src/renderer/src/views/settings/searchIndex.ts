@@ -17,7 +17,7 @@ export const searchItems: SearchItem[] = [
   },
   {
     id: 'appearance-close-behavior',
-    category: 'appearance',
+    category: 'system',
     title: '关闭按钮行为',
     description: '设置点击窗口关闭按钮时的行为',
     keywords: ['退出', '最小化', '托盘']
@@ -31,22 +31,41 @@ export const searchItems: SearchItem[] = [
   },
   {
     id: 'appearance-mac-status-lyric',
-    category: 'appearance',
+    category: 'lyrics',
     title: '状态栏歌词',
     description: '在 mac 状态栏显示当前歌词并提供播放控制菜单',
     keywords: ['状态栏', '菜单栏', '歌词', 'mac', 'tray']
   },
   {
     id: 'appearance-lyric-font',
-    category: 'appearance',
+    category: 'lyrics',
     title: '歌词字体设置',
     keywords: ['字体', '大小', 'font']
   },
   {
     id: 'appearance-desktop-lyric',
-    category: 'appearance',
+    category: 'lyrics',
     title: '桌面歌词样式',
     keywords: ['桌面', '歌词', 'desktop']
+  },
+
+  {
+    id: 'appearance-background',
+    category: 'appearance',
+    title: '全局背景',
+    keywords: ['背景', '壁纸', '透明度', '不透明度', '颜色', '模糊度', '侧栏', '导航栏']
+  },
+  {
+    id: 'playback-route-preload',
+    category: 'system',
+    title: '页面预加载',
+    keywords: ['性能', '路由', '切换', '预加载']
+  },
+  {
+    id: 'playback-smtc-hires',
+    category: 'system',
+    title: '系统媒体控件高清封面',
+    keywords: ['SMTC', '系统', '封面', '高清']
   },
 
   // AI
@@ -92,7 +111,7 @@ export const searchItems: SearchItem[] = [
   {
     id: 'playback-performance',
     category: 'playlist',
-    title: '全屏播放-性能优化',
+    title: '播放画面与动效',
     keywords: ['跳动歌词', '背景动画', '可视化', '性能']
   },
 

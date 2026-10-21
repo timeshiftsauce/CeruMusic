@@ -184,7 +184,11 @@ async function download(task: DownloadTask): Promise<any> {
   fileLock[filePath] = true
 
   try {
-    await fsPromise.mkdir(path.dirname(filePath), { recursive: true })
+    const directory = path.dirname(filePath)
+    // Windows 对已存在的磁盘根目录执行 recursive mkdir 仍会报 EPERM。
+    if (!fs.existsSync(directory)) {
+      await fsPromise.mkdir(directory, { recursive: true })
+    }
 
     let startByte = 0
     if (fs.existsSync(tempFilePath)) {

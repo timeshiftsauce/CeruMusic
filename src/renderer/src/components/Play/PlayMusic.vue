@@ -16,13 +16,19 @@ import {
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { usePlaySettingStore } from '@renderer/store'
 import icons from '../../assets/icon_font/icons'
 const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
 import { PlayMode } from '@renderer/types/audio'
-import { MessagePlugin, DialogPlugin, InputNumber as TInputNumber } from 'tdesign-vue-next'
+import {
+  MessagePlugin,
+  DialogPlugin,
+  InputNumber as TInputNumber,
+  NotifyPlugin
+} from 'tdesign-vue-next'
 import {
   playNext,
   playPrevious,
@@ -66,6 +72,7 @@ const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
+const playSetting = usePlaySettingStore()
 const lyricExtrasStore = useLyricExtrasStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
@@ -487,6 +494,8 @@ function globalControls(e) {
   console.log('全局:', e)
   if (e.detail.name === 'toggleFullPlay') {
     toggleFullPlay()
+  } else if (e.detail.name === 'toggleLike') {
+    void onToggleLike()
   }
 }
 
@@ -690,7 +699,13 @@ const onToggleLike = async () => {
       )
       if (removeRes.success && removeRes.data) {
         likeState.value = false
-        // MessagePlugin.success('已取消喜欢')
+        NotifyPlugin.info({
+          title: '已取消喜欢',
+          content: `《${currentSong.name || '未知歌曲'}》已从“我的喜欢”移除`,
+          duration: 3000,
+          placement: 'bottom-right',
+          closeBtn: true
+        })
       } else {
         MessagePlugin.error(removeRes.error || '取消喜欢失败')
       }
@@ -700,7 +715,13 @@ const onToggleLike = async () => {
       ])
       if (addRes.success) {
         likeState.value = true
-        // MessagePlugin.success('已添加到“我的喜欢”')
+        NotifyPlugin.success({
+          title: '已添加到喜欢',
+          content: `《${currentSong.name || '未知歌曲'}》已加入“我的喜欢”`,
+          duration: 3000,
+          placement: 'bottom-right',
+          closeBtn: true
+        })
       } else {
         MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
       }
@@ -1462,16 +1483,23 @@ const handleProgressDragStart = (event: MouseEvent) => {
 
 // 歌曲信息由全局播放管理器提供
 const maincolor = computed(() => player.value.coverDetail.mainColor || 'var(--td-brand-color-5)')
+// 底栏覆盖在流沙背景上时使用白色，收起播放页后恢复封面取色。
+const useWhiteControls = computed(
+  () => showFullPlay.value && playSetting.getBackgroundRenderer === 'titanium'
+)
+const controlAccentColor = computed(() => (useWhiteControls.value ? '#fff' : maincolor.value))
 const startmaincolor = computed(() => {
   const c = player.value.coverDetail.ColorObject
   if (c) return `rgba(${c.r},${c.g},${c.b},.2)`
   return 'rgba(0, 0, 0, 1)'
 })
-const contrastTextColor = computed(
-  () => player.value.coverDetail.textColor || 'var(--player-text-idle)'
+const contrastTextColor = computed(() =>
+  useWhiteControls.value ? '#fff' : player.value.coverDetail.textColor || 'var(--player-text-idle)'
 )
-const hoverColor = computed(
-  () => player.value.coverDetail.hoverColor || 'var(--player-text-hover-idle)'
+const hoverColor = computed(() =>
+  useWhiteControls.value
+    ? '#fff'
+    : player.value.coverDetail.hoverColor || 'var(--player-text-hover-idle)'
 )
 // 音量条未填充段背景:
 // 这里的对比关系是"已填充段(maincolor)"紧贴"未填充段",
@@ -1493,15 +1521,22 @@ const volumeTrackBg = computed(() => {
 // 音量弹窗容器背景:用主色亮度判定,选择反向雾色
 // 容器要"托住"整个弹窗,和主色形成对比
 const volumePopupBg = computed(() => {
+  if (useWhiteControls.value) return 'rgba(0,0,0,0.7)'
   const c = player.value.coverDetail.ColorObject
   if (c == null) return 'rgba(255,255,255,0.65)'
   const luminance = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255
   // 亮主色 -> 深雾容器; 暗主色 -> 浅雾容器
   return luminance > 0.5 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.65)'
 })
-const playbg = computed(() => player.value.coverDetail.playBg || 'var(--player-btn-bg-idle)')
-const playbghover = computed(
-  () => player.value.coverDetail.playBgHover || 'var(--player-btn-bg-hover-idle)'
+const playbg = computed(() =>
+  useWhiteControls.value
+    ? 'rgba(255,255,255,0.16)'
+    : player.value.coverDetail.playBg || 'var(--player-btn-bg-idle)'
+)
+const playbghover = computed(() =>
+  useWhiteControls.value
+    ? 'rgba(255,255,255,0.25)'
+    : player.value.coverDetail.playBgHover || 'var(--player-btn-bg-hover-idle)'
 )
 
 const bg = ref('var(--player-bg-default)')
@@ -2410,12 +2445,12 @@ watch(showFullPlay, (val) => {
       }
 
       &.lt-room-btn {
-        color: v-bind(maincolor);
+        color: v-bind(controlAccentColor);
         animation: lt-room-btn-pulse 2.4s ease-in-out infinite;
         transition: transform 0.15s ease;
 
         &:hover {
-          color: v-bind(maincolor);
+          color: v-bind(controlAccentColor);
           animation-play-state: paused;
           transform: scale(1.12);
         }
@@ -2474,7 +2509,7 @@ watch(showFullPlay, (val) => {
 
 .volume-value {
   font-size: 12.5px;
-  color: v-bind(maincolor);
+  color: v-bind(controlAccentColor);
   margin-top: 8px;
   font-weight: 900;
   text-shadow:

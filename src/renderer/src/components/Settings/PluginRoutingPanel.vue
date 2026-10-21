@@ -3,7 +3,7 @@
     <div class="routing-intro">
       <div>
         <slot name="navigation"><h3>能力分配</h3></slot>
-        <p>查看已启用插件提供的全部功能，并按能力选择实际使用的插件。</p>
+        <p>按平台分配能力，并查看已启用插件提供的界面与服务。</p>
       </div>
       <span class="routing-count">{{ enabledPlugins.length }} 个插件可用</span>
     </div>
@@ -40,6 +40,7 @@
         <div class="routing-group-title">
           <strong>{{ selectedUIGroup?.name || selectedGroup?.name }}</strong>
           <span>{{ selectedUIGroup?.rows.length ?? selectedGroup?.rows.length }} 项功能</span>
+          <small v-if="selectedUIGroup" class="routing-group-hint">界面与服务清单</small>
         </div>
         <div
           ref="rowsViewport"
@@ -82,7 +83,9 @@
               />
               <div v-else class="routing-provider">
                 <span>{{ row.implementations[0].manifest.name }}</span>
-                <small>{{ row.status }}</small>
+                <small>
+                  {{ row.status }} · {{ row.selectable ? '仅此插件提供' : '由所属插件提供' }}
+                </small>
               </div>
             </div>
           </template>
@@ -249,6 +252,7 @@ function changeUI(row: any, pluginId: string) {
 
 <style scoped lang="scss">
 .routing-panel {
+  container: plugin-routing / inline-size;
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
@@ -271,6 +275,8 @@ function changeUI(row: any, pluginId: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 0 2px 10px;
   h3,
   p {
@@ -351,6 +357,7 @@ function changeUI(row: any, pluginId: string) {
   flex-shrink: 0;
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 13px 16px;
   border-bottom: 1px solid var(--td-component-stroke);
@@ -358,6 +365,11 @@ function changeUI(row: any, pluginId: string) {
     color: var(--td-text-color-placeholder);
     font-size: 12px;
   }
+}
+.routing-group-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
 }
 .routing-row {
   display: grid;
@@ -371,6 +383,8 @@ function changeUI(row: any, pluginId: string) {
   }
 }
 .routing-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -390,10 +404,7 @@ function changeUI(row: any, pluginId: string) {
     color: var(--td-text-color-placeholder);
   }
 }
-@media (max-width: 720px) {
-  .routing-panel {
-    padding: 22px 16px 16px;
-  }
+@container plugin-routing (max-width: 720px) {
   .routing-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
@@ -410,6 +421,11 @@ function changeUI(row: any, pluginId: string) {
   .routing-row {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+}
+@media (max-width: 720px) {
+  .routing-panel {
+    padding: 22px 16px 16px;
   }
 }
 </style>

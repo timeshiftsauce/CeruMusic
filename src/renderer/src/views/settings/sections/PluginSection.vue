@@ -26,8 +26,23 @@ const tab = ref('installed')
   min-width: 0;
   overflow: hidden;
 }
+.plugin-section :deep(.plugins-container),
+.plugin-section :deep(.routing-panel) {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
 .plugin-view-tabs {
+  max-width: 100%;
   background: transparent;
+}
+.plugin-view-tabs :deep(.t-tabs__nav-item) {
+  height: 40px;
+  padding-inline: 14px;
+  font-size: 16px;
+}
+.plugin-view-tabs :deep(.t-tabs__nav-item.t-is-active) {
+  font-weight: 600;
 }
 .plugin-view-tabs :deep(.t-tabs__content) {
   display: none;

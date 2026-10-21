@@ -16,6 +16,9 @@ export interface GlobalBackgroundSettings {
   url: string
   opacity: number // 0-1
   blur: number // px
+  sidebarBlur: number // 0-50px
+  sidebarOpacity: number // 0-1
+  sidebarColor: string // Empty follows the theme
   brightness: number // 0-2
 }
 
@@ -84,6 +87,9 @@ export const useSettingsStore = defineStore(
         url: '',
         opacity: 0.5,
         blur: 10,
+        sidebarBlur: 10,
+        sidebarOpacity: 0.2,
+        sidebarColor: '',
         brightness: 0.8
       }
     }
@@ -191,6 +197,9 @@ export const useSettingsStore = defineStore(
           url: '',
           opacity: 0.5,
           blur: 10,
+          sidebarBlur: 10,
+          sidebarOpacity: 0.2,
+          sidebarColor: '',
           brightness: 0.8
         }
       }
