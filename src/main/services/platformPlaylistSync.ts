@@ -1,14 +1,25 @@
-import { createCipheriv, createHash, randomInt, randomUUID } from 'crypto'
+import {
+  createCipheriv,
+  createHash,
+  randomInt,
+  randomUUID
+} from 'crypto'
 import ManageSongList from './songList/ManageSongList'
 import type { SongList } from '@common/types/songList'
 import type { MusicPlatform } from './platformAccounts'
 
 type RemotePlaylist = {
   id: string
+  alternateIds?: string[]
   name: string
   cover?: string
   count?: number
   description?: string
+}
+
+export type PlaylistImportResult = {
+  added: number
+  updated: number
 }
 
 const sourceByPlatform: Record<MusicPlatform, SongList['source']> = {
@@ -229,12 +240,133 @@ async function kugouPlaylists(cookies: { name: string; value: string }[]): Promi
     throw new Error(message ? `酷狗歌单接口失败 (${status}): ${message}` : `酷狗歌单接口未返回列表 (${status})`)
   }
   return rows.flatMap((item: any) => {
-    const id = String(item?.listid ?? item?.id ?? item?.global_collection_id ?? item?.specialid ?? item?.list_create_gid ?? '')
+    const id = String(item?.global_collection_id ?? item?.listid ?? item?.id ?? item?.specialid ?? item?.list_create_gid ?? '')
     const name = String(item?.name ?? item?.title ?? item?.listname ?? '').trim()
     return id && name
-      ? [{ id, name, cover: item.pic ?? item.img ?? item.create_user_pic ?? item.cover, count: Number(item.count ?? item.song_count ?? item.songnum) || 0 }]
+      ? [{
+          id,
+          alternateIds: [item?.listid, item?.id, item?.list_create_gid].filter(Boolean).map(String),
+          name,
+          cover: item.pic ?? item.img ?? item.create_user_pic ?? item.cover,
+          count: Number(item.count ?? item.song_count ?? item.songnum) || 0
+        }]
       : []
   })
+}
+
+/** Fetch a logged-in user's cloud playlist by Kugou's global collection id. */
+export async function getKugouAccountPlaylistDetail(
+  cookies: { name: string; value: string }[],
+  listId: string,
+  page = 1
+): Promise<{ list: any[]; page: number; limit: number; total: number; source: 'kg' }> {
+  const values = cookieMap(cookies)
+  const token = values.token || values.login_token || values.kugou_token || values.kg_token || values.t
+  const userId = values.userid || values.user_id || values.kugooid || values.kugoo_id || values.kg_mid
+  if (!token || !userId) throw new Error('酷狗音乐登录状态中缺少账号凭据')
+  const resolvedPlaylist = String(listId).startsWith('collection_')
+    ? undefined
+    : (await kugouPlaylists(cookies)).find(
+        (playlist) =>
+          playlist.id === String(listId) || playlist.alternateIds?.includes(String(listId))
+      )
+  const collectionId = resolvedPlaylist?.id ?? String(listId)
+
+  const appId = '1005'
+  const clientVersion = '20489'
+  const signKey = 'OIlwieks28dk2k092lksi2UIkp'
+  const mid = values.kugou_api_mid || values.mid || BigInt(`0x${createHash('md5').update(`ceru-kugou-${userId}`).digest('hex').slice(0, 15)}`).toString()
+  const dfid = values.dfid || values.DFID || '-'
+  const clienttime = String(Math.floor(Date.now() / 1000))
+  const params: Record<string, string> = {
+    dfid,
+    mid,
+    uuid: '-',
+    appid: appId,
+    clientver: clientVersion,
+    clienttime,
+    token,
+    userid: userId,
+    area_code: '1',
+    begin_idx: String((Math.max(1, page) - 1) * 300),
+    plat: '1',
+    type: '1',
+    mode: '1',
+    personal_switch: '1',
+    extend_fields: 'abtags,hot_cmt,popularization',
+    pagesize: '300',
+    global_collection_id: collectionId
+  }
+  const signingText = Object.keys(params).sort().map((key) => `${key}=${params[key]}`).join('')
+  params.signature = createHash('md5').update(`${signKey}${signingText}${signKey}`).digest('hex')
+  const url = `https://gateway.kugou.com/pubsongs/v2/get_other_list_file_nofilt?${new URLSearchParams(params).toString()}`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Cookie: cookieHeader(cookies),
+      'User-Agent': 'Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi',
+      dfid,
+      mid,
+      clienttime,
+      'kg-rc': '1',
+      'kg-thash': '5d816a0',
+      'kg-rec': '1',
+      'kg-rf': 'B9EDA08A64250DEFFBCADDEE00F8F25F'
+    },
+    signal: AbortSignal.timeout(20000)
+  })
+  if (!response.ok) throw new Error(`酷狗歌单详情请求失败 (${response.status})`)
+  let result: any
+  try {
+    result = await response.json()
+  } catch {
+    throw new Error('酷狗歌单详情响应解析失败')
+  }
+  const rows = result?.data?.songs ?? result?.data?.info ?? result?.songs ?? result?.info ?? []
+  if (Number(result?.error_code ?? 0) !== 0 || Number(result?.status ?? 1) === 0) {
+    const errorCode = result?.error_code ?? result?.status ?? 'unknown'
+    const message = String(result?.errmsg ?? result?.error ?? result?.msg ?? result?.message ?? '').trim().slice(0, 160)
+    console.warn(`[platform-playlist-sync] kugou detail rejected code=${errorCode} message=${message || 'none'}`)
+    throw new Error(`酷狗歌单详情接口返回异常 (${errorCode})${message ? `：${message}` : ''}`)
+  }
+  if (!Array.isArray(rows)) throw new Error('酷狗歌单详情接口没有返回歌曲列表')
+  const list = rows.flatMap((item: any) => {
+    const audio = item?.audio_info ?? item
+    const hash = String(audio?.hash ?? item?.hash ?? item?.FileHash ?? '')
+    const fullName = String(item?.songname ?? item?.name ?? item?.filename ?? '').trim()
+    let name = fullName
+    let singer = String(item?.author_name ?? item?.singername ?? item?.singer ?? '').trim()
+    if (!singer && fullName.includes(' - ')) {
+      const parts = fullName.split(' - ')
+      singer = parts.shift() ?? ''
+      name = parts.join(' - ').trim()
+    }
+    if (!hash || !name) return []
+    return [{
+      name,
+      singer,
+      albumName: String(item?.album_info?.album_name ?? item?.albuminfo?.album_name ?? item?.album_name ?? item?.remark ?? ''),
+      albumId: item?.album_info?.album_id ?? item?.albuminfo?.album_id ?? item?.album_id ?? 0,
+      songmid: String(audio?.audio_id ?? item?.audio_id ?? item?.mixsongid ?? hash),
+      source: 'kg',
+      interval: String(audio?.timelength ?? item?.timelength ?? (Number(item?.timelen) ? Number(item.timelen) * 1000 : item?.duration ?? '')),
+      img: item?.img ?? item?.cover ?? item?.albuminfo?.img ?? null,
+      lrc: null,
+      hash,
+      types: [],
+      _types: {},
+      typeUrl: {}
+    }]
+  })
+  const total = Number(result?.data?.count ?? result?.data?.total ?? rows.length) || rows.length
+  console.info(`[platform-playlist-sync] kugou detail collection=${collectionId} page=${page} status=${result?.status ?? 'unknown'} error=${result?.error_code ?? 0} tracks=${list.length}/${total}`)
+  return {
+    list,
+    page: Math.max(1, page),
+    limit: Number(result?.data?.pagesize ?? 300),
+    total,
+    source: 'kg'
+  }
 }
 
 async function kuwoPlaylists(cookies: { name: string; value: string }[]): Promise<RemotePlaylist[]> {
@@ -362,7 +494,7 @@ export async function importAccountPlaylists(
   platform: MusicPlatform,
   cookies: { name: string; value: string }[],
   selectedIds?: string[]
-): Promise<number> {
+): Promise<PlaylistImportResult> {
   try {
     const selected = selectedIds ? new Set(selectedIds.map(String)) : undefined
     const fetched = await fetchRemotePlaylists(platform, cookies)
@@ -376,6 +508,7 @@ export async function importAccountPlaylists(
     const source = sourceByPlatform[platform]
     const existing = ManageSongList.Read()
     let imported = 0
+    let updated = 0
     for (const remote of remotePlaylists) {
       const meta = {
         source,
@@ -387,7 +520,10 @@ export async function importAccountPlaylists(
         ...(remote.description ? { description: remote.description } : {})
       }
       const linked = existing.find(
-        (item) => item.meta?.providerIdentity === platform && item.meta?.remotePlaylistId === remote.id
+        (item) =>
+          item.meta?.providerIdentity === platform &&
+          (item.meta?.remotePlaylistId === remote.id ||
+            (platform === 'kugou' && remote.alternateIds?.includes(String(item.meta?.remotePlaylistId))))
       )
       if (linked) {
         ManageSongList.editById(linked.id, {
@@ -396,6 +532,7 @@ export async function importAccountPlaylists(
           coverImgUrl: remote.cover || linked.coverImgUrl,
           meta
         })
+        updated += 1
       } else {
         const { id: localId } = ManageSongList.createPlaylist(
           `${remote.name} · ${platformName[platform]}`,
@@ -407,8 +544,10 @@ export async function importAccountPlaylists(
         imported += 1
       }
     }
-    console.info(`[platform-playlist-sync] ${platform} synced remote=${remotePlaylists.length} added=${imported}`)
-    return remotePlaylists.length
+    console.info(
+      `[platform-playlist-sync] ${platform} synced remote=${remotePlaylists.length} added=${imported} updated=${updated}`
+    )
+    return { added: imported, updated }
   } catch (error) {
     console.error(
       `[platform-playlist-sync] ${platform} import failed:`,

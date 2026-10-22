@@ -728,7 +728,14 @@ const tryAutoNext = (reason: string) => {
   playNext()
 }
 
-const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
+const savedPlayMode = String(userInfo.value.playMode || '')
+const playMode = ref(
+  savedPlayMode === PlayMode.RANDOM || savedPlayMode === PlayMode.SINGLE
+    ? savedPlayMode
+    : PlayMode.SEQUENCE
+)
+// 旧版 P 把顺序循环单独保存为 loop；Mian 的顺序模式就是列表循环。
+if (savedPlayMode !== playMode.value) userInfo.value.playMode = playMode.value
 const isLoadingSong = ref(false)
 const autoNextCount = ref(0)
 const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
@@ -767,11 +774,7 @@ watch(
     // 同步到系统媒体控件的随机/循环指示（仅原生通道生效，浏览器通道内部 no-op）。
     try {
       mediaSessionController.updatePlayMode(
-        mode === PlayMode.SINGLE || mode === PlayMode.LOOP
-          ? mode === PlayMode.SINGLE
-            ? 'Track'
-            : 'List'
-          : 'None',
+        mode === PlayMode.SINGLE ? 'Track' : mode === PlayMode.SEQUENCE ? 'List' : 'None',
         mode === PlayMode.RANDOM
       )
     } catch {}
@@ -799,7 +802,7 @@ const setPlayMode = (mode: PlayMode) => {
 }
 
 const updatePlayMode = () => {
-  const modes = [PlayMode.RANDOM, PlayMode.SINGLE, PlayMode.LOOP, PlayMode.SEQUENCE]
+  const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
   const currentIndex = modes.indexOf(playMode.value)
   const nextIndex = (currentIndex + 1) % modes.length
   setPlayMode(modes[nextIndex])
@@ -844,9 +847,6 @@ const resolveNextSong = ({
           )
         ))
   )
-  if (respectSingleMode && playMode.value === PlayMode.SEQUENCE && currentIndex >= list.value.length - 1) {
-    return null
-  }
   const nextIndex = (currentIndex + 1) % list.value.length
   return list.value[nextIndex] || null
 }
@@ -855,7 +855,7 @@ const resolveNextSong = ({
  * 计算下一首歌曲（不推进播放，仅返回引用，供无感过渡预取 URL 使用）。
  * - SINGLE 模式下返回 null（单曲循环不过渡）
  * - RANDOM 模式使用 shuffleOrder，必要时重建
- * - LOOP 模式按列表顺序循环，SEQUENCE 到列表末尾停止
+ * - SEQUENCE 模式按列表顺序循环
  * - 列表为空返回 null
  */
 const getNextSong = (): SongList | null => {
@@ -1059,7 +1059,8 @@ const onGlobalCtrl = (e: any) => {
           playMode.value = PlayMode.RANDOM
           userInfo.value.playMode = playMode.value
         } else if (v === 'loop') {
-          playMode.value = PlayMode.LOOP
+          // 兼容旧调用方：旧列表循环等同于 Mian 的顺序播放。
+          playMode.value = PlayMode.SEQUENCE
           userInfo.value.playMode = playMode.value
         } else if (v === 'toggleSingle') {
           playMode.value = playMode.value === PlayMode.SINGLE ? PlayMode.SEQUENCE : PlayMode.SINGLE

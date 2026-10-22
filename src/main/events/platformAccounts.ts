@@ -13,6 +13,9 @@ export function initPlatformAccountEvents(mainWindow: BrowserWindow): void {
   ipcMain.handle('platform-accounts:sync-playlists', (_, platform: unknown, selectedIds?: string[]) =>
     platformAccounts.syncPlaylists(platform, selectedIds)
   )
+  ipcMain.handle('platform-accounts:get-playlist-tracks', (_, platform: unknown, playlistId: unknown, page?: unknown) =>
+    platformAccounts.getPlaylistTracks(platform, playlistId, page)
+  )
   ipcMain.handle('platform-accounts:logout', (_, platform: unknown) =>
     platformAccounts.logout(platform, mainWindow)
   )

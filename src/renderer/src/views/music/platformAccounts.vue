@@ -69,7 +69,7 @@ const syncPlaylists = async (platform: Platform) => {
   syncing.value = platform
   try {
     const result = await window.api.platformAccounts.syncPlaylists(platform)
-    if (typeof result === 'number') throw new Error('读取平台歌单失败，请重试')
+    if (!Array.isArray(result)) throw new Error('读取平台歌单失败，请重试')
     remotePlaylists.value = result
     selectedIds.value = result.map((item) => item.id)
     selectAll.value = result.length > 0
@@ -90,9 +90,13 @@ const importSelected = async () => {
     // Send a fresh plain array across the preload boundary.
     const idsToImport = Array.from(selectedIds.value, (id) => String(id))
     const result = await window.api.platformAccounts.syncPlaylists(platform, idsToImport)
-    if (typeof result !== 'number') throw new Error('同步歌单失败')
+    if (Array.isArray(result)) throw new Error('同步歌单失败')
     pickerPlatform.value = null
-    MessagePlugin.success(`已导入 ${result} 个歌单到“歌单”`)
+    const changes = [
+      result.added > 0 ? `新增 ${result.added} 个` : '',
+      result.updated > 0 ? `更新 ${result.updated} 个` : ''
+    ].filter(Boolean)
+    MessagePlugin.success(`歌单同步完成：${changes.join('，')}`)
   } catch (error) {
     console.error('[platform-accounts] selected playlist import failed', {
       platform,
@@ -260,9 +264,11 @@ onBeforeUnmount(() => stopListening?.())
 
 <style scoped lang="scss">
 .platform-account-page {
-  width: min(780px, 100%);
-  margin: 0 auto;
-  padding: 36px 28px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 836px;
+  margin: 0;
+  padding: 36px 24px;
 }
 
 .page-heading {

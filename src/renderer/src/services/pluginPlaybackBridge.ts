@@ -86,7 +86,7 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
       volume: Math.max(0, Math.min(1, (audio.volume || 0) / 100)),
       muted: !!audio.audio?.muted,
       repeat:
-        mode === PlayMode.SINGLE ? 'one' : mode === PlayMode.LOOP ? 'all' : 'off',
+        mode === PlayMode.SINGLE ? 'one' : mode === PlayMode.SEQUENCE ? 'all' : 'off',
       shuffle: mode === PlayMode.RANDOM
     }
   }
@@ -115,7 +115,7 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
     const mode = (args[0] ?? {}) as any
     if (mode.shuffle === true) playback.playMode.value = PlayMode.RANDOM
     else if (mode.repeat === 'one') playback.playMode.value = PlayMode.SINGLE
-    else if (mode.repeat === 'all') playback.playMode.value = PlayMode.LOOP
+    else if (mode.repeat === 'all') playback.playMode.value = PlayMode.SEQUENCE
     else if (mode.repeat === 'off' || mode.shuffle === false)
       playback.playMode.value = PlayMode.SEQUENCE
     if (typeof mode.muted === 'boolean' && audio.audio) audio.audio.muted = mode.muted

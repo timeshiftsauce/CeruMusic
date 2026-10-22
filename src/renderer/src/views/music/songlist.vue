@@ -585,9 +585,23 @@ const viewPlaylist = (playlist: SongList) => {
       meta: JSON.stringify(playlist.meta), // 歌单元数据
       description: playlist.description || '',
       cloudId: playlist.meta?.cloudId, // 显式传递 cloudId，防止 meta 被覆盖后丢失
-      autoSync: playlist.meta?.accountPlaylist ? '1' : undefined
+      autoSync: playlist.meta?.accountPlaylist ? '1' : undefined,
+      // 每次点击都改变路由，保证重复点击当前平台歌单也会触发自动刷新。
+      refreshKey: playlist.meta?.accountPlaylist ? String(Date.now()) : undefined
     }
   })
+}
+
+const handlePlaylistCardClick = (event: MouseEvent, playlist: SongList) => {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, a, input, label, [role="button"]')) return
+
+  if (batchMode.value) {
+    togglePlaylistSelection(playlist.id)
+    return
+  }
+
+  viewPlaylist(playlist)
 }
 
 // 播放歌单
@@ -1363,7 +1377,6 @@ const scrollTop = ref(0)
 
 // 组件挂载时加载数据
 onMounted(() => {
-  loadPlaylists()
   // 监听页面滚动，关闭右键菜单
   nextTick(() => {
     if (scrollRef.value) {
@@ -1386,6 +1399,9 @@ const handleScrollCloseMenu = () => {
 }
 
 onActivated(() => {
+  // 页面处于 KeepAlive 缓存中时，侧栏切回“歌单”不会重新 mounted。
+  // 每次重新激活都重读本地和云端列表，让刚导入的歌单立即出现。
+  void loadPlaylists()
   if (scrollRef.value) {
     scrollRef.value.scrollTop = scrollTop.value
   }
@@ -1503,6 +1519,7 @@ onDeactivated(() => {
             class="playlist-card"
             :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
             :style="{ '--cover-url': `url('${getCoverUrl(playlist)}')` }"
+            @click="handlePlaylistCardClick($event, playlist)"
             @contextmenu="handlePlaylistContextMenu($event, playlist)"
           >
             <label v-if="batchMode" class="playlist-select" @click.stop>
@@ -1513,7 +1530,7 @@ onDeactivated(() => {
                 @change="togglePlaylistSelection(playlist.id)"
               />
             </label>
-            <div class="playlist-cover" @click="viewPlaylist(playlist)">
+            <div class="playlist-cover">
               <img
                 v-if="playlist.coverImgUrl"
                 :alt="playlist.name"
@@ -1527,7 +1544,7 @@ onDeactivated(() => {
               </div>
             </div>
             <div class="playlist-info">
-              <div class="playlist-name-row" @click="viewPlaylist(playlist)">
+              <div class="playlist-name-row">
                 <div :title="playlist.name" class="playlist-name-text">
                   {{ playlist.name }}
                 </div>
@@ -1580,7 +1597,7 @@ onDeactivated(() => {
                   size="small"
                   theme="primary"
                   variant="text"
-                  @click="playPlaylist(playlist)"
+                  @click.stop="playPlaylist(playlist)"
                 >
                   <i class="iconfont icon-bofang"></i>
                 </t-button>
@@ -1591,7 +1608,7 @@ onDeactivated(() => {
                   size="small"
                   theme="default"
                   variant="text"
-                  @click="viewPlaylist(playlist)"
+                  @click.stop="viewPlaylist(playlist)"
                 >
                   <view-list-icon
                     :fill-color="'transparent'"
@@ -1606,7 +1623,7 @@ onDeactivated(() => {
                   size="small"
                   theme="success"
                   variant="text"
-                  @click="editPlaylist(playlist)"
+                  @click.stop="editPlaylist(playlist)"
                 >
                   <Edit2Icon />
                 </t-button>
@@ -1618,7 +1635,7 @@ onDeactivated(() => {
                   size="small"
                   theme="danger"
                   variant="text"
-                  @click="deletePlaylist(playlist)"
+                  @click.stop="deletePlaylist(playlist)"
                 >
                   <i class="iconfont icon-shanchu"></i>
                 </t-button>
@@ -2146,6 +2163,7 @@ onDeactivated(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+  cursor: pointer;
   background: var(--local-card-bg);
   border-radius: 0.75rem;
   overflow: hidden;

@@ -13,7 +13,12 @@ import {
   randomUUID
 } from 'crypto'
 import QRCode from 'qrcode'
-import { importAccountPlaylists, listAccountPlaylists } from './platformPlaylistSync'
+import {
+  getKugouAccountPlaylistDetail,
+  importAccountPlaylists,
+  listAccountPlaylists,
+  type PlaylistImportResult
+} from './platformPlaylistSync'
 import { kwB64decode, kwDecrypt, kwMakeQ } from './kuwoAuthCrypto'
 
 export type MusicPlatform = 'netease' | 'qq' | 'kugou' | 'kuwo'
@@ -198,16 +203,22 @@ async function readSession(platform: MusicPlatform): Promise<StoredPlatformSessi
       decipher.final()
     ]).toString('utf8')
     const stored = JSON.parse(plaintext) as StoredPlatformSession
+    const now = Date.now() / 1000
+    // QQ login cookies have different lifetimes. Expired analytics and UI
+    // cookies must not invalidate the account's still-live login ticket.
+    const cookies = platform === 'qq'
+      ? stored.cookies.filter((cookie) => cookie.expirationDate === undefined || cookie.expirationDate > now)
+      : stored.cookies
     if (
       stored.version !== 1 ||
       !Array.isArray(stored.cookies) ||
-      !cookieMatches(platform, stored.cookies) ||
-      stored.cookies.some(
+      !cookieMatches(platform, cookies) ||
+      (platform !== 'qq' && cookies.some(
         (cookie) => cookie.expirationDate !== undefined && cookie.expirationDate <= Date.now() / 1000
-      )
+      ))
     )
       return null
-    return stored
+    return cookies === stored.cookies ? stored : { ...stored, cookies }
   } catch {
     return null
   }
@@ -238,7 +249,9 @@ async function captureLogin(
     secure: cookie.secure,
     httpOnly: cookie.httpOnly,
     ...(cookie.expirationDate ? { expirationDate: cookie.expirationDate } : {})
-  }))
+  })).filter((cookie) =>
+    platform !== 'qq' || cookie.expirationDate === undefined || cookie.expirationDate > Date.now() / 1000
+  )
   if (
     !cookieMatches(platform, cookies) ||
     loginWindow.isDestroyed() ||
@@ -295,11 +308,18 @@ function openLogin(platform: MusicPlatform, mainWindow: BrowserWindow): void {
   loginWindows.set(platform, window)
 
   let checking = false
+  let lastCaptureErrorAt = 0
   const timer = setInterval(() => {
     if (checking || window.isDestroyed()) return
     checking = true
     void captureLogin(platform, loginSession, window, mainWindow)
-      .catch(() => {})
+      .catch((error) => {
+        if (Date.now() - lastCaptureErrorAt < 30000) return
+        lastCaptureErrorAt = Date.now()
+        console.warn(
+          `[platform-login] cookie capture failed platform=${platform}: ${error instanceof Error ? error.message : 'unknown error'}`
+        )
+      })
       .finally(() => {
         checking = false
       })
@@ -636,12 +656,24 @@ export const platformAccounts = {
     return { success: true, nickname: account.nickname }
   },
 
-  async syncPlaylists(platform: unknown, selectedIds?: string[]): Promise<number | Awaited<ReturnType<typeof listAccountPlaylists>>> {
+  async syncPlaylists(
+    platform: unknown,
+    selectedIds?: string[]
+  ): Promise<PlaylistImportResult | Awaited<ReturnType<typeof listAccountPlaylists>>> {
     if (!isPlatform(platform)) throw new Error('不支持的音乐平台')
     const stored = await readSession(platform)
     if (!stored) throw new Error('请先登录该平台')
     if (!selectedIds) return listAccountPlaylists(platform, stored.cookies)
     return importAccountPlaylists(platform, stored.cookies, selectedIds)
+  },
+
+  async getPlaylistTracks(platform: unknown, playlistId: unknown, page: unknown = 1) {
+    if (platform !== 'kugou') throw new Error('该平台暂不支持此歌单详情接口')
+    const stored = await readSession('kugou')
+    if (!stored) throw new Error('请先登录酷狗音乐')
+    const id = String(playlistId ?? '').trim()
+    if (!id) throw new Error('酷狗歌单 ID 为空')
+    return getKugouAccountPlaylistDetail(stored.cookies, id, Number(page) || 1)
   },
 
   async logout(platform: unknown, mainWindow: BrowserWindow) {

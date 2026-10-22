@@ -81,13 +81,11 @@ const songInfo = computed(() => player.value.songInfo || ({} as any))
 const playModeLabel = computed(() => {
   if (playMode.value === PlayMode.RANDOM) return '随机播放'
   if (playMode.value === PlayMode.SINGLE) return '单曲循环'
-  if (playMode.value === PlayMode.LOOP) return '循环播放'
   return '顺序播放'
 })
 const playModeIcon = computed(() => {
   if (playMode.value === PlayMode.RANDOM) return 'icon-suijibofang'
   if (playMode.value === PlayMode.SINGLE) return 'icon-bofang-xunhuanbofang'
-  if (playMode.value === PlayMode.LOOP) return 'icon-bofang-xunhuanbofang'
   return 'icon-shunxubofangtubiao'
 })
 
@@ -1756,21 +1754,18 @@ watch(showFullPlay, (val) => {
 
           <!-- 单个按钮循环切换三种播放模式 -->
           <div class="play-mode-controls" aria-label="播放模式">
-            <t-tooltip :content="playModeLabel">
-              <t-button
-                class="control-btn mode-btn"
-                shape="circle"
-                variant="text"
-                :title="`${playModeLabel}，点击切换`"
-                :aria-label="`${playModeLabel}，点击切换播放模式`"
-                @click.stop="updatePlayMode"
-              >
-                <span class="play-mode-icon-wrap">
-                  <i :class="['iconfont', playModeIcon, 'PlayMode']"></i>
-                  <span v-if="playMode === PlayMode.SINGLE" class="single-mode-mark">1</span>
-                </span>
-              </t-button>
-            </t-tooltip>
+            <t-button
+              class="control-btn mode-btn"
+              shape="circle"
+              variant="text"
+              :aria-label="playModeLabel"
+              @click.stop="updatePlayMode"
+            >
+              <span class="play-mode-icon-wrap">
+                <i :class="['iconfont', playModeIcon, 'PlayMode']"></i>
+                <span v-if="playMode === PlayMode.SINGLE" class="single-mode-mark">1</span>
+              </span>
+            </t-button>
           </div>
 
           <!-- 桌面歌词开关按钮 -->

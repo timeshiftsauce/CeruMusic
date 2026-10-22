@@ -11,8 +11,8 @@ defineOptions({ name: 'HomeRoot' })
         <router-view v-slot="{ Component, route }">
           <Transition
             name="page"
-            :enter-active-class="`animate__animated ${route.meta.transitionIn} animate__fast`"
-            :leave-active-class="`animate__animated ${route.meta.transitionOut} animate__fast`"
+            :enter-active-class="`animate__animated ${route.meta.transitionIn} sidebar-page-transition`"
+            :leave-active-class="`animate__animated ${route.meta.transitionOut} sidebar-page-transition`"
           >
             <KeepAlive exclude="list">
               <component :is="Component" />
@@ -24,3 +24,16 @@ defineOptions({ name: 'HomeRoot' })
     <PlayMusic />
   </div>
 </template>
+
+<style scoped>
+:global(.sidebar-page-transition) {
+  --animate-duration: 480ms;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.sidebar-page-transition) {
+    --animate-duration: 1ms;
+  }
+}
+</style>

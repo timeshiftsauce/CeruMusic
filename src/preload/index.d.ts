@@ -305,7 +305,15 @@ interface CustomAPI {
     syncPlaylists: (
       platform: 'netease' | 'qq' | 'kugou' | 'kuwo',
       selectedIds?: string[]
-    ) => Promise<number | { id: string; name: string; cover?: string; count?: number; description?: string }[]>
+    ) => Promise<
+      | { added: number; updated: number }
+      | { id: string; name: string; cover?: string; count?: number; description?: string }[]
+    >
+    getPlaylistTracks: (
+      platform: 'kugou',
+      playlistId: string,
+      page?: number
+    ) => Promise<{ list: any[]; page: number; limit: number; total: number; source: 'kg' }>
     onChanged: (
       callback: (event: {
         platform: 'netease' | 'qq' | 'kugou' | 'kuwo'

@@ -190,7 +190,8 @@ const handleLocateBtnMouseLeave = () => {
   startLocateBtnHideTimer()
 }
 
-onMounted(() => {
+const loadCurrentRoutePlaylist = async () => {
+  const routePath = route.fullPath
   // 尽早触发图片预加载，不等待歌曲数据请求
   const coverUrl = (route.query.cover as string) || ''
 
@@ -210,13 +211,29 @@ onMounted(() => {
     bgImageLoaded.value = true
   }
 
-  void fetchPlaylistSongs().then(() => {
-    if (route.query.autoSync === '1' && playlistInfo.value.meta?.playlistId) {
-      void handleSyncPlaylist()
-    }
-  })
+  await fetchPlaylistSongs()
+  // router 会复用同一个歌单组件，快速切换时只处理当前路由对应的自动同步。
+  if (
+    route.fullPath === routePath &&
+    route.query.autoSync === '1' &&
+    playlistInfo.value.meta?.playlistId
+  ) {
+    await handleSyncPlaylist()
+  }
   triggerLocateBtnVisible()
+}
+
+onMounted(() => {
+  void loadCurrentRoutePlaylist()
 })
+
+watch(
+  () => route.fullPath,
+  (path, previousPath) => {
+    if (previousPath && path !== previousPath) void loadCurrentRoutePlaylist()
+  }
+)
+
 onBeforeUnmount(() => {
   clearLocateScrollTimers()
   clearLocateBtnTimer()
@@ -1447,17 +1464,27 @@ const handleSyncPlaylist = async () => {
 
   const getListDetail = async (page: number) => {
     let detailResult: any
+    const method = isLeaderboard ? 'getLeaderboardDetail' : 'getPlaylistDetail'
+    const requestId = isLeaderboard ? playlistId.replace(/^.*__/, '') : playlistId
     try {
-      const method = isLeaderboard ? 'getLeaderboardDetail' : 'getPlaylistDetail'
-      const requestId = isLeaderboard ? playlistId.replace(/^.*__/, '') : playlistId
-      detailResult = (await window.api.music.requestSdk(method, {
-        source,
-        id: requestId,
-        page: page
-      })) as any
+      if (isAccountPlaylist && source === 'kg') {
+        detailResult = await window.api.platformAccounts.getPlaylistTracks('kugou', requestId, page)
+      } else {
+        detailResult = (await window.api.music.requestSdk(method, {
+          source,
+          id: requestId,
+          page: page
+        })) as any
+      }
       console.log('list', detailResult)
-    } catch {
-      MessagePlugin.error(`获取歌单详情失败`)
+    } catch (error) {
+      console.error('[playlist-detail] failed to fetch playlist details', {
+        source,
+        playlistId: requestId,
+        page,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      MessagePlugin.error(`获取歌单详情失败：${error instanceof Error ? error.message : String(error)}`)
       load1.then((res) => res.close())
       return
     }
