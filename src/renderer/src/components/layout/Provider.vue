@@ -383,6 +383,7 @@ onMounted(() => {
   window.electron?.ipcRenderer?.on?.('toggle', () => forward('toggle'))
   window.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
   window.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
+  window.electron?.ipcRenderer?.on?.('toggleLike', () => forward('toggleLike'))
   window.electron?.ipcRenderer?.on?.('volumeDelta', (_: any, val: number) =>
     forward('volumeDelta', val)
   )

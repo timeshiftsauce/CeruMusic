@@ -127,8 +127,7 @@ const METADATA_SLOW_MS = 400
  * 切歌时「兜底等待」歌词的上限 —— 超时只是不再阻塞切歌，**不再丢弃结果**。
  *
  * 封面与歌词都要就绪后才切歌（避免中间态），但不该让外链歌词拖住切歌节奏：
- * 插件侧取歌词要串两次网络（先试 TTML 库，404/超时后再回退平台接口），
- * 实测无缓存歌曲常见 10s+（`scripts` 里的插件日志可见 TTML 段单独就 10s）。
+ * 插件可能等待 TTML 库超时后才返回已有的平台歌词，耗时可超过此上限。
  * 这里只决定「什么时候先切过去」，真正的结果到达后由下方回填补齐。
  */
 const LYRICS_WAIT_TIMEOUT_MS = 8000
@@ -452,7 +451,7 @@ export const useGlobalPlayStatusStore = defineStore(
      * 歌词迟到时的回填。
      *
      * `prepareSong` 等歌词有超时上限（`LYRICS_WAIT_TIMEOUT_MS`），但插件取歌词
-     * 本身要串行两次网络（先探 TTML 库、再回退平台接口），实测常超过上限。
+     * 本身可能还在等待 TTML 或平台接口，耗时可以超过上限。
      * 超时只该让切歌先过去，不该让结果作废 —— 否则本次播放就永远是空白歌词，
      * 用户切走再切回来才重新拉取（那时结果已进缓存，所以「又有了」）。
      *
@@ -587,12 +586,17 @@ export const useGlobalPlayStatusStore = defineStore(
       }
       const __t0 = performance.now()
 
+      // 超时只结束等待，仍保留本次准备拿到的最终歌词。
+      // 结果可能在超时后、音频就绪并 commitPrepared 前到达；此时 player 还是
+      // 上一首，backfillLyrics 会跳过，所以提交时必须读取最新结果。
+      let resolvedLyrics: Player['lyrics']['crlyric']
       // 封面始终等待：它很快（缓存命中约 10ms）且直接决定视觉，缺了会闪空。
       const lyricsPromise = withDeadline<
         import('@shiqianjiang/ceru-plugin-sdk').CrLyric | undefined
       >(
         loadLyrics()
           .then((r) => {
+            resolvedLyrics = r
             const cost = performance.now() - __t0
             if (cost > METADATA_SLOW_MS) {
               console.warn(`[切歌耗时] ${clean.name} 歌词=${cost.toFixed(0)}ms（偏慢）`)
@@ -647,7 +651,7 @@ export const useGlobalPlayStatusStore = defineStore(
         signal.throwIfAborted()
       }
       // 默认等歌词一起就绪：切歌时「封面 + 歌词」同时到位，不出现中间态。
-      const crlyric = await lyricsPromise
+      await lyricsPromise
       if (signal?.aborted) {
         dispose()
         signal.throwIfAborted()
@@ -658,9 +662,13 @@ export const useGlobalPlayStatusStore = defineStore(
         // 上游 CDN 原链接（供「高清封面协议」使用；可能是空字符串）。
         // 与 cover(blob:/file:) 严格区分，切勿混用。
         sourceUrl,
-        crlyric,
+        get crlyric() {
+          return resolvedLyrics
+        },
         colors,
-        lines: crlyric ? sanitizeLyricLines(toPlayerLyrics(crlyric)) : [],
+        get lines() {
+          return resolvedLyrics ? sanitizeLyricLines(toPlayerLyrics(resolvedLyrics)) : []
+        },
         dispose
       }
     }

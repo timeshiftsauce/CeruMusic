@@ -3,6 +3,7 @@ export const ROUTABLE_PLUGIN_CAPABILITIES: Record<string, readonly [string, stri
   'tracks.search': ['歌曲搜索', '查找歌曲、歌手和专辑'],
   'tracks.resolve': ['播放解析', '选择歌曲播放和下载使用的音源'],
   'tracks.lyrics': ['歌词', '获取逐行、逐字歌词和翻译'],
+  'tracks.artworkHires': ['高清封面', '为系统媒体控件提供高清封面（可选）'],
   'playlists.search': ['歌单搜索', '搜索平台公开歌单'],
   'playlists.categories': ['歌单分类', '获取歌单风格、场景等分类'],
   'playlists.list': ['歌单浏览', '浏览所选分类下的歌单'],
@@ -15,7 +16,6 @@ export const ROUTABLE_PLUGIN_CAPABILITIES: Record<string, readonly [string, stri
   'action:comments.hot': ['热门评论', '获取歌曲的热门评论'],
   'action:comments.get': ['最新评论', '分页读取歌曲评论'],
   'action:artwork.get': ['歌曲封面', '获取或补全歌曲封面'],
-  'action:artwork.hires': ['高清封面', '为系统媒体控件提供高清封面（可选）'],
   'action:playlist.parse': ['歌单链接识别', '识别歌单链接或歌单编号'],
   'action:recognize': ['听歌识曲', '根据音频片段识别歌曲'],
   'action:album.list': ['专辑歌曲', '读取专辑信息和歌曲列表']
@@ -31,6 +31,7 @@ const legacyCapabilities: Record<string, string> = {
   'action:search': 'tracks.search',
   'action:music.resolve': 'tracks.resolve',
   'action:lyrics.get': 'tracks.lyrics',
+  'action:artwork.hires': 'tracks.artworkHires',
   'action:playlist.search': 'playlists.search',
   'action:playlist.tags': 'playlists.categories',
   'action:playlist.list': 'playlists.list',

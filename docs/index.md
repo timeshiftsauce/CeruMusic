@@ -92,6 +92,8 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
    `yarn setup` 会跳过 Yarn 1 对 `better-sqlite3` 的错误 `node-gyp` 自动编译，并完成 Electron 与 native 模块准备。不要直接使用普通 `yarn install`。
 
+   Electron 默认通过 npmmirror 下载，失败时自动回退到 GitHub。可通过 `ELECTRON_MIRROR` 环境变量指定其他镜像；如镜像目录不带版本号前的 `v`，同时设置 `ELECTRON_CUSTOM_DIR='{{ version }}'`。显式配置镜像时不会自动切换下载源。
+
 2. 启动开发服务器：
 
    ```bash

@@ -27,6 +27,15 @@ export const backgroundRenderers = [
       '提取封面的四个主色，重新生成流动渐变，不保留封面图案；支持明暗波动和减少渐变色带。',
     detail: 'AMLL 0.6.0 新增，目前不随音乐鼓点变化。',
     supportsBeat: false
+  },
+  {
+    value: 'titanium',
+    label: '钛金属流沙',
+    name: 'Titanium',
+    fullName: 'TitaniumRenderer',
+    description: '提取封面主题色，生成带金属高光与细腻闪粉的流沙，切歌时平滑迁移沙面。',
+    detail: '支持低频鼓点驱动流沙，有歌词时自动收敛背景亮度。',
+    supportsBeat: true
   }
 ] as const
 

@@ -46,7 +46,10 @@ export default defineConfig(({ command }) => ({
   },
   renderer: {
     // Contract-only ESM stays live when the plugin SDK is upgraded during development.
-    optimizeDeps: { exclude: ['@shiqianjiang/ceru-plugin-sdk'] },
+    optimizeDeps: {
+      exclude: ['@shiqianjiang/ceru-plugin-sdk'],
+      include: ['@applemusic-like-lyrics/core', '@applemusic-like-lyrics/vue', 'qrcode']
+    },
     build: {
       chunkSizeWarningLimit: 1000,
       minify: 'terser',

@@ -14,6 +14,9 @@ const bgSettings = computed({
       url: '',
       opacity: 0.5,
       blur: 10,
+      sidebarBlur: 10,
+      sidebarOpacity: 0.2,
+      sidebarColor: '',
       brightness: 0.8
     },
   set: (val) => {
@@ -112,7 +115,7 @@ const handleFileSelect = async () => {
 
       <div class="setting-item">
         <div class="setting-info">
-          <h4>模糊度</h4>
+          <h4>背景模糊度</h4>
           <p>调整背景的模糊程度 ({{ bgSettings.blur }}px)</p>
         </div>
         <t-slider
@@ -122,6 +125,58 @@ const handleFileSelect = async () => {
           :step="1"
           style="width: 200px"
           @change="(v) => updateBg('blur', v)"
+        />
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <h4>导航栏模糊度</h4>
+          <p>单独调整左侧导航栏的模糊程度 ({{ bgSettings.sidebarBlur ?? 10 }}px)，0 为不模糊</p>
+        </div>
+        <t-slider
+          :value="bgSettings.sidebarBlur ?? 10"
+          :min="0"
+          :max="50"
+          :step="1"
+          style="width: 200px"
+          @change="(v) => updateBg('sidebarBlur', v)"
+        />
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <h4>导航栏不透明度</h4>
+          <p>
+            调整左侧导航栏底色的不透明度 ({{
+              Math.round((bgSettings.sidebarOpacity ?? 0.2) * 100)
+            }}%)，0 为完全透明
+          </p>
+        </div>
+        <t-slider
+          :value="bgSettings.sidebarOpacity ?? 0.2"
+          :min="0"
+          :max="1"
+          :step="0.01"
+          style="width: 200px"
+          @change="(v) => updateBg('sidebarOpacity', v)"
+        />
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <h4>导航栏背景颜色</h4>
+          <p>自定义左侧导航栏底色，清除颜色后跟随当前主题</p>
+        </div>
+        <t-color-picker
+          :value="bgSettings.sidebarColor || ''"
+          :color-modes="['monochrome']"
+          :enable-alpha="false"
+          :input-props="{ placeholder: '跟随主题' }"
+          format="HEX"
+          clearable
+          style="width: 200px"
+          @change="(v) => updateBg('sidebarColor', v)"
+          @clear="updateBg('sidebarColor', '')"
         />
       </div>
 

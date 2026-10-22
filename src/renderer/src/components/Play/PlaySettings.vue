@@ -130,7 +130,7 @@ const settingSections = computed(() => [
           :key="renderer.value"
           trigger="hover"
           placement="top"
-          :delay="[2000, 120]"
+          :delay="[800, 120]"
           :show-arrow="false"
           destroy-on-close
           overlay-inner-class-name="renderer-info-popup"
@@ -272,12 +272,13 @@ const settingSections = computed(() => [
 }
 
 .renderer-select {
+  container-type: inline-size;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   min-width: 0;
-  padding: 4px 8px;
+  padding: 8px 8px 12px;
   font-size: 14px;
 
   .renderer-title {
@@ -288,11 +289,12 @@ const settingSections = computed(() => [
 
 .renderer-options {
   display: grid;
-  grid-template-columns: 0.85fr 0.85fr 1.3fr;
-  flex: 0 1 190px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
   min-width: 0;
-  gap: 2px;
-  padding: 2px;
+  box-sizing: border-box;
+  gap: 3px;
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.1);
@@ -304,7 +306,9 @@ const settingSections = computed(() => [
   align-items: center;
   justify-content: center;
   min-width: 0;
-  padding: 5px 4px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 6px 2px;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -337,6 +341,12 @@ const settingSections = computed(() => [
     font-size: 12px;
     line-height: 16px;
     white-space: nowrap;
+  }
+}
+
+@container (max-width: 260px) {
+  .renderer-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

@@ -11,6 +11,7 @@ export type HotkeyAction =
   | 'setPlayModeRandom'
   | 'togglePlayModeSingle'
   | 'toggleAudioOutputSelector'
+  | 'toggleLike'
 
 export type HotkeyConfig = {
   enabled: boolean
@@ -38,6 +39,7 @@ export const defaultHotkeyConfig: HotkeyConfig = {
     setPlayModeSequence: 'CommandOrControl+Alt+4',
     setPlayModeRandom: 'CommandOrControl+Alt+5',
     togglePlayModeSingle: 'CommandOrControl+Alt+6',
-    toggleAudioOutputSelector: 'Alt+O'
+    toggleAudioOutputSelector: 'Alt+O',
+    toggleLike: 'CommandOrControl+Alt+K'
   }
 }

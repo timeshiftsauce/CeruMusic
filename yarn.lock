@@ -168,10 +168,9 @@
     "@jridgewell/gen-mapping" "^0.3.5"
     "@jridgewell/trace-mapping" "^0.3.24"
 
-"@applemusic-like-lyrics/core@0.6.0", "@applemusic-like-lyrics/core@^0.6.0":
+"@applemusic-like-lyrics/core@^0.6.0", "@applemusic-like-lyrics/core@file:vendor/amll/applemusic-like-lyrics-core-0.6.0+git.5fee356.tgz":
   version "0.6.0"
-  resolved "https://registry.yarnpkg.com/@applemusic-like-lyrics/core/-/core-0.6.0.tgz#bbed20987a208148247738ee7aab0af70fbff6f0"
-  integrity sha512-N4JckGSUr5cAet4qtHbLgYf3AYIgfcSUZUtaplJif+ywcG95bfFmZyEVk6JzCQOPwh/0shxXg5d3v0VyO/Qx2g==
+  resolved "file:vendor/amll/applemusic-like-lyrics-core-0.6.0+git.5fee356.tgz#1c5b03fffe83662296b864d8eb9422035a45e9a6"
   dependencies:
     "@ungap/structured-clone" "^1.3.3"
     bezier-easing "^3.0.1"

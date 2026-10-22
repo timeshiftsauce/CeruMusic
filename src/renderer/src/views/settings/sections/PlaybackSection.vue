@@ -1,17 +1,13 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { playSetting as usePlaySetting } from '@renderer/store/playSetting'
-import { useSettingsStore } from '@renderer/store/Settings'
 import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue'
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import EqualizerSettings from '@renderer/components/Settings/EqualizerSettings.vue'
 import AudioEffectSettings from '@renderer/components/Settings/AudioEffectSettings.vue'
 
 const playSettingStore = usePlaySetting()
-const { isJumpLyric, bgPlaying, isAudioVisualizer, smtcHiresCover } =
-  storeToRefs(playSettingStore)
-const settingsStore = useSettingsStore()
-const { settings } = storeToRefs(settingsStore)
+const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingStore)
 </script>
 
 <template>
@@ -38,7 +34,7 @@ const { settings } = storeToRefs(settingsStore)
 
     <!-- 播放显示 -->
     <div id="playback-performance" class="setting-group">
-      <h3>全屏播放-性能优化</h3>
+      <h3>播放画面与动效</h3>
 
       <div class="setting-item">
         <div class="item-info">
@@ -64,31 +60,6 @@ const { settings } = storeToRefs(settingsStore)
         <t-switch
           v-model="isAudioVisualizer"
           @change="playSettingStore.setIsAudioVisualizer(isAudioVisualizer)"
-        />
-      </div>
-
-      <div id="playback-route-preload" class="setting-item">
-        <div class="item-info">
-          <div class="item-title">路由预加载</div>
-          <div class="item-desc">空闲时预加载页面组件，提升页面切换速度</div>
-        </div>
-        <t-switch
-          :value="settings.routePreloadEnabled"
-          @change="(val) => settingsStore.updateSettings({ routePreloadEnabled: Boolean(val) })"
-        />
-      </div>
-
-      <div id="playback-smtc-hires" class="setting-item">
-        <div class="item-info">
-          <div class="item-title">系统媒体控件高清封面</div>
-          <div class="item-desc">
-            系统媒体卡片（SMTC）改用「高清封面协议」向音源插件获取大图，需插件支持；
-            不支持或获取失败时自动回落原有封面。关闭则一律使用原有封面。
-          </div>
-        </div>
-        <t-switch
-          v-model="smtcHiresCover"
-          @change="playSettingStore.setSmtcHiresCover(smtcHiresCover)"
         />
       </div>
     </div>

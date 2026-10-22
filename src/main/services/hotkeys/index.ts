@@ -29,7 +29,8 @@ const actionLabel: Record<HotkeyAction, string> = {
   setPlayModeSequence: '顺序播放',
   setPlayModeRandom: '随机播放',
   togglePlayModeSingle: '单曲循环切换',
-  toggleAudioOutputSelector: '切换音频输出设备'
+  toggleAudioOutputSelector: '切换音频输出设备',
+  toggleLike: '喜欢/取消喜欢'
 }
 
 const getStoredHotkeyConfig = (): HotkeyConfig => {
@@ -75,7 +76,8 @@ const actionCallbacks = (mainWindow: BrowserWindow) => {
     setPlayModeSequence: () => sendCtrl('setPlayMode', 'sequence'),
     setPlayModeRandom: () => sendCtrl('setPlayMode', 'random'),
     togglePlayModeSingle: () => sendCtrl('setPlayMode', 'toggleSingle'),
-    toggleAudioOutputSelector: () => sendCtrl('hotkeys:toggle-audio-output-selector')
+    toggleAudioOutputSelector: () => sendCtrl('hotkeys:toggle-audio-output-selector'),
+    toggleLike: () => sendCtrl('toggleLike')
   }
 
   return callbacks

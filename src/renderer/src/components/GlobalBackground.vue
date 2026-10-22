@@ -15,6 +15,9 @@ const bgType = computed(() => bgSettings.value?.type || 'none')
 const bgUrl = computed(() => bgSettings.value?.url || '')
 const bgOpacity = computed(() => bgSettings.value?.opacity ?? 0.5)
 const bgBlur = computed(() => bgSettings.value?.blur ?? 10)
+const sidebarBlur = computed(() => bgSettings.value?.sidebarBlur ?? 10)
+const sidebarOpacity = computed(() => bgSettings.value?.sidebarOpacity ?? 0.2)
+const sidebarColor = computed(() => bgSettings.value?.sidebarColor || '')
 const bgBrightness = computed(() => bgSettings.value?.brightness ?? 0.8)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -35,13 +38,32 @@ watch(
 
 // Theme changes only alter theme-mode/data-theme; keep wallpaper activation independent.
 watch(
-  isEnabled,
-  (enabled) => document.documentElement.classList.toggle('has-global-background', enabled),
+  [isEnabled, sidebarBlur, sidebarOpacity, sidebarColor],
+  ([enabled, blur, opacity, color]) => {
+    const root = document.documentElement
+    root.classList.toggle('has-global-background', enabled)
+    if (enabled) {
+      root.style.setProperty('--wallpaper-sidebar-blur', `${blur}px`)
+      root.style.setProperty('--wallpaper-sidebar-opacity', `${opacity * 100}%`)
+      if (color) {
+        root.style.setProperty('--wallpaper-sidebar-color', color)
+      } else {
+        root.style.removeProperty('--wallpaper-sidebar-color')
+      }
+    } else {
+      root.style.removeProperty('--wallpaper-sidebar-blur')
+      root.style.removeProperty('--wallpaper-sidebar-opacity')
+      root.style.removeProperty('--wallpaper-sidebar-color')
+    }
+  },
   { immediate: true, flush: 'sync' }
 )
 
 onBeforeUnmount(() => {
   document.documentElement.classList.remove('has-global-background')
+  document.documentElement.style.removeProperty('--wallpaper-sidebar-blur')
+  document.documentElement.style.removeProperty('--wallpaper-sidebar-opacity')
+  document.documentElement.style.removeProperty('--wallpaper-sidebar-color')
 })
 </script>
 
@@ -129,8 +151,13 @@ onBeforeUnmount(() => {
 
 :root.has-global-background .home-container .sidebar {
   background-image: none !important;
-  background-color: rgba(var(--wallpaper-container-rgb), 0.2) !important;
-  backdrop-filter: blur(10px);
+  background-color: color-mix(
+    in srgb,
+    var(--wallpaper-sidebar-color, rgb(var(--wallpaper-container-rgb)))
+      var(--wallpaper-sidebar-opacity, 20%),
+    transparent
+  ) !important;
+  backdrop-filter: blur(var(--wallpaper-sidebar-blur, 10px));
 }
 
 :root.has-global-background .home-container .content {

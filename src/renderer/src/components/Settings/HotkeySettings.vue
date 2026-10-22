@@ -20,7 +20,8 @@ const hotkeyActions: Array<{ id: HotkeyAction; title: string; desc: string }> = 
   { id: 'volumeUp', title: '音量 +', desc: '全局音量提升 5%' },
   { id: 'setPlayModeSequence', title: '顺序播放', desc: '切换为顺序播放' },
   { id: 'setPlayModeRandom', title: '随机播放', desc: '切换为随机播放' },
-  { id: 'togglePlayModeSingle', title: '单曲循环切换', desc: '切换单曲循环/顺序播放' }
+  { id: 'togglePlayModeSingle', title: '单曲循环切换', desc: '切换单曲循环/顺序播放' },
+  { id: 'toggleLike', title: '喜欢/取消喜欢', desc: '切换当前播放歌曲的喜欢状态' }
 ]
 
 const inAppShortcuts: Array<{ keys: string; title: string; desc: string }> = [

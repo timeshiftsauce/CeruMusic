@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { SearchIcon, TimeIcon, ChevronRightIcon } from 'tdesign-icons-vue-next'
 import { searchItems, type SearchItem } from '@renderer/views/settings/searchIndex'
 import { matchText } from '@renderer/utils/search'
+import { getSettingsCategoryLabel } from '@renderer/views/settings/categories'
 
 const emit = defineEmits(['select'])
 
@@ -33,11 +34,15 @@ const saveRecent = (id: string) => {
   localStorage.setItem('settings_recent_searches', JSON.stringify(newRecent))
 }
 
+const availableItems = searchItems.filter((item) =>
+  item.id !== 'appearance-mac-status-lyric' || /mac/i.test(navigator.platform || navigator.userAgent)
+)
+
 const searchResults = computed(() => {
   if (!query.value.trim()) return []
 
   const q = query.value.trim()
-  return searchItems.filter((item) => {
+  return availableItems.filter((item) => {
     // Match title
     if (matchText(item.title, q)) return true
     // Match description
@@ -52,11 +57,13 @@ const displayItems = computed(() => {
   if (!query.value.trim()) {
     // Return recent items objects
     return recentSearches.value
-      .map((id) => searchItems.find((item) => item.id === id))
+      .map((id) => availableItems.find((item) => item.id === id))
       .filter((item): item is SearchItem => !!item)
   }
   return searchResults.value
 })
+
+watch(query, () => { selectedIndex.value = -1 })
 
 const handleFocus = () => {
   isFocused.value = true
@@ -91,7 +98,9 @@ const handleKeydown = (_value: unknown, { e }: { e: KeyboardEvent }) => {
     selectedIndex.value = (selectedIndex.value + 1) % items.length
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
-    selectedIndex.value = (selectedIndex.value - 1 + items.length) % items.length
+    selectedIndex.value = selectedIndex.value < 0
+      ? items.length - 1
+      : (selectedIndex.value - 1 + items.length) % items.length
   } else if (e.key === 'Enter') {
     e.preventDefault()
     if (selectedIndex.value >= 0 && selectedIndex.value < items.length) {
@@ -141,7 +150,7 @@ const handleKeydown = (_value: unknown, { e }: { e: KeyboardEvent }) => {
             <div class="item-content">
               <div class="item-title">{{ item.title }}</div>
               <div v-if="item.description" class="item-desc">{{ item.description }}</div>
-              <div v-else class="item-path">{{ item.category }}</div>
+              <div class="item-path">{{ getSettingsCategoryLabel(item.category) }}</div>
             </div>
             <div class="item-action">
               <ChevronRightIcon />
@@ -165,7 +174,7 @@ const handleKeydown = (_value: unknown, { e }: { e: KeyboardEvent }) => {
 <style lang="scss" scoped>
 .settings-search {
   position: relative;
-  width: 240px;
+  width: clamp(170px, 24vw, 300px);
   margin-right: 12px;
   -webkit-app-region: no-drag;
   display: flex;
@@ -181,9 +190,8 @@ const handleKeydown = (_value: unknown, { e }: { e: KeyboardEvent }) => {
 .search-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0; // Make it wider if needed? Or fit width
-  width: 320px; // Wider than input
+  right: 0;
+  width: min(360px, calc(100vw - 32px));
   max-height: 400px;
   overflow-y: auto;
   background: var(--settings-group-bg); // Use theme var

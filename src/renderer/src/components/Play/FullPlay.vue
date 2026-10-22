@@ -536,6 +536,8 @@ const syncLyricPosition = (rebuildView = false) => {
 
 const scheduleLyricAutoResume = () => {
   cancelLyricAutoResume()
+  // AMLL 自己管理滚动与回正，保留自定义渲染器的回正定时器即可。
+  if (playSetting.getUseAmlLyricRenderer) return
   lyricAutoResumeTimer = setTimeout(() => {
     lyricAutoResumeTimer = undefined
     syncLyricPosition()
@@ -593,7 +595,8 @@ const { ready: bgInitialized } = usePlayerBackground(backgroundContainer, {
   renderer: () => playSetting.getBackgroundRenderer,
   album: () => actualCoverImage.value,
   active: () => props.show && isAppActive.value,
-  lowFreqVolume: () => (playSetting.getIsBackgroundBeat ? state.lowFreqVolume : 0)
+  lowFreqVolume: () => (playSetting.getIsBackgroundBeat ? state.lowFreqVolume : 0),
+  hasLyric: () => player.value.lyrics.lines.length > 0
 })
 
 // 在全屏播放显示时阻止系统息屏
@@ -669,13 +672,16 @@ watch(
   { immediate: true }
 )
 
-// 计算偏白的主题色
+const isTitaniumBackground = computed(() => playSetting.getBackgroundRenderer === 'titanium')
+
+// 流沙背景明暗独立于封面，文字和图标统一使用白色。
 const lightMainColor = computed(() => {
+  if (isTitaniumBackground.value) return '#fff'
   return player.value.coverDetail.lightMainColor || 'rgba(255, 255, 255, 0.9)'
 })
 
 const useBlackText = computed(() => {
-  return player.value.coverDetail.useBlackText
+  return !isTitaniumBackground.value && player.value.coverDetail.useBlackText
 })
 
 // 由封面取色生成的纯色渐变背景，可控且色块干净，避免封面原图杂色
@@ -935,7 +941,7 @@ onUnmounted(() => {
           :current-time="effectiveLyricTime"
           :word-fade-width="0.5"
           :playing="isAudioPlaying"
-          :disabled="!isAppActive"
+          :disabled="!props.show || !isAppActive"
           class="lyric-player"
           :align-position="
             playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34

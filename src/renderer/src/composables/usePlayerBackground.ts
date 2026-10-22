@@ -4,6 +4,7 @@ import {
   IsolationRenderer,
   MeshGradientRenderer,
   PixiRenderer,
+  TitaniumRenderer,
   type BaseRenderer
 } from '@applemusic-like-lyrics/core'
 import {
@@ -27,6 +28,7 @@ export function usePlayerBackground(
     album: () => string
     active: () => boolean
     lowFreqVolume: () => number
+    hasLyric: () => boolean
   }
 ) {
   const ready = ref(false)
@@ -85,12 +87,19 @@ export function usePlayerBackground(
         return
       }
       if (!session) {
-        const player =
-          type === 'pixi'
-            ? BackgroundRender.new(PixiRenderer)
-            : type === 'isolation'
-              ? BackgroundRender.new(IsolationRenderer)
-              : BackgroundRender.new(MeshGradientRenderer)
+        const renderers = {
+          pixi: PixiRenderer,
+          mesh: MeshGradientRenderer,
+          isolation: IsolationRenderer,
+          titanium: TitaniumRenderer
+        }
+        let player: BackgroundRender<BaseRenderer>
+        try {
+          player = BackgroundRender.new<BaseRenderer>(renderers[type])
+        } catch (error) {
+          console.warn('创建播放页背景失败:', error)
+          return
+        }
         session = { type, player, requestedAlbum: '', disposed: false }
         const canvas = player.getElement()
         Object.assign(canvas.style, {
@@ -100,11 +109,13 @@ export function usePlayerBackground(
           height: '100%'
         })
         host.appendChild(canvas)
-        player.setRenderScale(0.5)
+        // 流沙依赖细颗粒纹理，按原生分辨率渲染，避免低分辨率放大后变糊。
+        player.setRenderScale(type === 'titanium' ? 1 : 0.5)
         player.setFlowSpeed(1)
         player.setFPS(30)
       }
       applyVolume(session)
+      session.player.setHasLyric(options.hasLyric())
       session.player.resume()
       loadAlbum(session)
     },
@@ -116,6 +127,9 @@ export function usePlayerBackground(
   })
   watch(options.lowFreqVolume, () => {
     if (session) applyVolume(session)
+  })
+  watch(options.hasLyric, (hasLyric) => {
+    session?.player.setHasLyric(hasLyric)
   })
   onScopeDispose(release)
   return { ready }

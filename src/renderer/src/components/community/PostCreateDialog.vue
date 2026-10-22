@@ -17,7 +17,7 @@
  *
  * 注: tdesign 自动导入 t-dialog / t-textarea / t-button 等。
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { CloseIcon, ImageIcon, MusicIcon } from 'tdesign-icons-vue-next'
 import {
@@ -55,6 +55,7 @@ const uploadingImage = ref(false)
 const attachment = ref<PostAttachment | null>(null)
 const submitting = ref(false)
 const imageInput = ref<HTMLInputElement>()
+const contentInput = ref<HTMLTextAreaElement | null>(null)
 const attachmentCover = computed(() =>
   attachment.value?.type === 'song'
     ? attachment.value.song?.img
@@ -85,9 +86,23 @@ const pickerLoading = ref(false)
 const pickerSongs = ref<any[]>([])
 const pickerSelectedListIdx = ref<number>(-1)
 
+watch(contentInput, () => resizeContentInput(), { flush: 'post' })
+
 watch(visibleLocal, (v) => {
-  if (v) reset()
+  if (v) {
+    reset()
+    void nextTick(resizeContentInput)
+  }
 })
+
+function resizeContentInput() {
+  const el = contentInput.value
+  if (!el) return
+  const maxHeight = 320
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+}
 
 function reset() {
   const src = props.editPost
@@ -380,11 +395,15 @@ async function submit() {
     <div class="create-form">
       <div class="writing-area">
         <textarea
+          ref="contentInput"
           v-model="content"
           aria-label="笔记正文"
+          rows="5"
           maxlength="1000"
           :placeholder="'最近，有哪首歌打动了你？\n写下你的故事，或分享此刻的心情…'"
           :disabled="submitting"
+          @keydown.enter.stop
+          @input="resizeContentInput"
         />
         <div class="editor-meta">
           <span>让音乐和故事相遇</span>
@@ -729,6 +748,9 @@ async function submit() {
     outline: 0;
     resize: none;
     box-sizing: border-box;
+    max-height: 20rem;
+    overflow-y: hidden;
+    white-space: pre-wrap;
     font: inherit;
     font-size: 0.9375rem;
     line-height: 1.9;

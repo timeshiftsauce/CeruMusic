@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { noteCoverLayout, noteCoverTheme } from './noteCoverTheme'
+import { NoteText } from './noteText'
 
 const props = defineProps<{ seed: string; content: string; expanded?: boolean }>()
 const theme = computed(() => noteCoverTheme(props.seed))
@@ -12,7 +13,7 @@ const layout = computed(() => noteCoverLayout(props.seed))
     <span class="note-decoration" aria-hidden="true">{{ layout === 'quote' ? '“' : '♪' }}</span>
     <span class="note-eyebrow" aria-hidden="true"><span /> 音乐随记</span>
     <div class="note-writing">
-      <p>{{ content }}</p>
+      <p><NoteText :text="content" /></p>
     </div>
     <div class="note-signature" aria-hidden="true"><span /> 随心，随乐。</div>
   </div>
@@ -115,8 +116,6 @@ const layout = computed(() => noteCoverLayout(props.seed))
   font-weight: 400;
   line-height: 1.6;
   letter-spacing: 1px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
@@ -240,6 +239,7 @@ const layout = computed(() => noteCoverLayout(props.seed))
   border-top: 1px solid color-mix(in srgb, var(--note-ink) 20%, transparent);
   padding-top: 12px;
 }
+/* 详情页:封面铺满左侧整栏,只做预览 —— 长文按行截断,完整正文在右侧详情里 */
 .expanded {
   height: 100%;
   border-radius: 0;
@@ -249,13 +249,12 @@ const layout = computed(() => noteCoverLayout(props.seed))
   font-size: 12px;
 }
 .expanded .note-writing {
-  overflow-y: auto;
+  overflow: hidden;
 }
 .expanded .note-writing p {
-  display: block;
   margin: auto 0;
   font-size: clamp(30px, 3.2vw, 44px);
-  overflow: visible;
+  -webkit-line-clamp: 6;
 }
 .expanded .note-signature {
   font-size: 12px;

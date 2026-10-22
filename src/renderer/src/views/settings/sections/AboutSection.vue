@@ -242,7 +242,7 @@ const openLink = (url: string) => {
     </div>
 
     <!-- 联系方式 -->
-    <div class="setting-group">
+    <div id="about-contact" class="setting-group">
       <h3>联系方式</h3>
       <div class="contact-info">
         <p>如有技术问题或合作意向（仅限技术交流），请通过以下方式联系：</p>

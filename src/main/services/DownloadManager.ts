@@ -275,9 +275,16 @@ export default class DownloadManager extends EventEmitter {
       this.activeDownloads.set(taskId, worker)
       this.initializingTasks.delete(taskId)
 
-      worker.on('message', (message) => this.onWorkerMessage(taskId, message))
-      worker.on('error', (error) => this.onWorkerError(taskId, error))
-      worker.on('exit', (code) => this.onWorkerExit(taskId, code))
+      // 重试会为同一 taskId 创建新 worker，旧 worker 的延迟事件不能影响新下载。
+      worker.on('message', (message) => {
+        if (this.activeDownloads.get(taskId) === worker) this.onWorkerMessage(taskId, message)
+      })
+      worker.on('error', (error) => {
+        if (this.activeDownloads.get(taskId) === worker) this.onWorkerError(taskId, error)
+      })
+      worker.on('exit', (code) => {
+        if (this.activeDownloads.get(taskId) === worker) this.onWorkerExit(taskId, code)
+      })
 
       worker.postMessage({ ...task, requestHeaders: playbackRequestHeaders(task.url) })
     } catch (error: any) {
@@ -326,6 +333,7 @@ export default class DownloadManager extends EventEmitter {
       if (task && task.status === DownloadStatus.Downloading) {
         log.warn(`Worker for task ${taskId} stopped with exit code ${code}`)
         this.handleTaskError(taskId, new Error(`Worker stopped with exit code ${code}`))
+        return // 错误处理已清理旧 worker 并启动重试，不再清理新 worker。
       }
     }
     this.cleanupTask(taskId)
@@ -497,8 +505,8 @@ export default class DownloadManager extends EventEmitter {
   private cleanupTask(taskId: string) {
     if (this.activeDownloads.has(taskId)) {
       const worker = this.activeDownloads.get(taskId)
-      worker?.terminate()
       this.activeDownloads.delete(taskId)
+      worker?.terminate()
     }
   }
 
