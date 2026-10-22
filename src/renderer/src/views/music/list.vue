@@ -1467,8 +1467,12 @@ const handleSyncPlaylist = async () => {
     const method = isLeaderboard ? 'getLeaderboardDetail' : 'getPlaylistDetail'
     const requestId = isLeaderboard ? playlistId.replace(/^.*__/, '') : playlistId
     try {
-      if (isAccountPlaylist && source === 'kg') {
-        detailResult = await window.api.platformAccounts.getPlaylistTracks('kugou', requestId, page)
+      if (isAccountPlaylist && (source === 'kg' || source === 'wy')) {
+        detailResult = await window.api.platformAccounts.getPlaylistTracks(
+          source === 'wy' ? 'netease' : 'kugou',
+          requestId,
+          page
+        )
       } else {
         detailResult = (await window.api.music.requestSdk(method, {
           source,

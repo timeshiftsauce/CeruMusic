@@ -14,6 +14,7 @@ import {
 } from 'crypto'
 import QRCode from 'qrcode'
 import {
+  getNeteaseAccountPlaylistDetail,
   getKugouAccountPlaylistDetail,
   importAccountPlaylists,
   listAccountPlaylists,
@@ -668,12 +669,19 @@ export const platformAccounts = {
   },
 
   async getPlaylistTracks(platform: unknown, playlistId: unknown, page: unknown = 1) {
-    if (platform !== 'kugou') throw new Error('该平台暂不支持此歌单详情接口')
-    const stored = await readSession('kugou')
-    if (!stored) throw new Error('请先登录酷狗音乐')
     const id = String(playlistId ?? '').trim()
-    if (!id) throw new Error('酷狗歌单 ID 为空')
-    return getKugouAccountPlaylistDetail(stored.cookies, id, Number(page) || 1)
+    if (!id) throw new Error('歌单 ID 为空')
+    if (platform === 'netease') {
+      const stored = await readSession('netease')
+      if (!stored) throw new Error('请先登录网易云音乐')
+      return getNeteaseAccountPlaylistDetail(stored.cookies, id, Number(page) || 1)
+    }
+    if (platform === 'kugou') {
+      const stored = await readSession('kugou')
+      if (!stored) throw new Error('请先登录酷狗音乐')
+      return getKugouAccountPlaylistDetail(stored.cookies, id, Number(page) || 1)
+    }
+    throw new Error('该平台暂不支持此歌单详情接口')
   },
 
   async logout(platform: unknown, mainWindow: BrowserWindow) {

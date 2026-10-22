@@ -22,6 +22,15 @@ export type PlaylistImportResult = {
   updated: number
 }
 
+type NeteasePlaylistCacheEntry = {
+  expiresAt: number
+  playlist: any
+}
+
+const neteasePlaylistCache = new Map<string, NeteasePlaylistCacheEntry>()
+const NETEASE_DETAIL_PAGE_SIZE = 100
+const NETEASE_PLAYLIST_CACHE_TTL_MS = 5 * 60 * 1000
+
 const sourceByPlatform: Record<MusicPlatform, SongList['source']> = {
   netease: 'wy',
   qq: 'tx',
@@ -109,6 +118,162 @@ async function neteasePlaylists(cookies: { name: string; value: string }[]): Pro
       ? [{ id, name, cover: item.coverImgUrl, count: Number(item.trackCount) || 0, description: item.description }]
       : []
   })
+}
+
+function formatNeteaseDuration(durationMs: unknown): string {
+  const seconds = Math.max(0, Math.floor(Number(durationMs || 0) / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function formatNeteaseSize(size: unknown): string | undefined {
+  const bytes = Number(size)
+  if (!Number.isFinite(bytes) || bytes <= 0) return undefined
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB']
+  let value = bytes / 1024
+  let unit = units[0]
+  for (let index = 1; value >= 1024 && index < units.length; index += 1) {
+    value /= 1024
+    unit = units[index]
+  }
+  return `${value.toFixed(2)} ${unit}`
+}
+
+function neteaseTrackItem(track: any, privilege: any): any | undefined {
+  const id = track?.id
+  const name = String(track?.name ?? track?.pc?.sn ?? '').trim()
+  if (!id || !name) return undefined
+
+  const types: Array<{ type: string; size?: string }> = []
+  const typeDetails: Record<string, { size?: string }> = {}
+  const addType = (type: string, size?: unknown) => {
+    const detail = formatNeteaseSize(size)
+    types.push({ type, ...(detail ? { size: detail } : {}) })
+    typeDetails[type] = detail ? { size: detail } : {}
+  }
+  const maxBr = Number(privilege?.maxbr ?? 0)
+  if (privilege?.maxBrLevel === 'hires' && track?.hr?.size) addType('flac24bit', track.hr.size)
+  if (maxBr >= 999000) addType('flac')
+  if (maxBr >= 320000) addType('320k', track?.h?.size)
+  if (maxBr >= 128000) addType('128k', track?.l?.size)
+
+  const artists = track?.ar ?? []
+  return {
+    singer: track?.pc?.ar ?? artists.map((artist: any) => artist?.name).filter(Boolean).join('、'),
+    name,
+    albumName: track?.pc?.alb ?? track?.al?.name ?? '',
+    albumId: track?.al?.id ?? '',
+    source: 'wy',
+    interval: formatNeteaseDuration(track?.dt),
+    songmid: id,
+    img: track?.al?.picUrl ?? '',
+    lrc: null,
+    otherSource: null,
+    types,
+    _types: typeDetails,
+    typeUrl: {}
+  }
+}
+
+/** Fetch account playlist pages in batches, matching Moumusic's Netease detail flow. */
+export async function getNeteaseAccountPlaylistDetail(
+  cookies: { name: string; value: string }[],
+  playlistId: string,
+  page = 1
+): Promise<{ list: any[]; page: number; limit: number; total: number; source: 'wy'; info: any }> {
+  const id = String(playlistId).trim()
+  if (!/^\d+$/.test(id)) throw new Error('网易云歌单 ID 无效')
+  const header = cookieHeader(cookies)
+  if (!header) throw new Error('网易云登录状态中没有可用凭据')
+
+  const cacheKey = `${createHash('sha256').update(header).digest('hex')}:${id}`
+  const now = Date.now()
+  for (const [key, entry] of neteasePlaylistCache) {
+    if (entry.expiresAt <= now) neteasePlaylistCache.delete(key)
+  }
+  let playlist = neteasePlaylistCache.get(cacheKey)?.playlist
+  if (!playlist) {
+    const response = await responseJson('https://music.163.com/weapi/v3/playlist/detail', {
+      method: 'POST',
+      headers: {
+        Cookie: header,
+        Referer: 'https://music.163.com/',
+        'User-Agent': 'Mozilla/5.0',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: neteaseWeapi({ id, n: 100000, p: 1 })
+    })
+    playlist = response?.playlist
+    if (Number(response?.code) !== 200 || !Array.isArray(playlist?.trackIds)) {
+      throw new Error(`网易云歌单详情接口返回异常 (${response?.code ?? 'unknown'})`)
+    }
+    neteasePlaylistCache.set(cacheKey, {
+      playlist,
+      expiresAt: now + NETEASE_PLAYLIST_CACHE_TTL_MS
+    })
+    while (neteasePlaylistCache.size > 20) {
+      const oldest = neteasePlaylistCache.keys().next().value
+      if (!oldest) break
+      neteasePlaylistCache.delete(oldest)
+    }
+  }
+
+  const safePage = Math.max(1, Math.floor(Number(page) || 1))
+  const start = (safePage - 1) * NETEASE_DETAIL_PAGE_SIZE
+  const trackIds = playlist.trackIds.slice(start, start + NETEASE_DETAIL_PAGE_SIZE)
+  const cachedTracks = Array.isArray(playlist.tracks) ? playlist.tracks : []
+  const cachedPrivileges = Array.isArray(playlist.privileges) ? playlist.privileges : []
+  let tracks = cachedTracks.length === playlist.trackIds.length
+    ? cachedTracks.slice(start, start + NETEASE_DETAIL_PAGE_SIZE)
+    : []
+  let privileges = cachedPrivileges.length === playlist.trackIds.length
+    ? cachedPrivileges.slice(start, start + NETEASE_DETAIL_PAGE_SIZE)
+    : []
+
+  if (trackIds.length && tracks.length !== trackIds.length) {
+    const ids = trackIds.map((track: any) => Number(track?.id)).filter(Number.isFinite)
+    const detail = await responseJson('https://music.163.com/weapi/v3/song/detail', {
+      method: 'POST',
+      headers: {
+        Cookie: header,
+        Referer: 'https://music.163.com/',
+        'User-Agent': 'Mozilla/5.0',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: neteaseWeapi({
+        c: JSON.stringify(ids.map((songId) => ({ id: songId }))),
+        ids: JSON.stringify(ids)
+      })
+    })
+    if (Number(detail?.code) !== 200 || !Array.isArray(detail?.songs)) {
+      throw new Error(`网易云歌曲详情接口返回异常 (${detail?.code ?? 'unknown'})`)
+    }
+    tracks = detail.songs
+    privileges = Array.isArray(detail.privileges) ? detail.privileges : []
+    if (!privileges.length && cachedPrivileges.length) {
+      const privilegeById = new Map(cachedPrivileges.map((item: any) => [String(item?.id), item]))
+      privileges = tracks.map((track: any) => privilegeById.get(String(track?.id)))
+    }
+  }
+
+  const privilegeById = new Map(privileges.map((item: any) => [String(item?.id), item]))
+  const list = tracks.flatMap((track: any) => {
+    const item = neteaseTrackItem(track, privilegeById.get(String(track?.id)))
+    return item ? [item] : []
+  })
+  return {
+    list,
+    page: safePage,
+    limit: NETEASE_DETAIL_PAGE_SIZE,
+    total: playlist.trackIds.length,
+    source: 'wy',
+    info: {
+      name: playlist.name ?? '',
+      img: playlist.coverImgUrl ?? '',
+      desc: playlist.description ?? '',
+      author: playlist.creator?.nickname ?? ''
+    }
+  }
 }
 
 async function qqPlaylists(cookies: { name: string; value: string }[]): Promise<RemotePlaylist[]> {

@@ -310,10 +310,17 @@ interface CustomAPI {
       | { id: string; name: string; cover?: string; count?: number; description?: string }[]
     >
     getPlaylistTracks: (
-      platform: 'kugou',
+      platform: 'netease' | 'kugou',
       playlistId: string,
       page?: number
-    ) => Promise<{ list: any[]; page: number; limit: number; total: number; source: 'kg' }>
+    ) => Promise<{
+      list: any[]
+      page: number
+      limit: number
+      total: number
+      source: 'wy' | 'kg'
+      info?: { name?: string; img?: string; desc?: string; author?: string }
+    }>
     onChanged: (
       callback: (event: {
         platform: 'netease' | 'qq' | 'kugou' | 'kuwo'

@@ -238,7 +238,7 @@ const api = {
       ipcRenderer.invoke('platform-accounts:logout', platform),
     syncPlaylists: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo', selectedIds?: string[]) =>
       ipcRenderer.invoke('platform-accounts:sync-playlists', platform, selectedIds),
-    getPlaylistTracks: (platform: 'kugou', playlistId: string, page?: number) =>
+    getPlaylistTracks: (platform: 'netease' | 'kugou', playlistId: string, page?: number) =>
       ipcRenderer.invoke('platform-accounts:get-playlist-tracks', platform, playlistId, page),
     onChanged: (
       callback: {
