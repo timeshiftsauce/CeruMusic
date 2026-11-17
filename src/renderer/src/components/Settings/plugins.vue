@@ -75,7 +75,9 @@
                   <p class="hint-text">支持 HTTP/HTTPS 链接，插件文件为单个 .js 文件</p>
                 </div>
 
-                <div v-else class="local-hint-container">点击“确定”选择要导入的插件文件</div>
+                <div v-else class="local-hint-container">
+                  点击“确定”选择要导入的插件文件，也可以直接把 .js 插件文件拖入窗口
+                </div>
               </div>
             </template>
           </t-dialog>
@@ -99,7 +101,7 @@
       <div v-else-if="listedPlugins.length === 0" class="empty-state">
         <t-icon name="app" style="font-size: 48px" />
         <p>暂无已安装的插件</p>
-        <p class="hint">点击"添加插件"按钮来安装新插件</p>
+        <p class="hint">点击"添加插件"按钮，或把 .js 插件文件拖入窗口</p>
       </div>
 
       <div v-else-if="filteredPlugins.length === 0" class="empty-state filtered-empty">
@@ -495,7 +497,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated, onDeactivated, nextTick, toRaw, computed } from 'vue'
+import {
+  ref,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  onBeforeUnmount,
+  nextTick,
+  toRaw,
+  computed
+} from 'vue'
 import { PERMISSION_GROUPS, permissionGroup } from '@shiqianjiang/ceru-plugin-sdk/permissions'
 import { pluginContributions } from '@renderer/services/pluginState'
 import { refreshPluginContributions } from '@renderer/services/pluginState'
@@ -574,6 +585,7 @@ const loading = ref(!plugins.value.length)
 const listViewport = ref<HTMLElement>()
 let listScrollTop = 0
 let listActive = true
+let unsubPluginChanged: (() => void) | null = null
 function rememberListScroll() {
   if (listActive) listScrollTop = listViewport.value?.scrollTop ?? 0
 }
@@ -1502,7 +1514,16 @@ onMounted(async () => {
     console.log('组件挂载时初始化store')
     localUserStore.init()
   }
+  // 拖入文件、Deep Link、命令行都会在主进程完成安装，本页列表不会自己更新。
+  // 贡献刷新由 PluginHostBridge 统一负责，这里只需要重新拉取插件清单。
+  unsubPluginChanged = window.api.plugins.onChanged(() => {
+    void getPlugins()
+  })
   await getPlugins()
+})
+onBeforeUnmount(() => {
+  unsubPluginChanged?.()
+  unsubPluginChanged = null
 })
 </script>
 

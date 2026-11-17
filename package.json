@@ -110,7 +110,7 @@
     "crypto-js": "^4.2.0",
     "dompurify": "^3.2.6",
     "echarts": "^6.1.0",
-    "electron": "^45.0.0",
+    "electron": "^45.3.2",
     "electron-builder": "^26.8.1",
     "electron-icon-builder": "^2.0.1",
     "electron-vite": "^5.0.0",

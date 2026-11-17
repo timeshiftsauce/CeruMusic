@@ -87,6 +87,7 @@ declare module 'vue' {
     PlaySettings: typeof import('./src/components/Play/PlaySettings.vue')['default']
     PluginAccountDialog: typeof import('./src/components/PluginAccountDialog.vue')['default']
     PluginDrawer: typeof import('./src/components/PluginDrawer.vue')['default']
+    PluginDropOverlay: typeof import('./src/components/PluginDropOverlay.vue')['default']
     PluginHostBridge: typeof import('./src/components/PluginHostBridge.vue')['default']
     PluginNativeSurface: typeof import('./src/components/PluginNativeSurface.vue')['default']
     PluginNoticeDialog: typeof import('./src/components/PluginNoticeDialog.vue')['default']
