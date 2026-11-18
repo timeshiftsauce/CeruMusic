@@ -11,6 +11,7 @@ import {
   desktopCapturer,
   session,
   nativeImage,
+  nativeTheme,
   clipboard,
   type WebContents,
   BrowserWindowConstructorOptions
@@ -500,6 +501,8 @@ function createWindow(): void {
     minWidth: 1100,
     minHeight: 670,
     show: false,
+    // 首帧底色跟随系统深浅色，避免深色模式下窗口显示前的白底（首帧白闪）
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#242424' : '#ffffff',
     center: !savedBounds, // 如果有保存的位置，则不居中
     autoHideMenuBar: true,
     titleBarStyle: 'hidden' as const,

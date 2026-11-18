@@ -3,6 +3,26 @@
   <head lang="zh-CN">
     <meta charset="UTF-8" />
     <title>澜音 Music</title>
+    <script>
+      // 防止首帧白闪：在样式生效与应用挂载前，按已保存主题先设置 html 底色与主题属性。
+      // 口径与 Provider.vue 的 applyTheme / loadSavedTheme 保持一致。
+      ;(function () {
+        try {
+          var root = document.documentElement
+          var themeName = localStorage.getItem('selected-theme') || 'default'
+          var savedDark = localStorage.getItem('dark-mode')
+          var isDark =
+            savedDark === null
+              ? window.matchMedia('(prefers-color-scheme: dark)').matches
+              : savedDark === 'true'
+          if (themeName !== 'default') root.setAttribute('theme-mode', themeName)
+          root.setAttribute('data-theme', isDark ? 'dark' : 'light')
+          root.style.backgroundColor = isDark ? '#242424' : '#ffffff'
+        } catch (e) {
+          /* localStorage 不可用时保持默认 */
+        }
+      })()
+    </script>
     <script
       defer
       src="https://umami.shiqianjiang.cn/script.js"
