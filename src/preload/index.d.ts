@@ -292,6 +292,8 @@ interface CustomAPI {
     cancelProviderSelection: (id:string) => Promise<void>
     evaluatePageVisibility: (pluginId: string, entryId: string, source: string | null, provider: string | null, kind?: 'page' | 'provider') => Promise<unknown>
     contributions: () => Promise<any[]>
+    getPathForFile: (file: File) => string
+    queueExternalFile: (filePath: string) => Promise<{ sequence: number }>
     prepareExternal: (sequence: number) => Promise<{
       name: string
       version: string

@@ -84,7 +84,9 @@
                   <p class="hint-text">支持 HTTP/HTTPS 链接，插件文件为单个 .js 文件</p>
                 </div>
 
-                <div v-else class="local-hint-container">点击“确定”选择要导入的插件文件</div>
+                <div v-else class="local-hint-container">
+                  点击“确定”选择要导入的插件文件，也可以直接把 .js 插件文件拖入窗口
+                </div>
               </div>
             </template>
           </t-dialog>
@@ -108,7 +110,7 @@
       <div v-else-if="listedPlugins.length === 0" class="empty-state">
         <t-icon name="app" style="font-size: 48px" />
         <p>暂无已安装的插件</p>
-        <p class="hint">点击"添加插件"按钮来安装新插件</p>
+        <p class="hint">点击"添加插件"按钮，或把 .js 插件文件拖入窗口</p>
       </div>
 
       <div v-else-if="filteredPlugins.length === 0" class="empty-state filtered-empty">

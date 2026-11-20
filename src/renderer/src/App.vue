@@ -2,6 +2,7 @@
   <Provider v-if="!isAuxiliaryWindow">
     <GlobalBackground />
     <PluginHostBridge />
+    <PluginDropOverlay />
     <NotificationCenter />
 
     <router-view v-slot="{ Component }">
@@ -36,6 +37,7 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from '@renderer/plugin/notifications'
 import shareAPI from '@renderer/api/share'
+import PluginDropOverlay from '@renderer/components/PluginDropOverlay.vue'
 import PluginHostBridge from '@renderer/components/PluginHostBridge.vue'
 import { appEntryQueue } from '@renderer/services/entryQueue'
 import { showListenTogetherInvite } from '@renderer/services/listenTogetherInvite'

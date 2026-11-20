@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron'
+import { ipcRenderer, webUtils } from 'electron'
 import type { HotkeyConfigPayload } from '@common/types/hotkeys'
 
 // Custom APIs for renderer
@@ -94,6 +94,8 @@ export const desktopApi = {
       ipcRenderer.on('plugin:account-changed', listener)
       return () => ipcRenderer.removeListener('plugin:account-changed', listener)
     },
+    getPathForFile: (file: File) => webUtils.getPathForFile(file),
+    queueExternalFile: (filePath: string): Promise<{sequence: number}> => ipcRenderer.invoke('plugin:external:queue-file', filePath),
     prepareExternal: (sequence: number) => ipcRenderer.invoke('plugin:external:prepare', sequence),
     commitExternal: (sequence: number, format?: string) =>
       ipcRenderer.invoke('plugin:external:commit', sequence, format),

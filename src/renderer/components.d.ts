@@ -94,6 +94,7 @@ declare module 'vue' {
     PluginDrawer: typeof import('./src/components/PluginDrawer.vue')['default']
     PluginHookActivity: typeof import('./src/components/Settings/PluginHookActivity.vue')['default']
     PluginHooksPanel: typeof import('./src/components/Settings/PluginHooksPanel.vue')['default']
+    PluginDropOverlay: typeof import('./src/components/PluginDropOverlay.vue')['default']
     PluginHostBridge: typeof import('./src/components/PluginHostBridge.vue')['default']
     PluginManagerSettings: typeof import('./src/components/Settings/PluginManagerSettings.vue')['default']
     PluginNativeSurface: typeof import('./src/components/PluginNativeSurface.vue')['default']

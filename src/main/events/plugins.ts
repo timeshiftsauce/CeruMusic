@@ -26,7 +26,8 @@ import { playlistSectionProps, type PlaylistSectionContext } from '@common/plugi
 import {
   prepareExternalPlugin,
   commitExternalPlugin,
-  discardExternalPlugin
+  discardExternalPlugin,
+  queueExternalPluginFile
 } from '../services/plugin/externalInstall'
 
 let isPluginsInitialized = false
@@ -309,6 +310,14 @@ export default function InitPluginService() {
   ipcMain.handle('plugin:external:discard', (_event, sequence: number) =>
     discardExternalPlugin(sequence)
   )
+  // Dragging a plugin file onto the window is one more local entry; it feeds the
+  // same pending queue as deep links and command-line arguments.
+  ipcMain.handle('plugin:external:queue-file', async (event, filePath: unknown) => {
+    assertMainWindowRequest(event, '只有澜音主界面可以添加插件')
+    const sequence = await queueExternalPluginFile(filePath)
+    event.sender.send('deeplink:changed')
+    return { sequence }
+  })
   ipcMain.handle(
     'plugin:playlist-import-menu',
     async (_event, pluginId: string, menuId: string) => {

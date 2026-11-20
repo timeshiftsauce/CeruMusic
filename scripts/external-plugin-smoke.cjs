@@ -5,7 +5,7 @@ const {join}=require('node:path')
 const assert=require('node:assert/strict')
 app.whenReady().then(async()=>{
  const root=await mkdtemp(join(tmpdir(),'ceru-external-install-'));app.setPath('userData',root)
- const {default:service,prepareExternalPlugin,commitExternalPlugin,discardExternalPlugin,enqueueDeepLink,acknowledgeDeepLink}=await import('../.plugin-lifecycle-smoke.mjs')
+ const {default:service,prepareExternalPlugin,commitExternalPlugin,discardExternalPlugin,enqueueDeepLink,acknowledgeDeepLink,queueExternalPluginFile,getPendingDeepLinks}=await import('../.plugin-lifecycle-smoke.mjs')
  let failed=false
  try{
   await service.initializePlugins()
@@ -26,7 +26,22 @@ app.whenReady().then(async()=>{
   assert.equal((await prepareExternalPlugin(link.sequence)).update,true)
   const update=await commitExternalPlugin(link.sequence);assert.equal(update.pluginId,installed.pluginId)
   assert.equal(service.getPluginById(installed.pluginId),null)
-  console.log('PASS: queued plugin-file/link preview, cancel, inert install/update and acknowledged-request rejection')
+  // 拖入窗口的文件也走这条队列：先校验路径，再交给同一套 prepare/commit。
+  const dropped=join(root,'dropped.js');await writeFile(dropped,code)
+  await assert.rejects(queueExternalPluginFile('relative/plugin.js'),/路径无效/)
+  await assert.rejects(queueExternalPluginFile(join(root,'notes.txt')),/只能添加 \.js/)
+  await assert.rejects(queueExternalPluginFile(join(root,'missing.js')),/不存在/)
+  const folder=join(root,'folder.js');require('node:fs').mkdirSync(folder)
+  await assert.rejects(queueExternalPluginFile(folder),/单个 \.js/)
+  const droppedSequence=await queueExternalPluginFile(dropped)
+  const queued=getPendingDeepLinks().find(item=>item.sequence===droppedSequence)
+  assert.equal(queued.kind,'plugin-file')
+  assert.equal(queued.value,dropped,'拖入的绝对路径进入待处理队列')
+  assert.equal(await queueExternalPluginFile(dropped),droppedSequence,'重复拖入同一文件不会产生第二条请求')
+  const droppedPreview=await prepareExternalPlugin(droppedSequence)
+  assert.equal(droppedPreview.name,'外部插件');assert.equal(droppedPreview.update,true)
+  discardExternalPlugin(droppedSequence)
+  console.log('PASS: queued plugin-file/link preview, cancel, inert install/update, acknowledged-request rejection and validated drag-and-drop entry')
  }catch(error){console.error(error);failed=true}
  finally{await service.disposeAll();await rm(root,{recursive:true,force:true});app.exit(failed?1:0)}
 }).catch(error=>{console.error(error);app.exit(1)})
