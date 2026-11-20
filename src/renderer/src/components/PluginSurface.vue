@@ -5,11 +5,13 @@
       :key="session.sessionId"
       :session="session"
       :embedded="embedded"
+      :heading="heading"
     />
-    <PluginWebSurface
+    <PluginViewSurface
       v-else-if="session?.kind === 'web'"
       :key="session.sessionId"
       :session="session"
+      @mounted="elapsed => slotName && recordSlotMount(pluginId, elapsed)"
     />
     <div v-else-if="error" class="surface-status" role="alert">
       <p>{{ error }}</p>
@@ -20,34 +22,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { ref, shallowRef, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { PluginVisibleSession } from '@common/pluginDrawer'
-import PluginWebSurface from './PluginWebSurface.vue'
+import PluginViewSurface from './PluginViewSurface.vue'
+import type { PlaylistSectionContext } from '@common/pluginPlaylistContext'
 import PluginNativeSurface from './PluginNativeSurface.vue'
 
-const props = defineProps<{ pluginId: string; surfaceId: string; embedded?: boolean }>()
-const session = ref<PluginVisibleSession>()
+import { acquireSlot, recordSlotMount } from '@renderer/services/pluginSlotPolicy'
+const props = defineProps<{ pluginId: string; surfaceId: string; embedded?: boolean; heading?: string; slotName?: string; sectionContext?: PlaylistSectionContext }>()
+const session = shallowRef<PluginVisibleSession>()
 const error = ref('')
 const reload = ref(0)
 let closing: Promise<unknown> = Promise.resolve()
 let unsubscribe: (() => void) | undefined
 onMounted(() => {
-  unsubscribe = window.api.plugins.onChanged((change) => {
-    if (change?.pluginId === props.pluginId && change?.type === 'updated') reload.value++
+  unsubscribe = desktopBridge.api.plugins.onChanged((change) => {
+    if (change?.pluginId === props.pluginId && (change.type === 'updated' ||
+        (change.type === 'views-updated' && change.views?.includes(props.surfaceId)))) reload.value++
   })
 })
 onBeforeUnmount(() => unsubscribe?.())
 watch(
-  [() => props.pluginId, () => props.surfaceId, reload],
+  [() => props.pluginId, () => props.surfaceId, () => props.slotName, () => props.sectionContext, reload],
   async ([pluginId, surfaceId], _old, onCleanup) => {
     let cancelled = false
+    let release: (() => void) | undefined
     let mounted: PluginVisibleSession | undefined
     const close = (value: PluginVisibleSession) =>
-      window.api.plugins
+      desktopBridge.api.plugins
         .closeDrawer(value.pluginId, value.surfaceId, value.sessionId)
         .catch(() => {})
     onCleanup(() => {
       cancelled = true
+      release?.()
       if (mounted) closing = close(mounted)
     })
     session.value = undefined
@@ -55,13 +63,19 @@ watch(
     try {
       await closing
       if (cancelled) return
-      mounted = await window.api.plugins.mountSurface(String(pluginId), String(surfaceId))
+      if (props.slotName) {
+        release = acquireSlot(String(pluginId),props.slotName)
+        if (!release) throw Error('插件槽位已暂停或实例数达到上限')
+      }
+      const section = props.sectionContext && JSON.parse(JSON.stringify(props.sectionContext))
+      mounted = await desktopBridge.api.plugins.mountSurface(String(pluginId), String(surfaceId), props.slotName, section)
       if (cancelled) {
         closing = close(mounted)
         return
       }
       session.value = mounted
     } catch (reason: any) {
+      release?.()
       if (!cancelled) error.value = reason.message || '插件页面加载失败'
     }
   },

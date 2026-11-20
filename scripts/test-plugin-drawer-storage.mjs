@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url)
 await build({
   stdin: {
     contents: `
-    export { default as PluginHost } from './src/main/services/plugin/manager/PluginHost.ts';
+    export { default as PluginHost } from './src/main/services/plugin/v2/V2PluginHost.ts';
     export { PluginStorage, deletePluginStorage } from './src/main/services/plugin/storage.ts';
     export { bindPluginUIWindow } from './src/main/services/plugin/uiBridge.ts';
     export { savePluginConfig } from './src/main/services/plugin/pluginConfig.ts';

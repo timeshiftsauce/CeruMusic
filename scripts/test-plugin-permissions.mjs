@@ -23,7 +23,7 @@ try {
       {
         name: 'test-network',
         setup(builder) {
-          builder.onResolve({ filter: /^@shiqianjiang\/ceru-plugin-core\/network$/ }, () => ({
+          builder.onResolve({ filter: /^ceru-plugin-core-v2\/network$/ }, () => ({
             path: 'network',
             namespace: 'test'
           }))

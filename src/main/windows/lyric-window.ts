@@ -4,6 +4,8 @@ import { configManager } from '../services/ConfigManager'
 import { join } from 'path'
 import { lyricConfig } from '@common/types/config'
 import { is } from '@electron-toolkit/utils'
+import { bindDesktopLyricUI } from '../services/plugin/uiBridge'
+import { DesktopLyricSessions } from '../services/plugin/desktopLyricSessions'
 
 const lyricStore = {
   get: () =>
@@ -103,13 +105,17 @@ class LyricWindow {
       fullscreenable: false
     })
     if (!this.win) return null
+    bindDesktopLyricUI(this.win, new DesktopLyricSessions(async session => {
+      const { default: plugins } = await import('../services/plugin')
+      await plugins.getPluginById(session.pluginId)?.closeDrawer(session.surfaceId, session.sessionId)
+    }))
     // 禁用背景节流，防止后台时歌词更新延迟
     this.win.webContents.setBackgroundThrottling(false)
     // 加载地址（开发环境用项目根目录，生产用打包后的相对路径）
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/#/desktop-lyric`)
     } else {
-      this.win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'desktop-lyric' })
+      this.win.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/desktop-lyric' })
     }
     // 窗口事件
     this.event()

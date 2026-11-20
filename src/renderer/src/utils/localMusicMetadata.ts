@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import type { LocalMusicTags } from '@common/types/localMusicMetadata'
 
 type MetadataReader = {
@@ -7,7 +8,7 @@ type MetadataReader = {
 
 export async function readLocalMusicMetadata(
   id: string,
-  api: MetadataReader = window.api.localMusic
+  api: MetadataReader = desktopBridge.api.localMusic
 ) {
   const [tags, img] = await Promise.all([api.getTags(id, true), api.getCoverBase64(id)])
   if (!tags) throw new Error('无法读取本地音乐标签，请确认文件存在且可访问')

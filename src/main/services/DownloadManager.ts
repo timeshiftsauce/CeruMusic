@@ -17,6 +17,7 @@ log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'lo
 
 import { ConfigManager } from './ConfigManager'
 import { playbackRequestHeaders } from './plugin/playbackRequests'
+import { isPluginMediaUrl, pluginMedia } from './plugin/media/mediaProtocol'
 import { getCurrentProxyRule } from './networkProxy'
 import { TRUST_SYSTEM_CA_KEY } from './systemCaTrust'
 import { normalizeLyricFormat } from '@common/lyricFormats'
@@ -236,6 +237,7 @@ export default class DownloadManager extends EventEmitter {
       this.emit('task-status-changed', task)
 
       // Fetch URL if missing
+      if (task.url && isPluginMediaUrl(task.url) && !pluginMedia.has(task.url)) task.url = ''
       if (!task.url && this.urlFetcher) {
         log.info('Fetching URL for task:', taskId)
         task.url = await this.urlFetcher(task)
@@ -255,7 +257,9 @@ export default class DownloadManager extends EventEmitter {
           const lrc = await this.lyricFetcher(task)
           if (typeof lrc === 'string' && lrc) {
             task.songInfo.lrc = lrc
-            task.songInfo.lyricExportFormat = normalizeLyricFormat(task.tagWriteOptions?.lyricFormat)
+            task.songInfo.lyricExportFormat = normalizeLyricFormat(
+              task.tagWriteOptions?.lyricFormat
+            )
             this.saveTasks()
           }
         } catch (error) {
@@ -265,6 +269,14 @@ export default class DownloadManager extends EventEmitter {
       }
 
       // 代理规则随当前网络设置注入(直连时为 null),下载/封面/歌词请求均遵循；
+      const workerUrl = isPluginMediaUrl(task.url)
+        ? await pluginMedia.downloadUrl(task.url)
+        : task.url
+      if (this.tasks.get(taskId) !== task || task.status !== DownloadStatus.Downloading) {
+        this.initializingTasks.delete(taskId)
+        this.processQueue()
+        return
+      }
       // “信任系统证书”同样传快照(worker 为独立线程，需在本线程内自行应用)
       const worker = new Worker(workerPath, {
         workerData: {
@@ -286,7 +298,11 @@ export default class DownloadManager extends EventEmitter {
         if (this.activeDownloads.get(taskId) === worker) this.onWorkerExit(taskId, code)
       })
 
-      worker.postMessage({ ...task, requestHeaders: playbackRequestHeaders(task.url) })
+      worker.postMessage({
+        ...task,
+        url: workerUrl,
+        requestHeaders: playbackRequestHeaders(workerUrl)
+      })
     } catch (error: any) {
       this.initializingTasks.delete(taskId)
       // 若任务在初始化期间被外部暂停（如插件限流触发 pauseAllTasks），
@@ -311,6 +327,9 @@ export default class DownloadManager extends EventEmitter {
       this.emit('task-progress', task)
     } else if (message.type === 'completed') {
       log.info('Task completed:', taskId)
+      if (typeof message.result?.path === 'string' && message.result.path) {
+        task.filePath = message.result.path
+      }
       task.status = DownloadStatus.Completed
       task.progress = 100
       this.emit('task-completed', task)
@@ -445,6 +464,27 @@ export default class DownloadManager extends EventEmitter {
 
     this.saveTasks()
     this.processQueue()
+  }
+
+  public cancelPendingTasks(taskIds: string[]) {
+    const selected = new Set(taskIds)
+    const tasks = taskIds.map((id) => this.tasks.get(id)).filter((task) => !!task)
+    if (
+      tasks.some(
+        (task) =>
+          task.downloadedSize > 0 ||
+          ![DownloadStatus.Queued, DownloadStatus.Paused, DownloadStatus.Cancelled].includes(
+            task.status
+          ) ||
+          this.initializingTasks.has(task.id) ||
+          this.activeDownloads.has(task.id)
+      )
+    ) {
+      throw Error('下载已开始，请在下载管理中处理；已保存的文件不会被撤销')
+    }
+    // Remove the whole selection before cancelTask can advance another queued task.
+    this.queue = this.queue.filter((id) => !selected.has(id))
+    for (const task of tasks) this.cancelTask(task.id)
   }
 
   public cancelTask(taskId: string) {

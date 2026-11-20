@@ -61,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { startupHomeAvailable, refreshPluginContributions } from '@renderer/services/pluginState'
 import { musicStartupReady } from '@renderer/services/musicDataPersistence'
@@ -112,7 +113,7 @@ async function prepareStartup() {
 
   // 获取版本号
   try {
-    const appVersion = await window.electron.ipcRenderer.invoke('get-app-version')
+    const appVersion = await desktopBridge.electron.ipcRenderer.invoke('get-app-version')
     if (appVersion) version.value = appVersion
   } catch (error) {
     console.warn('Failed to get app version:', error)
@@ -121,7 +122,7 @@ async function prepareStartup() {
   loadingText.value = '读取插件列表...'
   loadingPercent.value = Math.max(loadingPercent.value, 15)
   try {
-    await window.electron.ipcRenderer.invoke('service-plugin-initialize-system')
+    await desktopBridge.electron.ipcRenderer.invoke('service-plugin-initialize-system')
     loadingText.value = '恢复已启用插件和首页...'
     loadingPercent.value = Math.max(loadingPercent.value, 35)
     await refreshPluginContributions()

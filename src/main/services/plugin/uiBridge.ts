@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'crypto'
+import { DesktopLyricSessions } from './desktopLyricSessions'
 
 const pending = new Map<
   string,
@@ -13,6 +14,28 @@ const pending = new Map<
 >()
 let mainWindow: BrowserWindow | undefined
 let ready = false
+let lyric: { window: BrowserWindow; sessions: DesktopLyricSessions } | undefined
+
+export function bindDesktopLyricUI(window: BrowserWindow, sessions: DesktopLyricSessions): void {
+  lyric = { window, sessions }
+  const dispose = () => { void sessions.dispose().catch(error => console.warn('释放桌面歌词插件失败:', error)) }
+  window.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
+    if (!inPlace && mainFrame) dispose()
+  })
+  window.on('hide', dispose)
+  window.once('closed', () => { if (lyric?.window === window) lyric = undefined; dispose() })
+}
+
+export function desktopLyricRequester(event: IpcMainInvokeEvent) {
+  if (!lyric || lyric.window.isDestroyed() || event.sender !== lyric.window.webContents) return null
+  if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame || !/^#\/?desktop-lyric$/.test(new URL(event.senderFrame.url).hash))
+    throw Error('只有桌面歌词主文档可以访问歌词视图')
+  return lyric.sessions
+}
+
+export function notifyDesktopLyricSelection(): void {
+  if (lyric && !lyric.window.isDestroyed()) lyric.window.webContents.send('plugin:desktop-lyric-refresh')
+}
 
 function cancelWindowRequests(sender: number, message: string) {
   for (const [id, entry] of pending) {
@@ -78,19 +101,26 @@ export function assertPluginUIRequest(event: IpcMainInvokeEvent): void {
   assertMainWindowRequest(event, '只有澜音主界面可以操作插件抽屉')
 }
 
-export function callPluginUI(pluginId: string, method: string, data: any): Promise<any> {
+export function callPluginUI(pluginId: string, method: string, data: any, signal?: AbortSignal): Promise<any> {
   const win = applicationWindow()
   if (!win || !ready) return Promise.reject(new Error('请等待澜音主界面加载完成后重试'))
   const id = randomUUID()
+  let abort: (() => void) | undefined
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
+    signal?.throwIfAborted()
+    const cancel = (error: Error) => {
+      if (!pending.has(id)) return
       pending.delete(id)
+      clearTimeout(timer)
       if (!win.isDestroyed()) win.webContents.send('plugin:ui-cancel', { id, pluginId })
-      reject(new Error('用户界面请求超时'))
-    }, 120000)
+      reject(error)
+    }
+    const timer = setTimeout(() => cancel(new Error('用户界面请求超时')), 120000)
+    abort = () => cancel(new Error('操作已取消'))
+    signal?.addEventListener('abort', abort, {once:true})
     pending.set(id, { sender: win.webContents.id, pluginId, resolve, reject, timer })
     win.webContents.send('plugin:ui', { id, pluginId, method, data })
-  })
+  }).finally(() => { if (abort) signal?.removeEventListener('abort', abort) })
 }
 
 export function cancelPluginUI(pluginId: string): void {
@@ -104,6 +134,9 @@ export function cancelPluginUI(pluginId: string): void {
 }
 
 export function publishPluginSurface(pluginId: string, sessionId: string, state: unknown): void {
+  if (lyric && !lyric.window.isDestroyed() && lyric.sessions.receives(pluginId, sessionId)) {
+    lyric.window.webContents.send('plugin:surface-state', { pluginId, sessionId, state, closed: state === undefined })
+  }
   applicationWindow()?.webContents.send('plugin:surface-state', {
     pluginId,
     sessionId,
@@ -112,14 +145,25 @@ export function publishPluginSurface(pluginId: string, sessionId: string, state:
   })
 }
 
+export function developerEntriesChanged():void { applicationWindow()?.webContents.send('plugin:dev-reloaded'); notifyDesktopLyricSelection() }
+
+export function publishHookNames(snapshot: {revision: number; names: string[]}): void {
+  applicationWindow()?.webContents.send('plugin:hooks-changed', snapshot)
+}
+
 export function publishPluginAccountChanged(pluginId: string): void {
   applicationWindow()?.webContents.send('plugin:account-changed', { pluginId })
 }
 
 export function pluginChanged(change?: {
-  type: 'installed' | 'updated' | 'uninstalled' | 'state-changed'
+  type: 'installed' | 'updated' | 'uninstalled' | 'state-changed' | 'views-updated'
+  views?: string[]
   pluginId: string
   enabled?: boolean
 }): void {
   applicationWindow()?.webContents.send('plugin:changed', change)
+  if (change && ['updated', 'views-updated'].includes(change.type) && lyric && !lyric.window.isDestroyed())
+    lyric.window.webContents.send('plugin:changed', change)
+  if (change?.type === 'views-updated') return
+  notifyDesktopLyricSelection()
 }

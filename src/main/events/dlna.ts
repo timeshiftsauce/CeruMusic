@@ -7,6 +7,7 @@ import * as https from 'https'
 import * as fs from 'fs'
 import { networkInterfaces } from 'os'
 import { fileURLToPath } from 'url'
+import { pluginMedia, isPluginMediaUrl } from '../services/plugin/media/mediaProtocol'
 
 let ssdpClient: Client | null = null
 const devices: Record<string, any> = {}
@@ -15,6 +16,7 @@ let localServer: http.Server | null = null
 let localServerPort = 0
 let currentLocalFile = ''
 let currentProxyUrl = ''
+let currentMediaUrl = ''
 
 function getLocalIp() {
   const interfaces = networkInterfaces()
@@ -32,6 +34,13 @@ function startLocalServer() {
   if (localServer) return
 
   localServer = http.createServer((req, res) => {
+    if (req.url?.startsWith('/media/')) {
+      if (!currentMediaUrl || req.url !== '/media/' + new URL(currentMediaUrl).hostname) {
+        res.writeHead(404)
+        res.end()
+      } else void pluginMedia.serve(currentMediaUrl, req, res)
+      return
+    }
     // If it's a proxy request for a localhost URL
     if (currentProxyUrl) {
       const client = currentProxyUrl.startsWith('https') ? https : http
@@ -179,8 +188,16 @@ export function initDlnaService() {
       let playUrl = url
       currentProxyUrl = ''
       currentLocalFile = ''
+      currentMediaUrl = ''
 
-      if (url.startsWith('file://')) {
+      if (isPluginMediaUrl(url)) {
+        if (!pluginMedia.has(url)) {
+          resolve(false)
+          return
+        }
+        currentMediaUrl = url
+        playUrl = `http://${getLocalIp()}:${localServerPort}/media/${new URL(url).hostname}`
+      } else if (url.startsWith('file://')) {
         try {
           currentLocalFile = fileURLToPath(url)
         } catch (e) {
@@ -197,7 +214,9 @@ export function initDlnaService() {
 
       const options = {
         autoplay: true,
-        contentType: 'audio/mpeg'
+        contentType: currentMediaUrl
+          ? (pluginMedia.contentType(currentMediaUrl) ?? 'audio/mpeg')
+          : 'audio/mpeg'
       }
 
       currentClient.load(playUrl, options, (err: any) => {

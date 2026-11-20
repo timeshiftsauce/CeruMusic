@@ -6,11 +6,11 @@ import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { readArtifact } from '@shiqianjiang/ceru-plugin-issuer'
+import { readArtifact } from 'ceru-plugin-issuer-v2'
 const temporary=await mkdtemp(join(tmpdir(),'ceru-share-resolver-'))
 const hosts=[]
 try {
-  await build({entryPoints:['src/main/services/plugin/shareResolver.ts'],outfile:join(temporary,'export.mjs'),bundle:true,platform:'node',format:'esm'})
+  await build({entryPoints:['src/main/services/plugin/v2/shareResolver.ts'],outfile:join(temporary,'export.mjs'),bundle:true,platform:'node',format:'esm'})
   const {exportShareResolver}=await import(pathToFileURL(join(temporary,'export.mjs')).href)
   // Compile the actual backend host and worker in isolation; no database/API server needed.
   await build({entryPoints:['../ceru-backend/src/share/plugin-host/CeruMusicPluginHost.ts','../ceru-backend/src/share/plugin-host/pluginWorker.ts'],outdir:temporary,bundle:true,platform:'node',format:'cjs'})

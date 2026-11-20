@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import type { HotkeyAction, HotkeyConfig, HotkeyStatus } from '@common/types/hotkeys'
 import { defaultHotkeyConfig } from '@common/types/hotkeys'
 import {
@@ -59,7 +60,7 @@ const updateStatus = (status?: HotkeyStatus) => {
 const load = async () => {
   loading.value = true
   try {
-    const res = await window.api.hotkeys.get()
+    const res = await desktopBridge.api.hotkeys.get()
     const cfg = (res && res.data) as HotkeyConfig | undefined
     if (!cfg) return
     enabled.value = !!cfg.enabled
@@ -75,7 +76,7 @@ const save = async (): Promise<boolean> => {
   saving.value = true
   try {
     const plainBindings = { ...(toRaw(bindings.value) || {}) }
-    const res = await window.api.hotkeys.set({
+    const res = await desktopBridge.api.hotkeys.set({
       enabled: enabled.value,
       bindings: plainBindings
     })

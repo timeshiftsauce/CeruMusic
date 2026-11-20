@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 /**
  * 发帖 / 编辑帖子对话框
  *
@@ -18,7 +19,7 @@
  * 注: tdesign 自动导入 t-dialog / t-textarea / t-button 等。
  */
 import { ref, computed, nextTick, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { CloseIcon, ImageIcon, MusicIcon } from 'tdesign-icons-vue-next'
 import {
   communityAPI,
@@ -171,7 +172,7 @@ async function loadPickerLists() {
     const cloud = Array.isArray(cloudRes) ? cloudRes : []
     let favoritesId: string | null = null
     try {
-      const fav = await (window as any).api?.songList?.getFavoritesId?.()
+      const fav = await (desktopBridge as any).api?.songList?.getFavoritesId?.()
       favoritesId = fav?.data || null
     } catch {}
 

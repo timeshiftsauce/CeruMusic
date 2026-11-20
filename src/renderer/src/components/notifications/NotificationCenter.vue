@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   ChatIcon,
   HeartIcon,

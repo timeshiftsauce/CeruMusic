@@ -233,6 +233,12 @@ export default [
     }
   },
 
+  {
+    files: ['src/main/services/plugin/v2/__fixtures__/*.js', 'src/main/services/plugin/v3/__fixtures__/*.js', 'src/main/services/plugin/__fixtures__/appdata-v2/plugins/*.js'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': ['error', { allow: ['^@ceru/'] }] }
+  },
+
   // Prettier 配置 (必须放在最后)
   prettier
 ]

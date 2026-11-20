@@ -92,7 +92,7 @@ ipcMain.handle('music-cache:enforce-limit', async () => {
   }
 })
 
-// 读取封面图片本体（本地已落盘则直接返回 file:// URL，miss 返回 null）
+// 获取已落盘的封面地址，未命中返回 null。
 ipcMain.handle('music-cache:get-cover-file', async (_, songCacheKey: string) => {
   try {
     return await musicCacheService.getCachedCoverFile(songCacheKey)

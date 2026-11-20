@@ -2,6 +2,8 @@ import * as path from 'path'
 import * as fs from 'fs/promises'
 import * as crypto from 'crypto'
 import axios from 'axios'
+import { pipeline } from 'node:stream/promises'
+import { isPluginMediaUrl, pluginMedia } from '../plugin/media/mediaProtocol'
 import { configManager } from '../ConfigManager'
 import { applyPlaybackRequestHeaders } from '../plugin/playbackRequests'
 import { getRequestAgentsFor } from '../networkProxy'
@@ -9,6 +11,13 @@ import { compareQualities } from '@shiqianjiang/ceru-plugin-sdk/quality'
 import { songCacheKey as sharedSongCacheKey } from '@common/musicItem'
 import { getMusicMetaCache, MusicMetaCache } from './MetaCache'
 import { sortByEvictionPriority } from './eviction'
+import {
+  coverId,
+  coverUrl,
+  parseCoverUrl,
+  isCoverExtension,
+  resolveCachedCover
+} from './coverImage'
 
 /** 缓存索引条目：记录要回收（LRU）所需的访问元数据 */
 interface CacheEntry {
@@ -73,8 +82,8 @@ export interface CacheInfo {
 
 export class MusicCacheService {
   private cacheIndex: Map<string, CacheEntry> = new Map()
-  /** 封面图片本体索引（key 为 songCacheKey） */
-  private coverFileIndex: Map<string, CacheEntry> = new Map()
+  /** 内存使用会话封面 ID；磁盘索引继续使用原来的 songCacheKey。 */
+  private coverFileIndex = new Map<string, CacheEntry & { songKey: string }>()
   /** 文本元数据（歌词/封面 URL）走 SQLite */
   private meta: MusicMetaCache
   /** 串行化淘汰，避免并发写入时重复计算容量 */
@@ -524,26 +533,36 @@ export class MusicCacheService {
   }
 
   /**
-   * 读取封面图片本体（已落盘的本地文件），返回可直接喂给 <img>/fetch 的 file:// URL。
+   * 返回当前进程的只读封面地址。
    *
    * 只缓存 URL 是不够的 —— 渲染层每次播放仍要联网下载整张图片，
    * 这正是「音频已缓存但切歌仍卡」的主因。这里把二进制也存到本地。
    */
   async getCachedCoverFile(songCacheKey: string): Promise<string | null> {
-    const entry = this.coverFileIndex.get(songCacheKey)
+    const id = coverId(songCacheKey)
+    const entry = this.coverFileIndex.get(id)
     if (!entry) return null
     try {
       await fs.access(entry.file)
       entry.lastAccess = Date.now()
       entry.hits += 1
       this.schedulePersist()
-      return this.toFileUrl(entry.file)
-    } catch {
+      return coverUrl(id)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       // 文件被外部删除，清掉索引条目
-      this.coverFileIndex.delete(songCacheKey)
+      this.coverFileIndex.delete(id)
       await this.saveCoverFileIndex()
       return null
     }
+  }
+
+  async resolveCoverUrl(url: string) {
+    const id = parseCoverUrl(url)
+    const entry = id && this.coverFileIndex.get(id)
+    return entry
+      ? resolveCachedCover(this.coverDir, entry.file, this.generateCacheKey(entry.songKey))
+      : null
   }
 
   /**
@@ -551,13 +570,15 @@ export class MusicCacheService {
    * 避免同一首歌反复写同一张图。
    */
   async cacheCoverFile(songCacheKey: string, data: Buffer, ext: string): Promise<string> {
-    const existing = this.coverFileIndex.get(songCacheKey)
+    if (!isCoverExtension(ext)) throw new Error('Unsupported cover extension')
+    const id = coverId(songCacheKey)
+    const existing = this.coverFileIndex.get(id)
     if (existing) {
       try {
         await fs.access(existing.file)
-        return this.toFileUrl(existing.file)
+        return coverUrl(id)
       } catch {
-        this.coverFileIndex.delete(songCacheKey)
+        this.coverFileIndex.delete(id)
       }
     }
 
@@ -565,7 +586,8 @@ export class MusicCacheService {
     const file = path.join(this.coverDir, `${hash}${ext}`)
     await fs.mkdir(this.coverDir, { recursive: true })
     await fs.writeFile(file, data)
-    this.coverFileIndex.set(songCacheKey, {
+    this.coverFileIndex.set(id, {
+      songKey: songCacheKey,
       file,
       size: data.byteLength,
       lastAccess: Date.now(),
@@ -573,15 +595,16 @@ export class MusicCacheService {
     })
     await this.saveCoverFileIndex()
     this.scheduleEviction()
-    return this.toFileUrl(file)
+    return coverUrl(id)
   }
 
   /** 删除某首歌的封面缓存（文件损坏时由渲染层请求清理，便于下次重新下载） */
   async invalidateCoverFile(songCacheKey: string): Promise<void> {
-    const entry = this.coverFileIndex.get(songCacheKey)
+    const id = coverId(songCacheKey)
+    const entry = this.coverFileIndex.get(id)
     if (!entry) return
     await fs.unlink(entry.file).catch(() => {})
-    this.coverFileIndex.delete(songCacheKey)
+    this.coverFileIndex.delete(id)
     await this.saveCoverFileIndex()
   }
 
@@ -589,10 +612,11 @@ export class MusicCacheService {
     try {
       const raw = await fs.readFile(this.coverIndexFilePath, 'utf-8')
       const obj = JSON.parse(raw) as Record<string, any>
-      const map = new Map<string, CacheEntry>()
+      const map = new Map<string, CacheEntry & { songKey: string }>()
       for (const [key, value] of Object.entries(obj)) {
         if (value && typeof value.file === 'string') {
-          map.set(key, {
+          map.set(coverId(key), {
+            songKey: key,
             file: value.file,
             size: Number(value.size) || 0,
             lastAccess: Number(value.lastAccess) || Date.now(),
@@ -608,7 +632,9 @@ export class MusicCacheService {
 
   private async saveCoverFileIndex() {
     try {
-      const obj = Object.fromEntries(this.coverFileIndex)
+      const obj = Object.fromEntries(
+        Array.from(this.coverFileIndex.values(), ({ songKey, ...entry }) => [songKey, entry])
+      )
       await fs.writeFile(this.coverIndexFilePath, JSON.stringify(obj, null, 2))
     } catch (error) {
       console.error('保存封面缓存索引失败:', error)
@@ -639,23 +665,27 @@ export class MusicCacheService {
       console.log(`开始下载歌曲: ${songId}`)
 
       const agents = getRequestAgentsFor(url)
-      const response = await axios({
-        method: 'GET',
-        url: url,
-        responseType: 'stream',
-        timeout: 30000,
-        // 代理由主进程网络设置决定;显式关闭以避免环境变量代理干扰
-        proxy: false,
-        ...(agents ? { httpAgent: agents.httpAgent, httpsAgent: agents.httpsAgent } : {}),
-        headers: applyPlaybackRequestHeaders(url, {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }),
-        // 4xx/5xx 也要进 catch,否则会把错误页当成歌曲写进缓存
-        validateStatus: (status) => status >= 200 && status < 300
-      })
+      const media = isPluginMediaUrl(url) ? await pluginMedia.open(url) : undefined
+      const response = media
+        ? { data: media.body, headers: media.headers }
+        : await axios({
+            method: 'GET',
+            url: url,
+            responseType: 'stream',
+            timeout: 30000,
+            // 代理由主进程网络设置决定;显式关闭以避免环境变量代理干扰
+            proxy: false,
+            ...(agents ? { httpAgent: agents.httpAgent, httpsAgent: agents.httpsAgent } : {}),
+            headers: applyPlaybackRequestHeaders(url, {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }),
+            // 4xx/5xx 也要进 catch,否则会把错误页当成歌曲写进缓存
+            validateStatus: (status) => status >= 200 && status < 300
+          })
 
       const contentType = String(response.headers?.['content-type'] || '')
       if (/^(text\/|application\/(json|xml|xhtml))/i.test(contentType)) {
+        response.data.destroy()
         throw new Error(`响应不是音频 (content-type: ${contentType || 'unknown'})`)
       }
 
@@ -665,13 +695,7 @@ export class MusicCacheService {
       tempPath = `${cacheFilePath}.part`
       const writer = require('fs').createWriteStream(tempPath)
 
-      response.data.pipe(writer)
-
-      await new Promise<void>((resolve, reject) => {
-        writer.on('finish', () => resolve())
-        writer.on('error', (error: Error) => reject(error))
-        response.data.on('error', (error: Error) => reject(error))
-      })
+      await pipeline(response.data, writer)
 
       const stat = await fs.stat(tempPath)
       if (stat.size <= 0) throw new Error('下载内容为空')

@@ -107,7 +107,7 @@ export const cloudSongListAPI = {
   },
 
   // 创建歌单
-  createUserSongList: async (data: CreateUserSongListDto) => {
+  createUserSongList: async (data: CreateUserSongListDto, signal?: AbortSignal) => {
     data = { ...data, songlist: await prepareCloudSongs(data.songlist) }
     const formData = new FormData()
     formData.append('localId', data.localId)
@@ -153,7 +153,8 @@ export const cloudSongListAPI = {
     // JSON stringify songlist
     formData.append('songlist', JSON.stringify(data.songlist))
 
-    return unwrap<CloudSongList>(request.post(BASE_URL, formData))
+    signal?.throwIfAborted()
+    return unwrap<CloudSongList>(request.post(BASE_URL, formData, { signal }))
   },
 
   // 更新歌单
@@ -208,17 +209,18 @@ export const cloudSongListAPI = {
   },
 
   // 删除歌单
-  deleteUserSongList: (id: string) => {
+  deleteUserSongList: (id: string, signal?: AbortSignal) => {
     return unwrap(
       request.delete(BASE_URL, {
-        data: { listId: id }
+        data: { listId: id }, signal
       })
     )
   },
 
   // 添加歌曲到歌单
-  addSongsToList: async (id: string, songs: CloudSongDto[]) => {
+  addSongsToList: async (id: string, songs: CloudSongDto[], signal?:AbortSignal) => {
     songs = await prepareCloudSongs(songs, id)
+    signal?.throwIfAborted()
     return unwrap<{ updatedAt: string }>(
       request.patch(`${BASE_URL}/list`, {
         id,
@@ -228,15 +230,17 @@ export const cloudSongListAPI = {
   },
 
   // 从歌单删除歌曲
-  removeSongsFromList: async (id: string, songmids: string[]) => {
+  removeSongsFromList: async (id: string, songmids: string[], signal?:AbortSignal) => {
     const modern = await supportsIdentity()
     const existing = (await cloudSongListAPI.getSongListDetail(id, 'asc')).list
-    const selected = songmids.map((id) => selectSong(existing as any[], id)).filter(Boolean)
+    const selected = [...new Set(songmids.map((id) => selectSong(existing as any[], id)).filter(Boolean))]
+    signal?.throwIfAborted()
+    if (!selected.length) return {removed:0, updatedAt:''}
     if (!modern) {
       assertLegacyIdentities(existing)
       songmids = selected.map((song) => String(song!.songmid))
     }
-    return unwrap<{ updatedAt: string }>(
+    const result = await unwrap<{ updatedAt: string; removed?:number }>(
       request.delete(`${BASE_URL}/list`, {
         data: {
           id,
@@ -244,5 +248,6 @@ export const cloudSongListAPI = {
         }
       })
     )
+    return {updatedAt:result.updatedAt, removed:result.removed ?? selected.length}
   }
 }

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { readArtifact } from '@shiqianjiang/ceru-plugin-issuer'
+import { readArtifact } from 'ceru-plugin-issuer-v2'
+import { readV2Descriptor } from './read-v2-test-descriptor.mjs'
 
 const baseURL = process.env.CERU_PREVIEW_URL || 'http://localhost:5173'
 const artifact = readArtifact(
@@ -58,7 +59,7 @@ try {
       const plugin = {
         pluginId: 'fixture',
         pluginInfo: manifest,
-        manifest,
+        descriptor: manifest,
         enabled: false,
         disabled: true,
         supportedSources: { navidrome: { name: 'Navidrome', qualitys: ['original'] } }
@@ -66,8 +67,7 @@ try {
       window.testStore = { initialization: true, userInfo: {}, init() {} }
       window.drawerFixture = {
         declareSettingsPage(enabled) {
-          if (enabled) manifest.contributes.settingsPages = [{ id: 'debug', title: '开发调试页', view: 'debug' }]
-          else delete manifest.contributes.settingsPages
+          manifest.pages = enabled ? [{ id: 'debug', mount: 'settings', title: '开发调试页', view: 'debug' }] : []
         },
         show(placement = 'right') {
           window.setTestSession({
@@ -79,10 +79,10 @@ try {
           })
         }
       }
-      window.api = {
+      const fixtureApi = {
         plugins: {
           loadAllPlugins: async () => [structuredClone(plugin)],
-          getManifest: async () => ({ data: manifest }),
+          getDescriptor: async () => ({ data: manifest }),
           getPermissions: async () => ({ data: [] }),
           guestList: async () => [],
           setActive: async () => {
@@ -110,8 +110,9 @@ try {
           }
         }
       }
+      window.ceruTakeDesktopBridge = () => ({ api: fixtureApi })
     },
-    { manifest: artifact.header.manifest, schema: artifact.resources['schema.connection'].value }
+    { manifest: readV2Descriptor('fixture', artifact.header.manifest), schema: artifact.resources['schema.connection'].value }
   )
   await page.route('**/__plugin_drawer_preview', (route) =>
     route.fulfill({

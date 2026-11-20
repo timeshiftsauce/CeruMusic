@@ -239,8 +239,9 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, computed, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import BaseDialog from '@renderer/components/BaseDialog.vue'
 import shareAPI from '@renderer/api/share'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
@@ -529,7 +530,7 @@ async function doShare() {
         if (!result.list.length || pos > 100000) throw new Error('云端歌单读取不完整，请稍后重试')
       }
       if (!sources.size) throw new Error('云端歌单为空，无法分享')
-      const resolver = await window.api.share.exportPlaylistResolver([...sources])
+      const resolver = await desktopBridge.api.share.exportPlaylistResolver([...sources])
       const preferred = localUserStore.userSource?.quality
       quality =
         preferred && resolver.qualities.includes(preferred) ? preferred : resolver.qualities[0]

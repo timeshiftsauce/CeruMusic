@@ -12,7 +12,12 @@ files:
   - '!.codegraph/**'
   - '!.workflow/**'
   - '!.startup-smoke-*/**'
+  - '!.permission-smoke-*/**'
+  - '!.netease-host-*/**'
+  - '!.tmp/**'
+  - '!.electron-runtime-*/**'
   - '!.tmp-*/**'
+  - '!.tmp-*'
   - '!temp/**'
   - '!test-data/**'
   - '!update-server/**'
@@ -21,6 +26,14 @@ files:
   - '!*.log.*'
   - '!**/*.log'
   - '!**/*.log.*'
+  - '!*.tsbuildinfo'
+  - '!component-*.png'
+  - '!utility-upgrade-original.tmp'
+  - '!*-results.json'
+  - '!*-verification.json'
+  - '!*-runtime-comparison.json'
+  - '!region-final-hashes.json'
+  - '!{AGENTS.md,CLAUDE.md,contributor-merge-checklist.md,jest.config.js,qodana.yaml,.eslintrc.backup.json}'
   - '!**/*.test.*'
   - '!**/*.spec.*'
   - '!**/.vscode/*'
@@ -28,6 +41,7 @@ files:
   - '!website/*'
   - '!scripts/*'
   - '!assets/*'
+  - '!vendor/plugin-runtime/**'
   - '!docs/*'
   # Rust 原生模块只保留编译产物 (.node)；源码与 target/ 不打包。
   - '!native/*/src/**'
@@ -80,6 +94,7 @@ win:
     - name: Ceru Music Protocol
       schemes:
         - cerumusic
+        - ceru
 nsis:
   include: build/installer.nsh
   license: EULA.txt

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref } from 'vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
@@ -21,7 +22,7 @@ const { checkForUpdates } = useAutoUpdate()
 
 const getAppVersion = async () => {
   try {
-    const version = await window.electron.ipcRenderer.invoke('get-app-version')
+    const version = await desktopBridge.electron.ipcRenderer.invoke('get-app-version')
     if (version) {
       appVersion.value = version
     }

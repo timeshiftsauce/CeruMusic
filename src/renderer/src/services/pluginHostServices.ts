@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { sameSong, songKey } from '@common/musicItem'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import type { ContentEntity, ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
@@ -8,6 +9,8 @@ import { useSettingsStore, type SettingsState } from '@renderer/store/Settings'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { useDlnaStore } from '@renderer/store/dlna'
+import { projectOperationTrack } from '@renderer/plugin/operations'
+import type { SongList } from '@renderer/types/audio'
 
 const PUBLIC_SETTINGS = new Set<keyof SettingsState>([
   'showFloatBall',
@@ -56,6 +59,22 @@ export const toPluginDownloadTask = (task: any) => ({
 })
 
 const sameRef = sameSong
+
+export async function prepareFavoriteSongs(refs: ResourceRef[], liked: boolean) {
+  let candidates: readonly SongList[]
+  if (liked) candidates = LocalUserDetailStore().list
+  else {
+    const id = unwrap(await desktopBridge.api.songList.getFavoritesId())
+    candidates = id ? unwrap(await songListAPI.getSongs(id)) : []
+  }
+  const byKey = new Map(candidates.map(song => [songKey(song), song]))
+  return [...new Set(refs.map(songKey))].flatMap(key => {
+    const song = byKey.get(key)
+    if (song) return [{ song, track: projectOperationTrack(song) }]
+    if (liked) throw Error('收藏歌曲不在当前队列中')
+    return []
+  })
+}
 
 function historyItems(): ContentEntity[] {
   return useGlobalPlayStatusStore().history.map((song) => toPluginTrack(song))
@@ -121,7 +140,7 @@ export function getPluginPublicSettings(): Record<string, unknown> {
   return Object.fromEntries([...PUBLIC_SETTINGS].map((key) => [key, settings[key]]))
 }
 
-export async function handlePluginHostService(method: string, args: any[]): Promise<any> {
+export async function handlePluginHostService(method: string, args: any[],from?:string): Promise<any> {
   if (method === 'services.history.list') {
     const items = historyItems()
     const offset = Math.max(0, Number.parseInt(String(args[0] ?? '0'), 10) || 0)
@@ -133,7 +152,7 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
     }
   }
   if (method.startsWith('services.favorites.')) {
-    const favoritesId = unwrap(await window.api.songList.getFavoritesId())
+    const favoritesId = unwrap(await desktopBridge.api.songList.getFavoritesId())
     if (!favoritesId) throw new Error('尚未创建我喜欢的音乐歌单')
     const refs = args[0] as ResourceRef[]
     if (method.endsWith('.contains'))
@@ -158,7 +177,7 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
     if (name === 'create') {
       const request = args[0] ?? {}
       const queue = LocalUserDetailStore().list
-      const local = await window.api.localMusic.getList()
+      const local = await desktopBridge.api.localMusic.getList()
       const history = historyItems().map(toAppTrack)
       const songs = (request.tracks as ResourceRef[]).map((ref) => {
         const song = [...queue, ...local, ...history].find((item) => sameRef(item, ref))
@@ -166,8 +185,9 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
         return song
       })
       const settings = useSettingsStore().settings
-      const results = await window.api.music.requestSdk('downloadBatchSongs', {
+      const results = await desktopBridge.api.music.requestSdk('downloadBatchSongs', {
         source: songs[0]?.source,
+        from,
         tasks: songs.map((song, index) => {
           const ref = request.tracks[index] as ResourceRef
           const quality =
@@ -181,31 +201,32 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
             source: ref.providerId,
             quality,
             path: request.internalDirectoryPath,
-            songInfo: { ...song, template: settings.filenameTemplate || '%t - %s' },
-            tagWriteOptions: settings.tagWriteOptions,
+            // Queue entries and nested metadata can be Vue proxies; IPC needs a data snapshot.
+            songInfo: JSON.parse(JSON.stringify({ ...song, template: settings.filenameTemplate || '%t - %s' })),
+            tagWriteOptions: JSON.parse(JSON.stringify(settings.tagWriteOptions ?? {})),
             lazy: false
           }
         })
       })
       const created = results.filter((result: any) => result.success).map(toPluginDownloadTask)
-      if (!created.length) throw new Error(results[0]?.error || '创建下载任务失败')
+      if (!created.length && results.some((result:any)=>result.success===false)) throw new Error(results[0]?.error || '创建下载任务失败')
       return created
     }
-    const tasks = await window.api.download.getTasks()
+    const tasks = await desktopBridge.api.download.getTasks()
     if (name === 'list') return tasks.map(toPluginDownloadTask)
     if (name === 'reveal') {
       const task = tasks.find((item: any) => item.id === args[0])
       if (!task) throw new Error('下载任务不存在')
-      await window.api.download.openFileLocation(task.filePath)
+      await desktopBridge.api.download.openFileLocation(task.filePath)
       return null
     }
     const ids = args[0] as string[]
     for (const id of ids) {
       if (!tasks.some((task: any) => task.id === id)) throw new Error('下载任务不存在')
-      if (name === 'pause') await window.api.download.pauseTask(id)
-      else if (name === 'resume') await window.api.download.resumeTask(id)
-      else if (name === 'cancel') await window.api.download.cancelTask(id)
-      else if (name === 'retry') await window.api.download.retryTask(id)
+      if (name === 'pause') await desktopBridge.api.download.pauseTask(id)
+      else if (name === 'resume') await desktopBridge.api.download.resumeTask(id)
+      else if (name === 'cancel') await desktopBridge.api.download.cancelTask(id)
+      else if (name === 'retry') await desktopBridge.api.download.retryTask(id)
       else throw new Error('不支持的下载操作')
     }
     return null
@@ -213,7 +234,7 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
   if (method.startsWith('services.localMusic.')) {
     const name = method.slice('services.localMusic.'.length)
     if (name === 'list') {
-      const songs = await window.api.localMusic.getList()
+      const songs = await desktopBridge.api.localMusic.getList()
       const offset = Math.max(0, Number(args[0]) || 0)
       const items = songs.slice(offset, offset + 100).map((song: any) => toPluginTrack(song))
       return {
@@ -225,16 +246,16 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
       }
     }
     if (name === 'scan') {
-      await window.api.localMusic.scan(args[0])
+      await desktopBridge.api.localMusic.scan(args[0])
       return { taskId: crypto.randomUUID() }
     }
-    if (name === 'getTags') return (await window.api.localMusic.getTags(args[0].id, true)) ?? {}
+    if (name === 'getTags') return (await desktopBridge.api.localMusic.getTags(args[0].id, true)) ?? {}
     if (name === 'writeTags') {
-      const songs = await window.api.localMusic.getList()
+      const songs = await desktopBridge.api.localMusic.getList()
       const song = songs.find((item: any) => String(item.songmid) === String(args[0].id))
       if (!song?.path) throw new Error('本地歌曲不存在')
       const tags = args[1] ?? {}
-      const result = await window.api.localMusic.writeTags(
+      const result = await desktopBridge.api.localMusic.writeTags(
         song.path,
         {
           ...song,
@@ -325,7 +346,7 @@ export async function handlePluginHostService(method: string, args: any[]): Prom
     const limit = request.maxOutputChars == null ? 20_000 : Number(request.maxOutputChars)
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50_000)
       throw new Error('AI 输出上限必须在 1 到 50000 字符之间')
-    const result = await window.api.ai.ask(prompt)
+    const result = await desktopBridge.api.ai.ask(prompt)
     const text = typeof result === 'string' ? result : (result?.text ?? result?.content)
     if (typeof text !== 'string') throw new Error('AI 服务返回了无效结果')
     return { text: text.slice(0, limit) }

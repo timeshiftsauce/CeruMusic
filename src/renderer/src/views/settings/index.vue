@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import PluginPage from '@renderer/components/PluginPage.vue'
+import { activePluginContributions, isPluginPageVisible } from '@renderer/services/pluginState'
+
 import type { DropdownMenuProps, DropdownOption } from 'naive-ui'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import {
@@ -23,6 +26,15 @@ import { searchItems, type SearchItem } from './searchIndex'
 import { settingsCategories, settingsGroups, resolveSettingsCategory, type SettingsCategoryKey } from './categories'
 
 const activeCategory = ref<SettingsCategoryKey>('appearance')
+
+const selectedExtension = ref('')
+const extensionPages = computed(() => activePluginContributions.value.flatMap(({pluginId,descriptor}) =>
+  descriptor.runtime === 3 ? descriptor.pages.filter((page: any) => page.mount === 'settings' && isPluginPageVisible(page)).map((page: any) => ({...page,pluginId,key:JSON.stringify([pluginId,page.id]),pluginName:descriptor.name})) : []
+).sort((left,right) => (left.order ?? 0) - (right.order ?? 0) || left.key.localeCompare(right.key)))
+const extension = computed(() => extensionPages.value.find(page => page.key === selectedExtension.value))
+watch(extensionPages, pages => {
+  if (selectedExtension.value && !pages.some(page => page.key === selectedExtension.value)) selectedExtension.value = ''
+})
 const route = useRoute()
 const contentPanelRef = ref<HTMLElement>()
 const scrollPositions: Record<string, number> = {}
@@ -62,6 +74,7 @@ function cancelPendingScroll() {
   highlightedElement = undefined
 }
 const switchCategory = async (categoryKey: string) => {
+  selectedExtension.value = ''
   const key = resolveSettingsCategory(categoryKey)
   if (!key || activeCategory.value === key) return
   cancelPendingScroll()
@@ -144,26 +157,30 @@ onBeforeUnmount(cancelPendingScroll)
               :key="category.key"
               type="button"
               class="nav-item"
-              :class="{ active: activeCategory === category.key }"
-              :aria-current="activeCategory === category.key ? 'page' : undefined"
+              :class="{ active: !extension && activeCategory === category.key }"
+              :aria-current="!extension && activeCategory === category.key ? 'page' : undefined"
               :title="category.description"
               @click="switchCategory(category.key)"
             >
               <component :is="categoryIcons[category.key]" class="nav-icon" aria-hidden="true" />
               <span>{{ category.label }}</span>
-              <span v-if="activeCategory === category.key" class="active-dot" aria-hidden="true"></span>
+              <span v-if="!extension && activeCategory === category.key" class="active-dot" aria-hidden="true"></span>
             </button>
+          </div>
+          <div v-if="extensionPages.length" class="nav-group">
+            <div class="nav-group-label">插件页面</div>
+            <button v-for="page in extensionPages" :key="page.key" type="button" class="nav-item" :class="{active: extension?.key === page.key}" :title="page.pluginName" @click="selectedExtension = page.key">{{ page.title }}</button>
           </div>
         </nav>
       </aside>
       <main class="content-panel" aria-label="设置内容">
         <div class="page-heading">
           <div class="page-heading-copy">
-            <h1>{{ currentCategory.label }}</h1>
-            <p>{{ currentCategory.description }}</p>
+            <h1>{{ extension?.title ?? currentCategory.label }}</h1>
+            <p>{{ extension ? (extension.pluginName === extension.title ? '管理插件账号与功能' : extension.pluginName) : currentCategory.description }}</p>
           </div>
           <n-dropdown
-            v-if="sectionLinks.length > 1 && activeCategory !== 'plugins'"
+            v-if="!extension && sectionLinks.length > 1 && activeCategory !== 'plugins'"
             trigger="click"
             placement="bottom-end"
             :options="sectionDropdownOptions"
@@ -179,7 +196,8 @@ onBeforeUnmount(cancelPendingScroll)
         </div>
         <div ref="contentPanelRef" class="panel-content" :class="{ 'panel-content-contained': activeCategory === 'plugins' }">
           <div class="section-container" :class="{ 'section-container-wide': activeCategory === 'plugins' }">
-            <KeepAlive>
+            <PluginPage v-if="extension" :key="extension.key" :plugin-id="extension.pluginId" :page-id="extension.id" />
+            <KeepAlive v-else>
               <component :is="currentComponent" :key="activeCategory" @switch-category="switchCategory" />
             </KeepAlive>
           </div>

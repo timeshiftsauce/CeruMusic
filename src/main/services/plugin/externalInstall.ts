@@ -1,7 +1,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
-import { readGuestInfo } from '@shiqianjiang/ceru-plugin-core/guests'
+import { readInstalledArtifact, sniffManifestVersion } from './runtimes'
+import { readGuestInfo } from 'ceru-plugin-core-v2/guests'
 import { getPendingDeepLinks } from '../../router/pendingLinks'
 import pluginService from './index'
 
@@ -26,8 +26,9 @@ export async function prepareExternalPlugin(sequence: number) {
     name = basename(new URL(url).pathname)
   }
   const parents = await pluginService.getPluginsList()
-  try {
-    const { manifest } = readPluginArtifact(code).header
+  const runtime = sniffManifestVersion(code)
+  if (runtime === 2 || runtime === 3 || target) {
+    const { manifest } = readInstalledArtifact(code, runtime).header
     const existing = parents.find((p) => p.pluginInfo.id === manifest.id)
     if (target && existing?.pluginId !== target) throw new Error('更新插件 ID 不匹配')
     drafts.set(sequence, { code, name, target, native: true })
@@ -35,15 +36,15 @@ export async function prepareExternalPlugin(sequence: number) {
       name: manifest.name,
       version: manifest.version,
       description: manifest.description || '',
+      componentViews: manifest.manifestVersion === 3 && !!manifest.entry.views?.some(view => view.kind === 'component'),
       update: !!existing,
       formats: [] as { value: string; label: string }[]
     }
-  } catch (error) {
-    if (target) throw error
+  } else {
     const adapters = parents
       .filter((p) => p.enabled)
       .flatMap((p) =>
-        (p.manifest.contributes?.guestAdapters || []).map((a: any) => ({
+        (p.descriptor?.guestAdapters || []).map((a: any) => ({
           value: p.pluginId + ':' + a.id,
           label: (a.title || a.format) + ' · ' + p.pluginInfo.name
         }))
@@ -55,6 +56,7 @@ export async function prepareExternalPlugin(sequence: number) {
       name: info.name,
       version: info.version,
       description: info.description || '',
+      componentViews: false,
       update: false,
       formats: adapters
     }

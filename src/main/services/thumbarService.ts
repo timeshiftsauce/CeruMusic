@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, nativeImage, nativeTheme, NativeImage } from 'electron'
+import { musicCacheService } from './musicCache'
 import path from 'node:path'
 import fs from 'node:fs'
 import { PNG } from 'pngjs'
@@ -197,6 +198,7 @@ class ThumbarService {
   }
   private ipcBound = false
   private overlayCoverHash: string | null = null
+  private coverRevision = 0
 
   init(win: BrowserWindow): void {
     if (process.platform !== 'win32') return
@@ -254,8 +256,8 @@ class ThumbarService {
       this.update()
     })
 
-    ipcMain.on('thumbar:set-cover', (_event, dataUrl: string | null) => {
-      this.applyCover(dataUrl)
+    ipcMain.on('thumbar:set-cover', (event, source: string | null) => {
+      if (event.sender === this.win?.webContents) void this.applyCover(source)
     })
 
     ipcMain.on(
@@ -266,20 +268,25 @@ class ThumbarService {
     )
   }
 
-  private applyCover(dataUrl: string | null): void {
+  private async applyCover(source: string | null): Promise<void> {
     if (!this.win || this.win.isDestroyed()) return
     if (process.platform !== 'win32') return
-    if (!dataUrl) {
+    const revision = ++this.coverRevision
+    if (!source) {
       try {
         this.win.setOverlayIcon(null, '')
       } catch {}
       this.overlayCoverHash = null
       return
     }
-    const hash = String(dataUrl.length) + ':' + dataUrl.slice(-32)
+    const cached = source.startsWith('ceru-cover://')
+    const hash = cached ? source : String(source.length) + ':' + source.slice(-32)
     if (hash === this.overlayCoverHash) return
     try {
-      const img = nativeImage.createFromDataURL(dataUrl)
+      const file = cached ? await musicCacheService.resolveCoverUrl(source) : null
+      if (revision !== this.coverRevision || !this.win || this.win.isDestroyed()) return
+      if (cached && !file) return
+      const img = file ? nativeImage.createFromPath(file.path) : nativeImage.createFromDataURL(source)
       if (img.isEmpty()) return
       const small = img.resize({
         width: COVER_OVERLAY_SIZE,

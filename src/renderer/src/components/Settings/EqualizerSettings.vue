@@ -110,7 +110,8 @@ import { storeToRefs } from 'pinia'
 import { useEqualizerStore } from '@renderer/store/Equalizer'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import AudioManager from '@renderer/utils/audio/audioManager'
-import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { DeleteIcon, SaveIcon } from 'tdesign-icons-vue-next'
 
 // 内置预设列表 - 这些预设不能被删除

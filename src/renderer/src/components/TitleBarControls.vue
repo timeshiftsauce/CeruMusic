@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 import NotificationBell from './notifications/NotificationBell.vue'
+import { runWindowClose } from '@renderer/plugin/operations'
+import { closeConfiguredWindow } from '@renderer/plugin/windowClose'
 
 const props = withDefaults(defineProps<Props>(), {
   controlStyle: false,
@@ -45,24 +48,18 @@ const controlsClass = computed(() => {
 
 // 窗口控制方法
 const handleMinimize = (): void => {
-  window.api?.minimize()
+  desktopBridge.api?.minimize()
 }
 
 const handleMaximize = (): void => {
-  window.api?.maximize()
+  desktopBridge.api?.maximize()
 }
 
 const handleClose = (): void => {
-  if (!settings.value.hasConfiguredCloseBehavior) {
-    showCloseDialog.value = true
-    return
-  }
-
-  if (settings.value.closeToTray) {
-    handleMiniMode()
-  } else {
-    window.api?.close()
-  }
+  void runWindowClose(closeWindow,'titlebar').catch(error=>console.warn('窗口关闭失败',error))
+}
+const closeWindow = (): void => {
+  closeConfiguredWindow(() => { showCloseDialog.value = true })
 }
 
 const showCloseDialog = ref(false)
@@ -79,18 +76,18 @@ const handleCloseChoice = (toTray: boolean): void => {
   if (toTray) {
     handleMiniMode()
   } else {
-    window.api?.close()
+    desktopBridge.api?.close()
   }
 }
 
 const handleMiniMode = (): void => {
   // 直接最小化到系统托盘
   console.log('TitleBarControls: 点击了最小化到系统托盘按钮')
-  if (window.api) {
-    console.log('TitleBarControls: window.api 存在，调用 setMiniMode(true)')
-    window.api.setMiniMode(true)
+  if (desktopBridge.api) {
+    console.log('TitleBarControls: desktopBridge.api 存在，调用 setMiniMode(true)')
+    desktopBridge.api.setMiniMode(true)
   } else {
-    console.error('TitleBarControls: window.api 不存在！')
+    console.error('TitleBarControls: desktopBridge.api 不存在！')
   }
   console.log('最小化到系统托盘')
 }
@@ -122,7 +119,7 @@ onMounted(() => {
   window.addEventListener('ceru-show-close-dialog', handler)
   unsubShowDialog = () => window.removeEventListener('ceru-show-close-dialog', handler)
 
-  unsubFullscreen = window.api?.onFullscreenChanged?.((value: boolean) => {
+  unsubFullscreen = desktopBridge.api?.onFullscreenChanged?.((value: boolean) => {
     isAppFullscreen.value = value
   })
 })

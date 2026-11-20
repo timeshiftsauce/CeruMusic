@@ -10,6 +10,7 @@
   -->
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
@@ -22,7 +23,7 @@ import {
 } from 'naive-ui'
 import { useSettingsStore } from '@renderer/store/Settings'
 import songListAPI from '@renderer/api/songList'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   importPlaylistFromPath,
   validateImportedPlaylist
@@ -310,11 +311,7 @@ const cancelImportPrompt = () => {
 
 const isDesktopLyricContext = () => {
   const r = router.currentRoute.value
-  if (location.hash && location.hash.includes('desktop-lyric')) return true
-  if (location.pathname && location.pathname.includes('desktop-lyric')) return true
-  if (r?.name === 'desktop-lyric') return true
-  if (r?.path && r.path.includes('desktop-lyric')) return true
-  return false
+  return /^#\/?desktop-lyric\/?(?:\?|$)/.test(location.hash) || r?.name === 'desktop-lyric'
 }
 
 onMounted(() => {
@@ -366,7 +363,7 @@ onMounted(() => {
   )
 
   // 监听 Logto 回调
-  window.electron?.ipcRenderer?.on?.('logto-callback', (_: any, url: string) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('logto-callback', (_: any, url: string) => {
     authStore.handleCallback(url)
   })
 
@@ -378,26 +375,26 @@ onMounted(() => {
     console.log('forward', name, val)
     window.dispatchEvent(new CustomEvent('global-music-control', { detail: { name, val } }))
   }
-  window.electron?.ipcRenderer?.on?.('play', () => forward('play'))
-  window.electron?.ipcRenderer?.on?.('pause', () => forward('pause'))
-  window.electron?.ipcRenderer?.on?.('toggle', () => forward('toggle'))
-  window.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
-  window.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
-  window.electron?.ipcRenderer?.on?.('toggleLike', () => forward('toggleLike'))
-  window.electron?.ipcRenderer?.on?.('volumeDelta', (_: any, val: number) =>
+  desktopBridge.electron?.ipcRenderer?.on?.('play', () => forward('play'))
+  desktopBridge.electron?.ipcRenderer?.on?.('pause', () => forward('pause'))
+  desktopBridge.electron?.ipcRenderer?.on?.('toggle', () => forward('toggle'))
+  desktopBridge.electron?.ipcRenderer?.on?.('playPrev', () => forward('playPrev'))
+  desktopBridge.electron?.ipcRenderer?.on?.('playNext', () => forward('playNext'))
+  desktopBridge.electron?.ipcRenderer?.on?.('toggleLike', () => forward('toggleLike'))
+  desktopBridge.electron?.ipcRenderer?.on?.('volumeDelta', (_: any, val: number) =>
     forward('volumeDelta', val)
   )
-  window.electron?.ipcRenderer?.on?.('seekDelta', (_: any, val: number) =>
+  desktopBridge.electron?.ipcRenderer?.on?.('seekDelta', (_: any, val: number) =>
     forward('seekDelta', val)
   )
-  window.electron?.ipcRenderer?.on?.('setPlayMode', (_: any, val: string) =>
+  desktopBridge.electron?.ipcRenderer?.on?.('setPlayMode', (_: any, val: string) =>
     forward('setPlayMode', val)
   )
 
   // Audio Output Selector Shortcut
   // Remove existing listeners to prevent duplicates/HMR issues
-  window.electron?.ipcRenderer?.removeAllListeners?.('hotkeys:toggle-audio-output-selector')
-  window.electron?.ipcRenderer?.on?.('hotkeys:toggle-audio-output-selector', () => {
+  desktopBridge.electron?.ipcRenderer?.removeAllListeners?.('hotkeys:toggle-audio-output-selector')
+  desktopBridge.electron?.ipcRenderer?.on?.('hotkeys:toggle-audio-output-selector', () => {
     // If device B is set and different from A, we prioritize toggling directly
     // This allows "Quick Comparison" as requested.
     if (
@@ -413,7 +410,7 @@ onMounted(() => {
   })
 
   // 全局监听打开歌单文件
-  window.electron?.ipcRenderer?.on?.('open-playlist-file', (_: any, filePath: string) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('open-playlist-file', (_: any, filePath: string) => {
     const fileName = filePath.replace(/^.*[\\/]/, '')
     if (processedPaths.has(filePath)) return
     processedPaths.add(filePath)
@@ -425,7 +422,7 @@ onMounted(() => {
     confirmImportPromptPath(filePath, fileName, silent)
   })
   // 首次挂载时主动拉取待处理文件队列，防止事件在挂载前发送导致丢失
-  window.electron?.ipcRenderer
+  desktopBridge.electron?.ipcRenderer
     ?.invoke?.('get-pending-open-playlist-files')
     .then((paths: string[]) => {
       paths?.forEach((p) => {

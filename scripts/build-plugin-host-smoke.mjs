@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url)
 const artifact = process.argv[2]
 if (!artifact) throw new Error('Usage: node scripts/build-plugin-host-smoke.mjs <plugin.js>')
 await build({
-  entryPoints: ['src/main/services/plugin/manager/PluginHost.ts'],
+  entryPoints: ['src/main/services/plugin/v2/V2PluginHost.ts'],
   outfile: '.plugin-host-smoke.mjs',
   bundle: true,
   platform: 'node',

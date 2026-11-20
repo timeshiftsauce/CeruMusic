@@ -39,14 +39,15 @@ export const useAuthStore=()=>state
   await writeFile(
     path.join(workspace, 'contributions.js'),
     `import { ref } from 'vue'
-export const activePluginContributions=ref([{pluginId:'fixture-installation',manifest:{contributes:{accountItems:[{id:'account',title:'网易云音乐',view:'account',action:'account.summary',logoutAction:'logout'}]}}}])
+export const activePluginContributions=ref([{pluginId:'fixture-installation',descriptor:{accounts:[{id:'account',title:'网易云音乐',legacy:{view:'account',action:'account.summary',logoutAction:'logout'}}]}}])
 export const pluginImportRequest=ref(null),libraryRevision=ref(0),playlistSections=ref([])
-export const markPluginUIReady=()=>{},refreshPluginContributions=async()=>{}
+export const providerIconUrls=ref({}),pluginRestorationComplete=ref(true),pluginContributions=activePluginContributions,contributionsLoaded=ref(true),contributionsRevision=ref(0),homeSections=ref([]),providerImplementations=ref([]),startupHomeAvailable=ref(false),playlistImporters=ref([]),playlistImportMenus=ref([])
+export const markPluginUIReady=()=>{},refreshPluginContributions=async()=>{},selectCapabilityImplementation=()=>{},selectProviderImplementation=()=>{},selectUIImplementation=()=>{}
 `
   )
   await writeFile(
     path.join(workspace, 'unused-services.js'),
-    'export default {};export const cloudSongListAPI={};export const mapSongsToCloud=value=>value'
+    'export default {};export const getPluginDevices=()=>[],getPluginPublicSettings=()=>({}),getPluginRoomState=()=>({}),recordPluginHistory=()=>{},toPluginDownloadTask=()=>({}),handlePluginHostService=async()=>null;export const cloudSongListAPI={};export const mapSongsToCloud=value=>value,mapCloudSongToLocal=value=>value'
   )
   await writeFile(
     path.join(workspace, 'playback.js'),
@@ -56,20 +57,22 @@ export const markPluginUIReady=()=>{},refreshPluginContributions=async()=>{}
       if(state.holdPlayback)await new Promise(resolve=>{state.releasePlayback=resolve})
       if(state.failPlayback)throw Error('测试播放失败')
     }
-    export const handlePlay=async()=>{}`
+    export const handlePlay=async()=>{},playMode={value:0}`
   )
   await writeFile(
     path.join(workspace, 'playback-stores.js'),
     `import { reactive } from 'vue'
     const store=reactive({initialization:true,list:[]})
     export const LocalUserDetailStore=()=>store
-    export const useListenTogetherStore=()=>({isInRoom:false})
-    export const useGlobalPlayStatusStore=()=>({player:{}})`
+    export const useListenTogetherStore=()=>({isInRoom:false,members:[]})
+    export const ControlAudioStore=()=>({Audio:{}}),useSettingsStore=()=>({settings:{}}),useAudioOutputStore=()=>({devices:[]}),useDlnaStore=()=>({devices:[]})
+    export const useGlobalPlayStatusStore=()=>({player:{lyrics:{}}})`
   )
   await writeFile(
     path.join(workspace, 'main.js'),
     `
 import { createApp, defineComponent, h, ref } from 'vue'
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TDesign from 'tdesign-vue-next'
@@ -110,7 +113,8 @@ state.updatePlugin=()=>{for(const listener of changeListeners)listener({type:'up
 state.emitUI=(method,data)=>new Promise((resolve,reject)=>{const id='ui-'+(++serial);responses.set(id,{resolve,reject});for(const listener of uiListeners)listener({id,pluginId:'fixture-installation',method,data})})
 state.completeLogin=()=>{state.summary=loggedIn();for(const listener of accountListeners)listener({pluginId:'fixture-installation'})}
 state.openNativeDrawer=()=>state.emitUI('ui.drawer.open',session('native-drawer'))
-window.api={plugins:{
+desktopBridge.api={download:Object.fromEntries(['onTaskAdded','onTaskProgress','onTaskStatusChanged','onTaskCompleted','onTaskError','onTasksReset'].map(name=>[name,()=>()=>{}])),plugins:{
+  async publishHostEvent(){},
   async mountSurface(pluginId,surfaceId){state.calls.push({method:'mountSurface',pluginId,surfaceId});return session(surfaceId)},
   async surfaceReady(pluginId,surfaceId,sessionId){state.calls.push({method:'surfaceReady',pluginId,surfaceId,sessionId});return {}},
   async surfaceAction(pluginId,surfaceId,sessionId,action,input){
@@ -175,11 +179,11 @@ state.unmount=()=>app.unmount()
           replacement: path.join(workspace, 'playback.js')
         },
         {
-          find: /^@renderer\/store\/(LocalUserDetail|ListenTogether|GlobalPlayStatus)$/,
+          find: /^@renderer\/store\/(LocalUserDetail|ListenTogether|GlobalPlayStatus|ControlAudio|Settings|audioOutput|dlna)$/,
           replacement: path.join(workspace, 'playback-stores.js')
         },
         {
-          find: /^@renderer\/(api\/(songList|cloudSongList)|utils\/playlist\/cloudList)$/,
+          find: /^@renderer\/(services\/pluginHostServices|api\/(songList|cloudSongList)|utils\/playlist\/cloudList)$/,
           replacement: path.join(workspace, 'unused-services.js')
         },
         {
@@ -206,7 +210,7 @@ state.unmount=()=>app.unmount()
     if (message.type() === 'error') issues.push(message.text())
   })
   await page.goto('http://127.0.0.1:' + address.port, { waitUntil: 'networkidle' })
-  await page.locator('.playlist-card').first().waitFor({ state: 'visible', timeout: 45000 })
+  await page.locator('.playlist-card').first().waitFor({ state: 'visible', timeout: 45000 }).catch(error => { throw new Error([error.message, ...issues].join('\n')) })
   assert.equal(await page.locator('.playlist-card').count(), 6)
   assert.equal(
     await page.locator('iframe,webview').count(),

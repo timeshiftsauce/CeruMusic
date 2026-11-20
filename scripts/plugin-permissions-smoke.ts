@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import PluginHost from '../src/main/services/plugin/manager/PluginHost'
+import PluginHost from '../src/main/services/plugin/v2/V2PluginHost'
 import pluginService from '../src/main/services/plugin'
 import { savePluginState } from '../src/main/services/plugin/pluginConfig'
 import {
@@ -33,7 +33,10 @@ const manifest = {
 const artifact = `exports.manifest = ${JSON.stringify(manifest)};
 exports.activate = async function(ctx) {
   const http = ctx.http.create({permissionKey: 'network', requestPermission: true});
-  ctx.actions.register('request', async (_, operation) => http.get('https://example.test/data', {operation}));
+  ctx.actions.register('request', async (input, operation) => {
+    if (input?.retry) await ctx.permissions.request({ key: 'network' });
+    return http.get('https://example.test/data', {operation});
+  });
 };`
 async function start(id: string) {
   const host = new PluginHost(artifact, log)
@@ -107,9 +110,9 @@ try {
   const denied = await start('denied-test')
   await main.webContents.executeJavaScript('window.answer = false')
   const before = (globalThis as any).__permissionNetworkCalls
-  await assert.rejects(denied.invokeV2Action('request'), /未授权/)
+  await assert.rejects(denied.invokeV2Action('request'), /未授权|Network permission network: denied/)
   assert.equal((globalThis as any).__permissionNetworkCalls, before, 'denial must prevent HTTP')
-  await assert.rejects(denied.invokeV2Action('request'), /未授权/)
+  await assert.rejects(denied.invokeV2Action('request'), /未授权|Network permission network: denied/)
   assert.equal(
     await main.webContents.executeJavaScript('window.requests.length'),
     2,
@@ -118,8 +121,10 @@ try {
   await denied.destroy()
   const retry = await start('denied-test')
   await main.webContents.executeJavaScript('window.answer = true')
+  await assert.rejects(retry.invokeV2Action('request'), /Network permission network: denied/)
+  assert.equal((globalThis as any).__permissionNetworkCalls, before)
   assert.deepEqual(
-    await retry.invokeV2Action('request'),
+    await retry.invokeV2Action('request', { retry: true }),
     { ok: true },
     'explicit retry after restart can ask again'
   )
@@ -127,7 +132,7 @@ try {
   const cancelled = await start('cancel-test')
   await main.webContents.executeJavaScript('window.answer = null')
   const request = cancelled.invokeV2Action('request')
-  const rejected = assert.rejects(request, /停止|未授权/)
+  const rejected = assert.rejects(request, /停止|未授权|Network permission network: denied/)
   const deadline = Date.now() + 3000
   while ((await main.webContents.executeJavaScript('window.requests.length')) < 4) {
     assert.ok(Date.now() < deadline, 'permission dialog delivery timed out')

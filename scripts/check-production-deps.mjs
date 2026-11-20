@@ -1,3 +1,4 @@
+import { verifyRuntimePackages } from './check-plugin-runtime-deps.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -73,6 +74,16 @@ if (rendererOnly.length > 0) {
   )
   for (const name of rendererOnly) console.error(`  - ${name}`)
   process.exit(1)
+}
+
+verifyRuntimePackages(root)
+await Promise.all([import('@shiqianjiang/ceru-plugin-core'), import('ceru-plugin-core-v2/node'), import('ceru-plugin-issuer-v2')])
+if (process.platform === 'win32') {
+  try {
+    await import('registry-js')
+  } catch (cause) {
+    throw new Error('Windows registry native module is unavailable. Run yarn postinstall before packaging.', { cause })
+  }
 }
 
 console.log(

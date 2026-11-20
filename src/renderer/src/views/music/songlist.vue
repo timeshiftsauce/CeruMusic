@@ -1,4 +1,7 @@
 <script lang="ts" setup>
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { runPlaylistCreate, runPlaylistDelete, runPlaylistExport, runPlaylistImport } from '@renderer/plugin/operations'
+import { capturePlaylistDeletion, type DeleteScope } from '@renderer/services/playlistDeletion'
 import {
   playlistImporters,
   playlistImportMenus,
@@ -7,9 +10,10 @@ import {
 } from '@renderer/services/pluginState'
 import { toAppTrack } from '@common/pluginMusic'
 import PluginPlaylistSections from '@renderer/components/PluginPlaylistSections.vue'
-import { ref, onMounted, computed, toRaw, h, nextTick, watch, type Component } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, toRaw, h, nextTick, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { NIcon, NDropdown } from 'naive-ui'
 import {
   Edit2Icon,
@@ -49,6 +53,7 @@ import {
 import SharePlaylistDialog from '@renderer/components/Share/SharePlaylistDialog.vue'
 import { useAuthStore } from '@renderer/store'
 
+import AccountCollections from '@renderer/components/AccountCollections.vue'
 const settingsStore = useSettingsStore()
 
 // 歌单列表
@@ -262,7 +267,7 @@ const loadPlaylists = async () => {
 
     // 读取“我的喜欢”ID并置顶与标记
     try {
-      const favRes = await (window as any).api?.songList?.getFavoritesId?.()
+      const favRes = await (desktopBridge as any).api?.songList?.getFavoritesId?.()
       favoritesId.value = (favRes && favRes.data) || null
       if (favoritesId.value) {
         const idx = playlists.value.findIndex((p) => p.id === favoritesId.value)
@@ -281,26 +286,31 @@ const loadPlaylists = async () => {
 }
 
 // 创建新歌单
+const creatingPlaylist = ref(false)
+let creationRevision = 0
+watch(showCreatePlaylistDialog,()=>{creationRevision++},{flush:'sync'})
+let pageActive = true
+onBeforeUnmount(()=>{pageActive=false;creationRevision++})
 const createPlaylist = async () => {
+  if (creatingPlaylist.value) return
   if (!newPlaylistForm.value.name.trim()) {
     MessagePlugin.warning('歌单名称不能为空')
     return
   }
 
-  try {
-    const result = await songListAPI.create(
-      newPlaylistForm.value.name,
-      newPlaylistForm.value.description,
-      'local'
-    )
+  const revision=++creationRevision, {name:requested,description}=newPlaylistForm.value
+  creatingPlaylist.value=true
+  const writePlaylist = async (name:string) => {
+    if (revision!==creationRevision || !showCreatePlaylistDialog.value || requested!==newPlaylistForm.value.name || description!==newPlaylistForm.value.description) return
+    const result = await songListAPI.create(name,description,'local')
 
     if (result.success) {
       MessagePlugin.success('歌单创建成功')
       showCreatePlaylistDialog.value = false
       const created = {
         id: result.data!.id,
-        name: newPlaylistForm.value.name,
-        description: newPlaylistForm.value.description,
+        name,
+        description,
         coverImgUrl: 'default-cover',
         createTime: new Date().toISOString(),
         updateTime: new Date().toISOString(),
@@ -311,13 +321,23 @@ const createPlaylist = async () => {
       newPlaylistForm.value = { name: '我的歌单', description: '这是我创建的歌单' }
       // 触发歌单更新事件
       window.dispatchEvent(new Event('playlist-updated'))
+      if (name!==requested) return async()=>{
+        const current=await songListAPI.getById(created.id)
+        if (!current.success || current.data?.name!==name) throw Error('歌单已更改，无法撤销这次改名')
+        const restored=await songListAPI.edit(created.id,{name:requested})
+        if (!restored.success) throw Error(restored.error || '恢复歌单名称失败')
+        updatePlaylistState(created.id,{name:requested})
+        window.dispatchEvent(new Event('playlist-updated'))
+      }
     } else {
       MessagePlugin.error(result.error || '创建歌单失败')
     }
-  } catch (error) {
+    return undefined
+  }
+  try {await runPlaylistCreate(requested,writePlaylist)} catch (error) {
     console.error('创建歌单失败:', error)
     MessagePlugin.error('创建歌单失败')
-  }
+  } finally {creatingPlaylist.value=false}
 }
 
 // 编辑歌单
@@ -404,51 +424,45 @@ const cancelPlaylistEdit = () => {
 }
 
 // 删除歌单
-const deletePlaylist = async (playlist: SongList) => {
-  const confirmDialog = DialogPlugin.confirm({
-    header: '确认删除',
-    body: `确定要删除歌单"${playlist.name}"吗？此操作不可撤销。`,
-    confirmBtn: '删除',
-    cancelBtn: '取消',
-    theme: 'danger',
-    onConfirm: async () => {
-      try {
-        let success = false
-        let errorMsg = ''
-
-        if (playlist.meta?.isCloudOnly) {
-          try {
-            await cloudSongListAPI.deleteUserSongList(playlist.id)
-            success = true
-          } catch (e) {
-            success = false
-            errorMsg = (e as Error).message
-          }
-        } else {
-          const result = await songListAPI.delete(playlist.id)
-          success = result.success
-          errorMsg = result.error || '删除歌单失败'
-        }
-
-        if (success) {
-          MessagePlugin.success('歌单删除成功')
-          removePlaylistState(playlist.id)
-          // 触发歌单更新事件
-          window.dispatchEvent(new Event('playlist-updated'))
-        } else {
-          MessagePlugin.error(errorMsg || '删除歌单失败')
-        }
-      } catch (error) {
-        console.error('删除歌单失败:', error)
-        MessagePlugin.error('删除歌单失败')
+const confirmPlaylistDelete = (playlist: SongList, scope: DeleteScope) => {
+  const { id, name } = playlist
+  const cloudOnly = !!playlist.meta?.isCloudOnly
+  const cloudId = cloudOnly ? id : playlist.meta?.cloudId
+  const target = capturePlaylistDeletion(playlist,scope)
+  const current = () => pageActive ? playlists.value.find(item => item.id === id) : undefined
+  const remove = async () => {
+    await target.apply(current,async localId=>{
+      const result = await songListAPI.delete(localId)
+      if (!result.success) throw Error(result.error || '删除本地歌单失败')
+    },remoteId=>cloudSongListAPI.deleteUserSongList(remoteId))
+    if (scope === 'cloud' && !cloudOnly) await loadPlaylists()
+    else removePlaylistState(id)
+    MessagePlugin.success('歌单删除成功')
+    window.dispatchEvent(new Event('playlist-updated'))
+  }
+  const open = (bypass: boolean) => {
+    if (!target.matches(current())) throw Error('歌单已更改，请重新确认删除')
+    const hint = scope === 'both' ? '本地和云端副本都将删除。' : scope === 'cloud' && !cloudOnly ? '本地副本将保留。' : scope === 'local' && cloudId ? '云端副本将保留。' : ''
+    let submitted = false
+    const dialog = DialogPlugin.confirm({
+      header: scope === 'cloud' ? '删除云端歌单' : '确认删除',
+      body: `确定要删除歌单“${name}”吗？${hint}此操作不可撤销。`,
+      confirmBtn: '删除', cancelBtn: '取消', theme: 'danger',
+      onCancel: () => dialog.destroy(),
+      onConfirm: async () => {
+        if (submitted) return
+        submitted = true
+        dialog.destroy()
+        try {
+          if (bypass) await remove()
+          else await runPlaylistDelete({id,name},scope,remove,async () => { open(true) })
+        } catch (error) { MessagePlugin.error(error instanceof Error ? error.message : '删除歌单失败') }
       }
-      confirmDialog.destroy()
-    },
-    onCancel: () => {
-      confirmDialog.destroy()
-    }
-  })
+    })
+  }
+  open(false)
 }
+const deletePlaylist = (playlist: SongList) => confirmPlaylistDelete(playlist,playlist.meta?.isCloudOnly ? 'cloud' : 'local')
 
 // 初始化路由
 const router = useRouter()
@@ -702,7 +716,7 @@ const openPluginImport = async (entry: { pluginId: string; id: string }) => {
   // （菜单 action 直接开抽屉）。先关掉「选择导入方式」，否则会和后续界面叠在一起。
   showImportDialog.value = false
   try {
-    await window.api.plugins.openPlaylistImportMenu(entry.pluginId, entry.id)
+    await desktopBridge.api.plugins.openPlaylistImportMenu(entry.pluginId, entry.id)
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '打开导入方式失败')
   } finally {
@@ -735,6 +749,19 @@ const handleNetworkPlaylistImport = async (input: string) => {
     MessagePlugin.warning('请先使用提供歌单导入功能的插件')
     return
   }
+  const originalImporterId = importer.publicId
+  try {
+    await runPlaylistImport({value:input,importerId:originalImporterId}, async request => {
+      const selected = playlistImporters.value.find(item => item.publicId === (request.importerId ?? originalImporterId))
+      if (!selected) throw new Error('所选歌单导入器已停用或不存在，请重新选择')
+      await executeNetworkPlaylistImport(request.value, selected)
+    })
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const executeNetworkPlaylistImport = async (input: string, importer: (typeof availableImporters.value)[number]) => {
   const loading = await MessagePlugin.loading('正在获取歌单信息...', 0)
   let createdId: string | undefined
   try {
@@ -745,7 +772,7 @@ const handleNetworkPlaylistImport = async (input: string) => {
     let description = ''
     let artwork = ''
     do {
-      const result = await window.api.plugins.importerTracks(importer.pluginId, importer.id, {
+      const result = await desktopBridge.api.plugins.importerTracks(importer.pluginId, importer.id, {
         value: input,
         cursor,
         limit: 100
@@ -851,11 +878,13 @@ const downloadPlaylist = async (playlist: SongList) => {
       return
     }
 
-    await window.api.music.requestSdk('downloadBatchSongs', {
+    const results=await desktopBridge.api.music.requestSdk('downloadBatchSongs', {
       source: songs[0]?.source || 'wy',
       tasks
     })
-    MessagePlugin.success(`已添加 ${tasks.length} 首歌曲到下载队列`)
+    const count=results.filter((row:any)=>row.success).length
+    if(count)MessagePlugin.success(`已添加 ${count} 首歌曲到下载队列`)
+    else if(results.length)MessagePlugin.error(results[0]?.error||'批量添加下载任务失败')
   } catch (error) {
     console.error('Download playlist failed:', error)
     MessagePlugin.error('下载失败')
@@ -1047,78 +1076,9 @@ const handleDownloadCloudPlaylist = async (pl: any) => {
   }
 }
 
-const handleDeleteCloudPlaylist = async (pl: SongList) => {
-  const confirm = DialogPlugin.confirm({
-    header: '删除云端歌单',
-    body: `确定要删除云端歌单 "${pl.name}" 吗？此操作不可恢复。`,
-    onConfirm: async () => {
-      confirm.destroy()
-      try {
-        await cloudSongListAPI.deleteUserSongList(pl.id)
-        MessagePlugin.success('删除成功')
-        removePlaylistState(pl.id)
-      } catch (e: any) {
-        MessagePlugin.error('删除失败: ' + e.message)
-      }
-    },
-    onCancel: () => confirm.destroy()
-  })
-}
-
-const handleDeletePlaylist = async (pl: SongList) => {
-  const isSynced = pl.meta?.isSynced && pl.meta?.cloudId
-
-  const dialog = DialogPlugin.confirm({
-    header: '删除歌单',
-    body: `确定要删除歌单 "${pl.name}" 吗？` + (isSynced ? ' (云端副本将保留)' : ''),
-    onConfirm: async () => {
-      dialog.destroy()
-      try {
-        const result = await songListAPI.delete(pl.id)
-        if (result.success) {
-          MessagePlugin.success('歌单删除成功')
-          removePlaylistState(pl.id)
-        } else {
-          MessagePlugin.error(result.error || '删除歌单失败')
-        }
-      } catch (error) {
-        console.error('删除歌单失败:', error)
-        MessagePlugin.error('删除歌单失败')
-      }
-    },
-    onCancel: () => dialog.destroy()
-  })
-}
-
-const handleDeleteBoth = async (pl: SongList) => {
-  const dialog = DialogPlugin.confirm({
-    header: '删除歌单',
-    body: `确定要删除歌单 "${pl.name}" (本地和云端) 吗？`,
-    onConfirm: async () => {
-      dialog.destroy()
-      try {
-        // Delete cloud
-        if (pl.meta?.cloudId) {
-          await cloudSongListAPI
-            .deleteUserSongList(pl.meta.cloudId)
-            .catch((e) => console.error('Cloud delete failed', e))
-        }
-
-        // Delete local
-        const result = await songListAPI.delete(pl.id)
-        if (result.success) {
-          MessagePlugin.success('删除成功')
-          await loadPlaylists()
-        } else {
-          MessagePlugin.error(result.error || '删除本地歌单失败')
-        }
-      } catch (error) {
-        MessagePlugin.error('删除失败')
-      }
-    },
-    onCancel: () => dialog.destroy()
-  })
-}
+const handleDeleteCloudPlaylist = (playlist: SongList) => confirmPlaylistDelete(playlist,'cloud')
+const handleDeletePlaylist = (playlist: SongList) => confirmPlaylistDelete(playlist,'local')
+const handleDeleteBoth = (playlist: SongList) => confirmPlaylistDelete(playlist,'both')
 
 // 右键菜单项配置 (Naive UI Dropdown 格式)
 const contextMenuOptions = computed(() => {
@@ -1248,24 +1208,18 @@ const handleContextMenuSelect = async (key: string) => {
 
 // 导出歌单处理函数
 const handleExportPlaylist = async (pl: SongList) => {
+  const {id,name} = pl
   try {
-    const res = await songListAPI.getSongs(pl.id)
-    if (!res.success) {
-      MessagePlugin.error(res.error || '获取歌单歌曲失败')
-      return
-    }
-    const songs = res.data || []
-    if (songs.length === 0) {
-      MessagePlugin.warning('歌单中没有可导出的歌曲')
-      return
-    }
-    const filtered = songs.filter((s) => s.source !== 'local')
-    const removed = songs.length - filtered.length
-    const safeName = pl.name.replace(/[\\/:*?"<>|]+/g, '_')
-    const fileName = `CeruMusic-${safeName}.cmpl`
-    const saved = await exportPlaylistToFile(filtered, fileName)
-    if (removed > 0) MessagePlugin.info(`已筛除 ${removed} 首本地歌曲`)
-    MessagePlugin.success(`歌单已导出为 ${saved}`)
+    await runPlaylistExport({id,name}, async format => {
+      const res = await songListAPI.getSongs(id)
+      if (!res.success) throw Error(res.error || '获取歌单歌曲失败')
+      const songs = res.data ?? [], filtered = songs.filter(song => song.source !== 'local')
+      if (!filtered.length) { MessagePlugin.warning('歌单中没有可导出的歌曲'); return }
+      const safeName = name.replace(/[\\/:*?"<>|]+/g, '_')
+      const saved = await exportPlaylistToFile(filtered, `CeruMusic-${safeName}.${format}`, format)
+      if (songs.length > filtered.length) MessagePlugin.info(`已筛除 ${songs.length - filtered.length} 首本地歌曲`)
+      MessagePlugin.success(`歌单已导出为 ${saved}`)
+    })
   } catch (e) {
     MessagePlugin.error(`导出失败: ${(e as Error).message}`)
   }
@@ -1348,6 +1302,7 @@ onDeactivated(() => {
           <h2>歌单</h2>
         </div>
         <div class="header-actions">
+          <PluginSlot name="playlist.header.actions" />
           <!-- <t-button theme="default" @click="openMusicFolder">
             <i class="iconfont icon-shouye"></i>
             打开文件夹
@@ -1528,13 +1483,14 @@ onDeactivated(() => {
         </div>
       </div>
       <PluginPlaylistSections :ready="!loading" />
+      <AccountCollections capability="playlists" />
     </div>
 
     <!-- 创建歌单对话框 -->
     <t-dialog
       v-model:visible="showCreatePlaylistDialog"
       :cancel-btn="{ content: '取消' }"
-      :confirm-btn="{ content: '创建', theme: 'primary' }"
+      :confirm-btn="{ content: '创建', theme: 'primary', loading: creatingPlaylist }"
       header="创建新歌单"
       placement="center"
       width="500px"
@@ -1545,6 +1501,7 @@ onDeactivated(() => {
           <t-form-item label="歌单名称" name="name" required>
             <t-input
               v-model="newPlaylistForm.name"
+              :maxlength="512"
               clearable
               placeholder="请输入歌单名称"
               @keyup.enter="createPlaylist"

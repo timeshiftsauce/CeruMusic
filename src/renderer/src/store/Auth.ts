@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import LogtoClient, { UserInfoResponse } from '@logto/browser'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { defaultRequest, Request } from '@renderer/utils/request'
 import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import { CERU_API_RESOURCE } from '@common/api/resources'

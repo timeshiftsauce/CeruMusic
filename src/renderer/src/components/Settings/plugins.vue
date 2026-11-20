@@ -12,11 +12,17 @@
               {{ enabledPluginCount }} 个运行中
             </p>
           </div>
-          <t-button theme="primary" @click="openInstallDialog">
-            <template #icon><t-icon name="add" /></template> 添加插件
-          </t-button>
+          <div class="manager-actions">
+            <t-button theme="default" variant="outline" aria-haspopup="dialog" @click="showManagerSettings = true">
+              <template #icon><t-icon name="setting" /></template> 管理设置
+            </t-button>
+            <t-button theme="primary" @click="openInstallDialog">
+              <template #icon><t-icon name="add" /></template> 添加插件
+            </t-button>
+          </div>
         </div>
 
+        <PluginManagerSettings v-if="showManagerSettings" @close="showManagerSettings = false" />
         <div class="plugin-toolbar">
           <t-input
             v-model="pluginSearch"
@@ -55,6 +61,9 @@
                 <div v-if="guestAdapters.length" class="guest-format-picker">
                   <label>插件格式</label>
                   <t-select v-model="importFormat" :options="importFormats" />
+                  <p v-if="importFormat === 'ceru'" class="hint-text">
+                    支持 v2 / v3 插件，自动识别运行环境。
+                  </p>
                 </div>
                 <t-radio-group
                   v-model="importMethod"
@@ -129,12 +138,12 @@
             class="plugin-mark"
             :class="{
               active: plugin.enabled,
-              'is-adapter': plugin.manifest?.contributes?.guestAdapters?.length
+              'is-adapter': plugin.descriptor?.guestAdapters?.length
             }"
             aria-hidden="true"
           >
             <svg
-              v-if="!plugin.manifest?.contributes?.guestAdapters?.length"
+              v-if="!plugin.descriptor?.guestAdapters?.length"
               class="plugin-record"
               viewBox="0 0 80 80"
               fill="none"
@@ -171,6 +180,10 @@
                 "
                 >{{ plugin.formatBadge?.label || '澜音' }}</span
               >
+              <t-tag v-if="!plugin.guest" size="small" variant="outline" title="插件运行环境">
+                {{ plugin.runtime === 2 ? 'v2' : plugin.runtime === 3 ? 'v3' : '未知环境' }}
+              </t-tag>
+              <t-tag v-if="pausedSlotPlugins.has(plugin.pluginId)" theme="warning" size="small" title="连续五次组件挂载超过 50 毫秒；独立页面仍可使用">槽位已暂停</t-tag>
               <span class="version">{{ plugin.pluginInfo.version }}</span>
             </div>
             <p
@@ -187,7 +200,16 @@
                   variant="light"
                   :theme="plugin.loadError ? 'danger' : plugin.enabled ? 'success' : 'default'"
                 >
-                  {{ plugin.loadError ? '加载异常' : plugin.enabled ? '运行中' : '未使用' }}
+                  {{
+                    plugin.status === 'broken'
+                      ? '无法加载'
+                      : plugin.status === 'blocked' ? '依赖未就绪'
+                      : plugin.loadError
+                        ? '加载异常'
+                        : plugin.enabled
+                          ? '运行中'
+                          : '未使用'
+                  }}
                 </t-tag>
                 <span class="author">{{ plugin.pluginInfo.author || '未署名作者' }}</span>
                 <span v-if="plugin.parentPluginName" class="plugin-dependency"
@@ -210,9 +232,25 @@
             </div>
             <div v-if="plugin.loadError" class="plugin-load-error">
               <t-icon name="error-circle" /> {{ plugin.loadError }}
+              <t-button v-if="plugin.status === 'blocked'" size="small" variant="text" @click="openInstallDialog">去安装依赖</t-button>
             </div>
           </div>
-          <div class="plugin-actions">
+          <div v-if="plugin.status === 'broken'" class="plugin-actions">
+            <t-button
+              theme="primary"
+              :disabled="Boolean(busyPluginId)"
+              @click="repairPlugin(plugin)"
+              >重新安装</t-button
+            >
+            <t-button
+              theme="danger"
+              variant="text"
+              :disabled="Boolean(busyPluginId)"
+              @click="uninstallPlugin(plugin.pluginId, plugin.pluginName)"
+              >删除</t-button
+            >
+          </div>
+          <div v-else class="plugin-actions">
             <t-button
               class="plugin-use-button"
               :theme="plugin.enabled ? 'default' : 'primary'"
@@ -249,11 +287,13 @@
             >
               <template #icon><t-icon name="download" /></template> 导入歌单
             </t-button>
+            <t-tag v-if="!plugin.guest && plugin.descriptor?.trusted" theme="danger" variant="light">完全信任</t-tag>
             <t-dropdown trigger="click">
               <t-button theme="default" variant="text" shape="square" aria-label="更多插件操作">
                 <template #icon><t-icon name="ellipsis" /></template>
               </t-button>
               <t-dropdown-menu>
+                <t-dropdown-item v-if="!plugin.guest && plugin.descriptor?.trusted" @click="openTrustedDetails(plugin)">完全信任详情</t-dropdown-item>
                 <t-dropdown-item
                   @click="
                     viewPluginLogs(plugin.parentPluginId || plugin.pluginId, plugin.pluginInfo.name)
@@ -262,7 +302,7 @@
                 >
                 <t-dropdown-item
                   v-for="page in plugin.enabled
-                    ? plugin.manifest?.contributes?.settingsPages || []
+                    ? plugin.descriptor?.pages.filter((page) => page.mount === 'settings' && isPluginPageVisible(page)) || []
                     : []"
                   :key="page.id"
                   @click="openPluginSettings(plugin.pluginId, page.view)"
@@ -287,6 +327,13 @@
           </div>
         </div>
       </div>
+
+      <t-dialog v-model:visible="trustedVisible" header="⚠ 此插件需要完全信任" width="560px" attach="body" :footer="false" :close-on-overlay-click="false">
+        <PluginTrustedDetails v-if="trustedDetail" :detail="trustedDetail" />
+        <p v-if="trustedDetail">状态：{{ trustedDetail.granted ? '已同意完全信任' : '未授权，仅可使用受限部分（如支持）' }}</p>
+        <t-button v-if="trustedDetail?.granted" theme="danger" :loading="trustedBusy" @click="changeTrusted(false)">撤销完全信任</t-button>
+        <t-button v-else theme="danger" :loading="trustedBusy" :disabled="!trustedDetail?.publisherIdentity" @click="changeTrusted(true)">开启完全信任…</t-button>
+      </t-dialog>
 
       <!-- 插件日志弹窗 -->
       <t-dialog
@@ -481,6 +528,10 @@
             </div>
           </div>
           <t-empty v-else description="该插件没有声明权限" />
+          <PluginHookActivity
+              v-if="permissionsDialogVisible && !permissionsGuestId && permissionsManifestId && permissionItems.some(item => item.name && ['player.intercept','navigation.intercept','account.intercept','search.intercept','library.intercept','window.intercept','lyrics.intercept','downloads.intercept','sharing.intercept','links.intercept','notifications.intercept'].includes(item.name))"
+            :key="permissionsManifestId" :plugin-id="permissionsManifestId"
+          />
         </template>
       </t-dialog>
 
@@ -495,9 +546,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated, onDeactivated, nextTick, toRaw, computed } from 'vue'
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import PluginManagerSettings from './PluginManagerSettings.vue'
+import PluginHookActivity from './PluginHookActivity.vue'
+import { pausedSlotPlugins } from '@renderer/services/pluginSlotPolicy'
+import { ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick, toRaw, computed } from 'vue'
+import PluginTrustedDetails from '../PluginTrustedDetails.vue'
 import { PERMISSION_GROUPS, permissionGroup } from '@shiqianjiang/ceru-plugin-sdk/permissions'
-import { pluginContributions } from '@renderer/services/pluginState'
+import { pluginContributions, isPluginPageVisible } from '@renderer/services/pluginState'
 import { refreshPluginContributions } from '@renderer/services/pluginState'
 import type { GuestInfo } from '@shiqianjiang/ceru-plugin-sdk'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
@@ -528,7 +584,9 @@ interface PluginConfigField {
 }
 
 interface Plugin {
-  manifest?: import('@shiqianjiang/ceru-plugin-sdk').PluginManifest
+  runtime?: 2 | 3 | 'unknown'
+  status?: 'installed' | 'broken' | 'blocked'
+  descriptor?: import('@common/pluginDescriptor').PluginDescriptor
   pluginId: string
   pluginName: string
   pluginInfo: PluginInfo
@@ -551,19 +609,20 @@ interface ApiResult {
 }
 
 const plugins = ref<Plugin[]>(
-  pluginContributions.value.map(({ pluginId, manifest, enabled }) => ({
+  pluginContributions.value.map(({ pluginId, descriptor, enabled }) => ({
     enabled,
     pluginId,
-    pluginName: manifest.name,
+    runtime: descriptor.runtime,
+    pluginName: descriptor.name,
     pluginInfo: {
-      name: manifest.name,
-      version: manifest.version,
-      author: manifest.author || '',
-      description: manifest.description
+      name: descriptor.name,
+      version: descriptor.version,
+      author: descriptor.author || '',
+      description: descriptor.description
     },
-    manifest,
+    descriptor,
     supportedSources: Object.fromEntries(
-      (manifest.contributes?.providers || []).map((provider: any) => [
+      (descriptor.providers || []).map((provider: any) => [
         provider.id,
         { name: provider.name, qualitys: provider.qualities || [] }
       ])
@@ -574,6 +633,19 @@ const loading = ref(!plugins.value.length)
 const listViewport = ref<HTMLElement>()
 let listScrollTop = 0
 let listActive = true
+let inventoryDirty = false
+let inventoryTimer: ReturnType<typeof setTimeout> | undefined
+let stopInventoryChanges: (() => void) | undefined
+function scheduleInventoryRefresh() {
+  inventoryDirty = true
+  if (!listActive || inventoryTimer !== undefined) return
+  inventoryTimer = setTimeout(() => {
+    inventoryTimer = undefined
+    if (!listActive) return
+    inventoryDirty = false
+    void getPlugins()
+  }, 0)
+}
 function rememberListScroll() {
   if (listActive) listScrollTop = listViewport.value?.scrollTop ?? 0
 }
@@ -585,7 +657,10 @@ onActivated(async () => {
   await nextTick()
   if (listViewport.value) listViewport.value.scrollTop = listScrollTop
   listActive = true
+  if (inventoryDirty) scheduleInventoryRefresh()
 })
+const showManagerSettings = ref(false)
+onDeactivated(() => { showManagerSettings.value = false })
 const busyPluginId = ref('')
 const pluginSearch = ref('')
 const pluginFilter = ref<'all' | 'enabled' | 'disabled'>('all')
@@ -651,9 +726,7 @@ const listedPlugins = computed<Plugin[]>(() =>
   ])
 )
 function guestFormatBadge(plugin: Plugin, guest: GuestInfo) {
-  const adapter = plugin.manifest?.contributes?.guestAdapters?.find(
-    (item) => item.id === guest.adapterId
-  )
+  const adapter = plugin.descriptor?.guestAdapters?.find((item) => item.id === guest.adapterId)
   return (
     adapter?.badge ?? {
       label: adapter?.format || '子插件',
@@ -665,8 +738,8 @@ function guestFormatBadge(plugin: Plugin, guest: GuestInfo) {
 const guestAdapters = computed(() =>
   pluginContributions.value
     .filter((item) => item.enabled)
-    .flatMap(({ pluginId, manifest }) =>
-      (manifest.contributes?.guestAdapters || []).map((adapter: any) => ({
+    .flatMap(({ pluginId, descriptor }) =>
+      (descriptor.guestAdapters || []).map((adapter: any) => ({
         pluginId,
         adapterId: adapter.id,
         label: adapter.title || adapter.format,
@@ -675,9 +748,31 @@ const guestAdapters = computed(() =>
     )
 )
 const importFormats = computed(() => [
-  { label: '澜音插件（v2）', value: 'ceru' },
+  { label: '澜音插件', value: 'ceru' },
   ...guestAdapters.value.map((item) => ({ label: item.label, value: item.value }))
 ])
+const trustedVisible = ref(false)
+const trustedDetail = ref<any>(null)
+const trustedOwner = ref('')
+const trustedBusy = ref(false)
+async function openTrustedDetails(plugin: Plugin) {
+  try {
+    trustedOwner.value = plugin.pluginId
+    trustedDetail.value = await desktopBridge.electron.ipcRenderer.invoke('plugin:trusted-detail', plugin.pluginId)
+    trustedVisible.value = true
+  } catch (error: any) { MessagePlugin.error(error.message || '读取完全信任详情失败') }
+}
+async function changeTrusted(allowed: boolean) {
+  trustedBusy.value = true
+  // Close the details overlay while the shared host confirmation is displayed.
+  trustedVisible.value = false
+  try {
+    trustedDetail.value = await desktopBridge.electron.ipcRenderer.invoke('plugin:trusted-set-consent', trustedOwner.value, allowed)
+    await getPlugins()
+  } catch (error: any) { MessagePlugin.error(error.message || '修改完全信任授权失败') }
+  finally { trustedBusy.value = false; trustedVisible.value = true }
+}
+
 const permissionsGuestId = ref<string | null>(null)
 const importMethod = ref<'local' | 'online'>('local')
 const onlineUrl = ref('')
@@ -727,6 +822,7 @@ const configTesting = ref(false)
 const configTestResult = ref<{ success: boolean; message: string } | null>(null)
 const permissionsDialogVisible = ref(false)
 const permissionsPluginId = ref('')
+const permissionsManifestId = ref('')
 const permissionsPluginName = ref('')
 const permissionItems = ref<{ key: string; name?: string; reason?: string }[]>([])
 const permissionSelection = ref<string[]>([])
@@ -736,6 +832,7 @@ const permissionGroups = computed(() => {
     { id: string; title: string; description: string; keys: string[] }
   >()
   for (const item of permissionItems.value) {
+    if (item.name === 'runtime.trusted') continue
     const id = permissionGroup(item.name as any) || item.key
     const group = groups.get(id) || {
       id,
@@ -763,14 +860,14 @@ const importPluginName = ref('')
 // 获取store实例
 const localUserStore = LocalUserDetailStore()
 const openPluginSettings = (pluginId: string, view: string) =>
-  window.api.plugins.openSurface(pluginId, view)
+  desktopBridge.api.plugins.openSurface(pluginId, view)
 
 function getPluginConfiguration(plugin: Plugin): { title: string; view: string } | undefined {
-  const manifest = plugin.manifest
+  const descriptor = plugin.descriptor
   const configuration =
-    manifest?.contributes?.settingsPages?.[0] ??
-    manifest?.contributes?.commands?.find((command: any) =>
-      manifest.modules?.surfaces?.some((surface: any) => surface.id === command.view)
+    descriptor?.pages.find((page) => page.mount === 'settings' && isPluginPageVisible(page)) ??
+    descriptor?.actions?.find((command: any) =>
+      descriptor.views?.some((surface: any) => surface.id === command.view)
     )
   return configuration?.view ? { title: configuration.title, view: configuration.view } : undefined
 }
@@ -797,7 +894,7 @@ async function selectPlugin(plugin: Plugin) {
   if (busyPluginId.value) return
   busyPluginId.value = plugin.pluginId
   try {
-    const activation = await window.api.plugins.setActive(plugin.pluginId)
+    const activation = await desktopBridge.api.plugins.setActive(plugin.pluginId)
     if (activation?.error) throw new Error(activation.error)
     plugin.enabled = true
     plugin.disabled = false
@@ -822,7 +919,7 @@ async function getPlugins() {
   error.value = null
 
   try {
-    const result = await window.api.plugins.loadAllPlugins()
+    const result = await desktopBridge.api.plugins.loadAllPlugins()
     if (request !== inventoryRequest) return
     console.log(result)
     // 检查返回结果是否有错误
@@ -836,8 +933,8 @@ async function getPlugins() {
           async (plugin: Plugin) =>
             [
               plugin.pluginId,
-              plugin.manifest?.contributes?.guestAdapters?.length
-                ? await window.api.plugins.guestList(plugin.pluginId)
+              plugin.descriptor?.guestAdapters?.length
+                ? await desktopBridge.api.plugins.guestList(plugin.pluginId)
                 : []
             ] as const
         )
@@ -868,9 +965,10 @@ async function openPermissionsDialog(plugin: Plugin) {
   permissionsPluginName.value = plugin.pluginInfo.name
   try {
     const [manifestResult, grantedResult] = await Promise.all([
-      window.api.plugins.getManifest(plugin.pluginId),
-      window.api.plugins.getPermissions(plugin.pluginId)
+      desktopBridge.api.plugins.getDescriptor(plugin.pluginId),
+      desktopBridge.api.plugins.getPermissions(plugin.pluginId)
     ])
+    permissionsManifestId.value = manifestResult?.data?.id || ''
     permissionItems.value = manifestResult?.data?.permissions || []
     permissionSelection.value = grantedResult?.data || []
     permissionsDialogVisible.value = true
@@ -883,7 +981,7 @@ async function useGuest(pluginId: string, guestId: string | null, rowId: string)
   if (busyPluginId.value) return
   busyPluginId.value = rowId
   try {
-    await window.api.plugins.guestSelect(pluginId, guestId)
+    await desktopBridge.api.plugins.guestSelect(pluginId, guestId)
     if (guestId) localUserStore.userInfo.pluginId = pluginId
     for (const guest of guestLists.value[pluginId] ?? []) guest.selected = guest.id === guestId
     if (guestId) {
@@ -915,7 +1013,7 @@ async function openGuestPermissions(pluginId: string, guest: GuestInfo) {
         reason: '允许此子插件访问本机或局域网接口'
       }
     ]
-    permissionSelection.value = await window.api.plugins.guestPermissions(pluginId, guest.id)
+    permissionSelection.value = await desktopBridge.api.plugins.guestPermissions(pluginId, guest.id)
     permissionsDialogVisible.value = true
   } catch (error: any) {
     MessagePlugin.error(error.message || '读取权限失败')
@@ -927,7 +1025,7 @@ function removeGuest(pluginId: string, guest: GuestInfo) {
     body: `确定移除“${guest.name}”及其授权记录吗？`,
     onConfirm: async () => {
       try {
-        await window.api.plugins.guestRemove(pluginId, guest.id)
+        await desktopBridge.api.plugins.guestRemove(pluginId, guest.id)
         confirmation.destroy()
         await getPlugins()
         await refreshPluginContributions(true)
@@ -944,7 +1042,7 @@ function removeGuest(pluginId: string, guest: GuestInfo) {
 async function savePluginPermissionGrants() {
   try {
     if (permissionsGuestId.value) {
-      await window.api.plugins.guestSetPermissions(
+      await desktopBridge.api.plugins.guestSetPermissions(
         permissionsPluginId.value,
         permissionsGuestId.value,
         [...permissionSelection.value]
@@ -954,7 +1052,7 @@ async function savePluginPermissionGrants() {
       await getPlugins()
       return
     }
-    const result = await window.api.plugins.savePermissions(permissionsPluginId.value, [
+    const result = await desktopBridge.api.plugins.savePermissions(permissionsPluginId.value, [
       ...permissionSelection.value
     ])
     if (result?.error) throw new Error(result.error)
@@ -981,7 +1079,7 @@ async function closePlugin(plugin: Plugin) {
   if (busyPluginId.value) return
   busyPluginId.value = plugin.pluginId
   try {
-    const result = await window.api.plugins.setEnabled(plugin.pluginId, false)
+    const result = await desktopBridge.api.plugins.setEnabled(plugin.pluginId, false)
     if (result?.error) throw new Error(result.error)
     plugin.enabled = false
     plugin.disabled = true
@@ -1011,7 +1109,7 @@ async function handleImport() {
       if (!adapter) throw new Error('请先安装对应的兼容环境')
       if (importMethod.value === 'online' && !onlineUrl.value.trim())
         throw new Error('请输入插件下载地址')
-      const guest = await window.api.plugins.guestImport(
+      const guest = await desktopBridge.api.plugins.guestImport(
         adapter.pluginId,
         adapter.adapterId,
         importMethod.value === 'online' ? onlineUrl.value.trim() : undefined
@@ -1027,7 +1125,7 @@ async function handleImport() {
 
     if (importMethod.value === 'local') {
       // 本地导入：调用文件选择API
-      result = (await window.api.plugins.selectAndAddPlugin(type.value)) as ApiResult
+      result = (await desktopBridge.api.plugins.selectAndAddPlugin(type.value)) as ApiResult
     } else {
       // 在线导入：调用在线下载API
       if (!onlineUrl.value.trim()) {
@@ -1045,7 +1143,7 @@ async function handleImport() {
         return
       }
 
-      result = (await window.api.plugins.downloadAndAddPlugin(
+      result = (await desktopBridge.api.plugins.downloadAndAddPlugin(
         onlineUrl.value,
         type.value
       )) as ApiResult
@@ -1080,6 +1178,22 @@ async function handleImport() {
 }
 
 // 卸载插件
+async function repairPlugin(plugin: Plugin) {
+  busyPluginId.value = plugin.pluginId
+  try {
+    const result = await desktopBridge.api.plugins.updateLocal(plugin.pluginId)
+    if (result?.canceled) return
+    if (result?.error) throw new Error(result.error)
+    await getPlugins()
+    await refreshPluginContributions(true)
+    MessagePlugin.success('插件已重新安装')
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '重新安装失败，原文件已保留')
+  } finally {
+    busyPluginId.value = ''
+  }
+}
+
 async function uninstallPlugin(pluginId: string, pluginName: string) {
   try {
     // 使用TDesign对话框，替代confirm
@@ -1092,7 +1206,7 @@ async function uninstallPlugin(pluginId: string, pluginName: string) {
         // 用户确认后，开始卸载操作
         loading.value = true
 
-        const result = (await window.api.plugins.uninstallPlugin(pluginId)) as ApiResult
+        const result = (await desktopBridge.api.plugins.uninstallPlugin(pluginId)) as ApiResult
 
         // 检查结果是否包含错误
         if (result && typeof result === 'object' && 'error' in result) {
@@ -1150,7 +1264,7 @@ async function loadPluginLogs() {
   logsError.value = null
 
   try {
-    const result = await window.api.plugins.getPluginLog(currentLogPluginId.value)
+    const result = await desktopBridge.api.plugins.getPluginLog(currentLogPluginId.value)
     if (result && Array.isArray(result)) {
       logs.value = result
       // 换插件/刷新时清掉旧的折叠状态，避免索引串扰
@@ -1247,11 +1361,11 @@ async function openConfigDialog(plugin: Plugin) {
 
   try {
     // 获取配置 schema
-    const schemaRes = await window.api.plugins.getConfigSchema(plugin.pluginId)
+    const schemaRes = await desktopBridge.api.plugins.getConfigSchema(plugin.pluginId)
     configSchema.value = schemaRes?.data || []
 
     // 获取已保存的配置
-    const configRes = await window.api.plugins.getConfig(plugin.pluginId)
+    const configRes = await desktopBridge.api.plugins.getConfig(plugin.pluginId)
     const savedConfig = configRes?.data || {}
 
     // 用 schema 默认值填充
@@ -1282,7 +1396,7 @@ async function savePluginConfig() {
 
     // toRaw + JSON round-trip 去除 Vue Proxy，避免 IPC structuredClone 报错
     const plainConfig = JSON.parse(JSON.stringify(toRaw(configValues.value)))
-    await window.api.plugins.saveConfig(configPluginId.value, plainConfig)
+    await desktopBridge.api.plugins.saveConfig(configPluginId.value, plainConfig)
     MessagePlugin.success('配置已保存')
     configDialogVisible.value = false
   } catch (err: any) {
@@ -1300,9 +1414,9 @@ async function testPluginConnection() {
   try {
     // 先保存当前配置
     const plainConfig = JSON.parse(JSON.stringify(toRaw(configValues.value)))
-    await window.api.plugins.saveConfig(configPluginId.value, plainConfig)
+    await desktopBridge.api.plugins.saveConfig(configPluginId.value, plainConfig)
 
-    const result = await window.api.plugins.testConnection(configPluginId.value)
+    const result = await desktopBridge.api.plugins.testConnection(configPluginId.value)
     configTestResult.value = result
     if (result?.success) {
       MessagePlugin.success(result.message || '连接成功')
@@ -1497,12 +1611,20 @@ function toggleGroup(key: number) {
 }
 
 onMounted(async () => {
+  stopInventoryChanges = desktopBridge.api.plugins.onChanged(change => {
+    if (change?.type !== 'views-updated') scheduleInventoryRefresh()
+  })
   // 确保store已初始化
   if (!localUserStore.initialization) {
     console.log('组件挂载时初始化store')
     localUserStore.init()
   }
   await getPlugins()
+})
+onBeforeUnmount(() => {
+  stopInventoryChanges?.()
+  clearTimeout(inventoryTimer)
+  inventoryRequest++
 })
 </script>
 
@@ -1605,7 +1727,13 @@ onMounted(async () => {
 .plugins-title-row > div {
   min-width: 0;
 }
-.plugins-title-row > :deep(.t-button) {
+.manager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.manager-actions :deep(.t-button) {
   flex-shrink: 0;
   height: 34px;
   padding-inline: 16px;

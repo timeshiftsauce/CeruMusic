@@ -1,11 +1,13 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { normalizeMusicItem, sameSong, restoredSong } from '@common/musicItem'
 import mitt, { type Emitter } from 'mitt'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { calculateBestQuality, getQualityDisplayName } from '@common/utils/quality'
 import { pluginQualityOrder } from '@renderer/utils/pluginQuality'
+import { runQueue } from '@renderer/plugin/operations'
 
 /**
  * 一起听场景下的"member 点歌"分流 —— addToPlaylistAndPlay/End/replacePlaylist
@@ -130,7 +132,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
   try {
     if ((song as any).source === 'local') {
       const id = (song as any).songmid
-      const url = await (window as any).api.localMusic.getUrlById(id)
+      const url = await (desktopBridge as any).api.localMusic.getUrlById(id)
       if (typeof url === 'object' && url?.error) throw new Error(url.error)
       if (typeof url === 'string') return url
       throw new Error('本地歌曲URL获取失败')
@@ -151,7 +153,7 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
     quality = calculateBestQuality(song.types, quality, order) || order.at(-1) || quality
 
     console.log(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)
-    const urlData = await window.api.music.requestSdk('getMusicUrl', {
+    const urlData = await desktopBridge.api.music.requestSdk('getPlaybackUrl', {
       pluginId: song.pluginResource?.pluginId || LocalUserDetail.userSource.pluginId,
       source: song.source,
       songInfo: song as any,
@@ -249,6 +251,12 @@ export async function addToPlaylistAndPlay(
  * @param localUserStore LocalUserDetail store实例
  */
 export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
+  return runQueue([song],'end',localUserStore.list,undefined,async (songs,position)=>{
+    const ordered = position==='next' ? [...songs].reverse() : songs
+    for (const selected of ordered) await addSelectedToPlaylist(selected,localUserStore,position)
+  })
+}
+async function addSelectedToPlaylist(song: SongList, localUserStore: any, position:'next'|'end') {
   /* 一起听 member:走点歌审核,不修改本地 list */
   if (await tryRequestSongAsMember(song)) return
   /* 一起听 host/admin:增量入队 server queue,member 通过 QUEUE_UPDATE 看到 */
@@ -263,7 +271,11 @@ export async function addToPlaylistEnd(song: SongList, localUserStore: any) {
     }
 
     // 使用store的方法添加歌曲
-    localUserStore.addSong(song)
+    if (position==='next') {
+      const current = restoredSong(localUserStore.list,localUserStore.userInfo)
+      const index=localUserStore.list.findIndex((item:SongList)=>sameSong(item,current))
+      localUserStore.list.splice(index+1,0,normalizeMusicItem(song))
+    } else localUserStore.addSong(song)
 
     await MessagePlugin.success('已添加到播放列表')
   } catch (error) {

@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, computed, watch, toRaw } from 'vue'
 import { searchValue } from '@renderer/store/search'
+import { interceptsSearchResults, resolveSearchQuery } from '@renderer/plugin/operations'
+import { rewriteSearchResults } from '@renderer/plugin/searchResults'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import SongVirtualList from '@renderer/components/Music/SongVirtualList.vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import songCover from '@assets/images/song.jpg'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
@@ -36,7 +39,30 @@ const { userSource } = storeToRefs(localUserDetailStoreInst)
 const keyword = ref('')
 const searchResults = ref<MusicItem[]>([])
 const loading = ref(false)
-const hasMore = ref(true)
+const hasMore = ref(false)
+const playlistMore = ref(false)
+const pages = {
+  track:{raw:0,delta:0,cursor:undefined as string|undefined,seen:new Set<string>()},
+  playlist:{raw:0,delta:0,cursor:undefined as string|undefined,seen:new Set<string>()}
+}
+async function visiblePage(kind:keyof typeof pages, result:any, source:string, request:number) {
+  const raw = Array.isArray(result?.list) ? result.list : []
+  let rows=raw
+  if (interceptsSearchResults()) {
+    try {rows=await rewriteSearchResults(keyword.value,source,kind,raw,input=>desktopBridge.api.plugins.searchResults(input))}
+    catch(error){console.warn('搜索结果拦截未生效',error)}
+  }
+  if (request!==generation) return null
+  const state=pages[kind]
+  state.raw+=raw.length
+  state.delta+=rows.length-raw.length
+  const cursor=typeof result?.nextCursor==='string' && result.nextCursor ? result.nextCursor : undefined
+  const more=cursor ? !state.seen.has(cursor) : raw.length>0 && state.raw<Number(result?.total)
+  if (cursor) state.seen.add(cursor)
+  state.cursor=cursor
+  const total=more ? Math.max(state.raw,Number(result?.total)||0)+state.delta : state.raw+state.delta
+  return {rows,total,more}
+}
 const currentPage = ref(1)
 const pageSize = 50
 const totalItems = ref(0)
@@ -53,65 +79,8 @@ const skeletonCount = playlistLimit
 const playlistTotal = ref(0)
 const search = searchValue()
 const router = useRouter()
-onActivated(async () => {
-  const localUserStore = LocalUserDetailStore()
-  console.log('sqjsqj', search.getValue)
-
-  if (search.getValue.trim() === '') {
-    console.log('跳转')
-    router.push({ name: 'find' })
-  }
-  watch(
-    search,
-    async () => {
-      if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
-      if (search.getValue.trim() === '') {
-        router.push({ name: 'find' })
-        return
-      }
-      keyword.value = search.getValue
-      searchResults.value = []
-      playlistResults.value = []
-      currentPage.value = 1
-      playlistPage.value = 1
-      if (activeTab.value === 'songs') {
-        await performSearch(true)
-      } else {
-        await fetchPlaylists(true)
-      }
-    },
-    { immediate: true }
-  )
-
-  // 监听 userSource 变化，重新加载页面
-  watch(
-    () => localUserStore.userSource,
-    async () => {
-      if (keyword.value.trim()) {
-        searchResults.value = []
-        playlistResults.value = []
-        currentPage.value = 1
-        playlistPage.value = 1
-        if (activeTab.value === 'songs') {
-          await performSearch(true)
-        } else {
-          await fetchPlaylists(true)
-        }
-      }
-    },
-    { deep: true }
-  )
-
-  // 标签切换按需加载
-  watch(activeTab, async (val) => {
-    if (!keyword.value.trim()) return
-    if (val === 'songs' && searchResults.value.length === 0) {
-      await performSearch(true)
-    } else if (val === 'playlists' && playlistResults.value.length === 0) {
-      await fetchPlaylists(true)
-    }
-  })
-})
+const route = useRoute()
+let generation = 0
 
 // 执行搜索
 const performSearch = async (reset = false) => {
@@ -126,6 +95,7 @@ const performSearch = async (reset = false) => {
   if (!hasMore.value) return
 
   loading.value = true
+  const request = generation
   try {
     const localUserStore = LocalUserDetailStore()
     if (!localUserStore.userSource.source) {
@@ -133,15 +103,18 @@ const performSearch = async (reset = false) => {
       return
     }
     const source = localUserStore.userSource.source as unknown as string
-    const result = await window.api.music.requestSdk('search', {
+    const result = await desktopBridge.api.music.requestSdk('search', {
       source,
       keyword: keyword.value,
       page: currentPage.value,
+      cursor: pages.track.cursor,
       limit: pageSize
     })
-    console.log('搜索结果', result)
-    totalItems.value = result.total || 0
-    const newSongs = (result.list || []).map((song: any, index: number) => ({
+    if (request !== generation) return
+    const visible=await visiblePage('track',result,source,request)
+    if (!visible || request!==generation) return
+    totalItems.value = visible.total
+    const newSongs = visible.rows.map((song: any, index: number) => ({
       ...song,
       id: song.songmid || `${currentPage.value}-${index}` // 确保每首歌都有唯一ID
     }))
@@ -154,11 +127,11 @@ const performSearch = async (reset = false) => {
 
     void setPic(searchResults.value.length - newSongs.length, source)
     currentPage.value += 1
-    hasMore.value = searchResults.value.length <= totalItems.value
+    hasMore.value = visible.more
   } catch (error) {
     console.error('搜索失败:', error)
   } finally {
-    loading.value = false
+    if (request === generation) loading.value = false
   }
 }
 
@@ -171,7 +144,7 @@ async function setPic(offset: number, source: string) {
       const song = songs[next++]
       if (!searchResults.value.includes(song) || song.img) continue
       try {
-        const url = await window.api.music.requestSdk('getPic', {
+        const url = await desktopBridge.api.music.requestSdk('getPic', {
           source: song.source || source,
           songInfo: toRaw(song)
         })
@@ -240,6 +213,7 @@ const fetchPlaylists = async (reset = false) => {
   }
 
   playlistLoading.value = true
+  const request = generation
   try {
     const localUserStore = LocalUserDetailStore()
     if (!localUserStore.userSource.source) {
@@ -247,15 +221,19 @@ const fetchPlaylists = async (reset = false) => {
       return
     }
     const source = localUserStore.userSource.source as unknown as string
-    const res = await window.api.music.requestSdk('searchPlaylist', {
+    const res = await desktopBridge.api.music.requestSdk('searchPlaylist', {
       source,
       keyword: keyword.value,
       page: playlistPage.value,
+      cursor: pages.playlist.cursor,
       limit: playlistLimit
     })
-    console.log('歌单搜索结果', res)
-    playlistTotal.value = res?.total || 0
-    const list = Array.isArray(res?.list) ? res.list : []
+    if (request !== generation) return
+    const visible=await visiblePage('playlist',res,source,request)
+    if (!visible || request!==generation) return
+    playlistTotal.value = visible.total
+    playlistMore.value = visible.more
+    const list = visible.rows
     const mapped = list.map((item: any) => ({
       id: item.id,
       title: item.name,
@@ -272,11 +250,11 @@ const fetchPlaylists = async (reset = false) => {
     } else {
       playlistResults.value = [...playlistResults.value, ...mapped]
     }
-    if (!reset) playlistPage.value += 1
+    playlistPage.value += 1
   } catch (e) {
     console.error('歌单搜索失败:', e)
   } finally {
-    playlistLoading.value = false
+    if (request === generation) playlistLoading.value = false
   }
 }
 
@@ -299,7 +277,7 @@ const onPlaylistScroll = (event: Event) => {
   const target = event.target as HTMLElement
   const { scrollTop, scrollHeight, clientHeight } = target
   const nearBottom = scrollHeight - scrollTop - clientHeight < 100
-  const hasMore = playlistResults.value.length < playlistTotal.value
+  const hasMore = playlistMore.value
   // console.log('歌单搜索结果', nearBottom, hasMore, !playlistLoading.value)
   if (nearBottom && hasMore && !playlistLoading.value) {
     fetchPlaylists(false)
@@ -307,6 +285,34 @@ const onPlaylistScroll = (event: Event) => {
 }
 
 const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
+watch([() => route.name, () => search.submission, userSource], async (_, __, onCleanup) => {
+  const current = ++generation
+  onCleanup(() => { generation++ })
+  if (route.name !== 'search') return
+  keyword.value = ''
+  loading.value = playlistLoading.value = false
+  totalItems.value = playlistTotal.value = 0
+  hasMore.value = playlistMore.value = false
+  for (const state of Object.values(pages)) {state.raw=state.delta=0;state.cursor=undefined;state.seen.clear()}
+  searchResults.value = []
+  playlistResults.value = []
+  playlistPage.value = currentPage.value = 1
+  if (!search.submitted) return
+  const sourceId = String(userSource.value.source || '')
+  if (!sourceId) { MessagePlugin.error('请配置音源'); return }
+  try {
+    const resolved = await resolveSearchQuery(search.submitted, sourceId)
+    if (current !== generation || resolved === null) return
+    keyword.value = resolved
+    if (activeTab.value === 'songs') await performSearch(true)
+    else await fetchPlaylists(true)
+  } catch (error) { if (current === generation) MessagePlugin.error('搜索失败：' + String(error)) }
+}, {immediate:true, deep:true})
+watch(activeTab, async tab => {
+  if (!keyword.value || route.name !== 'search') return
+  if (tab === 'songs' && currentPage.value === 1) await performSearch(true)
+  if (tab === 'playlists' && playlistPage.value === 1) await fetchPlaylists(true)
+})
 </script>
 
 <template>
@@ -315,7 +321,7 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
     <div class="search-header">
       <div class="header-row">
         <h2 class="search-title">
-          搜索"<span class="keyword">{{ keyword }}</span
+          搜索"<span class="keyword">{{ keyword || search.submitted }}</span
           >"
         </h2>
         <div class="result-info">
@@ -348,19 +354,20 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
             @scroll="handleScroll"
           />
         </div>
-        <div v-else-if="!loading" class="empty-state">
+        <div v-else-if="!loading && !hasMore" class="empty-state">
           <div class="empty-content">
             <div class="empty-icon">🔍</div>
             <h3>未找到相关歌曲</h3>
             <p>请尝试其他关键词</p>
           </div>
         </div>
-        <div v-else class="loading-state">
+        <div v-else-if="loading" class="loading-state">
           <div class="loading-content">
             <div class="loading-spinner"></div>
             <p>搜索中...</p>
           </div>
         </div>
+        <n-button v-if="hasMore && currentPage > 1" size="small" text :loading="loading" @click="performSearch(false)">加载更多单曲</n-button>
       </div>
 
       <!-- 歌单列表 -->
@@ -374,7 +381,7 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
           >
             <div
               v-for="playlist in playlistResults"
-              :key="playlist.id"
+              :key="JSON.stringify([playlist.source,playlist.id])"
               class="playlist-card"
               @click="routerToPlaylist(playlist)"
             >
@@ -401,14 +408,14 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
               </div>
             </div>
           </TransitionGroup>
-          <div v-else-if="!playlistLoading" class="empty-state">
+          <div v-else-if="!playlistLoading && !playlistMore" class="empty-state">
             <div class="empty-content">
               <div class="empty-icon">📚</div>
               <h3>未找到相关歌单</h3>
               <p>请尝试其他关键词</p>
             </div>
           </div>
-          <div v-else class="loader-grid">
+          <div v-else-if="playlistLoading" class="loader-grid">
             <div v-for="n in skeletonCount" :key="'sk-' + n" class="playlist-card">
               <div class="playlist-cover">
                 <div class="skeleton-block"></div>
@@ -419,6 +426,7 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
               </div>
             </div>
           </div>
+          <n-button v-if="playlistMore" size="small" text :loading="playlistLoading" @click="fetchPlaylists(false)">加载更多歌单</n-button>
         </div>
       </div>
     </div>

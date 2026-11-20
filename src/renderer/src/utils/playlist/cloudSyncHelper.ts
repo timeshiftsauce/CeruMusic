@@ -1,4 +1,4 @@
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
 import { getPersistentMeta } from '@renderer/utils/playlist/meta'

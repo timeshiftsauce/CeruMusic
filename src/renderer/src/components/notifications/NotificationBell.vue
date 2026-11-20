@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NotificationIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { NBadge } from 'naive-ui'
 import { useNotificationsStore } from '@renderer/store/Notifications'
 const inbox = useNotificationsStore()

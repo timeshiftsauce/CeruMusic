@@ -1,10 +1,11 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { h } from 'vue'
 import { DialogPlugin, MessagePlugin, Select } from 'tdesign-vue-next'
 import { refreshPluginContributions } from './pluginState'
 
 export async function showExternalPluginInstall(sequence: number): Promise<void> {
   try {
-    const info = await window.api.plugins.prepareExternal(sequence)
+    const info = await desktopBridge.api.plugins.prepareExternal(sequence)
     let format = info.formats[0]?.value
     const accepted = await new Promise<boolean>((resolve) => {
       const finish = (value: boolean) => {
@@ -18,6 +19,7 @@ export async function showExternalPluginInstall(sequence: number): Promise<void>
           h('div', { style: 'display:grid;gap:12px' }, [
             h('strong', `${info.name} ${info.version}`),
             info.description ? h('p', info.description) : null,
+            info.componentViews ? h('p', '此插件包含界面代码，将在应用内运行。启用严格模式后，整页使用隔离页面，插件槽位不显示。') : null,
             h(
               'p',
               info.update
@@ -42,7 +44,7 @@ export async function showExternalPluginInstall(sequence: number): Promise<void>
       })
     })
     if (!accepted) return
-    const result = await window.api.plugins.commitExternal(sequence, format)
+    const result = await desktopBridge.api.plugins.commitExternal(sequence, format)
     if (result?.error) throw new Error(result.error)
     if (result === null || result?.canceled) return
     MessagePlugin.success(info.update ? '插件已更新' : '插件已安装，可在设置中的插件列表使用')
@@ -50,6 +52,6 @@ export async function showExternalPluginInstall(sequence: number): Promise<void>
   } catch (error: any) {
     MessagePlugin.error(error?.message || '插件安装失败')
   } finally {
-    await window.api.plugins.discardExternal(sequence)
+    await desktopBridge.api.plugins.discardExternal(sequence)
   }
 }

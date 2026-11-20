@@ -1,3 +1,4 @@
+import { rendererEntryArgument } from './windows/rendererEntry'
 import {
   app,
   shell,
@@ -9,13 +10,18 @@ import {
   Tray,
   Menu,
   desktopCapturer,
+  protocol,
   session,
   nativeImage,
+  nativeTheme,
+  powerMonitor,
   clipboard,
   type WebContents,
   BrowserWindowConstructorOptions
 } from 'electron'
 import { configManager } from './services/ConfigManager'
+import { openLocalMedia } from './services/musicSdk/localSource'
+import { createCoverHandler } from './services/musicCache/coverProtocol'
 import menuBarLyric from './services/menuBarLyric'
 import { allowCrossOriginEmbeds } from './services/iframeEmbed'
 import { join } from 'path'
@@ -37,6 +43,7 @@ import './events/localMusic'
 import fs from 'node:fs'
 import { initHotkeyService } from './services/hotkeys'
 import { deepLinkRouter } from './router'
+import { accountOAuthCallbacks } from './services/plugin/accounts/oauth'
 import { thumbarService } from './services/thumbarService'
 import { nativeMediaService } from './services/nativeMediaService'
 import { registerWindowsAumid } from './services/windowsAumid'
@@ -133,7 +140,8 @@ function queueOpenPlugin(filePath: string) {
 }
 function handleExternalArguments(argv: string[]) {
   for (const value of argv) {
-    if (value.startsWith('cerumusic://')) {
+    if (accountOAuthCallbacks.accept(value)) continue
+    if (/^ceru(?:music)?:\/\//i.test(value)) {
       if (mainWindow) deepLinkRouter.match(mainWindow, value)
       else bufferEarlyDeepLink(value)
     } else if (/\.(cmpl|cpl)$/i.test(value)) queueOpenPlaylist(value)
@@ -165,9 +173,11 @@ app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,Media
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
     app.setAsDefaultProtocolClient('cerumusic', process.execPath, [path.resolve(process.argv[1])])
+    app.setAsDefaultProtocolClient('ceru', process.execPath, [path.resolve(process.argv[1])])
   }
 } else {
   app.setAsDefaultProtocolClient('cerumusic')
+  app.setAsDefaultProtocolClient('ceru')
 }
 
 // 获取单实例锁
@@ -323,7 +333,7 @@ function setupTray(): void {
   }
 
   if (!g.__ceru_tray_before_quit_bound__) {
-    app.once('before-quit', () => {
+    app.once('will-quit', () => {
       menuBarLyric.onEnabledChange(null)
       menuBarLyric.setTray(null)
       // macOS: 不要 destroy 托盘 —— 让 AppKit 在进程退出时自然销毁 NSStatusItem,
@@ -396,10 +406,12 @@ function toggleAppFullScreen(win: BrowserWindow | null): void {
 
 import { downloadManager } from './services/DownloadManager'
 import pluginService from './services/plugin/index'
+import { bindWindowLifecycle, bindSystemLifecycle, createQuitGate } from './services/plugin/lifecycle'
 import musicSdkService, { resolveDownloadUrl } from './services/musicSdk/service'
 import { musicCacheService } from './services/musicCache'
 import { normalizeLyricFormat } from '@common/lyricFormats'
 import { applyPlaybackRequestHeaders } from './services/plugin/playbackRequests'
+import { pluginMedia } from './services/plugin/media/mediaProtocol'
 
 function setupDownloadManager() {
   // Setup URL Fetcher for lazy loading
@@ -509,10 +521,11 @@ function createWindow(): void {
     icon: path.join(__dirname, '../../resources/logo.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: false,
-      nodeIntegration: true,
-      contextIsolation: false,
+      additionalArguments: [rendererEntryArgument()],
+      sandbox: true,
+      webSecurity: true,
+      nodeIntegration: false,
+      contextIsolation: true,
       // 使用 Chromium 默认节流：窗口进入后台（最小化 / 隐藏到托盘 / 被完全遮挡）时
       // 页面会正确进入 hidden 状态并停止出帧，显著降低后台 CPU/GPU 占用。
       // 前台不受影响；后台所需功能（进度保存 / SMTC / 桌面歌词推送等）均已改为
@@ -530,6 +543,7 @@ function createWindow(): void {
   mainWindow = new BrowserWindow(defaultOptions)
   // 以 Electron 原生事件同步 UI，包括系统触发的全屏切换。
   const win = mainWindow
+  bindWindowLifecycle(win, (name, ...args) => { void pluginService.publishLifecycle(name, ...args) })
   win.on('enter-full-screen', () => {
     fullscreenWindows.add(win)
     win.setMaximumSize(0, 0)
@@ -656,7 +670,8 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+    win.show()
+    pluginService.markAppReady('window')
     // Windows 任务栏缩略图工具栏 —— 必须在窗口可见后调用 setThumbarButtons 才生效
     // (Electron 文档: thumbar buttons only visible while the window is showing)
     // 非 win32 内部 no-op
@@ -784,7 +799,16 @@ registerAutoUpdateEvents()
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ceru-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+  { scheme: 'ceru-local', privileges: { standard: true, secure: true, stream: true } },
+  { scheme: 'ceru-cover', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
+])
 app.whenReady().then(async () => {
+  protocol.handle('ceru-media', request => pluginMedia.handle(request))
+  app.once('will-quit', () => pluginMedia.dispose())
+  protocol.handle('ceru-local', openLocalMedia)
+  protocol.handle('ceru-cover', createCoverHandler(url => musicCacheService.resolveCoverUrl(url), is.dev ? process.env.ELECTRON_RENDERER_URL : undefined))
   // 尽早挂上跨域放宽 —— 首屏的通知卡片 / 插件 iframe 就要用(详见 services/iframeEmbed)
   allowCrossOriginEmbeds()
   // 网络代理:在任何网络请求之前应用(未配置过时默认直连,不走系统代理)
@@ -843,6 +867,9 @@ app.whenReady().then(async () => {
       }
     })
   })
+
+  const releaseLifecycle = bindSystemLifecycle(powerMonitor, nativeTheme, (name, ...args) => { void pluginService.publishLifecycle(name, ...args) })
+  app.once('will-quit', releaseLifecycle)
 
   // Initialize plugins before starting download manager
   try {
@@ -917,7 +944,8 @@ app.whenReady().then(async () => {
   })
 
   // 应用退出前销毁所有插件 worker，避免 worker 阻塞主进程退出
-  app.on('before-quit', () => {
+  app.on('before-quit', createQuitGate(signal => pluginService.beforeQuit(signal), () => app.quit()))
+  app.once('will-quit', () => {
     pluginService.disposeAll().catch(() => {})
     // 把防抖中的缓存命中计数立即落盘，避免重启后淘汰依据丢失
     musicCacheService.flushCacheIndex().catch(() => {})
@@ -970,6 +998,7 @@ app.on('open-file', (event, filePath) => {
 // macOS Deep Link
 app.on('open-url', (event, url) => {
   event.preventDefault()
+  if (accountOAuthCallbacks.accept(url)) return
   if (mainWindow) {
     deepLinkRouter.match(mainWindow, url)
   } else bufferEarlyDeepLink(url)

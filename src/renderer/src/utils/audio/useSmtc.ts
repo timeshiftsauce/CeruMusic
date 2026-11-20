@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 /*
  * Copyright (c) 2025. 时迁酱 Inc. All rights reserved.
  *
@@ -58,7 +59,7 @@ interface TrackMetadata {
 let nativeAvailable: boolean | null = null
 
 function hasNativeBridge(): boolean {
-  return typeof window !== 'undefined' && !!window.api?.emi
+  return typeof window !== 'undefined' && !!desktopBridge.api?.emi
 }
 
 /** 探测原生通道是否可用（结果会缓存，只探测一次）。 */
@@ -69,7 +70,7 @@ async function detectNative(): Promise<boolean> {
     return false
   }
   try {
-    nativeAvailable = await window.api.emi.isAvailable()
+    nativeAvailable = await desktopBridge.api.emi.isAvailable()
   } catch {
     nativeAvailable = false
   }
@@ -223,7 +224,7 @@ class MediaSessionController {
       }
       // 注意：native 侧的 Option<T> 只认 undefined，传 null 会抛
       // "Failed to convert napi value Null into rust type"。
-      window.api.emi.updateMetadata({
+      desktopBridge.api.emi.updateMetadata({
         songName: metadata.title || '未知歌曲',
         authorName: metadata.artist || '未知艺术家',
         albumName: metadata.album || '未知专辑',
@@ -466,7 +467,7 @@ class MediaSessionController {
    */
   private bindNativeEvents(): void {
     if (this.nativeEventHandler || !hasNativeBridge()) return
-    this.nativeEventHandler = window.api.emi.onMediaEvent((event) => {
+    this.nativeEventHandler = desktopBridge.api.emi.onMediaEvent((event) => {
       console.log('[emi] 收到系统媒体按键:', event, 'callbacks=', !!this.callbacks)
       if (!this.callbacks) return
       switch (event.type) {
@@ -539,7 +540,7 @@ class MediaSessionController {
     // 原生通道
     if (this.nativeReady && hasNativeBridge()) {
       try {
-        window.api.emi.updatePlaybackStatus(state === 'paused' ? 'Paused' : 'Playing')
+        desktopBridge.api.emi.updatePlaybackStatus(state === 'paused' ? 'Paused' : 'Playing')
       } catch (error) {
         console.warn('原生通道更新播放状态失败:', error)
       }
@@ -564,7 +565,7 @@ class MediaSessionController {
   updateTimeline(currentTimeMs: number, totalTimeMs: number): void {
     if (!this.nativeReady || !hasNativeBridge()) return
     try {
-      window.api.emi.updateTimeline({ currentTime: currentTimeMs, totalTime: totalTimeMs })
+      desktopBridge.api.emi.updateTimeline({ currentTime: currentTimeMs, totalTime: totalTimeMs })
     } catch {}
   }
 
@@ -574,7 +575,7 @@ class MediaSessionController {
   updatePlayMode(repeatMode: 'Track' | 'List' | 'None', isShuffling: boolean): void {
     if (!this.nativeReady || !hasNativeBridge()) return
     try {
-      window.api.emi.updatePlayMode({ repeatMode, isShuffling })
+      desktopBridge.api.emi.updatePlayMode({ repeatMode, isShuffling })
     } catch {}
   }
 
@@ -673,7 +674,7 @@ async function resolveHiresArtwork(
   artworkUrl: string
 ): Promise<string | undefined> {
   try {
-    if (!window.api?.music?.requestSdk) {
+    if (!desktopBridge.api?.music?.requestSdk) {
       console.warn('[SMTC-高清] 无 requestSdk 桥，跳过高清请求')
       return undefined
     }
@@ -696,7 +697,7 @@ async function resolveHiresArtwork(
     console.log(
       `[SMTC-高清] → 请求插件 getHiresPic: source=${source} artworkUrl=${shortUrlForLog(artworkUrl)}`
     )
-    const value = await window.api.music.requestSdk('getHiresPic', {
+    const value = await desktopBridge.api.music.requestSdk('getHiresPic', {
       source,
       songInfo: plainSong,
       artworkUrl

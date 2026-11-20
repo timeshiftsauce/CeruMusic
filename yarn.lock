@@ -2607,30 +2607,47 @@
   resolved "https://registry.npmmirror.com/@shikijs/vscode-textmate/-/vscode-textmate-10.0.2.tgz"
   integrity sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==
 
-"@shiqianjiang/ceru-plugin-core@0.3.14":
-  version "0.3.14"
-  resolved "https://registry.yarnpkg.com/@shiqianjiang/ceru-plugin-core/-/ceru-plugin-core-0.3.14.tgz#7a3314fd468bb10b63fc8775c82f16121fcd5934"
-  integrity sha512-7JMLYvs2ifEnWs3RTEAluYronwD3wjeO0BBQdu03vN9paH7pPQQBE9xTsy1jrBxwxKtvMlt3Ystg3uGbmHfZOg==
+"@shiqianjiang/ceru-plugin-core@file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-core-3.0.0.tgz":
+  version "3.0.0"
+  resolved "file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-core-3.0.0.tgz#40befe5afc5925ada235653262e367593059f388"
   dependencies:
-    "@shiqianjiang/ceru-plugin-issuer" "0.3.14"
-    "@shiqianjiang/ceru-plugin-sdk" "0.3.14"
+    "@shiqianjiang/ceru-plugin-issuer" "3.0.0"
+    "@shiqianjiang/ceru-plugin-sdk" "3.0.0"
     axios "^1.13.2"
+    semver "^7.7.0"
     socket.io-client "^4.8.3"
     ws "^8.21.3"
 
-"@shiqianjiang/ceru-plugin-issuer@0.3.14":
-  version "0.3.14"
-  resolved "https://registry.yarnpkg.com/@shiqianjiang/ceru-plugin-issuer/-/ceru-plugin-issuer-0.3.14.tgz#7e4aac54b6a4bb921d22b11d8a43b1aac99625ec"
-  integrity sha512-CGD27xMNCetblcnJ/r95Ohic1OM8s6HXDWcWjIYCOr+z94V0d/I32LNrQe4dh9hkRV0XLf+lxn6PNBAQSfxl6w==
+"@shiqianjiang/ceru-plugin-issuer@0.3.16":
+  version "0.3.16"
+  resolved "file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-issuer-0.3.16.tgz#f33babdcd1ef3c03bf851db3ddf41df9173127c3"
   dependencies:
-    "@shiqianjiang/ceru-plugin-sdk" "0.3.14"
+    "@shiqianjiang/ceru-plugin-sdk" "0.3.16"
     acorn "^8.18.0"
     ajv "^8.20.0"
 
-"@shiqianjiang/ceru-plugin-sdk@0.3.14":
-  version "0.3.14"
-  resolved "https://registry.yarnpkg.com/@shiqianjiang/ceru-plugin-sdk/-/ceru-plugin-sdk-0.3.14.tgz#24fea888ec43059811fca69c06d6138911faf0e2"
-  integrity sha512-kTvPjZc0jZ8VvQDUUEIgq5Zf3GbJhsk2mfnKnR8UD13mchf6LBXriQHy0OiEmb0oiYwMvGu59dCyVHTVZUhAsQ==
+"@shiqianjiang/ceru-plugin-issuer@3.0.0", "@shiqianjiang/ceru-plugin-issuer@file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-issuer-3.0.0.tgz":
+  version "3.0.0"
+  resolved "file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-issuer-3.0.0.tgz#5a75ae1ce59e052f8808e8a337360ac51b71a5a8"
+  dependencies:
+    "@shiqianjiang/ceru-plugin-sdk" "3.0.0"
+    acorn "^8.18.0"
+    ajv "^8.20.0"
+    semver "^7.7.0"
+
+"@shiqianjiang/ceru-plugin-sdk@0.3.16":
+  version "0.3.16"
+  resolved "file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-sdk-0.3.16.tgz#cac2a5966d6427a75913b414d6a457ff80944f45"
+  dependencies:
+    "@types/lodash" "^4.17.25"
+    buffer "^6.0.3"
+    crypto-js "^4.2.0"
+    fflate "^0.8.2"
+    json5 "^2.2.3"
+
+"@shiqianjiang/ceru-plugin-sdk@3.0.0", "@shiqianjiang/ceru-plugin-sdk@file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-sdk-3.0.0.tgz":
+  version "3.0.0"
+  resolved "file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-sdk-3.0.0.tgz#21bb26283308f1d24d94fadcc0a3cb027d6a52fa"
   dependencies:
     "@types/lodash" "^4.17.25"
     buffer "^6.0.3"
@@ -4487,6 +4504,34 @@ centra@^2.7.0:
   integrity sha512-PbFMgMSrmgx6uxCdm57RUos9Tc3fclMvhLSATYN39XsDV29B89zZ3KA89jmY0vwSGazyU+uerqwa6t+KaodPcg==
   dependencies:
     follow-redirects "^1.15.6"
+
+"ceru-plugin-core-v2@file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-core-0.3.16.tgz":
+  version "0.3.16"
+  resolved "file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-core-0.3.16.tgz#dd13e7bccb459a49b786c94910178913e60fed2a"
+  dependencies:
+    "@shiqianjiang/ceru-plugin-issuer" "0.3.16"
+    "@shiqianjiang/ceru-plugin-sdk" "0.3.16"
+    axios "^1.13.2"
+    socket.io-client "^4.8.3"
+    ws "^8.21.3"
+
+"ceru-plugin-issuer-v2@file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-issuer-0.3.16.tgz":
+  version "0.3.16"
+  resolved "file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-issuer-0.3.16.tgz#f33babdcd1ef3c03bf851db3ddf41df9173127c3"
+  dependencies:
+    "@shiqianjiang/ceru-plugin-sdk" "0.3.16"
+    acorn "^8.18.0"
+    ajv "^8.20.0"
+
+"ceru-plugin-sdk-v2@file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-sdk-0.3.16.tgz":
+  version "0.3.16"
+  resolved "file:vendor/plugin-runtime/v2/shiqianjiang-ceru-plugin-sdk-0.3.16.tgz#cac2a5966d6427a75913b414d6a457ff80944f45"
+  dependencies:
+    "@types/lodash" "^4.17.25"
+    buffer "^6.0.3"
+    crypto-js "^4.2.0"
+    fflate "^0.8.2"
+    json5 "^2.2.3"
 
 chai@^6.2.2:
   version "6.2.2"
@@ -9606,6 +9651,11 @@ semver@^7.5.4, semver@^7.7.2, semver@^7.7.3:
   version "7.7.3"
   resolved "https://registry.npmmirror.com/semver/-/semver-7.7.3.tgz#4b5f4143d007633a8dc671cd0a6ef9147b8bb946"
   integrity sha512-SdsKMrI9TdgjdweUSR9MweHA4EJ8YxHn8DFaDisvhVlUOe4BF1tLD7GAj0lIqWVl+dPb/rExr0Btby5loQm20Q==
+
+semver@^7.7.0:
+  version "7.8.6"
+  resolved "https://registry.npmjs.org/semver/-/semver-7.8.6.tgz#67c0cda133a3ceb6f70b803e67625bf969000424"
+  integrity sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==
 
 semver@~7.7.3:
   version "7.7.4"

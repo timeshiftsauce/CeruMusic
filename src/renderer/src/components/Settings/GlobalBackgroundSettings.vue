@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
@@ -34,7 +35,7 @@ const updateMultipleBg = (updates: Partial<typeof bgSettings.value>) => {
 
 const handleFileSelect = async () => {
   try {
-    const filePaths = await window.electron.ipcRenderer.invoke('dialog:openFile', {
+    const filePaths = await desktopBridge.electron.ipcRenderer.invoke('dialog:openFile', {
       properties: ['openFile'],
       filters: [
         {

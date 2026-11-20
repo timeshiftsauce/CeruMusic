@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, watch, reactive, onBeforeUnmount } from 'vue'
 import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { useMessage, useDialog } from 'naive-ui'
+import { interceptNativeMessages } from '@renderer/plugin/notifications'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { lyricFormats, type BuiltinLyricFormat } from '@common/lyricFormats'
 
@@ -12,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:show', 'saved'])
 
-const message = useMessage()
+const message = interceptNativeMessages(useMessage())
 const dialog = useDialog()
 const activeTab = ref('edit')
 const loading = ref(false)
@@ -119,7 +121,7 @@ const handleSave = async () => {
   if (!props.song?.path || loading.value) return
   saving.value = true
   try {
-    const api = (window as any).api
+    const api = (desktopBridge as any).api
     const res = await api.localMusic.writeTags(
       props.song.path,
       {
@@ -194,7 +196,7 @@ const handleSearch = async () => {
     // We can run source searches in parallel for better performance
     const searchPromises = sources.map(async (src) => {
       try {
-        const res = await (window as any).api.music.requestSdk('search', {
+        const res = await (desktopBridge as any).api.music.requestSdk('search', {
           source: src,
           keyword: kw,
           page: 1,
@@ -212,7 +214,7 @@ const handleSearch = async () => {
             if (!item?.img) {
               itemsWithIndex.push({ item, index })
               tasks.push(
-                (window as any).api.music.requestSdk('getPic', {
+                (desktopBridge as any).api.music.requestSdk('getPic', {
                   source: src,
                   songInfo: item
                 })
@@ -272,7 +274,7 @@ const applyResult = async (item: any) => {
     } else {
       // Try to fetch image if missing
       try {
-        const pic = await (window as any).api.music.requestSdk('getPic', {
+        const pic = await (desktopBridge as any).api.music.requestSdk('getPic', {
           source: item.source,
           songInfo: item
         })
@@ -285,7 +287,7 @@ const applyResult = async (item: any) => {
 
     // Fetch lyrics
     try {
-      const lyricRes = await (window as any).api.music.requestSdk('getLyric', {
+      const lyricRes = await (desktopBridge as any).api.music.requestSdk('getLyric', {
         source: item.source,
         songInfo: toRaw(item),
         useFormat: lyricFormat.value

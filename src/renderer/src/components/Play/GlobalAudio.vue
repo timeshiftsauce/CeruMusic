@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import {
   onMounted,
   onUnmounted,
@@ -372,7 +373,7 @@ const handleCanPlay = (slot: AudioSlot): void => {
 
 onUnmounted(() => {
   try {
-    window.api.pingService.stop()
+    desktopBridge.api.pingService.stop()
   } catch {}
   if (rafId !== null) {
     try {

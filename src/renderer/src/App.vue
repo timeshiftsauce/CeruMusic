@@ -21,7 +21,11 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import NotificationCenter from '@renderer/components/notifications/NotificationCenter.vue'
+import { runWindowClose } from '@renderer/plugin/operations'
+import { installLinkEntries, openPublicLink } from '@renderer/plugin/systemOperations'
+import { closeConfiguredWindow } from '@renderer/plugin/windowClose'
 import { onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { coordinateMusicDataRepair, startupNeedsRepair } from '@renderer/services/musicDataRepair'
 import {
@@ -30,8 +34,7 @@ import {
   setMusicDataPersistence
 } from '@renderer/services/musicDataPersistence'
 import { useRoute, useRouter } from 'vue-router'
-import { MessagePlugin } from 'tdesign-vue-next'
-import { useSettingsStore } from '@renderer/store/Settings'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import shareAPI from '@renderer/api/share'
 import PluginHostBridge from '@renderer/components/PluginHostBridge.vue'
 import { appEntryQueue } from '@renderer/services/entryQueue'
@@ -43,7 +46,6 @@ import type { QueuedDeepLink } from '@common/types/deepLink'
 
 const route = useRoute()
 const router = useRouter()
-const settingsStore = useSettingsStore()
 const isAuxiliaryWindow = /^#\/(?:desktop-lyric|recognition-worker)(?:\/|$)/.test(
   window.location.hash
 )
@@ -100,9 +102,9 @@ async function openSongShare(id: string) {
   try {
     let detail: any
     if (id.startsWith('v2_')) {
-      const descriptor = await window.api.share.readDescriptor(id)
-      const registry = await window.api.plugins.contributions()
-      const installed = registry.find((item) => item.manifest.id === descriptor.track.pluginId)
+      const descriptor = await desktopBridge.api.share.readDescriptor(id)
+      const registry = await desktopBridge.api.plugins.contributions()
+      const installed = registry.find((item) => item.descriptor.id === descriptor.track.pluginId)
       if (!installed && descriptor.track.scope !== 'provider') {
         MessagePlugin.warning('请先安装分享歌曲所需的插件：' + descriptor.track.pluginId)
         return
@@ -179,6 +181,7 @@ async function openPlaylistShare(id: string) {
 }
 
 let unsubDeepLinks: (() => void) | undefined
+let cleanupLinkEntries: (() => void) | undefined
 let unsubCloseRequest: (() => void) | null = null
 let mounted = false
 let inbox: Promise<void> = Promise.resolve()
@@ -194,19 +197,20 @@ function updateQueueReady() {
 }
 async function handleDeepLink(item: QueuedDeepLink) {
   try {
-    if (item.kind === 'song-share') await openSongShare(item.value)
+    if (item.kind === 'public-link') await openPublicLink(item.value,'deeplink')
+    else if (item.kind === 'song-share') await openSongShare(item.value)
     else if (item.kind === 'playlist-share') await openPlaylistShare(item.value)
     else if (item.kind === 'listen-together') await showListenTogetherInvite('deeplink', item.value)
     else await showExternalPluginInstall(item.sequence)
   } finally {
-    await window.api.deepLinks.acknowledge(item.sequence)
+    await desktopBridge.api.deepLinks.acknowledge(item.sequence)
   }
 }
 function syncDeepLinks() {
   inbox = inbox
     .catch(() => {})
     .then(async () => {
-      const links = await window.api.deepLinks.pending()
+      const links = await desktopBridge.api.deepLinks.pending()
       if (!mounted) return
       for (const item of links.sort((a, b) => a.sequence - b.sequence)) {
         if (received.has(item.sequence)) continue
@@ -229,43 +233,50 @@ watch(
 
 // 处理 Ctrl+W / Alt+F4 的关闭请求，模拟点击关闭按钮行为
 const handleWindowCloseRequest = () => {
-  const settings = settingsStore.settings
-  if (!settings.hasConfiguredCloseBehavior) {
-    // 未配置过关闭行为，通过自定义事件通知 TitleBarControls 显示对话框
-    window.dispatchEvent(new CustomEvent('ceru-show-close-dialog'))
-    return
-  }
-  if (settings.closeToTray) {
-    window.api?.setMiniMode(true)
-  } else {
-    window.api?.close()
-  }
+  void runWindowClose(closeWindow,'shortcut').catch(error=>console.warn('窗口关闭失败',error))
+}
+const closeWindow = closeConfiguredWindow
+
+let languageObserver: MutationObserver | undefined
+function reportEnvironment() {
+  void desktopBridge.api.plugins.reportEnvironment(navigator.onLine, document.documentElement.lang)
+    .catch(error => console.warn('[app] environment report failed', error))
 }
 
 onMounted(async () => {
   if (isAuxiliaryWindow) return
   mounted = true
-  unsubDeepLinks = window.api.deepLinks.onChanged(() => {
+  cleanupLinkEntries=installLinkEntries()
+  window.addEventListener('online', reportEnvironment)
+  window.addEventListener('offline', reportEnvironment)
+  languageObserver = new MutationObserver(reportEnvironment)
+  languageObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] })
+  reportEnvironment()
+  unsubDeepLinks = desktopBridge.api.deepLinks.onChanged(() => {
     void syncDeepLinks()
   })
   void syncDeepLinks()
   // 启动时把窗口标题置为软件名(若 PlayMusic 后续挂载且有歌,会立刻覆盖为"歌名 - 歌手")
   try {
-    ;(window as any).api?.app?.setTitle?.('澜音 Ceru Music')
-    ;(window as any).api?.app?.setProgress?.(-1)
+    ;(desktopBridge as any).api?.app?.setTitle?.('澜音 Ceru Music')
+    ;(desktopBridge as any).api?.app?.setProgress?.(-1)
   } catch (e) {
     console.warn('[app] init title/progress failed', e)
   }
 
   // 监听主进程发送的关闭请求（Ctrl+W / Alt+F4）
-  if (window.api?.windowClose?.onRequest) {
-    unsubCloseRequest = window.api.windowClose.onRequest(() => handleWindowCloseRequest())
+  if (desktopBridge.api?.windowClose?.onRequest) {
+    unsubCloseRequest = desktopBridge.api.windowClose.onRequest(() => handleWindowCloseRequest())
   }
 })
 
 onBeforeUnmount(() => {
   if (isAuxiliaryWindow) return
   mounted = false
+  cleanupLinkEntries?.()
+  window.removeEventListener('online', reportEnvironment)
+  window.removeEventListener('offline', reportEnvironment)
+  languageObserver?.disconnect()
   unsubDeepLinks?.()
   appEntryQueue.setReady(false)
   unsubCloseRequest?.()

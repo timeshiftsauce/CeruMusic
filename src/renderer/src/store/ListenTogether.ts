@@ -22,7 +22,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { type Socket } from 'socket.io-client'
 import { SocketRequest } from '@renderer/utils/request'
 import { CERU_API_RESOURCE } from '@common/api/resources'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'

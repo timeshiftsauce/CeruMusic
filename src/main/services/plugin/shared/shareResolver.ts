@@ -1,29 +1,31 @@
-import type { Artifact } from '@shiqianjiang/ceru-plugin-issuer'
-import type { GuestInfo } from '@shiqianjiang/ceru-plugin-sdk'
-
 /** Generates only the explicitly declared resolution entry. Never evaluates plugin code. */
 export function exportShareResolver(
-  artifact: Artifact,
+  source: {
+    name: string
+    version: string
+    author?: string
+    providers: { id: string; name: string; qualities?: string[] }[]
+    factory?: string
+    declaration?: { configKeys?: string[]; guestGlobals?: string[]; guestAdapterId?: string }
+  },
   config: Record<string, unknown>,
-  guest?: { script: string; info: GuestInfo }
+  guest?: { script: string; info: import('@shiqianjiang/ceru-plugin-sdk').GuestInfo }
 ): string {
-  const manifest = artifact.header.manifest
-  const declaration = manifest.modules.share
+  const { declaration, factory } = source
   if (!declaration) throw new Error('此插件未提供服务器分享解析模块，请更新插件后重试')
-  const factory = artifact.modules[declaration.entry]
   if (!factory || factory.includes('__ceruRequire'))
     throw new Error('分享解析模块依赖桌面环境，无法在服务器运行')
   const values = Object.fromEntries((declaration.configKeys ?? []).map((key) => [key, config[key]]))
   const sources = Object.fromEntries(
     (guest
       ? guest.info.providers.map((p) => ({ id: p.id, name: p.name, qualities: p.qualities }))
-      : (manifest.contributes?.providers ?? [])
+      : source.providers
     ).map((p) => [p.id, { name: p.name, qualitys: p.qualities ?? [] }])
   )
   const info = {
-    name: guest?.info.name || manifest.name,
-    version: guest?.info.version || manifest.version,
-    author: guest?.info.author || manifest.author || ''
+    name: guest?.info.name || source.name,
+    version: guest?.info.version || source.version,
+    author: guest?.info.author || source.author || ''
   }
   const names = declaration.guestGlobals ?? []
   if (

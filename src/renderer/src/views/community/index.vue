@@ -12,7 +12,7 @@
  * 且 columns 的视觉是"上到下 -> 下一列",不是"左到右 -> 下一行"。
  */
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { AddIcon, ArrowUpIcon, RefreshIcon } from 'tdesign-icons-vue-next'
 import { communityAPI, type CommunityPost } from '@renderer/api/community'
 import PostCard from '@renderer/components/community/PostCard.vue'

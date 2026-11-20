@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { normalizeMusicItems } from '@common/musicItem'
 import type { SongList } from '@renderer/types/audio'
 import CryptoJS from 'crypto-js'
@@ -58,7 +59,7 @@ function getExtFromPath(p: string): string {
  * 从系统路径导入播放列表（支持 .cmpl/.cpl）
  */
 export async function importPlaylistFromPath(path: string): Promise<SongList[]> {
-  const buf = await (window as any).api.file.readFile(path)
+  const buf = await (desktopBridge as any).api.file.readFile(path)
   const ext = getExtFromPath(path)
   if (ext === 'cpl') {
     const text = new TextDecoder().decode(buf)
@@ -78,7 +79,8 @@ export async function importPlaylistFromPath(path: string): Promise<SongList[]> 
  */
 export async function exportPlaylistToFile(
   playlist: SongList[],
-  customFileName?: string
+  customFileName?: string,
+  format: 'cmpl' | 'cpl' = 'cmpl'
 ): Promise<string> {
   try {
     if (!playlist || playlist.length === 0) {
@@ -87,9 +89,9 @@ export async function exportPlaylistToFile(
 
     const encryptedData = encryptPlaylist(playlist)
     const fileName =
-      customFileName || `cerumusic-playlist-${new Date().toISOString().slice(0, 10)}.cmpl`
+      customFileName || `cerumusic-playlist-${new Date().toISOString().slice(0, 10)}.${format}`
 
-    const blob = await gzipString(encryptedData)
+    const blob = format === 'cmpl' ? await gzipString(encryptedData) : new Blob([encryptedData], {type:'text/plain'})
 
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')

@@ -97,7 +97,7 @@ try {
         name: 'page-test',
         setup(builder) {
           builder.onResolve(
-            { filter: /^(@renderer\/|vue-router$|tdesign-icons-vue-next$)/ },
+            { filter: /^(@renderer\/|vue-router$|tdesign-icons-vue-next$|tdesign-vue-next$)/ },
             ({ path }) => ({ path, namespace: 'stub' })
           )
           builder.onLoad({ filter: /.*/, namespace: 'stub' }, ({ path }) => {
@@ -123,6 +123,7 @@ try {
                 'export const useAutoUpdate=()=>({checkForUpdates(){}});',
               'vue-router':
                 'export const useRouter=()=>({replace:async path=>s.events.push(path),push(){}});',
+              'tdesign-vue-next': 'export const MessagePlugin={};',
               'tdesign-icons-vue-next': 'export const ChevronDownIcon={}, PlayCircleIcon={};'
             }
             return { contents: shared + (modules[path] ?? 'export default {};'), resolveDir: root }
@@ -211,7 +212,8 @@ try {
     false
   )
   finishPlayback()
-  await flush()
+  const deadline = Date.now() + 5000
+  while (!state.events.some(event => event.startsWith('/home')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25))
   assert.equal(
     state.events.at(-1),
     '/home/find',

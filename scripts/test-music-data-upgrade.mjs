@@ -1,3 +1,4 @@
+import { attachQaDriver } from './electron-qa-driver.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, writeFile, rm, rename, unlink } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
@@ -21,7 +22,8 @@ let application
 try {
   application = await electron.launch({ args: [launcher], env, timeout: 45000 })
   const page = await application.firstWindow()
-  await page.waitForFunction(() => !!window.api && location.hash.includes('/home'), {
+  await attachQaDriver(application, page, directory)
+  await page.waitForFunction(() => !!window.ceruQa && location.hash.includes('/home'), {
     timeout: 45000
   })
   // Seed only the isolated profile, then exercise the actual welcome -> repair sequence.
@@ -109,15 +111,15 @@ try {
     )
   )
   await page.evaluate(async (originals) => {
-    await window.api.musicDataRepair.begin(originals, false)
+    await window.ceruQa.musicDataRepair.begin(originals, false)
     localStorage.setItem('songList', '[]')
-    await window.api.musicDataRepair.rollback() // Simulate a second interruption before browser ack.
+    await window.ceruQa.musicDataRepair.rollback() // Simulate a second interruption before browser ack.
   }, originals)
   await page.reload()
   await page.waitForFunction(() => location.hash.startsWith('#/home'))
   await page.waitForTimeout(1200)
   assert.equal(await page.evaluate(() => localStorage.getItem('songList')), originals.songList)
-  assert.equal((await page.evaluate(() => window.api.musicDataRepair.inspect())).pending, null)
+  assert.equal((await page.evaluate(() => window.ceruQa.musicDataRepair.inspect())).pending, null)
 
   // A backup failure must leave the original data and migration version untouched.
   const repairDirectory = join(profile, 'music-data-repair')

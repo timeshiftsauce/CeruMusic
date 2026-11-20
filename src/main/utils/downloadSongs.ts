@@ -2,20 +2,25 @@ import { configManager } from '../services/ConfigManager'
 import { downloadManager } from '../services/DownloadManager'
 import path from 'node:path'
 import { formatMusicInfo } from '@common/utils/format'
+import { downloadFilename } from '../services/plugin/operations/downloads'
+import type { OperationSource } from '@shiqianjiang/ceru-plugin-sdk'
 
 const getDownloadDirectory = (): string => {
   const directories = configManager.getDirectories()
   return directories.downloadDir
 }
 
-export default function download(
+export default async function download(
   songInfo: any,
   url: string,
   tagWriteOptions: any,
   pluginId?: string,
   quality?: string,
-  directory?: string
-): any {
+  directory?: string,
+  source:OperationSource={kind:'ui',location:'download'},
+  assertActive:()=>void=()=>{},
+  bypassHooks=false
+): Promise<any> {
   const downloadDir = directory || getDownloadDirectory()
   const fileExtension = getFileExtension(url, quality)
   console.log('fileExtension:', songInfo.template, songInfo)
@@ -23,14 +28,16 @@ export default function download(
   if (!songInfo.date) {
     songInfo.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
-  const fileName =
+  const initialName =
     `${formatMusicInfo(songInfo.template, Object.assign(songInfo, { quality }))}.${fileExtension}`
       .replace(/[/\\:*?"<>|]/g, '')
       .replace(/^\.+/, '')
       .replace(/\.+$/, '')
       .trim()
+  const fileName=bypassHooks?initialName:await downloadFilename(songInfo,initialName,source)
   const filePath = path.join(downloadDir, fileName)
   const priority = tagWriteOptions.priority || 0
+  assertActive()
 
   return downloadManager.addTask(
     songInfo,

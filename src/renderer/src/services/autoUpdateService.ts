@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { NotifyPlugin, DialogPlugin } from 'tdesign-vue-next'
 
 import { reactive, h, ref } from 'vue'
@@ -82,39 +83,39 @@ export class AutoUpdateService {
     this.isListening = true
 
     // 监听各种更新事件
-    window.api.autoUpdater.onCheckingForUpdate(() => {
+    desktopBridge.api.autoUpdater.onCheckingForUpdate(() => {
       this.showCheckingNotification()
     })
 
-    window.api.autoUpdater.onUpdateAvailable((_, updateInfo: UpdateInfo) => {
+    desktopBridge.api.autoUpdater.onUpdateAvailable((_, updateInfo: UpdateInfo) => {
       this.showUpdateAvailableDialog(updateInfo)
     })
 
-    window.api.autoUpdater.onUpdateNotAvailable(() => {
+    desktopBridge.api.autoUpdater.onUpdateNotAvailable(() => {
       this.showNoUpdateNotification()
     })
 
-    window.api.autoUpdater.onDownloadStarted((updateInfo: UpdateInfo) => {
+    desktopBridge.api.autoUpdater.onDownloadStarted((updateInfo: UpdateInfo) => {
       this.handleDownloadStarted(updateInfo)
     })
 
-    window.api.autoUpdater.onDownloadProgress((progress: DownloadProgress) => {
+    desktopBridge.api.autoUpdater.onDownloadProgress((progress: DownloadProgress) => {
       console.log(progress)
 
       this.showDownloadProgressNotification(progress)
     })
 
-    window.api.autoUpdater.onUpdateDownloaded(() => {
+    desktopBridge.api.autoUpdater.onUpdateDownloaded(() => {
       this.showUpdateDownloadedDialog()
     })
 
-    window.api.autoUpdater.onError(
+    desktopBridge.api.autoUpdater.onError(
       (error: string | { code?: string; message: string; raw?: string }) => {
         this.showUpdateErrorNotification(error)
       }
     )
 
-    window.api.autoUpdater.onDifferentialFallback((info: { reason: string }) => {
+    desktopBridge.api.autoUpdater.onDifferentialFallback((info: { reason: string }) => {
       this.showDifferentialFallbackNotification(info?.reason)
     })
   }
@@ -124,13 +125,13 @@ export class AutoUpdateService {
     if (!this.isListening) return
 
     this.isListening = false
-    window.api.autoUpdater.removeAllListeners()
+    desktopBridge.api.autoUpdater.removeAllListeners()
   }
 
   // 检查更新
   async checkForUpdates() {
     try {
-      await window.api.autoUpdater.checkForUpdates()
+      await desktopBridge.api.autoUpdater.checkForUpdates()
     } catch (error) {
       console.error('检查更新失败:', error)
       NotifyPlugin.error({
@@ -146,7 +147,7 @@ export class AutoUpdateService {
   //  - mirror: GitHub 代理前缀（空 = 原生直连）
   async downloadUpdate(mode?: 'differential' | 'full', mirror = '') {
     try {
-      await window.api.autoUpdater.downloadUpdate(mode, mirror)
+      await desktopBridge.api.autoUpdater.downloadUpdate(mode, mirror)
     } catch (error) {
       console.error('下载更新失败:', error)
       NotifyPlugin.error({
@@ -160,7 +161,7 @@ export class AutoUpdateService {
   // 安装更新
   async quitAndInstall() {
     try {
-      await window.api.autoUpdater.quitAndInstall()
+      await desktopBridge.api.autoUpdater.quitAndInstall()
     } catch (error) {
       console.error('安装更新失败:', error)
       NotifyPlugin.error({
@@ -190,7 +191,7 @@ export class AutoUpdateService {
 
     // 先检测是否存在未完成的“应用更新”任务
     try {
-      const tasks = await window.api.download.getTasks()
+      const tasks = await desktopBridge.api.download.getTasks()
       const updateTask = (tasks || []).find((t: any) => t?.songInfo?.source === 'update')
 
       if (updateTask) {
@@ -220,7 +221,7 @@ export class AutoUpdateService {
             onClose: () => dialog.destroy(),
             onConfirm: () => {
               try {
-                window.api.download.resumeTask(updateTask.id)
+                desktopBridge.api.download.resumeTask(updateTask.id)
                 NotifyPlugin.info({
                   title: '已继续下载',
                   content: '可在“下载管理”查看进度',
@@ -236,7 +237,7 @@ export class AutoUpdateService {
     } catch {}
 
     // 优先检测是否已下载完成，若已下载则提示安装
-    const path = await window.api.autoUpdater.getDownloadedPath(updateInfo)
+    const path = await desktopBridge.api.autoUpdater.getDownloadedPath(updateInfo)
     if (path) {
       const dialog = DialogPlugin.confirm({
         header: `新版本 ${updateInfo.name} 已下载`,
@@ -306,7 +307,7 @@ export class AutoUpdateService {
 
     let ranked: Array<{ url: string; ms: number | null }> = []
     try {
-      ranked = (await window.api.autoUpdater.probeMirrors()) || []
+      ranked = (await desktopBridge.api.autoUpdater.probeMirrors()) || []
     } catch (e) {
       console.warn('镜像测速失败:', e)
     }

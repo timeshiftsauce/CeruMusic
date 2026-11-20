@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
+import type { LibraryPlaylist } from '@shiqianjiang/ceru-plugin-sdk'
 import { useRoute } from 'vue-router'
 import { playlistSections } from '@renderer/services/pluginState'
 import PluginSurface from './PluginSurface.vue'
+import PluginPage from './PluginPage.vue'
 
-const props = withDefaults(defineProps<{ ready?: boolean }>(), { ready: true })
+const props = withDefaults(defineProps<{ ready?: boolean; playlist?: LibraryPlaylist }>(), { ready: true })
+const sectionsToShow = computed(() => props.playlist ? playlistSections.value.filter(section => section.runtime === 3) : playlistSections.value)
 const route = useRoute()
 const active = ref(true)
 const root = ref<HTMLElement>()
@@ -19,7 +22,7 @@ watch(
   [
     () => route.query.pluginId,
     () => route.query.sectionId,
-    playlistSections,
+    sectionsToShow,
     active,
     () => props.ready
   ],
@@ -56,16 +59,17 @@ watch(
 </script>
 
 <template>
-  <div v-if="active && playlistSections.length" ref="root" class="plugin-playlist-sections">
+  <div v-if="active && sectionsToShow.length" ref="root" class="plugin-playlist-sections">
     <section
-      v-for="section in playlistSections"
+      v-for="section in sectionsToShow"
       :key="section.key"
       :data-section-key="section.key"
       :aria-label="section.title"
       tabindex="-1"
       class="plugin-playlist-section"
     >
-      <PluginSurface :plugin-id="section.pluginId" :surface-id="section.view" embedded />
+      <PluginPage v-if="section.runtime === 3" :plugin-id="section.pluginId" :page-id="section.id" :playlist="playlist" embedded />
+      <PluginSurface v-else :plugin-id="section.pluginId" :surface-id="section.view" embedded />
     </section>
   </div>
 </template>

@@ -120,7 +120,7 @@
 import { ref, computed, onActivated, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@renderer/store/Auth'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import defaultAvatar from '@renderer/assets/user.webp'
 import displayName from '@renderer/utils/auth/displayName'
 import logtoConfig from '@renderer/config'

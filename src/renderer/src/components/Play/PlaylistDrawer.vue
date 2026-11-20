@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { songKey } from '@common/musicItem'
+import { runQueueRemoval } from '@renderer/plugin/operations'
 import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
-import { MessagePlugin, Popconfirm } from 'tdesign-vue-next'
+import { Popconfirm } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { LocationIcon, DeleteIcon } from 'tdesign-icons-vue-next'
 import { useVirtualList } from '@vueuse/core'
 import type { SongList } from '@renderer/types/audio'
@@ -547,8 +549,11 @@ const handleClearPlaylist = () => {
     return
   }
 
-  localUserStore.clearList()
-  MessagePlugin.success('播放列表已清空')
+  void runQueueRemoval('queue.clear', [], list.value, undefined, async selected => {
+    if (lt.isInRoom) return
+    const removed = removeLocalQueueItems(selected)
+    if (removed) MessagePlugin.success(list.value.length ? '已移除选定的队列歌曲' : '播放列表已清空')
+  }).catch(reason => MessagePlugin.error(String(reason)))
 }
 
 // 定位到当前播放歌曲
@@ -588,9 +593,18 @@ const playDisplayItem = (_index: number, song: SongList) => {
   lt.playQueueItem(item.itemId)
 }
 
+function removeLocalQueueItems(songs: SongList[]) {
+  const targets = new Set(songs)
+  const kept = list.value.filter(song => !targets.has(song))
+  const removed = list.value.length - kept.length
+  if (removed) localUserStore.list = kept
+  return removed
+}
 const removeDisplayItem = (_index: number, song: SongList) => {
   if (!lt.isInRoom) {
-    localUserStore.removeSong(songKey(song))
+    void runQueueRemoval('queue.remove', [song], list.value, undefined, async selected => {
+      if (!lt.isInRoom) removeLocalQueueItems(selected)
+    }).catch(reason => MessagePlugin.error(String(reason)))
     return
   }
   const item = queueItemForSong(song)
@@ -685,7 +699,7 @@ defineExpose({
                     : formatTime(parseInt(item.data.interval) / 1000)
                 }}
               </div>
-              <button class="song-remove" @click.stop="removeDisplayItem(item.index, item.data)">
+              <button class="song-remove" :aria-label="'移除 ' + item.data.name" @click.stop="removeDisplayItem(item.index, item.data)">
                 <span class="iconfont icon-xuanxiangshanchu"></span>
               </button>
             </div>

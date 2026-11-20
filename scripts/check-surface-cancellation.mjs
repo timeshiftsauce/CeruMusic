@@ -3,19 +3,19 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
-import { SurfaceSession } from '@shiqianjiang/ceru-plugin-core/surface'
+import { SurfaceSession } from 'ceru-plugin-core-v2/surface'
 
 const require = createRequire(import.meta.url)
 const fixture = { handlers: new Map(), ipcFailures: [], window: {}, host: undefined }
 const electron = `
-export const app={}, BrowserWindow={}, clipboard={}, dialog={}, globalShortcut={}, nativeTheme={}, shell={};
+export const app={once(){}}, BrowserWindow={}, Notification={}, clipboard={}, dialog={}, globalShortcut={}, nativeTheme={}, shell={};
 export const ipcMain={handle:(channel,handler)=>fixture.handlers.set(channel,handler)};
 export const contextBridge={};
 export const ipcRenderer={invoke:async(channel,...args)=>{
   try { return await fixture.handlers.get(channel)({},...args) }
   catch(error) { fixture.ipcFailures.push(error); throw error }
 }};`
-const bridge = `export const pluginChanged=()=>{}, sendPluginNotice=()=>{},
+const bridge = `export const developerEntriesChanged=()=>{}, pluginChanged=()=>{}, sendPluginNotice=()=>{},
   callPluginUI=async()=>{}, publishPluginSurface=()=>{}, publishPluginAccountChanged=()=>{},
   assertMainWindowRequest=()=>{}, assertPluginUIRequest=()=>{};`
 async function load(path, mocks) {
@@ -61,14 +61,16 @@ async function load(path, mocks) {
   })
   return module.exports
 }
-const { default: PluginHost } = await load('src/main/services/plugin/manager/PluginHost.ts', {
+const { default: PluginHost } = await load('src/main/services/plugin/v2/V2PluginHost.ts', {
   electron,
   '../../../utils/path': 'export const getAppDirPath=()=>"unused"',
   '../uiBridge': bridge,
+  './uiBridge': bridge,
+  './sharing': 'export const createShareDescriptor=()=>{},readShareDescriptor=()=>{}',
   '../../../events/pluginNotice': bridge,
   '../pluginConfig':
     'export const getPluginConfig=()=>({}),savePluginConfig=()=>{},getPluginPermissions=()=>[],savePluginPermissions=()=>{}',
-  '../shareResolver': 'export const exportShareResolver=()=>{}',
+  './shareResolver': 'export const exportShareResolver=()=>{}',
   '../storage': 'export class PluginStorage {}',
   '../webDrawer': 'export const protectPluginFrames=()=>{}',
   '../playbackRequests': 'export const registerPlaybackRequest=()=>{}',
@@ -86,6 +88,9 @@ fixture.host = Object.assign(Object.create(PluginHost.prototype), {
 fixture.host.isDisabled = () => false
 const { default: init } = await load('src/main/events/plugins.ts', {
   electron,
+  '../utils/path': 'export const getAppDirPath=()=>"unused"',
+  '../services/ConfigManager': 'export const configManager={get:()=>undefined}',
+  '../services/plugin/operations/bus': 'export const getHookControls=()=>{},hookSnapshot=()=>{},operationBus={},setupHookPolicy=()=>{},updateHookControls=()=>{}',
   '../services/plugin': 'export default { getPluginById:()=>fixture.host }',
   '../services/songList/ManageSongList': 'export default class ManageSongList {}',
   '../logger': 'export const pluginLog=console',
@@ -94,11 +99,8 @@ const { default: init } = await load('src/main/events/plugins.ts', {
     'export const prepareExternalPlugin=()=>{},commitExternalPlugin=()=>{},discardExternalPlugin=()=>{}'
 })
 init()
-await load('src/preload/index.ts', {
-  electron,
-  '@electron-toolkit/preload': 'export const electronAPI={}'
-})
-const api = fixture.window.api.plugins
+const { desktopApi } = await load('src/preload/desktopApi.ts', { electron })
+const api = desktopApi.plugins
 function mount(sessionId, dispatch) {
   const surface = { id: 'view', kind: 'web' }
   const lifecycle = new SurfaceSession(
@@ -110,6 +112,7 @@ function mount(sessionId, dispatch) {
   )
   fixture.host.webSessions.set(sessionId, {
     web: { surfaceId: 'view', sessionId, kind: 'web' },
+    release() {},
     lifecycle
   })
 }

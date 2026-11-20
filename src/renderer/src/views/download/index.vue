@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { onMounted, computed, ref, watch } from 'vue'
 import { useDownloadStore, DownloadStatus } from '../../store/download'
 import {
@@ -21,7 +22,7 @@ const { settings } = storeToRefs(settingsStore)
 const filenameTemplate = ref(settings.value.filenameTemplate || '%t - %s')
 
 const updateConcurrent = (val: number) => {
-  window.api.download.setMaxConcurrent(val)
+  desktopBridge.api.download.setMaxConcurrent(val)
 }
 
 onMounted(async () => {
@@ -123,7 +124,7 @@ const formatSize = (size: number) => {
 // 立即安装（仅针对应用更新任务）
 const installUpdate = () => {
   try {
-    window.api.autoUpdater.quitAndInstall()
+    desktopBridge.api.autoUpdater.quitAndInstall()
   } catch (e) {
     console.error('安装更新失败', e)
   }

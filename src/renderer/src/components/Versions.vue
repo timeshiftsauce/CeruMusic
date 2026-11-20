@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { reactive } from 'vue'
 
-const versions = reactive({ ...window.electron.process.versions })
+const versions = reactive({ ...desktopBridge.electron.process.versions })
 </script>
 
 <template>

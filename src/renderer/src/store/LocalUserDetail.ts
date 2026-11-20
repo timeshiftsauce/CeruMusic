@@ -1,7 +1,7 @@
 import { getMusicStorage, setMusicStorage } from '@renderer/services/musicDataPersistence'
 import { normalizeMusicItem, sameSong, songKey, selectSong } from '@common/musicItem'
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
+import { computed, effectScope, ref, watch } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 
 import type { SongList } from '@renderer/types/audio'
@@ -14,10 +14,12 @@ export const LocalUserDetailStore = defineStore(
     const userInfo = ref<UserInfo>({})
     const initialization = ref(false)
     const isWatchStarted = ref(false) // 防止重复创建 watch
+    const persistenceScope = effectScope()
     function persistUserInfo() {
       // Available providers are a runtime snapshot, not user preferences.
       const { supportedSources: _runtimeSources, ...preferences } = userInfo.value
-      setMusicStorage('userInfo', JSON.stringify(preferences))
+      const serialized = JSON.stringify(preferences)
+      if (getMusicStorage('userInfo') !== serialized) setMusicStorage('userInfo', serialized)
     }
 
     function init(): void {
@@ -68,7 +70,7 @@ export const LocalUserDetailStore = defineStore(
       console.log('init local user detail')
       initialization.value = true
       const Audio = ControlAudioStore()
-      startWatch()
+      persistenceScope.run(startWatch)
       Audio.setVolume(userInfo.value.volume as number)
     }
     function startWatch() {
@@ -176,6 +178,7 @@ export const LocalUserDetailStore = defineStore(
       list,
       userInfo,
       initialization,
+      persistUserInfo,
       init,
       addSong,
       addSongToFirst,

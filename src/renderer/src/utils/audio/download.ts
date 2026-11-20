@@ -1,4 +1,6 @@
-import { NotifyPlugin, MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { NotifyPlugin, DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { toRaw, h } from 'vue'
@@ -208,7 +210,7 @@ async function downloadSingleSong(songInfo: MusicItem): Promise<void> {
     // 服务插件歌曲（如 navidrome）：自带 url，无需插件解析，使用 lazy 模式直接传 url
     const hasDirectUrl = !!(songInfo as any).url && typeof (songInfo as any).url === 'string'
 
-    const result = await window.api.music.requestSdk('downloadSingleSong', {
+    const result = await desktopBridge.api.music.requestSdk('downloadSingleSong', {
       pluginId: LocalUserDetail.userSource.pluginId?.toString() || '',
       source: songInfo.source,
       quality,
