@@ -24,6 +24,7 @@ const mocks = {
 export const ref = (value) => { const r = { value }; globalThis.state.refs.push(r); return r };
 export const onMounted = (fn) => { globalThis.state.mount = fn };
 export const onBeforeUnmount = (fn) => { globalThis.state.unmount = fn };`,
+  '@renderer/services/desktopBridge': `export const desktopBridge = { api: window.api };`,
   'tdesign-vue-next': `export const MessagePlugin = {
   error: (message) => globalThis.state.errors.push(message),
   warning: (message) => globalThis.state.warnings.push(message)
@@ -75,6 +76,7 @@ async function mountOverlay({ paths }) {
     },
     api: {
       plugins: {
+        getPathForFile: (file) => (file.name in paths ? paths[file.name] : ''),
         queueExternalFile: async (filePath) => {
           state.queued.push(filePath)
           return { sequence: state.queued.length }

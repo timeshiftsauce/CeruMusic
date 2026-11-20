@@ -17,6 +17,7 @@ export async function attachQaDriver(application, page, directory) {
     music: ['requestSdk'], songList: ['create','delete','getFavoritesId','setFavoritesId','addSongs','getSongs'], clipboard: ['readText'], musicDataRepair: ['begin','rollback','inspect']
   }
   if (['--skin-reload-only', '--skin-only','--qr-custom-only'].includes(process.argv[3])) selected.plugins.push('mountSurface','closeDrawer')
+  if (process.argv[3] === '--drop-only') selected.plugins.push('queueExternalFile')
   if (process.argv[3] === '--qr-custom-only') selected.plugins.push('surfaceAction')
   if (process.argv[3] === '--playlist-create-only') selected.songList.push('getAll')
   if (process.argv[3] === '--downloads-only') selected.download=['getTasks']

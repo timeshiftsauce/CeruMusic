@@ -1,3 +1,4 @@
+import { verifyPluginDrop } from './electron-plugin-drop.mjs'
 import { verifyCustomAccountQr } from './electron-account-qr-custom.mjs'
 import { verifyComponentSkinAuthor } from './electron-component-skin-author.mjs'
 import { verifyComponentStage } from './electron-component-stage.mjs'
@@ -269,7 +270,7 @@ try {
     server.once('error', reject).listen(0, '127.0.0.1', resolve)
   )
   const previewUrl = 'http://127.0.0.1:' + server.address().port + '/preview.wav'
-  if (['--qr-custom-only','--home-tabs-only','--csp-only','--component-stage','--component-skin-author','--component-author','--component-regions','--component-only','--trusted-only','--system-only','--netease-daily','--account-tab','--services-only','--track-like-only','--playlist-create-only','--window-close-only','--lyrics-only','--downloads-only','--sharing-only','--resolve-only','--shuffle-only','--search-query-only','--source-selection-only','--skin-only','--skin-reload-only','--panel-only','--skin-performance','--account-only','--qr-only','--oauth-only','--browser-only'].includes(process.argv[3])) {
+  if (['--drop-only','--qr-custom-only','--home-tabs-only','--csp-only','--component-stage','--component-skin-author','--component-author','--component-regions','--component-only','--trusted-only','--system-only','--netease-daily','--account-tab','--services-only','--track-like-only','--playlist-create-only','--window-close-only','--lyrics-only','--downloads-only','--sharing-only','--resolve-only','--shuffle-only','--search-query-only','--source-selection-only','--skin-only','--skin-reload-only','--panel-only','--skin-performance','--account-only','--qr-only','--oauth-only','--browser-only'].includes(process.argv[3])) {
     await page.addInitScript(()=>{window.__guide_initialized=true})
     await page.evaluate(()=>{localStorage.setItem('ceru_music_has_seen_first_run_notice_tips','true'); location.hash='/home/local'})
     await page.reload({waitUntil:'domcontentloaded'})
@@ -288,7 +289,8 @@ try {
       if (process.argv[3]==='--account-tab' || (process.argv[3]==='--netease-daily' && process.argv[5]==='--host-accounts')) await attachQaDriver(application,restarted,directory)
       return restarted
     }
-    if (process.argv[3] === '--home-tabs-only') await verifyHomeTabs(page)
+    if (process.argv[3] === '--drop-only') await verifyPluginDrop(page,directory)
+    else if (process.argv[3] === '--home-tabs-only') await verifyHomeTabs(page)
     else if (process.argv[3] === '--csp-only') await verifyRendererCsp(page, 'http://127.0.0.1:' + server.address().port + '/csp-script.js')
     else if (process.argv[3] === '--component-stage') await verifyComponentStage(application,page,directory)
     else if (process.argv[3] === '--component-skin-author') await verifyComponentSkinAuthor(application,page,directory,process.argv[4])
