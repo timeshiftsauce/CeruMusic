@@ -548,6 +548,7 @@
 </template>
 
 <script setup lang="ts">
+import { pluginInstallErrorMessage } from '@renderer/services/pluginInstallError'
 import { desktopBridge } from '@renderer/services/desktopBridge'
 import PluginManagerSettings from './PluginManagerSettings.vue'
 import PluginHookActivity from './PluginHookActivity.vue'
@@ -1158,7 +1159,7 @@ async function handleImport() {
 
     // 检查结果是否包含错误
     if (result && typeof result === 'object' && 'error' in result) {
-      MessagePlugin.error(`安装插件失败: ${result.error}`)
+      MessagePlugin.error(`安装插件失败\n${pluginInstallErrorMessage(result.error)}`)
       console.error('安装插件失败:', result.error)
     } else {
       // 安装成功才刷新插件列表
@@ -1175,7 +1176,7 @@ async function handleImport() {
     onlineUrl.value = ''
   } catch (err: any) {
     console.error('安装插件失败:', err)
-    MessagePlugin.error(`安装插件失败: ${err.message || '未知错误'}`)
+    MessagePlugin.error(`安装插件失败\n${pluginInstallErrorMessage(err)}`)
   }
 }
 

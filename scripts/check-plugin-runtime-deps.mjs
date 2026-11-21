@@ -16,7 +16,7 @@ export function verifyRuntimePackages(root) {
     JSON.parse(readFileSync(join(dirname(contained(entry)), '../package.json'), 'utf8')).version
   for (const [name, expected] of [
     ['ceru-plugin-core-v2', '0.3.16'],
-    [scope + 'core', '3.0.0']
+    [scope + 'core', '3.0.1']
   ]) {
     const entry = local.resolve(name)
     const core = createRequire(entry)

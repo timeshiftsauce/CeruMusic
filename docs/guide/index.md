@@ -47,7 +47,7 @@ _要是还有问题可自行在搜索引擎查询由于 。`apple`官方证书�
 
 LX 等外部脚本需要先安装相应 **v2 兼容环境插件**，再从该环境导入；不能将旧脚本直接当成 v2 成品。插件需要作者自行实现并合法提供数据能力。
 
-开发者请阅读 [v2 入门教程](/guide/plugins/v2/quick-start)，版本关系见 [兼容说明](/guide/plugins/v2/compatibility)。
+使用支持 v3 的澜音 2.5.0 测试构建时，可以开发和安装 v3 插件。开发者可以从 [v3 入门教程](/guide/plugins/v3/)或 [v2 入门教程](/guide/plugins/v2/quick-start)开始。适用版本见[兼容说明](/guide/plugins/v3/migration)。
 
 ::: details 旧版桌面安装界面（v1 历史资料）
 以下截图属于旧 v1 插件系统，新版按钮与兼容方式以当前插件管理为准。

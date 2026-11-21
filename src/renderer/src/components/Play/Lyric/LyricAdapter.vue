@@ -44,7 +44,7 @@
             </span>
           </template>
           <span v-if="line.translatedLyric" class="tran">{{ line.translatedLyric }}</span>
-          <span v-if="line.romanLyric" class="roma">{{ line.romanLyric }}</span>
+          <span v-if="romanizations[index]" class="roma">{{ romanizations[index] }}</span>
         </div>
         <div class="placeholder" />
       </div>
@@ -93,6 +93,12 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['line-click'])
+
+const romanizations = computed(() =>
+  props.lyricLines.map(
+    (line) => line.romanLyric || line.words.map((word) => word.romanWord).filter(Boolean).join(' ')
+  )
+)
 
 const lyricScrollContainer = ref<HTMLElement | null>(null)
 const focusedLine = ref<number | null>(null)

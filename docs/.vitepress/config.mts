@@ -1,6 +1,96 @@
 import { defineConfig } from 'vitepress'
 import note from 'markdown-it-footnote'
 
+const pluginV3Sidebar = {
+  text: '插件开发 · v3',
+  link: '/guide/plugins/v3/',
+  collapsed: false,
+  items: [
+    {
+      text: '开始与脚手架',
+      collapsed: false,
+      items: [
+        { text: '开发指南', link: '/guide/plugins/v3/' },
+        { text: '用十分钟跑起第一个插件', link: '/guide/plugins/v3/quick-start' },
+        { text: '从源码找到构建产物', link: '/guide/plugins/v3/project-files' },
+        { text: 'CLI 命令与模板选择', link: '/guide/plugins/v3/cli' }
+      ]
+    },
+    {
+      text: '动手教程',
+      collapsed: true,
+      items: [
+        { text: '写一个带存储的 Vue 插件', link: '/guide/plugins/v3/first-plugin' },
+        { text: '搜索本地歌曲并播放', link: '/guide/plugins/v3/music' },
+        { text: '提供自己的音乐源', link: '/guide/plugins/v3/provider' },
+        { text: '账号与扫码登录', link: '/guide/plugins/v3/accounts' },
+        { text: 'Manifest 与页面入口', link: '/guide/plugins/v3/manifest' }
+      ]
+    },
+    {
+      text: '插件生命周期',
+      collapsed: true,
+      items: [
+        { text: '逐个理解生命周期回调', link: '/guide/plugins/v3/lifecycle' }
+      ]
+    },
+    {
+      text: '操作 Hook 与事件',
+      collapsed: true,
+      items: [
+        { text: '编写并测试播放规则', link: '/guide/plugins/v3/hooks' },
+        { text: '操作、权限与执行时限', link: '/guide/plugins/v3/operations' }
+      ]
+    },
+    {
+      text: '插件 API',
+      collapsed: true,
+      items: [
+        { text: '按任务选择 PluginContext API', link: '/guide/plugins/v3/api' },
+        { text: '完整 API 目录与教程入口', link: '/guide/plugins/v3/api-reference' },
+        { text: '本地歌单 API 实战', link: '/guide/plugins/v3/playlist' },
+        { text: '调用桌面服务', link: '/guide/plugins/v3/desktop-api' },
+        { text: '逐项查方法、参数与返回值', link: '/guide/plugins/v3/methods' },
+        { text: '权限申请与撤销', link: '/guide/plugins/v3/permissions' },
+        { text: '配置、存储与升级', link: '/guide/plugins/v3/storage' },
+        { text: '具名路由与导航守卫', link: '/guide/plugins/v3/routing' },
+        { text: 'SDK 类型与方法签名', link: '/guide/plugins/v3/reference' }
+      ]
+    },
+    {
+      text: '音乐与网络',
+      collapsed: true,
+      items: [
+        { text: '歌曲引用、歌词与音质', link: '/guide/plugins/v3/media' },
+        { text: '导入歌单并验证结果', link: '/guide/plugins/v3/importer' },
+        { text: 'HTTP 与实时连接', link: '/guide/plugins/v3/network' },
+        { text: '本机服务与媒体流', link: '/guide/plugins/v3/servers' }
+      ]
+    },
+    {
+      text: '界面与扩展',
+      collapsed: true,
+      items: [
+        { text: 'Vue hooks 与宿主组件', link: '/guide/plugins/v3/views' },
+        { text: '自定义隔离 HTML 页面', link: '/guide/plugins/v3/web' },
+        { text: '制作播放器皮肤', link: '/guide/plugins/v3/skin' },
+        { text: '原生歌单与动作', link: '/guide/plugins/v3/native' },
+        { text: '跨插件服务与离线联调', link: '/guide/plugins/v3/services' },
+        { text: 'Guest 兼容环境', link: '/guide/plugins/v3/guests' }
+      ]
+    },
+    {
+      text: '交付与排错',
+      collapsed: true,
+      items: [
+        { text: '构建、校验并安装', link: '/guide/plugins/v3/publishing' },
+        { text: 'v2 迁移与升级验收', link: '/guide/plugins/v3/migration' },
+        { text: '按现象排查错误', link: '/guide/plugins/v3/troubleshooting' }
+      ]
+    }
+  ]
+}
+
 const pluginSidebar = {
   text: '插件开发 · v2',
   link: '/guide/plugins/v2/',
@@ -175,12 +265,20 @@ export default defineConfig({
     nav: [
       { text: '首页', link: '/' },
       { text: '使用文档', link: '/guide/' },
-      { text: '插件开发', link: '/guide/plugins/v2/' },
+      {
+        text: '插件开发',
+        activeMatch: '/guide/plugins/',
+        items: [
+          { text: 'v3 开发指南', link: '/guide/plugins/v3/' },
+          { text: 'v2 开发指南', link: '/guide/plugins/v2/' }
+        ]
+      },
       { text: '接口文档', link: 'https://api.ceru.shiqianjiang.cn/api-docs' }
     ],
 
     sidebar: {
-      '/guide/plugins/v2/': [pluginSidebar, legacyPluginSidebar],
+      '/guide/plugins/v3/': [pluginV3Sidebar, { ...pluginSidebar, collapsed: true }, legacyPluginSidebar],
+      '/guide/plugins/v2/': [{ ...pluginV3Sidebar, collapsed: true }, pluginSidebar, legacyPluginSidebar],
       '/': [
         {
           text: 'CeruMusic',
@@ -208,7 +306,8 @@ export default defineConfig({
             { text: '更新计划', link: '/guide/update' }
           ]
         },
-        pluginSidebar,
+        pluginV3Sidebar,
+        { ...pluginSidebar, collapsed: true },
         legacyPluginSidebar,
         {
           text: '开发者接口',

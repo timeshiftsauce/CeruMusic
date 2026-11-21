@@ -12,7 +12,7 @@ title: 开发原生配置页
 ## 1. 创建工程
 
 ```shell
-npm create ceru-plugin@latest my-settings-drawer -- --template source --lang ts
+npm create ceru-plugin@0.3.16 my-settings-drawer -- --template source --lang ts
 cd my-settings-drawer
 npm install
 ```

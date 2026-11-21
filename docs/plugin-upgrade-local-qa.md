@@ -1167,15 +1167,15 @@ Core SHA-1 `ad0d3f0ad6f2787686187c95510134128b0b026c`，SDK `0adc0db61766d56450d
 | 范围 | 已保存证据 | 结论与边界 |
 | --- | --- | --- |
 | 工具链自定义流版本 | 工具链 `artifacts/media-custom-full-tests.log` | 197/197，通过；`media-custom-tests.log` 的六项专项包含 worker 自定义变换、WASM、流式密码及取消检查。本机 WASM 专项为 36.02 MiB/s，不是通用性能保证。 |
-| 宿主回归 | [media-custom-host-tests.log](../media-custom-host-tests.log) | 2 套/42 项通过，仅 `upgrade.test.ts` 与 `DownloadManager.test.ts`；不是全量宿主通过。较早 [media-all-host-tests.log](../media-all-host-tests.log) 的 43 套/176 项属于此前媒体版本。 |
-| Electron 媒体专项 | [media-custom-electron.log](../media-custom-electron.log)；`scripts/test-plugin-media.mjs --electron` | Electron 45.0.0 的独立临时 profile/harness 中，AES-128/256-CTR、AES-128/256-CBC、ChaCha20 及真实 worker WASM 变换均报告 `started/resumed/range: true`、时长 180 秒；脚本跳转到第 143 秒后继续播放。不是完整打包应用的媒体入口验收。 |
+| 宿主回归 | `media-custom-host-tests.log` | 2 套/42 项通过，仅 `upgrade.test.ts` 与 `DownloadManager.test.ts`；不是全量宿主通过。较早 `media-all-host-tests.log` 的 43 套/176 项属于此前媒体版本。 |
+| Electron 媒体专项 | `media-custom-electron.log`；`scripts/test-plugin-media.mjs --electron` | Electron 45.0.0 的独立临时 profile/harness 中，AES-128/256-CTR、AES-128/256-CBC、ChaCha20 及真实 worker WASM 变换均报告 `started/resumed/range: true`、时长 180 秒；脚本跳转到第 143 秒后继续播放。不是完整打包应用的媒体入口验收。 |
 | 最新独立桌面候选 | 下述临时候选目录的 `media-custom-install.log`、`media-custom-build.log` | 安装完成；生产依赖边界检查、主进程/渲染端类型检查及生产构建完成，构建日志末尾为 `Done in 165.16s.`。这不等于已经重新生成并验收自定义流版本的 ASAR/exe。 |
 
 独立候选目录为 `C:/Users/Administrator/AppData/Local/Temp/ceru-default-release-14277043-487e-4e7b-8dda-51e417518e4e`。该目录中本轮 v3 tgz 与工具链 `artifacts/pack-summary.json` 的 SHA-1 一致：Core `b360ae905e19bc631d02ba64f00c5c026461a6f8`、SDK `dc927c9264ed869fcca67abd31bd4195c1e6a158`、issuer `7a94802aad690337d3c880f9070acbb7e9de56be`。较早 `media-package.log` 生成的是 `dist/media-streams/win-unpacked`，时间早于自定义流包和最新构建；其中 npm `ELSPROBLEMS/invalid` 依赖采集警告仍保留。最新生产构建中的动态/静态重复导入和大 chunk 警告也未因此消失。
 
-**打包 exe 的 JS 入口误启动：失败且不隔离。** [media-packaged-executable.log](../media-packaged-executable.log) 记录向打包的 `ceru-music.exe` 传 JavaScript 入口的尝试。打包程序忽略该入口并启动正常应用，读取了既有用户 profile，载入既有插件和曲目；随后停止了 PID 6148。日志最终是 `Electron encrypted media playback failed`，退出值 `4294967295 !== 0`。此运行不能计作隔离测试或媒体通过，也没有前后数据比对，**不能断言既有 profile/用户数据未改变**。停止 PID 6148 的处置来自本次任务记录，不是日志中的数据完整性证明。
+**打包 exe 的 JS 入口误启动：失败且不隔离。** `media-packaged-executable.log` 记录向打包的 `ceru-music.exe` 传 JavaScript 入口的尝试。打包程序忽略该入口并启动正常应用，读取了既有用户 profile，载入既有插件和曲目；随后停止了 PID 6148。日志最终是 `Electron encrypted media playback failed`，退出值 `4294967295 !== 0`。此运行不能计作隔离测试或媒体通过，也没有前后数据比对，**不能断言既有 profile/用户数据未改变**。停止 PID 6148 的处置来自本次任务记录，不是日志中的数据完整性证明。
 
-当前 `scripts/test-plugin-media.mjs:14` 在创建临时目录和启动进程之前拒绝 `--executable=...`，报错为 `Packaged apps ignore a JavaScript entry argument; use the isolated ASAR test harness instead`。后续打包媒体验收应通过隔离 ASAR harness 执行，并先核实实际 `userData`。较早 [media-packaged-panel.log](../media-packaged-panel.log) 的面板/动画检查通过，只证明其记录的界面检查，不抵消误启动或补足媒体验收。
+当前 `scripts/test-plugin-media.mjs:14` 在创建临时目录和启动进程之前拒绝 `--executable=...`，报错为 `Packaged apps ignore a JavaScript entry argument; use the isolated ASAR test harness instead`。后续打包媒体验收应通过隔离 ASAR harness 执行，并先核实实际 `userData`。较早 `media-packaged-panel.log` 的面板/动画检查通过，只证明其记录的界面检查，不抵消误启动或补足媒体验收。
 
 仍须完成：
 

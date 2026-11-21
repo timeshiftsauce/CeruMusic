@@ -121,6 +121,11 @@ const settingSections = computed(() => [
     title: '歌词设置',
     items: [
       {
+        label: '显示音译',
+        value: playSetting.getShowLyricRomanization,
+        update: (val: boolean) => playSetting.setShowLyricRomanization(val)
+      },
+      {
         label: '跳转时逐行错开',
         value: playSetting.getIsSeekLyricStagger,
         update: (val: boolean) => playSetting.setIsSeekLyricStagger(val)

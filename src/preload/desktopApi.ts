@@ -669,6 +669,15 @@ export const desktopApi = {
     /** 通过主进程读取系统剪贴板,绕过 renderer 焦点 / 权限限制 */
     readText: (): Promise<string> => ipcRenderer.invoke('clipboard:read-text')
   },
+  /** 系统级通知(操作系统通知中心),用于全局快捷键等“窗口可能不在前台”的反馈 */
+  systemNotification: {
+    /** 返回 true 表示已发出;false 表示平台不支持或参数无效 */
+    show: (title: string, body: string): Promise<boolean> =>
+      ipcRenderer.invoke('system-notification:show', title, body)
+  },
+  /** 打开应用日志目录(主进程决定路径,不存在则先创建) */
+  openLogsDirectory: (): Promise<{ success: boolean; path?: string; message?: string }> =>
+    ipcRenderer.invoke('app:open-logs-directory'),
   /**
    * Windows 任务栏缩略图工具栏(Thumbnail Toolbar)桥
    * 主进程 thumbarService 实现按钮渲染 + cover overlay + tooltip,

@@ -29,7 +29,7 @@ next:
 在终端执行：
 
 ```shell
-npm create ceru-plugin@latest ceru-http-source -- --template source --lang ts
+npm create ceru-plugin@0.3.16 ceru-http-source -- --template source --lang ts
 cd ceru-http-source
 npm install
 ```

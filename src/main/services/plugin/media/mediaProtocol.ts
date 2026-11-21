@@ -179,30 +179,35 @@ export class PluginMediaRegistry {
       { range, signal: lifetime, transform: entry.transform ?? ('transform' in entry.result.stream! ? this.runtimes.get(entry.owner)?.(entry.result.stream!.transform,lifetime) : undefined) }
     )
   }
-  async handle(request: Request): Promise<Response> {
-    if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405 })
-    if (!this.has(request.url)) return new Response(null, { status: 404 })
+  async handle(request: Request, rendererOrigin?: string): Promise<Response> {
+    const origin = request.headers.get('origin')
+    if (origin && origin !== rendererOrigin && origin !== 'file://' && origin !== 'null')
+      return new Response(null, { status: 403 })
+    const headers = new Headers()
+    if (origin) headers.set('Access-Control-Allow-Origin', origin)
+    if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405, headers })
+    if (!this.has(request.url)) return new Response(null, { status: 404, headers })
     try {
       const result = await this.open(
         request.url,
         request.headers.get('range') ?? undefined,
         request.signal
       )
+      for (const [key, value] of Object.entries(result.headers)) headers.set(key, value)
       if (request.method === 'HEAD') {
         result.body.destroy()
-        return new Response(null, { status: result.status, headers: result.headers })
+        return new Response(null, { status: result.status, headers })
       }
       return new Response(Readable.toWeb(result.body) as ReadableStream<Uint8Array>, {
         status: result.status,
-        headers: result.headers
+        headers
       })
     } catch (error) {
-      if (error instanceof MediaRangeError)
-        return new Response(null, {
-          status: 416,
-          headers: error.length === undefined ? {} : { 'Content-Range': 'bytes */' + error.length }
-        })
-      return new Response(null, { status: 502 })
+      if (error instanceof MediaRangeError) {
+        if (error.length !== undefined) headers.set('Content-Range', 'bytes */' + error.length)
+        return new Response(null, { status: 416, headers })
+      }
+      return new Response(null, { status: 502, headers })
     }
   }
   async serve(url: string, request: IncomingMessage, response: ServerResponse): Promise<void> {

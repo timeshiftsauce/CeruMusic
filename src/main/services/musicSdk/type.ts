@@ -112,7 +112,19 @@ export interface DownloadSingleSongArgs extends GetMusicUrlArg {
 }
 
 // 搜索联想结果的类型定义
-export type TipSearchResult = string[]
+export type TipSearchKind = 'songs' | 'artists' | 'albums' | 'playlists'
+export interface TipSearchItem {
+  name: string
+  artist?: { name?: string }
+  artists?: { name?: string }[]
+}
+export type TipSearchResult = string[] | {
+  order?: TipSearchKind[]
+  songs?: TipSearchItem[]
+  artists?: TipSearchItem[]
+  albums?: TipSearchItem[]
+  playlists?: TipSearchItem[]
+}
 
 export interface GetCommentArg {
   songInfo: MusicItem

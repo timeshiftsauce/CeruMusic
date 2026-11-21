@@ -469,6 +469,14 @@ interface CustomAPI {
     readText: () => Promise<string>
   }
 
+  /** 系统级通知(操作系统通知中心);返回 false 表示平台不支持或参数无效 */
+  systemNotification: {
+    show: (title: string, body: string) => Promise<boolean>
+  }
+
+  /** 打开应用日志目录(主进程决定路径,不存在则先创建) */
+  openLogsDirectory: () => Promise<{ success: boolean; path?: string; message?: string }>
+
   systemAudio: {
     /** 必须先调用此方法获取一次性媒体采集授权（10s 过期、最多 4 次请求） */
     prepareCapture: () => Promise<boolean>

@@ -16,6 +16,7 @@ import {
   nativeTheme,
   powerMonitor,
   clipboard,
+  Notification,
   type WebContents,
   BrowserWindowConstructorOptions
 } from 'electron'
@@ -800,12 +801,14 @@ registerAutoUpdateEvents()
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'ceru-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+  { scheme: 'ceru-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } },
   { scheme: 'ceru-local', privileges: { standard: true, secure: true, stream: true } },
   { scheme: 'ceru-cover', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
 ])
 app.whenReady().then(async () => {
-  protocol.handle('ceru-media', request => pluginMedia.handle(request))
+  const rendererUrl = is.dev && process.env.ELECTRON_RENDERER_URL
+  const rendererOrigin = rendererUrl ? new URL(rendererUrl).origin : undefined
+  protocol.handle('ceru-media', request => pluginMedia.handle(request, rendererOrigin))
   app.once('will-quit', () => pluginMedia.dispose())
   protocol.handle('ceru-local', openLocalMedia)
   protocol.handle('ceru-cover', createCoverHandler(url => musicCacheService.resolveCoverUrl(url), is.dev ? process.env.ELECTRON_RENDERER_URL : undefined))
@@ -1036,6 +1039,36 @@ ipcMain.handle('clipboard:read-text', async () => {
   } catch (e) {
     console.warn('clipboard:read-text failed', e)
     return ''
+  }
+})
+
+/* 系统通知 —— 面向渲染端的最小通道(目前用于全局快捷键触发的操作反馈)。
+ * 只在窗口不聚焦时才有意义,但这里不替调用方判断:由渲染端决定是否发。
+ * 返回 false 表示当前平台不支持系统通知,调用方可据此回退。 */
+ipcMain.handle('system-notification:show', (_event, title: unknown, body: unknown) => {
+  if (typeof title !== 'string' || !title.trim() || title.length > 120) return false
+  if (typeof body !== 'string' || body.length > 512) return false
+  if (!Notification.isSupported()) return false
+  try {
+    new Notification({ title, body, silent: false }).show()
+    return true
+  } catch (e) {
+    console.warn('system-notification:show failed', e)
+    return false
+  }
+})
+
+/* 打开日志目录 —— 路径由主进程决定(app.getPath('logs')),renderer 不拼路径。
+ * 目录不存在时先创建,避免用户看到"文件不存在"的系统报错。 */
+ipcMain.handle('app:open-logs-directory', async () => {
+  try {
+    const dir = app.getPath('logs')
+    await fs.promises.mkdir(dir, { recursive: true })
+    const error = await shell.openPath(dir)
+    return error ? { success: false, message: error } : { success: true, path: dir }
+  } catch (e: any) {
+    console.warn('app:open-logs-directory failed', e)
+    return { success: false, message: e?.message || String(e) }
   }
 })
 

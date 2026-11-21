@@ -44,3 +44,12 @@ native/*/*.d.ts
 # napi 在 crate 根目录生成的 npm 元数据目录
 native/*/npm/
 
+
+# Generated plugin QA profiles and compiler caches
+/.electron-runtime-*/
+/*-results.json
+/*-verification.json
+/*-runtime-comparison.json
+/region-final-hashes.json
+*.tsbuildinfo
+/docs/.vitepress/.temp/

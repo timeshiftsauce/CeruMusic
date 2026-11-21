@@ -5,11 +5,11 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Upstream has not published the Titanium renderer or the lyric brightness optimization yet.
-const commit = '5fee356362353dbb24ce9bea3a62536478040de7'
-const sourceHash = '8cf33903e3ea4c7b0660add3f2e37bd135979431d9db8cd22a02f41cf2bfe151'
+// Keep unpublished upstream fixes pinned and verify the downloaded source archive.
+const commit = 'e13c5e6746618f54114ac37418afb11bf895b173'
+const sourceHash = '6c10fe22c1a935aeedd63cfa08695d9c5d9b5e3bd76979452018875089509b5c'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const work = join(root, '.tmp/amll')
+const work = join(root, '.tmp/amll', commit)
 const source = join(work, 'source')
 const core = join(source, 'packages/core')
 const destination = join(root, 'vendor/amll')

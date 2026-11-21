@@ -260,13 +260,12 @@ async function electronProbe(modulePath, profile, fixtures) {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'ceru-media',
-      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true }
+      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true }
     }
   ])
   const { PluginMediaRegistry } = await import(pathToFileURL(modulePath).href),
     registry = new PluginMediaRegistry()
   await app.whenReady()
-  protocol.handle('ceru-media', (request) => registry.handle(request))
   let server, win, worker
   const timeout = setTimeout(() => {
     console.error('Encrypted audio playback timed out')
@@ -289,6 +288,12 @@ async function electronProbe(modulePath, profile, fixtures) {
         stream: fixture.stream
       })
     server = createServer((request, response) => {
+      if (request.url === '/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' })
+        response.end('<audio muted crossorigin="anonymous"></audio>')
+        return
+      }
+      if (!sources.has(request.url)) { response.writeHead(404).end(); return }
       const { bytes } = sources.get(request.url),
         match = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range ?? '')
       const start = match ? Number(match[1]) : 0,
@@ -324,7 +329,9 @@ async function electronProbe(modulePath, profile, fixtures) {
       }
     })
     win.webContents.setAudioMuted(true)
-    await win.loadURL('data:text/html,<audio muted></audio>')
+    const rendererOrigin = 'http://127.0.0.1:' + server.address().port
+    protocol.handle('ceru-media', request => registry.handle(request, rendererOrigin))
+    await win.loadURL(rendererOrigin)
     const results = []
     for (const [route, value] of sources) {
       const token = registry.register('fixture', {

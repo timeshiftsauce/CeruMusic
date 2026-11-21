@@ -397,7 +397,7 @@ function checkGuide() {
                 <transition name="source">
                   <div v-if="source_list_show" class="source-list">
                     <div class="items">
-                      <SourceDisabledHint v-for="item in sourcePickerEntries" :key="item.key" :reason="item.reason" v-slot="{ events }">
+                      <SourceDisabledHint v-for="item in sourcePickerEntries.filter(entry => entry.source !== 'local')" :key="item.key" :reason="item.reason" v-slot="{ events }">
                       <button type="button" v-on="events"
                         class="source-item"
                         :class="{ active: item.selected }"

@@ -23,7 +23,7 @@ next:
 新建工程：
 
 ```shell
-npm create ceru-plugin@latest ceru-navidrome -- --template vue --lang ts
+npm create ceru-plugin@0.3.16 ceru-navidrome -- --template vue --lang ts
 cd ceru-navidrome
 npm install
 ```

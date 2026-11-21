@@ -864,11 +864,20 @@ const regionContent = computed(() => {
 const stageSelected = computed(() => props.show && !!regionView('player.stage'))
 const warnings = computed(() => regionNotices.value.filter(item => item.reason === 'warning'))
 const partsVisible = computed(() => props.show && !stageSelected.value)
+const displayedLyricLines = computed(() => {
+  const lines = toRaw(player.value.lyrics.lines)
+  if (playSetting.getShowLyricRomanization) return lines
+  return lines.map((line) => ({
+    ...line,
+    romanLyric: '',
+    words: line.words.map((word) => ({ ...word, romanWord: '' }))
+  }))
+})
 const lyricRegionContent = computed(() => !props.show || (!stageSelected.value && !regionView('player.lyrics')) ? {} : ({
   track:regionContent.value.track, layout: regionContent.value.layout, palette:regionContent.value.palette,
   forward:{alignPosition:playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34,
     enableBlur:playSetting.getIsBlurLyric,enableSpring:playSetting.getisJumpLyric,enableScale:playSetting.getisJumpLyric},
-  lines:simulator.active.value ? simulator.fixture.value.lines : player.value.lyrics.lines.map(line => ({startTimeMs:line.startTime, endTimeMs:line.endTime, text:line.words.map(word => word.word).join(''),
+  lines:simulator.active.value ? simulator.fixture.value.lines : displayedLyricLines.value.map(line => ({startTimeMs:line.startTime, endTimeMs:line.endTime, text:line.words.map(word => word.word).join(''),
     translation:line.translatedLyric, romanization:line.romanLyric, isBackground:line.isBG, isDuet:line.isDuet,
     words:line.words.map(word => ({text:word.word, startTimeMs:word.startTime, endTimeMs:word.endTime, romanization:word.romanWord}))}))
 }))
@@ -977,7 +986,7 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
         <component
           :is="playSetting.getUseAmlLyricRenderer ? LyricPlayer : LyricAdapter"
           ref="lyricPlayerRef"
-          :lyric-lines="toRaw(player.lyrics.lines) || []"
+          :lyric-lines="displayedLyricLines"
           :current-time="effectiveLyricTime"
           :word-fade-width="0.5"
           :playing="isAudioPlaying"

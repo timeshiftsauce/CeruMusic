@@ -384,19 +384,27 @@ h2 {
 .avatar-wrap {
   position: relative;
   flex-shrink: 0;
+  flex: 0 0 42px;
   width: 42px;
   height: 42px;
+  min-width: 42px;
+  min-height: 42px;
   border-radius: 50%;
   background: var(--td-brand-color-light);
   color: var(--td-brand-color);
   display: grid;
   place-items: center;
+  overflow: visible;
 }
 .avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+  clip-path: circle(50%);
 }
 .avatar-wrap i {
   display: grid;

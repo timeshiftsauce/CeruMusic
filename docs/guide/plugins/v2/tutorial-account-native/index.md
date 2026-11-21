@@ -21,7 +21,7 @@ next:
 ## 1. 创建工程
 
 ```shell
-npm create ceru-plugin@latest my-account-plugin -- --template vue --lang ts
+npm create ceru-plugin@0.3.16 my-account-plugin -- --template vue --lang ts
 cd my-account-plugin
 npm install
 ```

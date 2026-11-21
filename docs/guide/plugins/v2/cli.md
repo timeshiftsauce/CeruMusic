@@ -10,8 +10,8 @@ title: 脚手架与 CLI
 ## 创建与列出模板
 
 ```shell
-npm create ceru-plugin@latest
-npm create ceru-plugin@latest my-plugin -- --template vue --lang ts
+npm create ceru-plugin@0.3.16
+npm create ceru-plugin@0.3.16 my-plugin -- --template vue --lang ts
 ```
 
 第一种交互选择目录、模板和语言；第二种一次指定。已有本地 CLI 时也可以：

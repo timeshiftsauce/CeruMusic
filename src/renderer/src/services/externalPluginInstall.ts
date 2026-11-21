@@ -2,6 +2,7 @@ import { desktopBridge } from '@renderer/services/desktopBridge'
 import { h } from 'vue'
 import { DialogPlugin, MessagePlugin, Select } from 'tdesign-vue-next'
 import { refreshPluginContributions } from './pluginState'
+import { pluginInstallErrorMessage } from './pluginInstallError'
 
 export async function showExternalPluginInstall(sequence: number): Promise<void> {
   try {
@@ -50,7 +51,7 @@ export async function showExternalPluginInstall(sequence: number): Promise<void>
     MessagePlugin.success(info.update ? '插件已更新' : '插件已安装，可在设置中的插件列表使用')
     void refreshPluginContributions(true).catch(console.warn)
   } catch (error: any) {
-    MessagePlugin.error(error?.message || '插件安装失败')
+    MessagePlugin.error(pluginInstallErrorMessage(error))
   } finally {
     await desktopBridge.api.plugins.discardExternal(sequence)
   }

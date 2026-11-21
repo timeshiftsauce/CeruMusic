@@ -26,7 +26,7 @@ import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
 import { PlayMode } from '@renderer/types/audio'
-import { DialogPlugin, InputNumber as TInputNumber, NotifyPlugin } from 'tdesign-vue-next'
+import { DialogPlugin, InputNumber as TInputNumber } from 'tdesign-vue-next'
 import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   playNext,
@@ -665,7 +665,15 @@ const onToggleLike = async (location:'player'|'shortcut'='player') => {
     if (!current) {MessagePlugin.warning('当前没有正在播放的歌曲');return}
     await runTrackLike(current,!likeState.value,location,list.value,async (song,liked)=>{
       const previous=await applyTrackFavorite(song,liked)
-      if (previous!==liked) NotifyPlugin[liked?'success':'info']({title:liked?'已添加到喜欢':'已取消喜欢',content:`《${song.name || '未知歌曲'}》${liked?'已加入':'已移出'}“我的喜欢”`,duration:3000,placement:'bottom-right',closeBtn:true})
+      /* 界面内点击静默(按钮本身已有状态反馈);
+       * 全局快捷键 / 任务栏缩略图触发时窗口可能不在前台,改用系统通知。 */
+      if (previous!==liked && location==='shortcut') {
+        const name=song.name || '未知歌曲'
+        const what=song.singer ? `${name}-${song.singer}` : name
+        void desktopBridge.api?.systemNotification
+          ?.show(liked ? '已喜欢' : '已取消喜欢', `${what} Ciallo～(∠・ω )⌒☆`)
+          ?.catch(() => {})
+      }
       return previous
     })
   } catch(error) {MessagePlugin.error(error instanceof Error?error.message:'操作失败，请稍后重试')}

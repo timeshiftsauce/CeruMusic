@@ -35,7 +35,7 @@ import { interceptsResolve, resolveBus } from '../plugin/operations/bus'
 import { interceptsLyrics } from '../plugin/operations/bus'
 import { runLyrics } from '../plugin/operations/lyrics'
 import { runDownloadTasks } from '../plugin/operations/downloads'
-import type { OperationSource } from '@shiqianjiang/ceru-plugin-sdk'
+import type { CrLyric, OperationSource } from '@shiqianjiang/ceru-plugin-sdk'
 
 const v2Track = toAppTrack
 
@@ -80,10 +80,8 @@ function hasLyricContent(document: any): boolean {
   if (!document || typeof document !== 'object') return false
   const lines = Array.isArray(document.lines) ? document.lines : null
   if (lines && lines.length > 0) return true
-  return (
-    typeof document.raw === 'string' ||
-    typeof document.content === 'string' ||
-    typeof document.text === 'string'
+  return [document.plainText, document.raw, document.content, document.text].some(
+    (text) => typeof text === 'string' && text.trim().length > 0
   )
 }
 
@@ -413,12 +411,11 @@ function main(source: string = 'wy') {
         // 与音频、封面同一个 key：同一首歌的元信息只有一份，与音质无关。
         const lyricKey = isDisplayLyric ? musicCacheService.songCacheKey(songInfo) : ''
         if (isDisplayLyric) {
-          const cached = await musicCacheService.getCachedLyricObject<import('@shiqianjiang/ceru-plugin-sdk').CrLyric>(
-            lyricKey
-          )
-          // 命中也要套用当前的过滤偏好，保证与「未命中」路径的返回值形态一致，
-          // 否则用户改了过滤设置却只在首次播放生效。
-          if (cached) {
+          let cached = await musicCacheService.getCachedLyricObject<CrLyric>(lyricKey)
+          if (!hasLyricContent(cached)) {
+            cached = await musicCacheService.getCachedLyricObject<CrLyric>(lyricMarkerKey(lyricKey))
+          }
+          if (cached && hasLyricContent(cached)) {
             return { crlyric: grepLyricInfo ? filterLyricInfo(cached, useStrictMode) : cached }
           }
         }
@@ -446,13 +443,13 @@ function main(source: string = 'wy') {
             })
           ).text
         }
-        if (isDisplayLyric && res) musicCacheService.cacheLyricObject(lyricKey, res)
         // 与封面缓存一致：写一份「这首歌取过歌词」的标记。
         // 当插件返回空文档、或插件侧请求在并发下失败时，渲染层拿不到歌词就会
         // 守着同一个 inFlightMetadataKey 不再重试 —— 用户看到「这次播放没有歌词」，
         // 切走再切回来（inFlightMetadataKey 已换）才重新拉一次。
         // 有了标记，下一次请求可以直接绕过插件用缓存补齐。
         if (isDisplayLyric && hasLyricContent(res)) {
+          musicCacheService.cacheLyricObject(lyricKey, res)
           musicCacheService.cacheLyricObject(lyricMarkerKey(lyricKey), res)
         }
         return { crlyric: grepLyricInfo ? filterLyricInfo(res, useStrictMode) : res }
@@ -514,14 +511,15 @@ function main(source: string = 'wy') {
     },
 
     async getPlaylistTags() {
-      const provider = requireV2('playlists.categories')
+      const provider = pluginService.getV2Provider(source, undefined, 'playlists.categories')
+      if (!provider) throw new Error(`未安装提供「${source}」歌单分类的音源插件`)
       const result = await provider.host.invokeV2Provider(source, 'playlists.categories', [])
       const groups = new Map<string, any[]>()
       const hotTag: any[] = []
       for (const item of result.items) {
-        const group = item.extensions?.group || '分类'
+        const group = item.extensions?.group || item.subtitle || '分类'
         const tag = { id: item.ref.id, name: item.title }
-        if (item.extensions?.hot) hotTag.push(tag)
+        if (item.extensions?.hot || group === '热门') hotTag.push(tag)
         const list = groups.get(group) ?? []
         list.push(tag)
         groups.set(group, list)
@@ -540,14 +538,16 @@ function main(source: string = 'wy') {
       page?: number
       limit?: number
     }) {
-      const provider = requireV2('playlists.list')
+      const provider = pluginService.getV2Provider(source, undefined, 'playlists.list')
+      if (!provider) throw new Error(`未安装提供「${source}」歌单的音源插件`)
       const res = await provider.host.invokeV2Provider(source, 'playlists.list', [
         {
-          pluginId: provider.host.getPluginInfo().id,
+          pluginId: provider.pluginId,
           providerId: source,
           kind: 'playlist-category',
-          id: tagId || 'hot',
-          data: { sortId, limit }
+          id: tagId || '全部',
+          data: { sortId, limit },
+          scope: 'provider'
         },
         String(page)
       ])
@@ -560,14 +560,19 @@ function main(source: string = 'wy') {
         if (ref.kind !== 'playlist' || ref.id !== id || ref.providerId !== source)
           throw new Error('歌单资源与请求不匹配')
       }
-      const provider = pluginService.getV2Provider(source, ref?.pluginId, 'playlists.get')
+      const provider = pluginService.getV2Provider(
+        source,
+        ref?.scope === 'provider' ? undefined : ref?.pluginId,
+        'playlists.get'
+      )
       if (!provider) throw new Error('未安装提供此歌单的插件，请先安装并启用原插件')
       const res = await provider.host.invokeV2Provider(source, 'playlists.get', [
         ref ?? {
           pluginId: provider.host.getPluginInfo().id,
           providerId: source,
           kind: 'playlist',
-          id
+          id,
+          scope: 'provider'
         },
         ref ? cursor : String(page)
       ])
@@ -626,7 +631,8 @@ function main(source: string = 'wy') {
     },
 
     async getLeaderboards() {
-      const provider = requireV2('charts.list')
+      const provider = pluginService.getV2Provider(source, undefined, 'charts.list')
+      if (!provider) throw new Error(`未安装提供「${source}」排行榜的音源插件`)
       const result = await provider.host.invokeV2Provider(source, 'charts.list', [])
       return (result?.items || []).map((item: any) => ({
         id: item.ref?.id,
@@ -639,9 +645,10 @@ function main(source: string = 'wy') {
     },
 
     async getLeaderboardDetail({ id, page }: { id: string; page: number }) {
-      const provider = requireV2('charts.getTracks')
+      const provider = pluginService.getV2Provider(source, undefined, 'charts.getTracks')
+      if (!provider) throw new Error(`未安装提供「${source}」排行榜的音源插件`)
       const result = await provider.host.invokeV2Provider(source, 'charts.getTracks', [
-        { pluginId: provider.pluginId, providerId: source, kind: 'chart', id },
+        { pluginId: provider.pluginId, providerId: source, kind: 'chart', id, scope: 'provider' },
         String(page)
       ])
       return v2Page(result) as PlaylistDetailResult

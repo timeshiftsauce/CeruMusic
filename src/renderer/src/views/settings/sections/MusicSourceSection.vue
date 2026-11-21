@@ -184,7 +184,7 @@ const goPlugin = () => {
       <div id="music-source" class="setting-group">
         <h3>音乐源选择</h3>
         <div class="source-cards">
-          <SourceDisabledHint v-for="source in sourcePickerEntries" :key="source.key" :reason="source.reason" v-slot="{ events }">
+          <SourceDisabledHint v-for="source in sourcePickerEntries.filter(entry => entry.source !== 'local')" :key="source.key" :reason="source.reason" v-slot="{ events }">
           <button type="button" v-on="events"
             class="source-card"
             :class="{ active: source.selected }"
