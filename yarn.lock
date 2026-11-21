@@ -11415,10 +11415,10 @@ zwitch@^2.0.4:
     gl-matrix "4.0.0-beta.2"
     vitest "^4.1.10"
 
-"@shiqianjiang/ceru-plugin-core@3.0.1", "@shiqianjiang/ceru-plugin-core@file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-core-3.0.1.tgz":
+"@shiqianjiang/ceru-plugin-core@3.0.1":
   version "3.0.1"
-  resolved "vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-core-3.0.1.tgz#cca35221f0b25c479713a4ab9fc9528aaaa2ae0e"
-  integrity sha512-FgDWS0bdgEI9mZOCz7/4qDORzxZu/C/KV2mkW2NMIIbWuaPPYI6FWKn6lqcplYNwZ2n+kVQL3jetTpqRs4IBzQ==
+  resolved "https://registry.npmjs.org/@shiqianjiang/ceru-plugin-core/-/ceru-plugin-core-3.0.1.tgz#45e7a3850348d8a3a6cadd002b58b39d87c8c01b"
+  integrity sha512-eHR5E0GcdL4G7qgQva+D+tROrI4AthOdUBbxPuYcr2EtWvDMfh7+jX6x33haO1CXg7Nat72uYwFjlFQozHrT1A==
   dependencies:
     "@shiqianjiang/ceru-plugin-issuer" "3.0.1"
     "@shiqianjiang/ceru-plugin-sdk" "3.0.1"
@@ -11436,9 +11436,9 @@ zwitch@^2.0.4:
     acorn "^8.18.0"
     ajv "^8.20.0"
 
-"@shiqianjiang/ceru-plugin-issuer@3.0.1", "@shiqianjiang/ceru-plugin-issuer@file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-issuer-3.0.1.tgz":
+"@shiqianjiang/ceru-plugin-issuer@3.0.1":
   version "3.0.1"
-  resolved "vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-issuer-3.0.1.tgz#e5ec06ba421b69b13bf4f53c89d01c12fcb54518"
+  resolved "https://registry.npmjs.org/@shiqianjiang/ceru-plugin-issuer/-/ceru-plugin-issuer-3.0.1.tgz#e5ec06ba421b69b13bf4f53c89d01c12fcb54518"
   integrity sha512-kucKWllYp6OEvMINP0snNMC6zxd8aWg1ES/AErewDxU7NUqslc5ghWMCDo+mMe/iIkDUm4Q31zOghN4dRpJXaA==
   dependencies:
     "@shiqianjiang/ceru-plugin-sdk" "3.0.1"
@@ -11457,9 +11457,9 @@ zwitch@^2.0.4:
     fflate "^0.8.2"
     json5 "^2.2.3"
 
-"@shiqianjiang/ceru-plugin-sdk@3.0.1", "@shiqianjiang/ceru-plugin-sdk@file:vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-sdk-3.0.1.tgz":
+"@shiqianjiang/ceru-plugin-sdk@3.0.1":
   version "3.0.1"
-  resolved "vendor/plugin-runtime/v3/shiqianjiang-ceru-plugin-sdk-3.0.1.tgz#0ab5ddd8b9ce212d13f680a9d103adb7c5e90d4b"
+  resolved "https://registry.npmjs.org/@shiqianjiang/ceru-plugin-sdk/-/ceru-plugin-sdk-3.0.1.tgz#0ab5ddd8b9ce212d13f680a9d103adb7c5e90d4b"
   integrity sha512-Z0Mu1nmJjoaHIpDqbLZWQ+tdw9O1PK45sIm6TFlbJzbeFAz9uG6HEdjHCalsJBKBddjwU5pQhLciZUljDJUBMg==
   dependencies:
     "@types/lodash" "^4.17.25"
