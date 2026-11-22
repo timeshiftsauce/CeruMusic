@@ -80,11 +80,39 @@ export const desktopApi = {
   },
   //音源插件
   plugins: {
-    accountConnections: (pluginId:string,itemId:string,validate?:boolean) => ipcRenderer.invoke('plugin:account-connections',pluginId,itemId,validate),
-    accountLikes: (pluginId:string,itemId:string,connection:string,enabled:boolean,ref?:import('@shiqianjiang/ceru-plugin-sdk').ResourceRef)=>ipcRenderer.invoke('plugin:account-likes',pluginId,itemId,connection,enabled,ref),
-    accountCollection: (pluginId:string,itemId:string,capability:import('@shiqianjiang/ceru-plugin-sdk').AccountListCapability,connection:string,cursor?:string)=>ipcRenderer.invoke('plugin:account-collection',pluginId,itemId,capability,connection,cursor),
-    cancelAccountQr: (pluginId:string,ticket:string) => ipcRenderer.invoke('plugin:account-qr-cancel',pluginId,ticket),
-    accountChange: (pluginId:string,itemId:string,action:'login'|'switch'|'logout',connection?:string,method?:'form'|'qrcode'|'oauth'|'browser') => ipcRenderer.invoke('plugin:account-change',pluginId,itemId,action,connection,method),
+    accountConnections: (pluginId: string, itemId: string, validate?: boolean) =>
+      ipcRenderer.invoke('plugin:account-connections', pluginId, itemId, validate),
+    accountLikes: (
+      pluginId: string,
+      itemId: string,
+      connection: string,
+      enabled: boolean,
+      ref?: import('@shiqianjiang/ceru-plugin-sdk').ResourceRef
+    ) => ipcRenderer.invoke('plugin:account-likes', pluginId, itemId, connection, enabled, ref),
+    accountCollection: (
+      pluginId: string,
+      itemId: string,
+      capability: import('@shiqianjiang/ceru-plugin-sdk').AccountListCapability,
+      connection: string,
+      cursor?: string
+    ) =>
+      ipcRenderer.invoke(
+        'plugin:account-collection',
+        pluginId,
+        itemId,
+        capability,
+        connection,
+        cursor
+      ),
+    cancelAccountQr: (pluginId: string, ticket: string) =>
+      ipcRenderer.invoke('plugin:account-qr-cancel', pluginId, ticket),
+    accountChange: (
+      pluginId: string,
+      itemId: string,
+      action: 'login' | 'switch' | 'logout',
+      connection?: string,
+      method?: 'form' | 'qrcode' | 'oauth' | 'browser'
+    ) => ipcRenderer.invoke('plugin:account-change', pluginId, itemId, action, connection, method),
     accountLogout: (pluginId: string, itemId: string) =>
       ipcRenderer.invoke('plugin:account-logout', pluginId, itemId),
     accountSummary: (pluginId: string, itemId: string) =>
@@ -95,7 +123,8 @@ export const desktopApi = {
       return () => ipcRenderer.removeListener('plugin:account-changed', listener)
     },
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
-    queueExternalFile: (filePath: string): Promise<{sequence: number}> => ipcRenderer.invoke('plugin:external:queue-file', filePath),
+    queueExternalFile: (filePath: string): Promise<{ sequence: number }> =>
+      ipcRenderer.invoke('plugin:external:queue-file', filePath),
     prepareExternal: (sequence: number) => ipcRenderer.invoke('plugin:external:prepare', sequence),
     commitExternal: (sequence: number, format?: string) =>
       ipcRenderer.invoke('plugin:external:commit', sequence, format),
@@ -115,28 +144,58 @@ export const desktopApi = {
       ipcRenderer.invoke('plugin:guest-permissions', pluginId, guestId),
     guestSetPermissions: (pluginId: string, guestId: string, keys: string[]) =>
       ipcRenderer.invoke('plugin:guest-set-permissions', pluginId, guestId, keys),
-    hookControls: (change?:import('../common/pluginHookControls').HookControlChange) => ipcRenderer.invoke('plugin:hook-controls',change),
+    hookControls: (change?: import('../common/pluginHookControls').HookControlChange) =>
+      ipcRenderer.invoke('plugin:hook-controls', change),
     hookSnapshot: () => ipcRenderer.invoke('plugin:hook-snapshot'),
-    trackLike: (id:string,input:unknown,location:string) => ipcRenderer.invoke('plugin:track-like',id,input,location),
-    playlistCreate: (id:string,input:unknown) => ipcRenderer.invoke('plugin:playlist-create',id,input),
-    playlistDelete: (id:string,input:unknown) => ipcRenderer.invoke('plugin:playlist-delete',id,input),
-    playlistExport: (id:string,input:unknown) => ipcRenderer.invoke('plugin:playlist-export',id,input),
-    playlistImport: (id:string,input:unknown) => ipcRenderer.invoke('plugin:playlist-import',id,input),
-    windowClose: (id:string,location:'titlebar'|'shortcut') => ipcRenderer.invoke('plugin:window-close',id,location),
-    replayDownload: (token:string)=>ipcRenderer.invoke('plugin:download-replay',token),
-    shareCreate: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['share.create'])=>ipcRenderer.invoke('plugin:share-create',id,input),
-    systemOperation: (id:string,name:import('@shiqianjiang/ceru-plugin-sdk').SystemOperationName,input:unknown)=>ipcRenderer.invoke('plugin:system-operation',id,name,input),
-    dispatchLink: (url:string)=>ipcRenderer.invoke('plugin:link-dispatch',url),
-    playlistTracks: (id:string,name:'playlist.addTracks'|'playlist.removeTracks',input:unknown) => ipcRenderer.invoke('plugin:playlist-tracks',id,name,input),
-    searchQuery: (input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.query']) => ipcRenderer.invoke('plugin:search-query',input),
-    searchSuggest: (input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.suggest']) => ipcRenderer.invoke('plugin:search-suggest',input),
-    searchResults: (input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.results']) => ipcRenderer.invoke('plugin:search-results',input),
-    onHookNames: (callback: (snapshot: {revision:number;names:string[]})=>void) => {
-      const listener = (_event:any, snapshot:{revision:number;names:string[]}) => callback(snapshot)
-      ipcRenderer.on('plugin:hooks-changed',listener)
-      return () => ipcRenderer.removeListener('plugin:hooks-changed',listener)
+    trackLike: (id: string, input: unknown, location: string) =>
+      ipcRenderer.invoke('plugin:track-like', id, input, location),
+    playlistCreate: (id: string, input: unknown) =>
+      ipcRenderer.invoke('plugin:playlist-create', id, input),
+    playlistDelete: (id: string, input: unknown) =>
+      ipcRenderer.invoke('plugin:playlist-delete', id, input),
+    playlistExport: (id: string, input: unknown) =>
+      ipcRenderer.invoke('plugin:playlist-export', id, input),
+    playlistImport: (id: string, input: unknown) =>
+      ipcRenderer.invoke('plugin:playlist-import', id, input),
+    windowClose: (id: string, location: 'titlebar' | 'shortcut') =>
+      ipcRenderer.invoke('plugin:window-close', id, location),
+    replayDownload: (token: string) => ipcRenderer.invoke('plugin:download-replay', token),
+    shareCreate: (
+      id: string,
+      input: import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['share.create']
+    ) => ipcRenderer.invoke('plugin:share-create', id, input),
+    systemOperation: (
+      id: string,
+      name: import('@shiqianjiang/ceru-plugin-sdk').SystemOperationName,
+      input: unknown
+    ) => ipcRenderer.invoke('plugin:system-operation', id, name, input),
+    dispatchLink: (url: string) => ipcRenderer.invoke('plugin:link-dispatch', url),
+    playlistTracks: (
+      id: string,
+      name: 'playlist.addTracks' | 'playlist.removeTracks',
+      input: unknown
+    ) => ipcRenderer.invoke('plugin:playlist-tracks', id, name, input),
+    searchQuery: (input: import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.query']) =>
+      ipcRenderer.invoke('plugin:search-query', input),
+    searchSuggest: (
+      input: import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.suggest']
+    ) => ipcRenderer.invoke('plugin:search-suggest', input),
+    searchResults: (
+      input: import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.results']
+    ) => ipcRenderer.invoke('plugin:search-results', input),
+    onHookNames: (callback: (snapshot: { revision: number; names: string[] }) => void) => {
+      const listener = (_event: any, snapshot: { revision: number; names: string[] }) =>
+        callback(snapshot)
+      ipcRenderer.on('plugin:hooks-changed', listener)
+      return () => ipcRenderer.removeListener('plugin:hooks-changed', listener)
     },
-    runPlaybackOperation: (id:string,name:string,input:unknown,from?:string,system?:boolean) => ipcRenderer.invoke('plugin:run-playback-operation',id,name,input,from,system),
+    runPlaybackOperation: (
+      id: string,
+      name: string,
+      input: unknown,
+      from?: string,
+      system?: boolean
+    ) => ipcRenderer.invoke('plugin:run-playback-operation', id, name, input, from, system),
     onUI: (callback: (request: any) => void) => {
       const listener = (_event: any, request: any) => callback(request)
       ipcRenderer.on('plugin:ui', listener)
@@ -144,9 +203,12 @@ export const desktopApi = {
     },
     respondUI: (result: any) => ipcRenderer.invoke('plugin:ui-result', result),
     uiReady: (ready: boolean) => ipcRenderer.invoke('plugin:ui-ready', ready),
-    guardRoute: (to:unknown,from:unknown,owner?:string) => ipcRenderer.invoke('plugin:guard-route',to,from,owner),
-    routeCompleted: (to: unknown, from: unknown) => ipcRenderer.invoke('plugin:route-completed',to,from),
-    reportEnvironment: (online: boolean, locale: string) => ipcRenderer.invoke('plugin:report-environment', online, locale),
+    guardRoute: (to: unknown, from: unknown, owner?: string) =>
+      ipcRenderer.invoke('plugin:guard-route', to, from, owner),
+    routeCompleted: (to: unknown, from: unknown) =>
+      ipcRenderer.invoke('plugin:route-completed', to, from),
+    reportEnvironment: (online: boolean, locale: string) =>
+      ipcRenderer.invoke('plugin:report-environment', online, locale),
     publishHostEvent: (event: string, value: unknown, pluginId?: string) =>
       ipcRenderer.invoke('plugin:publish-host-event', event, value, pluginId),
     onUICancel: (callback: (request: { id: string }) => void) => {
@@ -156,11 +218,19 @@ export const desktopApi = {
     },
     openSurface: (pluginId: string, surfaceId: string) =>
       ipcRenderer.invoke('plugin:open-surface', pluginId, surfaceId),
-    skinChoice: (choice?: { pluginId: string; skinId: string } | null) => ipcRenderer.invoke('plugin:skin-choice', choice),
-    regionChoice: (edit: import('@common/pluginSkin').RegionEdit) => ipcRenderer.invoke('plugin:region-choice', edit),
-    skinSetting: (edit: import('@common/pluginSkin').SkinSettingEdit) => ipcRenderer.invoke('plugin:skin-setting', edit),
-    mountSurface: (pluginId: string, surfaceId: string, slot?: string, section?: import('@common/pluginPlaylistContext').PlaylistSectionContext, region?: string) =>
-      ipcRenderer.invoke('plugin:mount-surface', pluginId, surfaceId, slot, section, region),
+    skinChoice: (choice?: { pluginId: string; skinId: string } | null) =>
+      ipcRenderer.invoke('plugin:skin-choice', choice),
+    regionChoice: (edit: import('@common/pluginSkin').RegionEdit) =>
+      ipcRenderer.invoke('plugin:region-choice', edit),
+    skinSetting: (edit: import('@common/pluginSkin').SkinSettingEdit) =>
+      ipcRenderer.invoke('plugin:skin-setting', edit),
+    mountSurface: (
+      pluginId: string,
+      surfaceId: string,
+      slot?: string,
+      section?: import('@common/pluginPlaylistContext').PlaylistSectionContext,
+      region?: string
+    ) => ipcRenderer.invoke('plugin:mount-surface', pluginId, surfaceId, slot, section, region),
     surfaceReady: (pluginId: string, surfaceId: string, sessionId: string) =>
       ipcRenderer.invoke('plugin:surface-ready', pluginId, surfaceId, sessionId),
     onSurfaceState: (callback: (event: any) => void) => {
@@ -199,16 +269,50 @@ export const desktopApi = {
     ) => ipcRenderer.invoke('plugin:drawer-action', pluginId, surfaceId, sessionId, index, values),
     closeDrawer: (pluginId: string, surfaceId: string, sessionId: string) =>
       ipcRenderer.invoke('plugin:drawer-close', pluginId, surfaceId, sessionId),
-    strictMode:(enabled?:boolean):Promise<boolean>=>ipcRenderer.invoke('plugin:strict-mode',enabled),
-    devState:()=>ipcRenderer.invoke('plugin:dev-state'),
-    setDevMode:(enabled:boolean)=>ipcRenderer.invoke('plugin:dev-mode',enabled),
-    addDevFile:()=>ipcRenderer.invoke('plugin:dev-add'),
-    removeDevFile:(file:string)=>ipcRenderer.invoke('plugin:dev-remove',file),
-    onDevReloaded:(callback:()=>void)=>{const listener=()=>callback();ipcRenderer.on('plugin:dev-reloaded',listener);return ()=>ipcRenderer.off('plugin:dev-reloaded',listener)},
+    strictMode: (enabled?: boolean): Promise<boolean> =>
+      ipcRenderer.invoke('plugin:strict-mode', enabled),
+    devState: () => ipcRenderer.invoke('plugin:dev-state'),
+    setDevMode: (enabled: boolean) => ipcRenderer.invoke('plugin:dev-mode', enabled),
+    addDevFile: () => ipcRenderer.invoke('plugin:dev-add'),
+    removeDevFile: (file: string) => ipcRenderer.invoke('plugin:dev-remove', file),
+    onDevReloaded: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('plugin:dev-reloaded', listener)
+      return () => ipcRenderer.off('plugin:dev-reloaded', listener)
+    },
     musicSources: () => ipcRenderer.invoke('plugin:music-sources'),
-    guardProviderSelection: (id:string, pluginId:string, providerId:string, source:string|null, provider:string|null) => ipcRenderer.invoke('plugin:guard-provider-selection',id,pluginId,providerId,source,provider),
-    cancelProviderSelection: (id:string) => ipcRenderer.invoke('plugin:cancel-provider-selection',id),
-    evaluatePageVisibility: (pluginId: string, entryId: string, source: string | null, provider: string | null, kind: 'page' | 'provider' = 'page') => ipcRenderer.invoke('plugin:evaluate-page-visibility',pluginId,entryId,source,provider,kind),
+    guardProviderSelection: (
+      id: string,
+      pluginId: string,
+      providerId: string,
+      source: string | null,
+      provider: string | null
+    ) =>
+      ipcRenderer.invoke(
+        'plugin:guard-provider-selection',
+        id,
+        pluginId,
+        providerId,
+        source,
+        provider
+      ),
+    cancelProviderSelection: (id: string) =>
+      ipcRenderer.invoke('plugin:cancel-provider-selection', id),
+    evaluatePageVisibility: (
+      pluginId: string,
+      entryId: string,
+      source: string | null,
+      provider: string | null,
+      kind: 'page' | 'provider' = 'page'
+    ) =>
+      ipcRenderer.invoke(
+        'plugin:evaluate-page-visibility',
+        pluginId,
+        entryId,
+        source,
+        provider,
+        kind
+      ),
     contributions: () => ipcRenderer.invoke('plugin:contributions'),
     restoreEnabled: () => ipcRenderer.invoke('plugin:restore-enabled'),
     setActive: (pluginId: string | null) => ipcRenderer.invoke('plugin:set-active', pluginId),
@@ -247,7 +351,8 @@ export const desktopApi = {
     getConfig: (pluginId: string) => ipcRenderer.invoke('service-plugin-getConfig', pluginId),
     getPermissions: (pluginId: string) =>
       ipcRenderer.invoke('service-plugin-getPermissions', pluginId),
-    getDescriptor: (pluginId: string) => ipcRenderer.invoke('service-plugin-getDescriptor', pluginId),
+    getDescriptor: (pluginId: string) =>
+      ipcRenderer.invoke('service-plugin-getDescriptor', pluginId),
     savePermissions: (pluginId: string, permissions: string[]) =>
       ipcRenderer.invoke('service-plugin-savePermissions', pluginId, permissions),
     saveConfig: (pluginId: string, config: Record<string, any>) =>
@@ -270,6 +375,31 @@ export const desktopApi = {
       ) => callback(payload)
       ipcRenderer.on('plugin-add-link', handler)
       return () => ipcRenderer.removeListener('plugin-add-link', handler)
+    }
+  },
+  platformAccounts: {
+    status: () => ipcRenderer.invoke('platform-accounts:status'),
+    openLogin: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo') =>
+      ipcRenderer.invoke('platform-accounts:open-login', platform),
+    kuwoLogin: (username: string, password: string) =>
+      ipcRenderer.invoke('platform-accounts:kuwo-login', username, password),
+    logout: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo') =>
+      ipcRenderer.invoke('platform-accounts:logout', platform),
+    syncPlaylists: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo', selectedIds?: string[]) =>
+      ipcRenderer.invoke('platform-accounts:sync-playlists', platform, selectedIds),
+    getPlaylistTracks: (platform: 'netease' | 'kugou', playlistId: string, page?: number) =>
+      ipcRenderer.invoke('platform-accounts:get-playlist-tracks', platform, playlistId, page),
+    onChanged: (callback: {
+      (event: {
+        platform: 'netease' | 'qq' | 'kugou' | 'kuwo'
+        loggedIn: boolean
+        playlistCount?: number
+        syncError?: string
+      }): void
+    }) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: any) => callback(value)
+      ipcRenderer.on('platform-accounts:changed', listener)
+      return () => ipcRenderer.removeListener('platform-accounts:changed', listener)
     }
   },
   // ai助手
@@ -447,8 +577,7 @@ export const desktopApi = {
     downloadUpdate: (mode?: 'differential' | 'full', mirror?: string) =>
       ipcRenderer.invoke('auto-updater:download-update', mode, mirror),
     /** 探测更新镜像速度 → [{ url, ms }]（按 ms 升序，失败的已剔除） */
-    probeMirrors: (mirrors?: string[]) =>
-      ipcRenderer.invoke('auto-updater:probe-mirrors', mirrors),
+    probeMirrors: (mirrors?: string[]) => ipcRenderer.invoke('auto-updater:probe-mirrors', mirrors),
     quitAndInstall: () => ipcRenderer.invoke('auto-updater:quit-and-install'),
     getDownloadedPath: (updateInfo?: any) =>
       ipcRenderer.invoke('auto-updater:get-downloaded-path', updateInfo),
@@ -764,4 +893,3 @@ export const desktopApi = {
     }
   }
 }
-

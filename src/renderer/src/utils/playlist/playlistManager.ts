@@ -20,7 +20,7 @@ import { runQueue } from '@renderer/plugin/operations'
  */
 async function tryRequestSongAsMember(song: SongList): Promise<boolean> {
   try {
-    const { useListenTogetherStore } = await import('@renderer/store')
+    const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
     const lt = useListenTogetherStore()
     if (!lt.isInRoom || lt.canControl) return false
 
@@ -75,7 +75,7 @@ async function tryRequestSongAsMember(song: SongList): Promise<boolean> {
  */
 async function tryAddToQueueAsHost(song: SongList): Promise<boolean> {
   try {
-    const { useListenTogetherStore } = await import('@renderer/store')
+    const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
     const lt = useListenTogetherStore()
     if (!lt.isInRoom || !lt.canControl) return false
     /* 本地预检 —— 同曲已在 queue 立刻提示,避免发到服务端再吃 SONG_ALREADY_QUEUED */
@@ -110,6 +110,7 @@ type PlaylistEvents = {
   addToPlaylistAndPlay: SongList
   addToPlaylistEnd: SongList
   replacePlaylist: SongList[]
+  replacePlaylistAndPlay: { songs: SongList[]; song: SongList }
 }
 
 // 热更新时复用同一总线，避免页面发往新总线、播放器仍监听旧总线。
@@ -303,7 +304,7 @@ export async function replacePlaylist(
 
     /* 一起听 member:批量替换列表语义不适合"点歌"流程,只取第一首作为点歌请求,
      * 其它歌曲忽略 + 提示用户。avoid 改本地共享列表破坏房间同步状态。 */
-    const { useListenTogetherStore } = await import('@renderer/store')
+    const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
     const lt = useListenTogetherStore()
     if (lt.isInRoom && !lt.canControl) {
       const first = songs[0]
@@ -374,13 +375,34 @@ export function initPlaylistEventListeners(
   const onReplace = async (songs: SongList[]) => {
     await replacePlaylist(songs, localUserStore, playSongCallback)
   }
+  const onReplaceAndPlay = async ({ songs, song }: PlaylistEvents['replacePlaylistAndPlay']) => {
+    if (songs.length === 0) {
+      await MessagePlugin.warning('歌曲列表为空')
+      return
+    }
+    if (await tryRequestSongAsMember(song)) return
+    try {
+      localUserStore.replaceSongList(songs)
+      const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
+      const lt = useListenTogetherStore()
+      if (lt.isInRoom && lt.canControl) {
+        await lt.syncRoomContextFromLocal({ queueOnly: true })
+      }
+      await playSongCallback(song)
+    } catch (error: any) {
+      console.error('切换歌单并播放失败:', error)
+      await MessagePlugin.error(error?.message || '切换歌单并播放失败')
+    }
+  }
   emitter.on('addToPlaylistAndPlay', onPlay)
   emitter.on('addToPlaylistEnd', onAdd)
   emitter.on('replacePlaylist', onReplace)
+  emitter.on('replacePlaylistAndPlay', onReplaceAndPlay)
   detachPlaylistListeners = () => {
     emitter.off('addToPlaylistAndPlay', onPlay)
     emitter.off('addToPlaylistEnd', onAdd)
     emitter.off('replacePlaylist', onReplace)
+    emitter.off('replacePlaylistAndPlay', onReplaceAndPlay)
   }
 }
 

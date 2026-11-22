@@ -28,11 +28,7 @@
         </div>
         <!-- 搜索建议 -->
         <Transition name="fade" mode="out-in" @after-leave="calcSearchSuggestHeights">
-          <div
-            v-if="SearchStore.value && groups.length"
-            ref="searchSuggestRef"
-            class="all-suggest"
-          >
+          <div v-if="SearchStore.value && groups.length" ref="searchSuggestRef" class="all-suggest">
             <div v-for="(group, index) in groups" :key="index" class="suggest">
               <div class="suggest-type">
                 <SvgIcon :name="searchSuggestionsType[group.kind].icon" />

@@ -24,18 +24,31 @@ function desktopViewLibrary(): Plugin {
         build: {
           write: false,
           lib: { entry, formats: ['iife'], name: 'DesktopComponents' },
-          rollupOptions: { external: ['vue'], output: { globals: { vue: 'desktopVue' }, exports: 'named' } }
+          rollupOptions: {
+            external: ['vue'],
+            output: { globals: { vue: 'desktopVue' }, exports: 'named' }
+          }
         }
       })
-      const files = (Array.isArray(result) ? result : [result]).flatMap(part => 'output' in part ? part.output : [])
-      const entryChunk = files.find(file => file.type === 'chunk' && file.isEntry)
-      const stylesheet = files.find(file => file.type === 'asset' && file.fileName.endsWith('.css'))
-      if (entryChunk?.type !== 'chunk' || stylesheet?.type !== 'asset') throw Error('Missing desktop component library output')
-      for (const id of entryChunk.moduleIds) if (!id.startsWith('\0')) this.addWatchFile(id.split('?')[0])
-      this.emitFile({ type: 'asset', fileName: 'desktop-components.json', source: JSON.stringify({
-        factory: 'function(desktopVue){' + entryChunk.code + '\nreturn DesktopComponents}',
-        styles: Buffer.from(stylesheet.source).toString('utf8')
-      }) })
+      const files = (Array.isArray(result) ? result : [result]).flatMap((part) =>
+        'output' in part ? part.output : []
+      )
+      const entryChunk = files.find((file) => file.type === 'chunk' && file.isEntry)
+      const stylesheet = files.find(
+        (file) => file.type === 'asset' && file.fileName.endsWith('.css')
+      )
+      if (entryChunk?.type !== 'chunk' || stylesheet?.type !== 'asset')
+        throw Error('Missing desktop component library output')
+      for (const id of entryChunk.moduleIds)
+        if (!id.startsWith('\0')) this.addWatchFile(id.split('?')[0])
+      this.emitFile({
+        type: 'asset',
+        fileName: 'desktop-components.json',
+        source: JSON.stringify({
+          factory: 'function(desktopVue){' + entryChunk.code + '\nreturn DesktopComponents}',
+          styles: Buffer.from(stylesheet.source).toString('utf8')
+        })
+      })
     }
   }
 }
@@ -81,7 +94,10 @@ export default defineConfig(({ command }) => ({
     // Local runtime packages can change without a version bump during development.
     // Keep their ESM live so Vite does not retain a previous vendor archive.
     optimizeDeps: {
-      exclude: ['@shiqianjiang/ceru-plugin-sdk', '@shiqianjiang/ceru-plugin-core/component-runtime'],
+      exclude: [
+        '@shiqianjiang/ceru-plugin-sdk',
+        '@shiqianjiang/ceru-plugin-core/component-runtime'
+      ],
       include: ['@applemusic-like-lyrics/core', '@applemusic-like-lyrics/vue', 'qrcode']
     },
     build: {
@@ -113,7 +129,7 @@ export default defineConfig(({ command }) => ({
            *  - vendor-vue        Vue + 周边运行时(高频共用,放在主入口附近)
            *  - vendor-tdesign    UI 组件库(体积大,跨多个页面用)
            * - vendor-amll       Apple Music 歌词渲染器(只在 FullPlay 用,可懒)
-           *  - vendor-tfjs       TensorFlow.js (仅 nsfwCheck 路径用,已 dynamic import)
+           *  - TensorFlow.js     仅由 nsfwCheck 按需加载,不要并入启动 vendor chunk
            *  - vendor-logto      Logto 鉴权
            *  - vendor-socketio   Socket.IO client (一起听用)
            *  - vendor-misc       其余 node_modules,合并防止碎片化
@@ -148,7 +164,8 @@ export default defineConfig(({ command }) => ({
               /[\\/]node_modules[\\/]@tensorflow[\\/]/.test(id) ||
               /[\\/]node_modules[\\/]nsfwjs[\\/]/.test(id)
             ) {
-              return 'vendor-tfjs'
+              // 由 nsfwCheck 的 dynamic import 单独触发加载，避免 5MB 模型运行时进入首页预加载链。
+              return undefined
             }
             if (/[\\/]node_modules[\\/]@logto[\\/]/.test(id)) {
               return 'vendor-logto'

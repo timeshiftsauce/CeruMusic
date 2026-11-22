@@ -42,26 +42,36 @@ const loading = ref(false)
 const hasMore = ref(false)
 const playlistMore = ref(false)
 const pages = {
-  track:{raw:0,delta:0,cursor:undefined as string|undefined,seen:new Set<string>()},
-  playlist:{raw:0,delta:0,cursor:undefined as string|undefined,seen:new Set<string>()}
+  track: { raw: 0, delta: 0, cursor: undefined as string | undefined, seen: new Set<string>() },
+  playlist: { raw: 0, delta: 0, cursor: undefined as string | undefined, seen: new Set<string>() }
 }
-async function visiblePage(kind:keyof typeof pages, result:any, source:string, request:number) {
+async function visiblePage(kind: keyof typeof pages, result: any, source: string, request: number) {
   const raw = Array.isArray(result?.list) ? result.list : []
-  let rows=raw
+  let rows = raw
   if (interceptsSearchResults()) {
-    try {rows=await rewriteSearchResults(keyword.value,source,kind,raw,input=>desktopBridge.api.plugins.searchResults(input))}
-    catch(error){console.warn('搜索结果拦截未生效',error)}
+    try {
+      rows = await rewriteSearchResults(keyword.value, source, kind, raw, (input) =>
+        desktopBridge.api.plugins.searchResults(input)
+      )
+    } catch (error) {
+      console.warn('搜索结果拦截未生效', error)
+    }
   }
-  if (request!==generation) return null
-  const state=pages[kind]
-  state.raw+=raw.length
-  state.delta+=rows.length-raw.length
-  const cursor=typeof result?.nextCursor==='string' && result.nextCursor ? result.nextCursor : undefined
-  const more=cursor ? !state.seen.has(cursor) : raw.length>0 && state.raw<Number(result?.total)
+  if (request !== generation) return null
+  const state = pages[kind]
+  state.raw += raw.length
+  state.delta += rows.length - raw.length
+  const cursor =
+    typeof result?.nextCursor === 'string' && result.nextCursor ? result.nextCursor : undefined
+  const more = cursor
+    ? !state.seen.has(cursor)
+    : raw.length > 0 && state.raw < Number(result?.total)
   if (cursor) state.seen.add(cursor)
-  state.cursor=cursor
-  const total=more ? Math.max(state.raw,Number(result?.total)||0)+state.delta : state.raw+state.delta
-  return {rows,total,more}
+  state.cursor = cursor
+  const total = more
+    ? Math.max(state.raw, Number(result?.total) || 0) + state.delta
+    : state.raw + state.delta
+  return { rows, total, more }
 }
 const currentPage = ref(1)
 const pageSize = 50
@@ -111,8 +121,8 @@ const performSearch = async (reset = false) => {
       limit: pageSize
     })
     if (request !== generation) return
-    const visible=await visiblePage('track',result,source,request)
-    if (!visible || request!==generation) return
+    const visible = await visiblePage('track', result, source, request)
+    if (!visible || request !== generation) return
     totalItems.value = visible.total
     const newSongs = visible.rows.map((song: any, index: number) => ({
       ...song,
@@ -229,8 +239,8 @@ const fetchPlaylists = async (reset = false) => {
       limit: playlistLimit
     })
     if (request !== generation) return
-    const visible=await visiblePage('playlist',res,source,request)
-    if (!visible || request!==generation) return
+    const visible = await visiblePage('playlist', res, source, request)
+    if (!visible || request !== generation) return
     playlistTotal.value = visible.total
     playlistMore.value = visible.more
     const list = visible.rows
@@ -285,30 +295,45 @@ const onPlaylistScroll = (event: Event) => {
 }
 
 const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
-watch([() => route.name, () => search.submission, userSource], async (_, __, onCleanup) => {
-  const current = ++generation
-  onCleanup(() => { generation++ })
-  if (route.name !== 'search') return
-  keyword.value = ''
-  loading.value = playlistLoading.value = false
-  totalItems.value = playlistTotal.value = 0
-  hasMore.value = playlistMore.value = false
-  for (const state of Object.values(pages)) {state.raw=state.delta=0;state.cursor=undefined;state.seen.clear()}
-  searchResults.value = []
-  playlistResults.value = []
-  playlistPage.value = currentPage.value = 1
-  if (!search.submitted) return
-  const sourceId = String(userSource.value.source || '')
-  if (!sourceId) { MessagePlugin.error('请配置音源'); return }
-  try {
-    const resolved = await resolveSearchQuery(search.submitted, sourceId)
-    if (current !== generation || resolved === null) return
-    keyword.value = resolved
-    if (activeTab.value === 'songs') await performSearch(true)
-    else await fetchPlaylists(true)
-  } catch (error) { if (current === generation) MessagePlugin.error('搜索失败：' + String(error)) }
-}, {immediate:true, deep:true})
-watch(activeTab, async tab => {
+watch(
+  [() => route.name, () => search.submission, userSource],
+  async (_, __, onCleanup) => {
+    const current = ++generation
+    onCleanup(() => {
+      generation++
+    })
+    if (route.name !== 'search') return
+    keyword.value = ''
+    loading.value = playlistLoading.value = false
+    totalItems.value = playlistTotal.value = 0
+    hasMore.value = playlistMore.value = false
+    for (const state of Object.values(pages)) {
+      state.raw = state.delta = 0
+      state.cursor = undefined
+      state.seen.clear()
+    }
+    searchResults.value = []
+    playlistResults.value = []
+    playlistPage.value = currentPage.value = 1
+    if (!search.submitted) return
+    const sourceId = String(userSource.value.source || '')
+    if (!sourceId) {
+      MessagePlugin.error('请配置音源')
+      return
+    }
+    try {
+      const resolved = await resolveSearchQuery(search.submitted, sourceId)
+      if (current !== generation || resolved === null) return
+      keyword.value = resolved
+      if (activeTab.value === 'songs') await performSearch(true)
+      else await fetchPlaylists(true)
+    } catch (error) {
+      if (current === generation) MessagePlugin.error('搜索失败：' + String(error))
+    }
+  },
+  { immediate: true, deep: true }
+)
+watch(activeTab, async (tab) => {
   if (!keyword.value || route.name !== 'search') return
   if (tab === 'songs' && currentPage.value === 1) await performSearch(true)
   if (tab === 'playlists' && playlistPage.value === 1) await fetchPlaylists(true)
@@ -367,7 +392,14 @@ watch(activeTab, async tab => {
             <p>搜索中...</p>
           </div>
         </div>
-        <n-button v-if="hasMore && currentPage > 1" size="small" text :loading="loading" @click="performSearch(false)">加载更多单曲</n-button>
+        <n-button
+          v-if="hasMore && currentPage > 1"
+          size="small"
+          text
+          :loading="loading"
+          @click="performSearch(false)"
+          >加载更多单曲</n-button
+        >
       </div>
 
       <!-- 歌单列表 -->
@@ -381,7 +413,7 @@ watch(activeTab, async tab => {
           >
             <div
               v-for="playlist in playlistResults"
-              :key="JSON.stringify([playlist.source,playlist.id])"
+              :key="JSON.stringify([playlist.source, playlist.id])"
               class="playlist-card"
               @click="routerToPlaylist(playlist)"
             >
@@ -426,7 +458,14 @@ watch(activeTab, async tab => {
               </div>
             </div>
           </div>
-          <n-button v-if="playlistMore" size="small" text :loading="playlistLoading" @click="fetchPlaylists(false)">加载更多歌单</n-button>
+          <n-button
+            v-if="playlistMore"
+            size="small"
+            text
+            :loading="playlistLoading"
+            @click="fetchPlaylists(false)"
+            >加载更多歌单</n-button
+          >
         </div>
       </div>
     </div>

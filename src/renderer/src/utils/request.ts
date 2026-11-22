@@ -1,8 +1,9 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
-import LogtoClient, { LogtoClientError } from '@logto/browser'
+import LogtoClient from '@logto/browser'
 import { MessagePlugin } from '@renderer/plugin/notifications'
 import { io as ioClient, type Socket } from 'socket.io-client'
 import GlobaConfig from '@common/api/config.json'
+import { isInvalidLogtoSession } from '@renderer/utils/auth/sessionError'
 
 // 常量定义
 const DEFAULT_AUTH_URL = 'https://auth.shiqianjiang.cn'
@@ -16,13 +17,23 @@ const ERROR_MESSAGES = {
 // 全局实例缓存
 let logtoClientInstance: LogtoClient | null = null
 const axiosInstances: Map<string, AxiosInstance> = new Map()
+let logoutInFlight: Promise<void> | null = null
 
 // 辅助函数：登出并通知
 async function logoutAndNotify() {
-  const { useAuthStore } = await import('@renderer/store')
-  const userStore = useAuthStore()
-  userStore.outlogin()
-  MessagePlugin.warning(ERROR_MESSAGES.LOGIN_EXPIRED)
+  if (logoutInFlight) return logoutInFlight
+  logoutInFlight = (async () => {
+    const { useAuthStore } = await import('@renderer/store/Auth')
+    const userStore = useAuthStore()
+    if (!userStore.isAuthenticated) return
+    await userStore.outlogin()
+    MessagePlugin.warning(ERROR_MESSAGES.LOGIN_EXPIRED)
+  })()
+  try {
+    await logoutInFlight
+  } finally {
+    logoutInFlight = null
+  }
 }
 
 export class Request {
@@ -61,15 +72,10 @@ export class Request {
 
     try {
       return await logtoClientInstance.getAccessToken(this.resource)
-    } catch (error: any) {
-      if (error instanceof LogtoClientError) {
-        // 只有在明确是未认证错误时才触发登出
-        if (error.code === 'not_authenticated') {
-          await logoutAndNotify()
-          throw new Error(ERROR_MESSAGES.LOGIN_EXPIRED)
-        }
-        // 其他 Logto 错误（如 user_cancelled, missing_scope 等）不应触发自动登出
-        console.warn('Logto client error:', error.code, error)
+    } catch (error) {
+      if (isInvalidLogtoSession(error)) {
+        await logoutAndNotify()
+        throw new Error(ERROR_MESSAGES.LOGIN_EXPIRED, { cause: error })
       }
       throw error
     }
@@ -78,7 +84,8 @@ export class Request {
   // 私有方法：处理响应错误
   private async handleResponseError(error: any): Promise<never> {
     const status = error?.response?.status
-    const message = error.response?.data?.message || error.message || ERROR_MESSAGES.REQUEST_FAILED
+    const message =
+      error?.response?.data?.message || error?.message || ERROR_MESSAGES.REQUEST_FAILED
 
     // Allow 304 to pass through if caught by axios (though axios usually treats 304 as success if body is empty, sometimes it might be configured otherwise)
     // Actually, if we want to handle 304 manually in the caller, we should rethrow it or return it.
@@ -88,16 +95,10 @@ export class Request {
       throw error
     }
 
-    // 检查是否为认证相关错误
-    const isAuthError = status === 401 || /token|授权|登录|过期|unauth/i.test(String(message))
-
-    if (isAuthError) {
-      await logoutAndNotify()
-      throw new Error(ERROR_MESSAGES.LOGIN_EXPIRED)
-    }
-
     console.error('Request Error:', error)
-    throw Object.assign(new Error(message), { status })
+    throw Object.assign(new Error(status === 401 ? '认证请求失败，请稍后重试' : message), {
+      status
+    })
   }
 
   // 核心请求方法
@@ -106,7 +107,7 @@ export class Request {
     returnRaw = false,
     authMode: 'required' | 'optional' = 'required'
   ): Promise<T | any> {
-    const authStore = await import('@renderer/store').then((m) => m.useAuthStore())
+    const authStore = await import('@renderer/store/Auth').then((m) => m.useAuthStore())
     if (authMode === 'required' && !authStore.isAuthenticated) {
       MessagePlugin.warning('未登录，请先登录')
       throw new Error('未登录，请先登录')
@@ -122,41 +123,53 @@ export class Request {
       }
     }
 
+    // 2. 组装配置
+    const finalConfig: AxiosRequestConfig = {
+      ...config,
+
+      headers: {
+        ...config.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    }
+    /* dev 切换:从 config.json 的 baseUrl 列表里查 url 等于 this.resource 的条目,
+     * 启用 dev 时用 developmentUrl 覆盖 baseURL。与 SocketRequest.resolveBaseURL 同款数据驱动。 */
+    const isDev = process.env.NODE_ENV === 'development' && Boolean(GlobaConfig.enableDev)
+    if (isDev) {
+      const list = (GlobaConfig as { baseUrl?: Array<{ url: string; developmentUrl?: string }> })
+        .baseUrl
+      const entry = list?.find((e) => e.url === this.resource)
+      if (entry?.developmentUrl) {
+        finalConfig.baseURL = entry.developmentUrl
+      }
+    }
+    // 设置默认 Content-Type (非 FormData 时)
+    if (
+      (!finalConfig.headers || !finalConfig.headers['Content-Type']) &&
+      !(finalConfig.data instanceof FormData)
+    ) {
+      finalConfig.headers = finalConfig.headers || {}
+      finalConfig.headers['Content-Type'] = 'application/json'
+    }
+
     try {
-      // 2. 组装配置
-      const finalConfig: AxiosRequestConfig = {
-        ...config,
-
-        headers: {
-          ...config.headers,
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      }
-      /* dev 切换:从 config.json 的 baseUrl 列表里查 url 等于 this.resource 的条目,
-       * 启用 dev 时用 developmentUrl 覆盖 baseURL。与 SocketRequest.resolveBaseURL 同款数据驱动。 */
-      const isDev = process.env.NODE_ENV === 'development' && Boolean(GlobaConfig.enableDev)
-      if (isDev) {
-        const list = (GlobaConfig as { baseUrl?: Array<{ url: string; developmentUrl?: string }> })
-          .baseUrl
-        const entry = list?.find((e) => e.url === this.resource)
-        if (entry?.developmentUrl) {
-          finalConfig.baseURL = entry.developmentUrl
-        }
-      }
-      // 设置默认 Content-Type (非 FormData 时)
-      if (
-        (!finalConfig.headers || !finalConfig.headers['Content-Type']) &&
-        !(finalConfig.data instanceof FormData)
-      ) {
-        finalConfig.headers = finalConfig.headers || {}
-        finalConfig.headers['Content-Type'] = 'application/json'
-      }
-
-      // 3. 发送请求
       const response = await this.instance(finalConfig)
       return returnRaw ? response : response.data
     } catch (error: any) {
-      // 4. 错误处理
+      if (error?.response?.status === 401 && token && logtoClientInstance) {
+        try {
+          // A stale access token does not mean the saved refresh token has expired.
+          await logtoClientInstance.clearAccessToken()
+          const freshToken = await this.getAccessToken()
+          const response = await this.instance({
+            ...finalConfig,
+            headers: { ...finalConfig.headers, Authorization: `Bearer ${freshToken}` }
+          })
+          return returnRaw ? response : response.data
+        } catch (retryError) {
+          return this.handleResponseError(retryError)
+        }
+      }
       return this.handleResponseError(error)
     }
   }

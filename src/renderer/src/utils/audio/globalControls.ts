@@ -53,26 +53,14 @@ export function installGlobalMusicControls() {
     }
   }, 150)
 
-  let keyThrottle = false
-  const throttle = (cb: () => void, delay: number) => {
-    if (keyThrottle) return
-    keyThrottle = true
-    setTimeout(() => {
-      try {
-        cb()
-      } finally {
-        keyThrottle = false
-      }
-    }, delay)
-  }
-
   globalKeyDownHandler = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null
     const tag = (target?.tagName || '').toLowerCase()
     const isEditable =
-      target?.hasAttribute('contenteditable') ||
+      !!target?.closest('[contenteditable="true"], [contenteditable=""]') ||
       tag === 'input' ||
       tag === 'textarea' ||
+      tag === 'select' ||
       (target as HTMLInputElement)?.type === 'text' ||
       (target as HTMLInputElement)?.type === 'search' ||
       (target as HTMLInputElement)?.type === 'password' ||
@@ -80,26 +68,36 @@ export function installGlobalMusicControls() {
       (target as HTMLInputElement)?.type === 'url' ||
       (target as HTMLInputElement)?.type === 'number'
 
-    throttle(() => {
-      if (isEditable) return
-      if (e.code === 'Space') {
-        e.preventDefault()
-        dispatch('toggle')
-      } else if (e.code === 'ArrowUp') {
-        e.preventDefault()
-        dispatch('volumeDelta', 5)
-      } else if (e.code === 'ArrowDown') {
-        e.preventDefault()
-        dispatch('volumeDelta', -5)
-      } else if (e.code === 'ArrowLeft') {
-        dispatch('seekDelta', -5)
-      } else if (e.code === 'ArrowRight') {
-        dispatch('seekDelta', 5)
-      } else if (e.code === 'KeyF') {
-        e.preventDefault()
-        dispatch('toggleFullPlay')
-      }
-    }, 100)
+    if (isEditable || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+
+    let control: { name: string; val?: number } | undefined
+    switch (e.code) {
+      case 'Space':
+        control = { name: 'toggle' }
+        break
+      case 'ArrowUp':
+        control = { name: 'volumeDelta', val: 5 }
+        break
+      case 'ArrowDown':
+        control = { name: 'volumeDelta', val: -5 }
+        break
+      case 'ArrowLeft':
+        control = { name: 'seekDelta', val: -5 }
+        break
+      case 'ArrowRight':
+        control = { name: 'seekDelta', val: 5 }
+        break
+      case 'KeyF':
+        control = { name: 'toggleFullPlay' }
+        break
+      default:
+        return
+    }
+
+    // Prevent the browser's default action synchronously. Doing this in a timer
+    // is too late for Space and leaves the focused button/page reacting as well.
+    e.preventDefault()
+    dispatch(control.name, control.val)
   }
 
   document.addEventListener('keydown', globalKeyDownHandler)

@@ -16,13 +16,12 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
 const crateDir = resolve(root, 'native', 'external-media-integration')
-const outDir = resolve(
-  crateDir,
-  process.env.NAPI_BUILD_TYPE === 'debug' ? 'target/debug' : 'target/release'
-)
-
 const isDebug = process.argv.includes('--debug')
 const profileDir = isDebug ? 'debug' : 'release'
+const targetArg = process.argv.find((arg) => arg.startsWith('--target='))?.slice('--target='.length)
+const target = process.env.NATIVE_TARGET || targetArg || null
+const universal = process.argv.includes('--universal')
+const targets = universal ? ['aarch64-apple-darwin', 'x86_64-apple-darwin'] : [target]
 
 console.log(`[emi] 构建 external-media-integration (${profileDir}) ...`)
 
@@ -36,37 +35,67 @@ if (cargoCheck.status !== 0) {
   process.exit(1)
 }
 
-const args = ['build']
-if (!isDebug) args.push('--release')
+const builtLibraries = []
+for (const buildTarget of targets) {
+  if (buildTarget) {
+    const installedTargets = spawnSync('rustup', ['target', 'list', '--installed'], {
+      encoding: 'utf8',
+      shell: true
+    })
+    if (installedTargets.status === 0 && !installedTargets.stdout.split(/\r?\n/).includes(buildTarget)) {
+      const addTarget = spawnSync('rustup', ['target', 'add', buildTarget], {
+        stdio: 'inherit',
+        shell: true
+      })
+      if (addTarget.status !== 0) {
+        console.error(`[emi] 无法安装 Rust 目标 ${buildTarget}`)
+        process.exit(addTarget.status ?? 1)
+      }
+    }
+  }
 
-const result = spawnSync('cargo', args, {
-  cwd: crateDir,
-  stdio: 'inherit',
-  shell: true
-})
+  const outDir = resolve(crateDir, 'target', ...(buildTarget ? [buildTarget] : []), profileDir)
+  const args = ['build']
+  if (!isDebug) args.push('--release')
+  if (buildTarget) args.push('--target', buildTarget)
 
-if (result.status !== 0) {
-  console.error(`[emi] cargo build 失败 (exit ${result.status ?? 'unknown'})`)
-  process.exit(result.status ?? 1)
+  const result = spawnSync('cargo', args, {
+    cwd: crateDir,
+    stdio: 'inherit',
+    shell: true
+  })
+  if (result.status !== 0) {
+    console.error(`[emi] cargo build 失败 (exit ${result.status ?? 'unknown'})`)
+    process.exit(result.status ?? 1)
+  }
+
+  if (!existsSync(outDir)) {
+    console.error(`[emi] 未找到构建输出目录: ${outDir}`)
+    process.exit(1)
+  }
+  const candidates = readdirSync(outDir).filter((f) =>
+    /external[_-]media[_-]integration\.(dll|so|dylib)$/i.test(f)
+  )
+  if (candidates.length === 0) {
+    console.error(`[emi] 在 ${outDir} 未找到 external-media-integration 动态库`)
+    process.exit(1)
+  }
+  builtLibraries.push(resolve(outDir, candidates[0]))
 }
 
-// cargo 产出的 cdylib 名字带前缀/后缀，找出来复制成 .node
-if (!existsSync(outDir)) {
-  console.error(`[emi] 未找到构建输出目录: ${outDir}`)
-  process.exit(1)
-}
-
-const candidates = readdirSync(outDir).filter((f) =>
-  /external[_-]media[_-]integration\.(dll|so|dylib)$/i.test(f)
-)
-if (candidates.length === 0) {
-  console.error(`[emi] 在 ${outDir} 未找到 external-media-integration 动态库`)
-  process.exit(1)
-}
-
-const srcLib = resolve(outDir, candidates[0])
 const destLib = resolve(crateDir, 'external-media-integration.node')
-copyFileSync(srcLib, destLib)
+if (universal) {
+  const result = spawnSync('lipo', ['-create', ...builtLibraries, '-output', destLib], {
+    stdio: 'inherit',
+    shell: true
+  })
+  if (result.status !== 0) {
+    console.error('[emi] lipo 创建通用媒体模块失败')
+    process.exit(result.status ?? 1)
+  }
+} else {
+  copyFileSync(builtLibraries[0], destLib)
+}
 console.log(`[emi] 已生成 ${destLib}`)
 
 // 顺带把生成的 .d.ts 也拷出来（napi 的 build 会输出到 crate 根目录）

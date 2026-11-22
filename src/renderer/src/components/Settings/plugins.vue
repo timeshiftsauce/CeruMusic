@@ -13,7 +13,12 @@
             </p>
           </div>
           <div class="manager-actions">
-            <t-button theme="default" variant="outline" aria-haspopup="dialog" @click="showManagerSettings = true">
+            <t-button
+              theme="default"
+              variant="outline"
+              aria-haspopup="dialog"
+              @click="showManagerSettings = true"
+            >
               <template #icon><t-icon name="setting" /></template> 管理设置
             </t-button>
             <t-button theme="primary" @click="openInstallDialog">
@@ -185,7 +190,13 @@
               <t-tag v-if="!plugin.guest" size="small" variant="outline" title="插件运行环境">
                 {{ plugin.runtime === 2 ? 'v2' : plugin.runtime === 3 ? 'v3' : '未知环境' }}
               </t-tag>
-              <t-tag v-if="pausedSlotPlugins.has(plugin.pluginId)" theme="warning" size="small" title="连续五次组件挂载超过 50 毫秒；独立页面仍可使用">槽位已暂停</t-tag>
+              <t-tag
+                v-if="pausedSlotPlugins.has(plugin.pluginId)"
+                theme="warning"
+                size="small"
+                title="连续五次组件挂载超过 50 毫秒；独立页面仍可使用"
+                >槽位已暂停</t-tag
+              >
               <span class="version">{{ plugin.pluginInfo.version }}</span>
             </div>
             <p
@@ -205,12 +216,13 @@
                   {{
                     plugin.status === 'broken'
                       ? '无法加载'
-                      : plugin.status === 'blocked' ? '依赖未就绪'
-                      : plugin.loadError
-                        ? '加载异常'
-                        : plugin.enabled
-                          ? '运行中'
-                          : '未使用'
+                      : plugin.status === 'blocked'
+                        ? '依赖未就绪'
+                        : plugin.loadError
+                          ? '加载异常'
+                          : plugin.enabled
+                            ? '运行中'
+                            : '未使用'
                   }}
                 </t-tag>
                 <span class="author">{{ plugin.pluginInfo.author || '未署名作者' }}</span>
@@ -234,7 +246,13 @@
             </div>
             <div v-if="plugin.loadError" class="plugin-load-error">
               <t-icon name="error-circle" /> {{ plugin.loadError }}
-              <t-button v-if="plugin.status === 'blocked'" size="small" variant="text" @click="openInstallDialog">去安装依赖</t-button>
+              <t-button
+                v-if="plugin.status === 'blocked'"
+                size="small"
+                variant="text"
+                @click="openInstallDialog"
+                >去安装依赖</t-button
+              >
             </div>
           </div>
           <div v-if="plugin.status === 'broken'" class="plugin-actions">
@@ -289,13 +307,19 @@
             >
               <template #icon><t-icon name="download" /></template> 导入歌单
             </t-button>
-            <t-tag v-if="!plugin.guest && plugin.descriptor?.trusted" theme="danger" variant="light">完全信任</t-tag>
+            <t-tag v-if="!plugin.guest && plugin.descriptor?.trusted" theme="danger" variant="light"
+              >完全信任</t-tag
+            >
             <t-dropdown trigger="click">
               <t-button theme="default" variant="text" shape="square" aria-label="更多插件操作">
                 <template #icon><t-icon name="ellipsis" /></template>
               </t-button>
               <t-dropdown-menu>
-                <t-dropdown-item v-if="!plugin.guest && plugin.descriptor?.trusted" @click="openTrustedDetails(plugin)">完全信任详情</t-dropdown-item>
+                <t-dropdown-item
+                  v-if="!plugin.guest && plugin.descriptor?.trusted"
+                  @click="openTrustedDetails(plugin)"
+                  >完全信任详情</t-dropdown-item
+                >
                 <t-dropdown-item
                   @click="
                     viewPluginLogs(plugin.parentPluginId || plugin.pluginId, plugin.pluginInfo.name)
@@ -304,7 +328,9 @@
                 >
                 <t-dropdown-item
                   v-for="page in plugin.enabled
-                    ? plugin.descriptor?.pages.filter((page) => page.mount === 'settings' && isPluginPageVisible(page)) || []
+                    ? plugin.descriptor?.pages.filter(
+                        (page) => page.mount === 'settings' && isPluginPageVisible(page)
+                      ) || []
                     : []"
                   :key="page.id"
                   @click="openPluginSettings(plugin.pluginId, page.view)"
@@ -330,11 +356,35 @@
         </div>
       </div>
 
-      <t-dialog v-model:visible="trustedVisible" header="⚠ 此插件需要完全信任" width="560px" attach="body" :footer="false" :close-on-overlay-click="false">
+      <t-dialog
+        v-model:visible="trustedVisible"
+        header="⚠ 此插件需要完全信任"
+        width="560px"
+        attach="body"
+        :footer="false"
+        :close-on-overlay-click="false"
+      >
         <PluginTrustedDetails v-if="trustedDetail" :detail="trustedDetail" />
-        <p v-if="trustedDetail">状态：{{ trustedDetail.granted ? '已同意完全信任' : '未授权，仅可使用受限部分（如支持）' }}</p>
-        <t-button v-if="trustedDetail?.granted" theme="danger" :loading="trustedBusy" @click="changeTrusted(false)">撤销完全信任</t-button>
-        <t-button v-else theme="danger" :loading="trustedBusy" :disabled="!trustedDetail?.publisherIdentity" @click="changeTrusted(true)">开启完全信任…</t-button>
+        <p v-if="trustedDetail">
+          状态：{{
+            trustedDetail.granted ? '已同意完全信任' : '未授权，仅可使用受限部分（如支持）'
+          }}
+        </p>
+        <t-button
+          v-if="trustedDetail?.granted"
+          theme="danger"
+          :loading="trustedBusy"
+          @click="changeTrusted(false)"
+          >撤销完全信任</t-button
+        >
+        <t-button
+          v-else
+          theme="danger"
+          :loading="trustedBusy"
+          :disabled="!trustedDetail?.publisherIdentity"
+          @click="changeTrusted(true)"
+          >开启完全信任…</t-button
+        >
       </t-dialog>
 
       <!-- 插件日志弹窗 -->
@@ -531,8 +581,30 @@
           </div>
           <t-empty v-else description="该插件没有声明权限" />
           <PluginHookActivity
-              v-if="permissionsDialogVisible && !permissionsGuestId && permissionsManifestId && permissionItems.some(item => item.name && ['player.intercept','navigation.intercept','account.intercept','search.intercept','library.intercept','window.intercept','lyrics.intercept','downloads.intercept','sharing.intercept','links.intercept','notifications.intercept'].includes(item.name))"
-            :key="permissionsManifestId" :plugin-id="permissionsManifestId"
+            v-if="
+              permissionsDialogVisible &&
+              !permissionsGuestId &&
+              permissionsManifestId &&
+              permissionItems.some(
+                (item) =>
+                  item.name &&
+                  [
+                    'player.intercept',
+                    'navigation.intercept',
+                    'account.intercept',
+                    'search.intercept',
+                    'library.intercept',
+                    'window.intercept',
+                    'lyrics.intercept',
+                    'downloads.intercept',
+                    'sharing.intercept',
+                    'links.intercept',
+                    'notifications.intercept'
+                  ].includes(item.name)
+              )
+            "
+            :key="permissionsManifestId"
+            :plugin-id="permissionsManifestId"
           />
         </template>
       </t-dialog>
@@ -553,7 +625,16 @@ import { desktopBridge } from '@renderer/services/desktopBridge'
 import PluginManagerSettings from './PluginManagerSettings.vue'
 import PluginHookActivity from './PluginHookActivity.vue'
 import { pausedSlotPlugins } from '@renderer/services/pluginSlotPolicy'
-import { ref, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick, toRaw, computed } from 'vue'
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  onActivated,
+  onDeactivated,
+  nextTick,
+  toRaw,
+  computed
+} from 'vue'
 import PluginTrustedDetails from '../PluginTrustedDetails.vue'
 import { PERMISSION_GROUPS, permissionGroup } from '@shiqianjiang/ceru-plugin-sdk/permissions'
 import { pluginContributions, isPluginPageVisible } from '@renderer/services/pluginState'
@@ -663,7 +744,9 @@ onActivated(async () => {
   if (inventoryDirty) scheduleInventoryRefresh()
 })
 const showManagerSettings = ref(false)
-onDeactivated(() => { showManagerSettings.value = false })
+onDeactivated(() => {
+  showManagerSettings.value = false
+})
 const busyPluginId = ref('')
 const pluginSearch = ref('')
 const pluginFilter = ref<'all' | 'enabled' | 'disabled'>('all')
@@ -761,19 +844,32 @@ const trustedBusy = ref(false)
 async function openTrustedDetails(plugin: Plugin) {
   try {
     trustedOwner.value = plugin.pluginId
-    trustedDetail.value = await desktopBridge.electron.ipcRenderer.invoke('plugin:trusted-detail', plugin.pluginId)
+    trustedDetail.value = await desktopBridge.electron.ipcRenderer.invoke(
+      'plugin:trusted-detail',
+      plugin.pluginId
+    )
     trustedVisible.value = true
-  } catch (error: any) { MessagePlugin.error(error.message || '读取完全信任详情失败') }
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '读取完全信任详情失败')
+  }
 }
 async function changeTrusted(allowed: boolean) {
   trustedBusy.value = true
   // Close the details overlay while the shared host confirmation is displayed.
   trustedVisible.value = false
   try {
-    trustedDetail.value = await desktopBridge.electron.ipcRenderer.invoke('plugin:trusted-set-consent', trustedOwner.value, allowed)
+    trustedDetail.value = await desktopBridge.electron.ipcRenderer.invoke(
+      'plugin:trusted-set-consent',
+      trustedOwner.value,
+      allowed
+    )
     await getPlugins()
-  } catch (error: any) { MessagePlugin.error(error.message || '修改完全信任授权失败') }
-  finally { trustedBusy.value = false; trustedVisible.value = true }
+  } catch (error: any) {
+    MessagePlugin.error(error.message || '修改完全信任授权失败')
+  } finally {
+    trustedBusy.value = false
+    trustedVisible.value = true
+  }
 }
 
 const permissionsGuestId = ref<string | null>(null)
@@ -1614,7 +1710,7 @@ function toggleGroup(key: number) {
 }
 
 onMounted(async () => {
-  stopInventoryChanges = desktopBridge.api.plugins.onChanged(change => {
+  stopInventoryChanges = desktopBridge.api.plugins.onChanged((change) => {
     if (change?.type !== 'views-updated') scheduleInventoryRefresh()
   })
   // 确保store已初始化

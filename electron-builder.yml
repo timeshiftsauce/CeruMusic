@@ -3,7 +3,7 @@ productName: 澜音
 directories:
   buildResources: build
 asar: true
-afterPack: scripts/check-packaged-files.mjs
+afterPack: scripts/after-pack.mjs
 # Ship application output and runtime resources only. Production node_modules
 # and the sanitized package.json are added by electron-builder automatically.
 files:
@@ -127,6 +127,9 @@ snap:
 deb:
   artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: false
+electronLanguages:
+  - zh-CN
+  - en-US
 publish:
   provider: generic
   url: https://update.cerumusic.top

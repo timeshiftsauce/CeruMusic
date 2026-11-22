@@ -38,7 +38,7 @@ import { useDlnaStore } from '@renderer/store/dlna'
 import { MessagePlugin } from '@renderer/plugin/notifications'
 
 // 全局播放模式设置
-import { usePlaySettingStore } from '@renderer/store'
+import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import PlaySettings from './PlaySettings.vue'
 import SkinSimulatorBar from './SkinSimulatorBar.vue'
 import { provide } from 'vue'

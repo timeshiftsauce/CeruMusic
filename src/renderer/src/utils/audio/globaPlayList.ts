@@ -1,7 +1,18 @@
 import { desktopBridge } from '@renderer/services/desktopBridge'
 import { songKey, selectSong, restoredSong, durationMilliseconds } from '@common/musicItem'
 import { ref, toRaw, watch } from 'vue'
-import { interceptsAdvance, interceptsQueueEnd, interceptsShuffle, runAdjustment, runAdvance, runPlay, runPlaybackFailure, runQueueEnd, runShuffle, runTransport } from '@renderer/plugin/operations'
+import {
+  interceptsAdvance,
+  interceptsQueueEnd,
+  interceptsShuffle,
+  runAdjustment,
+  runAdvance,
+  runPlay,
+  runPlaybackFailure,
+  runQueueEnd,
+  runShuffle,
+  runTransport
+} from '@renderer/plugin/operations'
 import { storeToRefs } from 'pinia'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -115,8 +126,15 @@ const PluginErrorMsgs = [
 let cachedLtStore: any = null
 const getListenTogetherStore = async () => {
   if (cachedLtStore) return cachedLtStore
-  const { useListenTogetherStore } = await import('@renderer/store')
-  cachedLtStore = useListenTogetherStore()
+  try {
+    const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
+    cachedLtStore = useListenTogetherStore()
+  } catch (error) {
+    // A failure to load the optional room-control module must not disable local
+    // playback controls such as play, pause, or next.
+    console.error('[playback] failed to load listen-together controls', error)
+    cachedLtStore = { isInRoom: false }
+  }
   return cachedLtStore
 }
 
@@ -221,17 +239,22 @@ const togglePlayPause = async (system = false) => {
   }
 }
 
-type PlayOptions = { immediate?: boolean; shouldAutoStart?: () => boolean; pluginId?: string; beforePlay?: (song:SongList)=>void }
+type PlayOptions = {
+  immediate?: boolean
+  shouldAutoStart?: () => boolean
+  pluginId?: string
+  beforePlay?: (song: SongList) => void
+}
 let playIntent = 0
-const playSong = (song:SongList, options:PlayOptions = {}):Promise<void> => {
+const playSong = (song: SongList, options: PlayOptions = {}): Promise<void> => {
   const intent = ++playIntent
-  return runPlay(song,localUserStore.list,options.pluginId,async selected => {
-    if (intent!==playIntent) return
+  return runPlay(song, localUserStore.list, options.pluginId, async (selected) => {
+    if (intent !== playIntent) return
     options.beforePlay?.(selected)
-    await playSelectedSong(selected,options)
+    await playSelectedSong(selected, options)
   })
 }
-const playSelectedSong = async (song:SongList, options:PlayOptions) => {
+const playSelectedSong = async (song: SongList, options: PlayOptions) => {
   const selection = ++selectionSequence
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
@@ -326,7 +349,8 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
     if (failureHandled || requestId !== currentPlayRequestId || intent !== playIntent) return
     failureHandled = true
     void runPlaybackFailure(song, error, async () => {
-      if (requestId === currentPlayRequestId && intent === playIntent) await advanceAfterFailure(reason)
+      if (requestId === currentPlayRequestId && intent === playIntent)
+        await advanceAfterFailure(reason)
     }).catch(console.warn)
   }
   pendingSongId = songKey(song)
@@ -578,14 +602,16 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
       mediaSessionController.updatePlaybackState('paused')
       return
     }
-    start()
-      .then(() => {
+    start().then(
+      () => {
         if (currentPlayRequestId !== requestId) return
         autoNextCount.value = 0
-      }, () => {
+      },
+      () => {
         if (currentPlayRequestId !== requestId) return
         tryAutoNext('启动播放失败', 'start')
-      })
+      }
+    )
 
     // 只有在确定是当前请求时，才挂载错误监听
     if (Audio.value.audio) {
@@ -737,7 +763,14 @@ const advanceAfterFailure = async (reason: string) => {
   await playNext(undefined, true, 'error')
 }
 
-const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
+const savedPlayMode = String(userInfo.value.playMode || '')
+const playMode = ref(
+  savedPlayMode === PlayMode.RANDOM || savedPlayMode === PlayMode.SINGLE
+    ? savedPlayMode
+    : PlayMode.SEQUENCE
+)
+// 旧版 P 把顺序循环单独保存为 loop；Mian 的顺序模式就是列表循环。
+if (savedPlayMode !== playMode.value) userInfo.value.playMode = playMode.value
 const isLoadingSong = ref(false)
 const autoNextCount = ref(0)
 const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
@@ -756,11 +789,20 @@ const buildShuffleOrder = () => {
     ;[candidate[index], candidate[target]] = [candidate[target], candidate[index]]
   }
   shuffleOrder.value = candidate.map(songKey)
-  pendingShuffle = runShuffle(candidate, ordered => {
-    if (revision === shuffleRevision && playMode.value === PlayMode.RANDOM && ids.length === list.value.length && ids.every((id,index) => id === songKey(list.value[index]))) {
+  pendingShuffle = runShuffle(candidate, (ordered) => {
+    if (
+      revision === shuffleRevision &&
+      playMode.value === PlayMode.RANDOM &&
+      ids.length === list.value.length &&
+      ids.every((id, index) => id === songKey(list.value[index]))
+    ) {
       shuffleOrder.value = ordered.map(songKey)
     }
-  })?.catch(console.warn).finally(() => { if (revision === shuffleRevision) pendingShuffle = undefined })
+  })
+    ?.catch(console.warn)
+    .finally(() => {
+      if (revision === shuffleRevision) pendingShuffle = undefined
+    })
 }
 
 const isShuffleOrderValid = () => {
@@ -813,10 +855,20 @@ watch(
 )
 
 const setPlaybackMode = (mode: PlayMode, pluginId?: string, system = false) =>
-  runAdjustment('player.setMode', {mode}, value => {
-    playMode.value = { sequence: PlayMode.SEQUENCE, random: PlayMode.RANDOM, single: PlayMode.SINGLE }[value.mode]
-    if (!pluginId) userInfo.value.playMode = playMode.value
-  }, pluginId, system)
+  runAdjustment(
+    'player.setMode',
+    { mode },
+    (value) => {
+      playMode.value = {
+        sequence: PlayMode.SEQUENCE,
+        random: PlayMode.RANDOM,
+        single: PlayMode.SINGLE
+      }[value.mode]
+      if (!pluginId) userInfo.value.playMode = playMode.value
+    },
+    pluginId,
+    system
+  )
 const updatePlayMode = () => {
   const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
   const currentIndex = modes.indexOf(playMode.value)
@@ -875,15 +927,32 @@ const resolveNextSong = ({
  * - 列表为空返回 null
  */
 const atQueueEnd = () => {
-  if (playMode.value === PlayMode.SINGLE || !list.value.length || cachedLtStore?.isInRoom) return false
-  const current = pendingSongId ?? userInfo.value.lastPlaySongKey ?? songKey(restoredSong(list.value,userInfo.value,useGlobalPlayStatusStore().player.songInfo as SongList))
-  const tail = playMode.value === PlayMode.RANDOM ? shuffleOrder.value.at(-1) : songKey(list.value[list.value.length-1])
+  if (playMode.value === PlayMode.SINGLE || !list.value.length || cachedLtStore?.isInRoom)
+    return false
+  const current =
+    pendingSongId ??
+    userInfo.value.lastPlaySongKey ??
+    songKey(
+      restoredSong(
+        list.value,
+        userInfo.value,
+        useGlobalPlayStatusStore().player.songInfo as SongList
+      )
+    )
+  const tail =
+    playMode.value === PlayMode.RANDOM
+      ? shuffleOrder.value.at(-1)
+      : songKey(list.value[list.value.length - 1])
   return current === tail
 }
 
 const getNextSong = (): SongList | null => {
   if (interceptsQueueEnd() && atQueueEnd()) return null
-  if (interceptsAdvance() || (playMode.value === PlayMode.RANDOM && (interceptsShuffle() || pendingShuffle))) return null
+  if (
+    interceptsAdvance() ||
+    (playMode.value === PlayMode.RANDOM && (interceptsShuffle() || pendingShuffle))
+  )
+    return null
   return resolveNextSong({
     respectSingleMode: true,
     rebuildShuffleOnWrap: false
@@ -892,15 +961,20 @@ const getNextSong = (): SongList | null => {
 
 const resolvePlaybackAdvance = (respectSingleMode: boolean) => {
   if (playMode.value !== PlayMode.RANDOM || (!interceptsShuffle() && !pendingShuffle))
-    return resolveNextSong({respectSingleMode, rebuildShuffleOnWrap:true})
+    return resolveNextSong({ respectSingleMode, rebuildShuffleOnWrap: true })
   return resolveHookedShuffleAdvance(respectSingleMode)
 }
 
 const resolveHookedShuffleAdvance = async (respectSingleMode: boolean) => {
-  const token = pendingAutoNextToken, intent = playIntent
+  const token = pendingAutoNextToken,
+    intent = playIntent
   ensureShuffleOrder()
   let revision = shuffleRevision
-  const current = () => token === pendingAutoNextToken && intent === playIntent && revision === shuffleRevision && playMode.value === PlayMode.RANDOM
+  const current = () =>
+    token === pendingAutoNextToken &&
+    intent === playIntent &&
+    revision === shuffleRevision &&
+    playMode.value === PlayMode.RANDOM
   if (pendingShuffle) await pendingShuffle
   if (!current() || !shuffleOrder.value.length) return null
   const id = pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
@@ -908,9 +982,11 @@ const resolveHookedShuffleAdvance = async (respectSingleMode: boolean) => {
     ensureShuffleOrder(true)
     revision = shuffleRevision
     if (pendingShuffle) await pendingShuffle
-    return current() ? list.value.find(song => songKey(song) === shuffleOrder.value[0]) ?? null : null
+    return current()
+      ? (list.value.find((song) => songKey(song) === shuffleOrder.value[0]) ?? null)
+      : null
   }
-  return resolveNextSong({respectSingleMode, rebuildShuffleOnWrap:false})
+  return resolveNextSong({ respectSingleMode, rebuildShuffleOnWrap: false })
 }
 
 const playPrevious = (pluginId?: string, system = false) =>
@@ -954,27 +1030,24 @@ const previousPlayback = async (pluginId?: string) => {
 }
 
 const playNext = (pluginId?: string, system = false, reason: 'user' | 'error' = 'user') =>
-  runAdvance(reason, list.value, selected => nextPlayback(selected, pluginId), pluginId, system)
+  runAdvance(reason, list.value, (selected) => nextPlayback(selected, pluginId), pluginId, system)
 const nextPlayback = async (selected?: SongList, pluginId?: string) => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
-  const lt = await getListenTogetherStore()
-  if (lt.isInRoom) {
-    if (lt.canControl) {
-      lt.skip()
-    } else {
-      MessagePlugin.warning('当前在一起听房间中，无播放控制权')
-    }
-    return
-  }
-  if (list.value.length === 0) return
   try {
+    const lt = await getListenTogetherStore()
+    if (lt.isInRoom) {
+      if (lt.canControl) lt.skip()
+      else MessagePlugin.warning('当前在一起听房间中，无播放控制权')
+      return
+    }
     const advance = selected ?? resolvePlaybackAdvance(false)
     const nextSong = advance instanceof Promise ? await advance : advance
     if (nextSong) {
       await playSong(nextSong, { pluginId })
     }
-  } catch {
+  } catch (error) {
+    console.error('[playback] failed to play next song', error)
     MessagePlugin.error('播放下一首失败')
   }
 }
@@ -1038,21 +1111,43 @@ const playNextAuto = () => {
     if (token !== pendingAutoNextToken) return
     pendingAutoNextTimer = null
     if (crossfadeManager.isFinalizingCurrentAdvance()) return
-    const advance = () => runAdvance('ended', list.value, async selected => {
-      if (token === pendingAutoNextToken) await playNextAutoNow(selected)
-    }, undefined, true)
-    if (!interceptsQueueEnd()) { void advance(); return }
-    const intent = playIntent, mode = playMode.value
+    const advance = () =>
+      runAdvance(
+        'ended',
+        list.value,
+        async (selected) => {
+          if (token === pendingAutoNextToken) await playNextAutoNow(selected)
+        },
+        undefined,
+        true
+      )
+    if (!interceptsQueueEnd()) {
+      void advance()
+      return
+    }
+    const intent = playIntent,
+      mode = playMode.value
     const handleEnd = async () => {
       if (mode === PlayMode.RANDOM && pendingShuffle) await pendingShuffle
       if (token !== pendingAutoNextToken || intent !== playIntent || mode !== playMode.value) return
       if (!atQueueEnd()) return advance()
       const originalKeys = list.value.map(songKey)
-      await runQueueEnd(list.value,async tracks=>{
-        if (token !== pendingAutoNextToken || intent !== playIntent || mode !== playMode.value || !atQueueEnd() || originalKeys.length!==list.value.length || !originalKeys.every((key,index)=>key===songKey(list.value[index]))) return
+      await runQueueEnd(list.value, async (tracks) => {
+        if (
+          token !== pendingAutoNextToken ||
+          intent !== playIntent ||
+          mode !== playMode.value ||
+          !atQueueEnd() ||
+          originalKeys.length !== list.value.length ||
+          !originalKeys.every((key, index) => key === songKey(list.value[index]))
+        )
+          return
         if (!tracks) return advance()
         const moving = new Set(tracks.map(songKey))
-        localUserStore.replaceSongList([...list.value.filter(song=>!moving.has(songKey(song))),...tracks])
+        localUserStore.replaceSongList([
+          ...list.value.filter((song) => !moving.has(songKey(song))),
+          ...tracks
+        ])
         await playSong(tracks[0])
       })
     }
@@ -1062,15 +1157,29 @@ const playNextAuto = () => {
 
 const setVolume = (percent: number, pluginId?: string, system = false) => {
   if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw Error('音量超出范围')
-  return runAdjustment('player.setVolume', { volume: percent / 100 }, value => controlAudio.setVolume(Math.round(value.volume * 100)), pluginId, system)
+  return runAdjustment(
+    'player.setVolume',
+    { volume: percent / 100 },
+    (value) => controlAudio.setVolume(Math.round(value.volume * 100)),
+    pluginId,
+    system
+  )
 }
 const seekTo = (time: number, pluginId?: string, system = false) => {
   const positionMs = Math.round(time * 1000)
   if (!Number.isSafeInteger(positionMs) || positionMs < 0) throw Error('无效的播放位置')
-  const intent = playIntent, currentUrl = Audio.value.url
-  return runAdjustment('player.seek', { positionMs }, value => {
-    if (playIntent === intent && Audio.value.url === currentUrl) applySeek(value.positionMs / 1000)
-  }, pluginId, system)
+  const intent = playIntent,
+    currentUrl = Audio.value.url
+  return runAdjustment(
+    'player.seek',
+    { positionMs },
+    (value) => {
+      if (playIntent === intent && Audio.value.url === currentUrl)
+        applySeek(value.positionMs / 1000)
+    },
+    pluginId,
+    system
+  )
 }
 const applySeek = (time: number) => {
   cancelPendingAutoNext()
@@ -1134,8 +1243,16 @@ const onGlobalCtrl = (e: any) => {
     case 'setPlayMode':
       {
         const v = String(val || '')
-        const target = v === 'sequence' ? PlayMode.SEQUENCE : v === 'random' ? PlayMode.RANDOM :
-          v === 'toggleSingle' ? (playMode.value === PlayMode.SINGLE ? PlayMode.SEQUENCE : PlayMode.SINGLE) : undefined
+        const target =
+          v === 'sequence'
+            ? PlayMode.SEQUENCE
+            : v === 'random'
+              ? PlayMode.RANDOM
+              : v === 'toggleSingle'
+                ? playMode.value === PlayMode.SINGLE
+                  ? PlayMode.SEQUENCE
+                  : PlayMode.SINGLE
+                : undefined
         if (target) void setPlaybackMode(target, undefined, true).catch(console.warn)
       }
       break

@@ -196,7 +196,8 @@ const handleLocateBtnMouseLeave = () => {
   startLocateBtnHideTimer()
 }
 
-onMounted(() => {
+const loadCurrentRoutePlaylist = async () => {
+  const routePath = route.fullPath
   // 尽早触发图片预加载，不等待歌曲数据请求
   const coverUrl = (route.query.cover as string) || ''
 
@@ -216,19 +217,29 @@ onMounted(() => {
     bgImageLoaded.value = true
   }
 
-  fetchPlaylistSongs()
-  triggerLocateBtnVisible()
-
-  // 检查是否需要自动同步平台歌单 (从歌单列表页右键菜单触发)
-  if (route.query.autoSync === '1') {
-    // 延迟执行，等待 playlistInfo 初始化完成
-    setTimeout(() => {
-      if ('playlistId' in playlistInfo.value.meta) {
-        handleSyncPlaylist()
-      }
-    }, 500)
+  await fetchPlaylistSongs()
+  // router 会复用同一个歌单组件，快速切换时只处理当前路由对应的自动同步。
+  if (
+    route.fullPath === routePath &&
+    route.query.autoSync === '1' &&
+    playlistInfo.value.meta?.playlistId
+  ) {
+    await handleSyncPlaylist()
   }
+  triggerLocateBtnVisible()
+}
+
+onMounted(() => {
+  void loadCurrentRoutePlaylist()
 })
+
+watch(
+  () => route.fullPath,
+  (path, previousPath) => {
+    if (previousPath && path !== previousPath) void loadCurrentRoutePlaylist()
+  }
+)
+
 onBeforeUnmount(() => {
   clearLocateScrollTimers()
   clearLocateBtnTimer()
@@ -268,12 +279,23 @@ const isPlaylistShare = computed(() => {
 
 // 获取歌单歌曲列表
 const loadedSectionPlaylist = ref<LibraryPlaylist>()
-const favoritesCollectionId=ref<string|null>(null)
-watch(()=>[route.params.id,isLocalPlaylist.value],async(_value,_previous,onCleanup)=>{
-  let current=true;onCleanup(()=>{current=false});favoritesCollectionId.value=null
-  if(!isLocalPlaylist.value)return
-  try{const result=await desktopBridge.api.songList.getFavoritesId();if(current && result.success)favoritesCollectionId.value=result.data??null}catch{}
-},{immediate:true})
+const favoritesCollectionId = ref<string | null>(null)
+watch(
+  () => [route.params.id, isLocalPlaylist.value],
+  async (_value, _previous, onCleanup) => {
+    let current = true
+    onCleanup(() => {
+      current = false
+    })
+    favoritesCollectionId.value = null
+    if (!isLocalPlaylist.value) return
+    try {
+      const result = await desktopBridge.api.songList.getFavoritesId()
+      if (current && result.success) favoritesCollectionId.value = result.data ?? null
+    } catch {}
+  },
+  { immediate: true }
+)
 const sectionPlaylist = computed(() => {
   const playlist = loadedSectionPlaylist.value
   if (loading.value || isPlaylistShare.value || playlist?.ref.id !== route.params.id) return
@@ -373,7 +395,13 @@ const fetchLocalPlaylistSongs = async () => {
       if (playlistResult.success && playlistResult.data) {
         const playlist = playlistResult.data
         if (playlist.id === route.params.id && isLocalPlaylist.value && !isPlaylistShare.value) {
-          loadedSectionPlaylist.value = { ref: { id: playlist.id, location: 'local' }, name: playlist.name, description: playlist.description, trackCount: result.data.length, writable: true }
+          loadedSectionPlaylist.value = {
+            ref: { id: playlist.id, location: 'local' },
+            name: playlist.name,
+            description: playlist.description,
+            trackCount: result.data.length,
+            writable: true
+          }
         }
 
         // Merge meta from backend with current meta (which may contain cloudId from router)
@@ -441,8 +469,18 @@ const fetchCloudUserPlaylist = async (reset = false) => {
       cloudNextPos.value
     )
 
-    if (reset && cloudId === route.params.id && isCloudUserPlaylist.value && !isPlaylistShare.value) {
-      loadedSectionPlaylist.value = { ref: { id: cloudId, location: 'cloud' }, name: playlistInfo.value.title || '云端歌单', trackCount: total, writable: true }
+    if (
+      reset &&
+      cloudId === route.params.id &&
+      isCloudUserPlaylist.value &&
+      !isPlaylistShare.value
+    ) {
+      loadedSectionPlaylist.value = {
+        ref: { id: cloudId, location: 'cloud' },
+        name: playlistInfo.value.title || '云端歌单',
+        trackCount: total,
+        writable: true
+      }
     }
     const localMappedSongs = cloudSongs.map(mapCloudSongToLocal)
 
@@ -833,12 +871,29 @@ async function setPic(offset: number, source: string) {
 }
 
 // 组件事件处理函数
-const handlePlay = (song: MusicItem) => {
+const handlePlay = async (song: MusicItem) => {
   currentSong.value = song
   isPlaying.value = true
   console.log('播放歌曲:', song.name)
+  if (!isLocalPlaylist.value && hasMore.value) {
+    let pageGuard = 0
+    while (hasMore.value && pageGuard++ < MAX_PREFETCH_PAGES) {
+      if (route.query.type === 'cloud_user') {
+        await fetchCloudUserPlaylist(false)
+      } else if (route.query.type === 'playlist_share') {
+        await fetchPlaylistShareSongs(false)
+      } else {
+        await fetchNetworkPlaylistSongs(false)
+      }
+    }
+    await nextTick()
+  }
   if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song))
+    const sourceSongs = songListRef.value?.sortedSongs || songs.value
+    ;(window as any).musicEmitter.emit('replacePlaylistAndPlay', {
+      songs: toRaw(sourceSongs.map((item: MusicItem) => toRaw(item))),
+      song: toRaw(song)
+    })
   }
 }
 
@@ -899,13 +954,13 @@ const handleDownloadBatch = async (batchSongs: any[]) => {
   }
 
   try {
-    const results=await desktopBridge.api.music.requestSdk('downloadBatchSongs', {
+    const results = await desktopBridge.api.music.requestSdk('downloadBatchSongs', {
       source: batchSongs[0]?.source || 'wy',
       tasks
     })
-    const count=results.filter((row:any)=>row.success).length
-    if(count)MessagePlugin.success(`已添加 ${count} 首歌曲到下载队列`)
-    else if(results.length)MessagePlugin.error(results[0]?.error||'批量添加下载任务失败')
+    const count = results.filter((row: any) => row.success).length
+    if (count) MessagePlugin.success(`已添加 ${count} 首歌曲到下载队列`)
+    else if (results.length) MessagePlugin.error(results[0]?.error || '批量添加下载任务失败')
   } catch (err) {
     console.error('Batch download failed:', err)
     MessagePlugin.error('批量添加下载任务失败')
@@ -929,20 +984,26 @@ const handleAddToPlaylist = (song: MusicItem) => {
 }
 
 // 从本地歌单移出歌曲
-const removePlaylistSelection = (selected:MusicItem[], batch:boolean) => {
+const removePlaylistSelection = (selected: MusicItem[], batch: boolean) => {
   const current = playlistInfo.value
   const page = route.fullPath
   const cloudOnly = isCloudUserPlaylist.value
   if (!isLocalPlaylist.value && !cloudOnly) return
-  return changePlaylistTracks('playlist.removeTracks', {id:current.id, name:current.title, meta:current.meta}, selected, cloudOnly, (keys, count) => {
-    if (route.fullPath !== page || playlistInfo.value !== current) return
-    const remaining = songs.value.filter(song => !keys.has(songKey(song)))
-    current.total = Math.max(0, current.total - (count ?? songs.value.length - remaining.length))
-    songs.value = remaining
-    if (batch && selected.every(song => keys.has(songKey(song)))) multiSelect.value = false
-  })
+  return changePlaylistTracks(
+    'playlist.removeTracks',
+    { id: current.id, name: current.title, meta: current.meta },
+    selected,
+    cloudOnly,
+    (keys, count) => {
+      if (route.fullPath !== page || playlistInfo.value !== current) return
+      const remaining = songs.value.filter((song) => !keys.has(songKey(song)))
+      current.total = Math.max(0, current.total - (count ?? songs.value.length - remaining.length))
+      songs.value = remaining
+      if (batch && selected.every((song) => keys.has(songKey(song)))) multiSelect.value = false
+    }
+  )
 }
-const handleRemoveFromLocalPlaylist = (song:MusicItem) => removePlaylistSelection([song], false)
+const handleRemoveFromLocalPlaylist = (song: MusicItem) => removePlaylistSelection([song], false)
 
 // 移动歌曲到指定位置（以用户当前可见列表为准）
 const handleMoveToPosition = (song: MusicItem) => {
@@ -1049,7 +1110,8 @@ const handleMoveToPosition = (song: MusicItem) => {
     onClose: () => dialog.destroy()
   })
 }
-const handleRemoveBatchSelected = (batchSongs:MusicItem[]) => removePlaylistSelection(batchSongs, true)
+const handleRemoveBatchSelected = (batchSongs: MusicItem[]) =>
+  removePlaylistSelection(batchSongs, true)
 
 // 多选模式（外部控制）
 const multiSelect = ref(false)
@@ -1124,7 +1186,10 @@ const handleFileSelect = async (event: Event) => {
 
       try {
         // 调用API更新歌单封面
-        const result = await desktopBridge.api.songList.updateCover(playlistInfo.value.id, base64Data)
+        const result = await desktopBridge.api.songList.updateCover(
+          playlistInfo.value.id,
+          base64Data
+        )
 
         if (result.success) {
           // 更新本地显示的封面
@@ -1284,20 +1349,37 @@ const handleSyncPlaylist = async () => {
   const source = playlistInfo.value.meta?.source || playlistInfo.value.source
   const playlistId = (playlistInfo.value.meta as { playlistId: string }).playlistId
   const isLeaderboard = playlistInfo.value.isLeaderboard || playlistInfo.value.meta?.isLeaderboard
+  const isAccountPlaylist = playlistInfo.value.meta?.accountPlaylist === true
 
   const getListDetail = async (page: number) => {
     let detailResult: any
+    const method = isLeaderboard ? 'getLeaderboardDetail' : 'getPlaylistDetail'
+    const requestId = isLeaderboard ? playlistId.replace(/^.*__/, '') : playlistId
     try {
-      const method = isLeaderboard ? 'getLeaderboardDetail' : 'getPlaylistDetail'
-      const requestId = isLeaderboard ? playlistId.replace(/^.*__/, '') : playlistId
-      detailResult = (await desktopBridge.api.music.requestSdk(method, {
-        source,
-        id: requestId,
-        page: page
-      })) as any
+      if (isAccountPlaylist && (source === 'kg' || source === 'wy')) {
+        detailResult = await desktopBridge.api.platformAccounts.getPlaylistTracks(
+          source === 'wy' ? 'netease' : 'kugou',
+          requestId,
+          page
+        )
+      } else {
+        detailResult = (await desktopBridge.api.music.requestSdk(method, {
+          source,
+          id: requestId,
+          page: page
+        })) as any
+      }
       console.log('list', detailResult)
-    } catch {
-      MessagePlugin.error(`获取歌单详情失败`)
+    } catch (error) {
+      console.error('[playlist-detail] failed to fetch playlist details', {
+        source,
+        playlistId: requestId,
+        page,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      MessagePlugin.error(
+        `获取歌单详情失败：${error instanceof Error ? error.message : String(error)}`
+      )
       load1.then((res) => res.close())
       return
     }
@@ -1319,6 +1401,18 @@ const handleSyncPlaylist = async () => {
   let new_songs: Array<any> = detailResult.list || []
 
   if (new_songs.length === 0) {
+    if (isAccountPlaylist) {
+      const replacement = await desktopBridge.api.songList.replaceSongs(id, [])
+      load1.then((res) => res.close())
+      if (!replacement.success) {
+        MessagePlugin.error(`歌单更新失败：${replacement.error || '保存歌曲失败'}`)
+        return
+      }
+      songs.value = []
+      playlistInfo.value.total = 0
+      MessagePlugin.success('歌单已更新，当前没有歌曲')
+      return
+    }
     MessagePlugin.warning('该歌单没有歌曲')
     load1.then((res) => res.close())
     return
@@ -1334,6 +1428,32 @@ const handleSyncPlaylist = async () => {
       break
     }
     new_songs = new_songs.concat(songsList)
+  }
+
+  if (isAccountPlaylist) {
+    if (source === 'kg') {
+      load1.then((res) => res.close())
+      const coverLoading = MessagePlugin.loading('正在获取歌曲封面...')
+      try {
+        await setPicForPlaylist(new_songs, source)
+      } catch (error) {
+        console.warn('获取封面失败，但继续更新歌单:', error)
+      }
+      coverLoading.then((res) => res.close())
+    }
+    const coverUrl = detailResult.info?.img || playlistInfo.value.cover
+    if (coverUrl) await songListAPI.updateCover(id, coverUrl)
+    const replacement = await desktopBridge.api.songList.replaceSongs(id, new_songs)
+    load1.then((res) => res.close())
+    if (!replacement.success) {
+      MessagePlugin.error(`歌单更新失败：${replacement.error || '保存歌曲失败'}`)
+      return
+    }
+    songs.value = new_songs
+    playlistInfo.value.total = new_songs.length
+    MessagePlugin.success(`歌单已更新，共 ${new_songs.length} 首歌曲`)
+    await fetchPlaylistSongs()
+    return
   }
 
   // 处理导入结果
@@ -1636,7 +1756,10 @@ const handleSyncFromCloud = async () => {
     )
     const localSongs = cloudSongs.map(mapCloudSongToLocal)
 
-    const replacement = await desktopBridge.api.songList.replaceSongs(playlistInfo.value.id, localSongs)
+    const replacement = await desktopBridge.api.songList.replaceSongs(
+      playlistInfo.value.id,
+      localSongs
+    )
     if (!replacement.success) throw new Error(replacement.error || '替换歌单失败')
 
     // Update view
@@ -1851,8 +1974,15 @@ const filteredMoreActions = computed(() =>
       </div>
 
       <div v-else class="song-list-wrapper">
-        <PluginPlaylistSections v-if="sectionPlaylist" class="detail-plugin-sections" :playlist="sectionPlaylist" />
-        <AccountCollections v-if="isLocalPlaylist && favoritesCollectionId===route.params.id" capability="likes" />
+        <PluginPlaylistSections
+          v-if="sectionPlaylist"
+          class="detail-plugin-sections"
+          :playlist="sectionPlaylist"
+        />
+        <AccountCollections
+          v-if="isLocalPlaylist && favoritesCollectionId === route.params.id"
+          capability="likes"
+        />
         <PlaylistLoadError
           v-if="networkLoadError"
           :message="networkLoadError"

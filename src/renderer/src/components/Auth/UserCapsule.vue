@@ -1,7 +1,7 @@
 <template>
   <div class="user-capsule-container">
     <n-dropdown
-      v-if="(authStore.isAuthenticated && authStore.user) || pluginAccountItems.length"
+      v-if="authStore.isAuthenticated || pluginAccountItems.length"
       v-model:show="menuShown"
       style="-webkit-app-region: none"
       :options="userOpt"
@@ -26,7 +26,9 @@
           style="background: rgba(125, 125, 125, 0.2); color: inherit"
           >{{ Name.split('')[0] }}</t-avatar
         >
-        <span class="user-name">{{ authStore.isAuthenticated ? Name : '未登录' }}</span>
+        <span class="user-name">{{
+          authStore.isAuthenticated ? (authStore.user ? Name : '澜音账号') : '未登录'
+        }}</span>
       </div>
     </n-dropdown>
     <div v-else class="user-capsule" @click="handleLogin">

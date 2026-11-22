@@ -63,7 +63,9 @@
                 @change="(value) => changeCapability(row, String(value || ''))"
               />
               <div v-else class="routing-provider">
-                <span>{{ row.implementations.map((item) => item.descriptor.name).join('、') }}</span>
+                <span>{{
+                  row.implementations.map((item) => item.descriptor.name).join('、')
+                }}</span>
                 <small>已注册 · 当前未接入统一分配</small>
               </div>
             </div>

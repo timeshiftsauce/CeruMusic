@@ -20,6 +20,7 @@ import {
   PlayCircleIcon,
   DeleteIcon,
   ViewListIcon,
+  ViewModuleIcon,
   DownloadIcon,
   ShareIcon,
   RefreshIcon,
@@ -51,7 +52,7 @@ import {
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
 import SharePlaylistDialog from '@renderer/components/Share/SharePlaylistDialog.vue'
-import { useAuthStore } from '@renderer/store'
+import { useAuthStore } from '@renderer/store/Auth'
 
 import AccountCollections from '@renderer/components/AccountCollections.vue'
 const settingsStore = useSettingsStore()
@@ -59,6 +60,70 @@ const settingsStore = useSettingsStore()
 // 歌单列表
 const playlists = ref<SongList[]>([])
 const loading = ref(false)
+const viewMode = ref<'grid' | 'list'>(
+  localStorage.getItem('ceru-playlist-view-mode') === 'list' ? 'list' : 'grid'
+)
+const batchMode = ref(false)
+const selectedPlaylistIds = ref<string[]>([])
+const allPlaylistsSelected = computed(
+  () => playlists.value.length > 0 && selectedPlaylistIds.value.length === playlists.value.length
+)
+const setPlaylistView = (mode: 'grid' | 'list') => {
+  viewMode.value = mode
+  localStorage.setItem('ceru-playlist-view-mode', mode)
+}
+const togglePlaylistSelection = (id: string) => {
+  selectedPlaylistIds.value = selectedPlaylistIds.value.includes(id)
+    ? selectedPlaylistIds.value.filter((selectedId) => selectedId !== id)
+    : [...selectedPlaylistIds.value, id]
+}
+const toggleAllPlaylists = () => {
+  selectedPlaylistIds.value = allPlaylistsSelected.value ? [] : playlists.value.map((item) => item.id)
+}
+const cancelBatchSelection = () => {
+  batchMode.value = false
+  selectedPlaylistIds.value = []
+}
+const deleteSelectedPlaylists = () => {
+  const selected = playlists.value.filter((item) => selectedPlaylistIds.value.includes(item.id))
+  if (!selected.length) return
+  const dialog = DialogPlugin.confirm({
+    header: '批量删除歌单',
+    body: `确定删除选中的 ${selected.length} 个歌单吗？此操作不可撤销。`,
+    confirmBtn: '删除',
+    cancelBtn: '取消',
+    theme: 'danger',
+    onConfirm: async () => {
+      try {
+        const local = selected.filter((item) => !item.meta?.isCloudOnly)
+        const cloud = selected.filter((item) => item.meta?.isCloudOnly)
+        const deleted = new Set<string>()
+        if (local.length) {
+          const result = await songListAPI.batchDelete(local.map((item) => item.id))
+          if (!result.success) throw new Error(result.error || '批量删除本地歌单失败')
+          result.data?.success?.forEach((id) => deleted.add(id))
+        }
+        const cloudResults = await Promise.allSettled(
+          cloud.map((item) => cloudSongListAPI.deleteUserSongList(item.id).then(() => deleted.add(item.id)))
+        )
+        cloudResults.forEach((result, index) => {
+          if (result.status === 'rejected') console.error(`删除云歌单 ${cloud[index].id} 失败:`, result.reason)
+        })
+        deleted.forEach(removePlaylistState)
+        const failedCount = selected.length - deleted.size
+        if (failedCount) MessagePlugin.warning(`已删除 ${deleted.size} 个，${failedCount} 个失败`)
+        else MessagePlugin.success(`已删除 ${deleted.size} 个歌单`)
+        window.dispatchEvent(new Event('playlist-updated'))
+      } catch (error) {
+        MessagePlugin.error(error instanceof Error ? error.message : '批量删除歌单失败')
+      } finally {
+        cancelBatchSelection()
+        dialog.destroy()
+      }
+    },
+    onCancel: () => dialog.destroy()
+  })
+}
 // 喜欢歌单ID（用于排序与标记）
 const favoritesId = ref<string | null>(null)
 
@@ -533,9 +598,24 @@ const viewPlaylist = (playlist: SongList) => {
       type: 'local', // 标识这是本地歌单
       meta: JSON.stringify(playlist.meta), // 歌单元数据
       description: playlist.description || '',
-      cloudId: playlist.meta?.cloudId // 显式传递 cloudId，防止 meta 被覆盖后丢失
+      cloudId: playlist.meta?.cloudId, // 显式传递 cloudId，防止 meta 被覆盖后丢失
+      autoSync: playlist.meta?.accountPlaylist ? '1' : undefined,
+      // 每次点击都改变路由，保证重复点击当前平台歌单也会触发自动刷新。
+      refreshKey: playlist.meta?.accountPlaylist ? String(Date.now()) : undefined
     }
   })
+}
+
+const handlePlaylistCardClick = (event: MouseEvent, playlist: SongList) => {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, a, input, label, [role="button"]')) return
+
+  if (batchMode.value) {
+    togglePlaylistSelection(playlist.id)
+    return
+  }
+
+  viewPlaylist(playlist)
 }
 
 // 播放歌单
@@ -1251,7 +1331,6 @@ const scrollTop = ref(0)
 
 // 组件挂载时加载数据
 onMounted(() => {
-  loadPlaylists()
   // 监听页面滚动，关闭右键菜单
   nextTick(() => {
     if (scrollRef.value) {
@@ -1274,6 +1353,9 @@ const handleScrollCloseMenu = () => {
 }
 
 onActivated(() => {
+  // 页面处于 KeepAlive 缓存中时，侧栏切回“歌单”不会重新 mounted。
+  // 每次重新激活都重读本地和云端列表，让刚导入的歌单立即出现。
+  void loadPlaylists()
   if (scrollRef.value) {
     scrollRef.value.scrollTop = scrollTop.value
   }
@@ -1328,6 +1410,41 @@ onDeactivated(() => {
           <h3>我的歌单 ({{ playlists.length }})</h3>
           <div class="section-actions">
             <t-button
+              size="small"
+              :theme="viewMode === 'grid' ? 'primary' : 'default'"
+              variant="text"
+              aria-label="网格视图"
+              @click="setPlaylistView('grid')"
+            >
+              <ViewModuleIcon />
+            </t-button>
+            <t-button
+              size="small"
+              :theme="viewMode === 'list' ? 'primary' : 'default'"
+              variant="text"
+              aria-label="列表视图"
+              @click="setPlaylistView('list')"
+            >
+              <ViewListIcon />
+            </t-button>
+            <t-button size="small" variant="text" @click="batchMode ? cancelBatchSelection() : (batchMode = true)">
+              {{ batchMode ? '取消选择' : '批量管理' }}
+            </t-button>
+            <template v-if="batchMode">
+              <t-button size="small" variant="text" @click="toggleAllPlaylists">
+                {{ allPlaylistsSelected ? '取消全选' : '全选' }}
+              </t-button>
+              <t-button
+                size="small"
+                theme="danger"
+                variant="text"
+                :disabled="!selectedPlaylistIds.length"
+                @click="deleteSelectedPlaylists"
+              >
+                删除所选 ({{ selectedPlaylistIds.length }})
+              </t-button>
+            </template>
+            <t-button
               :loading="loading"
               size="small"
               theme="primary"
@@ -1346,16 +1463,29 @@ onDeactivated(() => {
         </div>
 
         <!-- 歌单网格 -->
-        <div v-else-if="playlists.length > 0" class="playlists-grid">
+        <div
+          v-else-if="playlists.length > 0"
+          class="playlists-grid"
+          :class="{ 'list-view': viewMode === 'list' }"
+        >
           <div
             v-for="playlist in playlists"
             :key="playlist.id"
             class="playlist-card"
             :class="{ 'custom-bg': settingsStore.settings.globalBackground?.enable }"
             :style="{ '--cover-url': `url('${getCoverUrl(playlist)}')` }"
+            @click="handlePlaylistCardClick($event, playlist)"
             @contextmenu="handlePlaylistContextMenu($event, playlist)"
           >
-            <div class="playlist-cover" @click="viewPlaylist(playlist)">
+            <label v-if="batchMode" class="playlist-select" @click.stop>
+              <input
+                type="checkbox"
+                :checked="selectedPlaylistIds.includes(playlist.id)"
+                :aria-label="`选择歌单 ${playlist.name}`"
+                @change="togglePlaylistSelection(playlist.id)"
+              />
+            </label>
+            <div class="playlist-cover">
               <img
                 v-if="playlist.coverImgUrl"
                 :alt="playlist.name"
@@ -1369,7 +1499,7 @@ onDeactivated(() => {
               </div>
             </div>
             <div class="playlist-info">
-              <div class="playlist-name-row" @click="viewPlaylist(playlist)">
+              <div class="playlist-name-row">
                 <div :title="playlist.name" class="playlist-name-text">
                   {{ playlist.name }}
                 </div>
@@ -1422,7 +1552,7 @@ onDeactivated(() => {
                   size="small"
                   theme="primary"
                   variant="text"
-                  @click="playPlaylist(playlist)"
+                  @click.stop="playPlaylist(playlist)"
                 >
                   <i class="iconfont icon-bofang"></i>
                 </t-button>
@@ -1433,7 +1563,7 @@ onDeactivated(() => {
                   size="small"
                   theme="default"
                   variant="text"
-                  @click="viewPlaylist(playlist)"
+                  @click.stop="viewPlaylist(playlist)"
                 >
                   <view-list-icon
                     :fill-color="'transparent'"
@@ -1448,7 +1578,7 @@ onDeactivated(() => {
                   size="small"
                   theme="success"
                   variant="text"
-                  @click="editPlaylist(playlist)"
+                  @click.stop="editPlaylist(playlist)"
                 >
                   <Edit2Icon />
                 </t-button>
@@ -1460,7 +1590,7 @@ onDeactivated(() => {
                   size="small"
                   theme="danger"
                   variant="text"
-                  @click="deletePlaylist(playlist)"
+                  @click.stop="deletePlaylist(playlist)"
                 >
                   <i class="iconfont icon-shanchu"></i>
                 </t-button>
@@ -1958,9 +2088,39 @@ onDeactivated(() => {
   gap: 1.5rem;
 }
 
-.playlist-card {
+.playlists-grid.list-view {
   display: flex;
   flex-direction: column;
+  gap: 0.75rem;
+
+  .playlist-card {
+    min-height: 104px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .playlist-cover {
+    flex: 0 0 104px;
+    width: 104px;
+    height: 104px;
+  }
+
+  .playlist-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .playlist-actions {
+    flex: 0 0 auto;
+    padding: 0 0.75rem;
+  }
+}
+
+.playlist-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
   background: var(--local-card-bg);
   border-radius: 0.75rem;
   overflow: hidden;
@@ -2137,6 +2297,28 @@ onDeactivated(() => {
     justify-content: flex-end;
     padding: 0 1rem 1rem;
     gap: 0.5rem;
+  }
+}
+
+.playlist-select {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 18%);
+
+  input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--td-brand-color);
   }
 }
 

@@ -461,12 +461,6 @@ const scanLibrary = async () => {
   }
 }
 
-const addToPlaylistAndPlay = (song: MusicItem) => {
-  if ((window as any).musicEmitter) {
-    ;(window as any).musicEmitter.emit('addToPlaylistAndPlay', toRaw(song) as any)
-  }
-}
-
 const addToPlaylistEnd = (song: MusicItem) => {
   if ((window as any).musicEmitter) {
     ;(window as any).musicEmitter.emit('addToPlaylistEnd', toRaw(song) as any)
@@ -474,7 +468,13 @@ const addToPlaylistEnd = (song: MusicItem) => {
 }
 
 const handlePlay = (song: MusicItem) => {
-  addToPlaylistAndPlay(song)
+  if ((window as any).musicEmitter) {
+    const sourceSongs = songListRef.value?.sortedSongs || songs.value
+    ;(window as any).musicEmitter.emit('replacePlaylistAndPlay', {
+      songs: toRaw(sourceSongs.map((item: MusicItem) => toRaw(item))),
+      song: toRaw(song)
+    })
+  }
 }
 
 // 右键菜单

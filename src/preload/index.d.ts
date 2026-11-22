@@ -343,6 +343,39 @@ interface CustomAPI {
     loadAllPlugins: () => Promise<any>
     getPluginLog: (pluginId: string) => Promise<any>
   }
+  platformAccounts: {
+    status: () => Promise<{ netease: boolean; qq: boolean; kugou: boolean; kuwo: boolean }>
+    openLogin: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo') => Promise<{ success: boolean }>
+    kuwoLogin: (username: string, password: string) => Promise<{ success: boolean; nickname?: string }>
+    logout: (platform: 'netease' | 'qq' | 'kugou' | 'kuwo') => Promise<void>
+    syncPlaylists: (
+      platform: 'netease' | 'qq' | 'kugou' | 'kuwo',
+      selectedIds?: string[]
+    ) => Promise<
+      | { added: number; updated: number }
+      | { id: string; name: string; cover?: string; count?: number; description?: string }[]
+    >
+    getPlaylistTracks: (
+      platform: 'netease' | 'kugou',
+      playlistId: string,
+      page?: number
+    ) => Promise<{
+      list: any[]
+      page: number
+      limit: number
+      total: number
+      source: 'wy' | 'kg'
+      info?: { name?: string; img?: string; desc?: string; author?: string }
+    }>
+    onChanged: (
+      callback: (event: {
+        platform: 'netease' | 'qq' | 'kugou' | 'kuwo'
+        loggedIn: boolean
+        playlistCount?: number
+        syncError?: string
+      }) => void
+    ) => () => void
+  }
   ping: (callback: Function<any>) => undefined
   pingService: {
     start: () => undefined

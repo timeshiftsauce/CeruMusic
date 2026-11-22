@@ -19,7 +19,7 @@
 import { ref, computed } from 'vue'
 import { MessagePlugin } from '@renderer/plugin/notifications'
 import { CodeIcon, CloseIcon } from 'tdesign-icons-vue-next'
-import { useAuthStore } from '@renderer/store'
+import { useAuthStore } from '@renderer/store/Auth'
 
 const auth = useAuthStore()
 
