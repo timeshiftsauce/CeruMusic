@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-eH72ZRFrmFowrsXNwP5fii100+ym5s27F8+T6OHKYfU=' https://umami.shiqianjiang.cn; connect-src https://umami.shiqianjiang.cn; img-src data: https://umami.shiqianjiang.cn; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>访问统计</title>
+    <script>// The sandboxed statistics frame keeps storage in memory, as it did in srcdoc.
+const values = new Map()
+Object.defineProperty(window, 'localStorage', {
+  value: Object.freeze({
+    get length() { return values.size },
+    key(index) { return Array.from(values.keys())[index] ?? null },
+    getItem(key) { return values.get(String(key)) ?? null },
+    setItem(key, value) { values.set(String(key), String(value)) },
+    removeItem(key) { values.delete(String(key)) },
+    clear() { values.clear() }
+  })
+})</script>
+    <script defer src="https://umami.shiqianjiang.cn/script.js" data-website-id="62b3c383-7648-4f65-b59e-2ef73c3cc29d"></script>
+  </head>
+  <body></body>
+</html>

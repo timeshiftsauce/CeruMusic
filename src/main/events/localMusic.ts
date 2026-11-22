@@ -1,3 +1,4 @@
+import { rendererEntryArgument } from '../windows/rendererEntry'
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import fs from 'fs'
 import fsp from 'fs/promises'
@@ -26,10 +27,11 @@ function getOrCreateWorkerWindow(): Promise<BrowserWindow> {
       show: false,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
-        nodeIntegration: true,
-        contextIsolation: false,
-        backgroundThrottling: false,
-        webSecurity: false
+        additionalArguments: [rendererEntryArgument()],
+        sandbox: true,
+        nodeIntegration: false,
+        contextIsolation: true,
+        backgroundThrottling: false
       }
     })
 
@@ -634,10 +636,7 @@ ipcMain.handle('local-music:batch-match', async (e, songmids: string[]) => {
       const plugins = await pluginService.getPluginsList()
       const plugin = plugins.find(
         (p) =>
-          p.enabled &&
-          pluginService
-            .getManifest(p.pluginId)
-            ?.contributes?.commands?.some((c: any) => c.action === 'recognize')
+          p.enabled && p.descriptor?.actions.some(action => action.id === 'recognize')
       )
       if (!plugin) throw new Error('请安装支持听歌识曲的插件')
       const source =

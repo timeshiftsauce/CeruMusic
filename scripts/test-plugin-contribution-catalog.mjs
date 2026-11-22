@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { build } from 'esbuild'
+import { readV2Descriptor } from './read-v2-test-descriptor.mjs'
 
 const bundled = await build({
   entryPoints: ['src/renderer/src/utils/pluginContributionCatalog.ts'],
@@ -49,12 +50,13 @@ const plugin = {
     importers: ['import'], lyricConverters: ['lyrics', 'runtime-only-converter']
   }
 }
-const groups = getPluginContributionGroups([plugin])
+const catalog = plugins => getPluginContributionGroups(plugins.map(item => ({ ...item, descriptor: {...readV2Descriptor(item.pluginId, item.manifest), ...item.future} })))
+const groups = catalog([plugin])
 const rows = groups.flatMap(group => group.rows)
 const declarations = rows.flatMap(row => row.declarations)
 for (const [type, items] of Object.entries(contributions)) {
   for (const item of items) {
-    assert.equal(declarations.filter(d => d.type === type && d.id === item.id).length, 1,
+    assert.equal(declarations.filter(d => d.type === type && d.id === (type === 'commands' ? item.action : item.id)).length, 1,
       `declaration must be represented exactly once: ${type}/${item.id}`)
   }
 }
@@ -70,19 +72,19 @@ assert.equal(declarations.filter(d => d.type === 'modules.share').length, 1)
 const second = structuredClone(plugin)
 second.pluginId = 'another-plugin'
 second.manifest.contributes = { homeSections: [{ id: 'other-lists', kind: 'playlists', title: '另一套推荐' }] }
-const home = getPluginContributionGroups([plugin, second]).find(group => group.key === '__ui')
+const home = catalog([plugin, second]).find(group => group.key === '__ui')
 assert.equal(home.rows.filter(row => row.key === 'home:playlists').length, 1)
 assert.equal(home.rows.find(row => row.key === 'home:playlists').implementations.length, 2)
 assert.equal(home.rows.find(row => row.key === 'home:playlists').declarations.length, 2)
-assert.ok(getPluginContributionGroups([second]).length, 'UI-only plugins appear without music providers')
+assert.ok(catalog([second]).length, 'UI-only plugins appear without music providers')
 
 const future = structuredClone(plugin)
 future.registrations.futureRegistry = ['future-runtime-service']
+future.future = { futureWidgets: [{ id: 'future', title: '新类型的服务' }] }
 future.manifest.contributes = {
-  futureWidgets: [{ id: 'future', title: '新类型的服务' }],
   playlistSections: [{ id: 'bad-library', title: '未完成歌单界面', view: 'missing' }]
 }
-const futureRows = getPluginContributionGroups([future]).flatMap(group => group.rows)
+const futureRows = catalog([future]).flatMap(group => group.rows)
 assert.ok(futureRows.some(row => row.label === '新类型的服务' && row.status === '尚未识别' && !row.selectable))
 assert.ok(futureRows.some(row => row.label === 'futureRegistry · future-runtime-service' && row.status === '已注册' && !row.selectable))
 assert.ok(futureRows.some(row => row.label === '未完成歌单界面' && row.status === '缺少界面声明'))

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -251,7 +252,7 @@ const sendMessage = async () => {
     const handleStreamEnd = (data: { streamId: string }) => {
       if (data.streamId === streamId) {
         isLoading.value = false
-        window.api.ai.removeStreamListeners()
+        desktopBridge.api.ai.removeStreamListeners()
       }
     }
 
@@ -266,15 +267,15 @@ const sendMessage = async () => {
           }
         }
         isLoading.value = false
-        window.api.ai.removeStreamListeners()
+        desktopBridge.api.ai.removeStreamListeners()
       }
     }
 
-    window.api.ai.onStreamChunk(handleStreamChunk)
-    window.api.ai.onStreamEnd(handleStreamEnd)
-    window.api.ai.onStreamError(handleStreamError)
+    desktopBridge.api.ai.onStreamChunk(handleStreamChunk)
+    desktopBridge.api.ai.onStreamEnd(handleStreamEnd)
+    desktopBridge.api.ai.onStreamError(handleStreamError)
 
-    await window.api.ai.askStream(userMessage, streamId)
+    await desktopBridge.api.ai.askStream(userMessage, streamId)
   } catch (error: any) {
     console.error('AI流式API调用失败:', error)
     if (!aiContent) {
@@ -287,7 +288,7 @@ const sendMessage = async () => {
       }
     }
     isLoading.value = false
-    window.api.ai.removeStreamListeners()
+    desktopBridge.api.ai.removeStreamListeners()
   }
 
   scrollToBottom()
@@ -508,6 +509,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 悬浮球外层容器 */
 .float-ball-container {
+  pointer-events: none;
   position: fixed;
   width: 120px;
   height: 120px;
@@ -520,6 +522,7 @@ onBeforeUnmount(() => {
 }
 
 .float-ball {
+  pointer-events: auto;
   width: 80px;
   height: 80px;
   border-radius: 50%;
@@ -564,6 +567,7 @@ video {
 
 /* 关闭按钮样式 */
 .close-ball-btn {
+  pointer-events: auto;
   position: absolute;
   top: 8px;
   right: 8px;

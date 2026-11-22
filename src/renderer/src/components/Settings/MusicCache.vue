@@ -114,7 +114,9 @@
 </template>
 
 <script lang="ts" setup>
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { PieChart } from 'echarts/charts'
@@ -326,7 +328,7 @@ const minorItems = computed(() => {
 const loadCacheInfo = async (forceRefresh = false) => {
   try {
     console.log('正在获取缓存信息...', forceRefresh ? '(强制刷新)' : '')
-    const res = await window.api.musicCache.getInfo()
+    const res = await desktopBridge.api.musicCache.getInfo()
     console.log('获取到缓存信息:', res)
     cacheInfo.value = res
   } catch (error) {
@@ -337,7 +339,7 @@ const loadCacheInfo = async (forceRefresh = false) => {
 
 const loadPolicy = async () => {
   try {
-    const policy = await window.api.musicCache.getPolicy()
+    const policy = await desktopBridge.api.musicCache.getPolicy()
     if (policy?.maxBytes > 0) {
       maxSizeGb.value = Math.max(1, Math.round(policy.maxBytes / 1024 ** 3))
     }
@@ -351,7 +353,7 @@ const savePolicy = async () => {
   if (saving.value) return
   saving.value = true
   try {
-    const result = await window.api.musicCache.setPolicy({
+    const result = await desktopBridge.api.musicCache.setPolicy({
       maxBytes: Math.max(1, Number(maxSizeGb.value) || 1) * 1024 ** 3,
       maxQuality: maxQuality.value
     })
@@ -377,7 +379,7 @@ const enforceLimit = async () => {
   if (evicting.value) return
   evicting.value = true
   try {
-    const result = await window.api.musicCache.enforceLimit()
+    const result = await desktopBridge.api.musicCache.enforceLimit()
     if (!result?.success) {
       MessagePlugin.error(result?.message || '清理失败')
       return
@@ -419,7 +421,7 @@ const clearCache = () => {
         cacheInfo.value = { ...cacheInfo.value, clearing: true }
 
         // 执行清除操作
-        const result = await window.api.musicCache.clear()
+        const result = await desktopBridge.api.musicCache.clear()
 
         if (result.success) {
           console.log('缓存清除成功，开始更新界面')

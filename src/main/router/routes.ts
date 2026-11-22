@@ -1,4 +1,5 @@
 import { deepLinkRouter } from './index'
+import { publicLink } from '@shiqianjiang/ceru-plugin-sdk'
 
 import { enqueueDeepLink } from './pendingLinks'
 import type { QueuedDeepLink } from '../../common/types/deepLink'
@@ -75,7 +76,9 @@ export function setupDeepLinks() {
 export function bufferEarlyDeepLink(url: string): boolean {
   try {
     const parsed = new URL(url)
-    if (parsed.protocol !== 'cerumusic:') return false
+    if (!['cerumusic:','ceru:'].includes(parsed.protocol)) return false
+    const safe=publicLink(url)
+    if(safe) {enqueueDeepLink('public-link',safe);return true}
     const route = (parsed.host + parsed.pathname).replace(/\/$/, '')
     const value = parsed.pathname.split('/').filter(Boolean).at(-1)
     if (route.startsWith('playlist/share/') && value) enqueueDeepLink('playlist-share', value)

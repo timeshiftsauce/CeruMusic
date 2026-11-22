@@ -297,10 +297,14 @@ setRequestAgentProvider((url) => getRequestAgentsFor(url))
 
 // 插件运行时(core 的 requestNetwork:搜索/歌词/解析 URL 等均经此)。
 // 用动态导入,避免 node_modules 尚未更新到带注入点的版本时整体加载失败。
-void import('@shiqianjiang/ceru-plugin-core/network')
-  .then((core) => {
-    core.setNetworkProxyResolver?.((url) => getRequestAgentsFor(url))
-  })
-  .catch((error) => {
-    console.warn('[network] 插件网络代理解析器注册失败:', error)
-  })
+for (const runtime of [
+  import('@shiqianjiang/ceru-plugin-core/network'),
+  import('ceru-plugin-core-v2/network')
+])
+  void runtime
+    .then((core) => {
+      core.setNetworkProxyResolver?.((url) => getRequestAgentsFor(url))
+    })
+    .catch((error) => {
+      console.warn('[network] 插件网络代理解析器注册失败:', error)
+    })

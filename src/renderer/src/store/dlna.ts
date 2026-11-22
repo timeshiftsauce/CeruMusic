@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
@@ -9,10 +10,10 @@ export const useDlnaStore = defineStore('dlna', () => {
   const startSearch = async () => {
     isSearching.value = true
     try {
-      await window.electron.ipcRenderer.invoke('dlna:startSearch')
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:startSearch')
       setTimeout(async () => {
         try {
-          devices.value = await window.electron.ipcRenderer.invoke('dlna:getDevices')
+          devices.value = await desktopBridge.electron.ipcRenderer.invoke('dlna:getDevices')
         } catch (e) {
           console.error('DLNA get devices error', e)
         }
@@ -26,7 +27,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const stopSearch = async () => {
     try {
-      await window.electron.ipcRenderer.invoke('dlna:stopSearch')
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:stopSearch')
     } catch (e) {
       console.error('DLNA stop search error', e)
     }
@@ -36,7 +37,7 @@ export const useDlnaStore = defineStore('dlna', () => {
   const play = async (url: string, title: string) => {
     if (!currentDevice.value) return
     try {
-      await window.electron.ipcRenderer.invoke('dlna:play', {
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:play', {
         url,
         location: currentDevice.value.location,
         title
@@ -48,7 +49,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const pause = async () => {
     try {
-      await window.electron.ipcRenderer.invoke('dlna:pause')
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:pause')
     } catch (e) {
       console.error('DLNA pause error', e)
     }
@@ -56,7 +57,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const resume = async () => {
     try {
-      await window.electron.ipcRenderer.invoke('dlna:resume')
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:resume')
     } catch (e) {
       console.error('DLNA resume error', e)
     }
@@ -64,7 +65,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const stop = async () => {
     try {
-      await window.electron.ipcRenderer.invoke('dlna:stop')
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:stop')
     } catch (e) {
       console.error('DLNA stop error', e)
     }
@@ -72,7 +73,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const seek = async (seconds: number) => {
     try {
-      await window.electron.ipcRenderer.invoke('dlna:seek', seconds)
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:seek', seconds)
     } catch (e) {
       console.error('DLNA seek error', e)
     }
@@ -80,7 +81,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const setVolume = async (volume: number) => {
     try {
-      await window.electron.ipcRenderer.invoke('dlna:setVolume', volume)
+      await desktopBridge.electron.ipcRenderer.invoke('dlna:setVolume', volume)
     } catch (e) {
       console.error('DLNA setVolume error', e)
     }
@@ -88,7 +89,7 @@ export const useDlnaStore = defineStore('dlna', () => {
 
   const getPosition = async () => {
     try {
-      return await window.electron.ipcRenderer.invoke('dlna:getPosition')
+      return await desktopBridge.electron.ipcRenderer.invoke('dlna:getPosition')
     } catch (e) {
       console.error('DLNA getPosition error', e)
       return 0

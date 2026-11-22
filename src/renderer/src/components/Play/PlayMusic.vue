@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { restoredSong } from '@common/musicItem'
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { restoredSong, songKey } from '@common/musicItem'
+import { runTrackLike } from '@renderer/plugin/operations'
+import { favoriteChanged,applyTrackFavorite } from '@renderer/services/trackFavorites'
 import { getQualityDisplayName } from '@common/utils/quality'
 import {
   ref,
@@ -23,12 +26,8 @@ import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
 import { PlayMode } from '@renderer/types/audio'
-import {
-  MessagePlugin,
-  DialogPlugin,
-  InputNumber as TInputNumber,
-  NotifyPlugin
-} from 'tdesign-vue-next'
+import { DialogPlugin, InputNumber as TInputNumber } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   playNext,
   playPrevious,
@@ -194,7 +193,7 @@ const refreshLikeState = async () => {
       return
     }
     if (!cachedFavoritesId) {
-      const favIdRes = await window.api.songList.getFavoritesId()
+      const favIdRes = await desktopBridge.api.songList.getFavoritesId()
       cachedFavoritesId = (favIdRes && favIdRes.data) || null
     }
     if (!cachedFavoritesId) {
@@ -218,12 +217,12 @@ watch(
 onMounted(() => refreshLikeState())
 
 // === Windows 任务栏缩略图工具栏（Thumbnail Toolbar）状态同步 ===
-const thumbarApi = (window as any).api?.thumbar
+const thumbarApi = (desktopBridge as any).api?.thumbar
 let removeThumbarToggleLikeListener: (() => void) | null = null
 
 // === 窗口标题 + 任务栏/Dock 进度条同步 ===
 // 启动默认标题在 App.vue 推一次,这里只在有歌时切换"歌名 - 歌手",无歌回退默认名。
-const appApi = (window as any).api?.app
+const appApi = (desktopBridge as any).api?.app
 const DEFAULT_WINDOW_TITLE = '澜音 Ceru Music'
 const pushWindowTitle = () => {
   if (!appApi?.setTitle) return
@@ -319,14 +318,16 @@ watch(
 )
 watch(
   () => player.value.cover,
-  async (cover) => {
+  async (cover, _previous, onCleanup) => {
     if (!thumbarApi?.setCover) return
-    if (!cover) {
-      thumbarApi.setCover(null)
+    if (!cover || cover.startsWith('ceru-cover://')) {
+      thumbarApi.setCover(cover || null)
       return
     }
+    let current = true
+    onCleanup(() => { current = false })
     const dataUrl = await blobOrUrlToDataUrl(cover)
-    if (dataUrl) thumbarApi.setCover(dataUrl)
+    if (current) thumbarApi.setCover(dataUrl)
   },
   { immediate: true }
 )
@@ -352,24 +353,24 @@ const desktopLyricLocked = ref(false)
 const toggleDesktopLyric = async () => {
   try {
     if (!desktopLyricOpen.value) {
-      window.electron?.ipcRenderer?.send?.('change-desktop-lyric', true)
+      desktopBridge.electron?.ipcRenderer?.send?.('change-desktop-lyric', true)
       desktopLyricOpen.value = true
       // 恢复最新锁定状态
-      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+      const lock = await desktopBridge.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
       desktopLyricLocked.value = !!lock
       return
     }
     // 已打开
-    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+    const lock = await desktopBridge.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
     desktopLyricLocked.value = !!lock
     if (desktopLyricLocked.value) {
       // 先解锁，本次不关闭
-      window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', false)
+      desktopBridge.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', false)
       desktopLyricLocked.value = false
       return
     }
     // 未锁定则关闭
-    window.electron?.ipcRenderer?.send?.('change-desktop-lyric', false)
+    desktopBridge.electron?.ipcRenderer?.send?.('change-desktop-lyric', false)
     desktopLyricOpen.value = false
   } catch (e) {
     console.error('切换桌面歌词失败:', e)
@@ -392,7 +393,7 @@ const isDraggingVolume = ref(false)
 const volumeValue = computed({
   get: () => Audio.value.volume,
   set: (val) => {
-    setVolume(val)
+    void setVolume(val).catch(console.warn)
   }
 })
 
@@ -487,8 +488,7 @@ function globalControls(e) {
   if (e.detail.name === 'toggleFullPlay') {
     toggleFullPlay()
   } else if (e.detail.name === 'toggleLike') {
-    void onToggleLike()
-  }
+    void onToggleLike('shortcut')  }
 }
 
 onMounted(async () => {
@@ -499,7 +499,7 @@ onMounted(async () => {
   lyricOpenChangeHandler = async (_: any, visible: boolean) => {
     desktopLyricOpen.value = !!visible
     if (desktopLyricOpen.value) {
-      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+      const lock = await desktopBridge.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
       desktopLyricLocked.value = !!lock
     } else {
       desktopLyricLocked.value = false
@@ -509,14 +509,14 @@ onMounted(async () => {
     desktopLyricOpen.value = false
     desktopLyricLocked.value = false
   }
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', lyricLockHandler)
-  window.electron?.ipcRenderer?.on?.('desktop-lyric-open-change', lyricOpenChangeHandler)
-  window.electron?.ipcRenderer?.on?.('closeDesktopLyric', lyricCloseHandler)
+  desktopBridge.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', lyricLockHandler)
+  desktopBridge.electron?.ipcRenderer?.on?.('desktop-lyric-open-change', lyricOpenChangeHandler)
+  desktopBridge.electron?.ipcRenderer?.on?.('closeDesktopLyric', lyricCloseHandler)
   // 初始化同步当前打开与锁定状态
   try {
-    const open = await window.electron?.ipcRenderer?.invoke?.('get-lyric-open-state')
+    const open = await desktopBridge.electron?.ipcRenderer?.invoke?.('get-lyric-open-state')
     desktopLyricOpen.value = !!open
-    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
+    const lock = await desktopBridge.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
     desktopLyricLocked.value = !!lock
   } catch {}
   window.addEventListener('global-music-control', globalControls)
@@ -540,7 +540,7 @@ onMounted(async () => {
   // 任务栏缩略图喜欢按钮点击 -> 触发本地喜欢切换
   if (thumbarApi?.onToggleLike) {
     removeThumbarToggleLikeListener = thumbarApi.onToggleLike(() => {
-      onToggleLike().catch(() => {})
+      onToggleLike('shortcut').catch(() => {})
     })
   }
   // 首次推送状态
@@ -550,16 +550,16 @@ onMounted(async () => {
 // 组件卸载时清理
 onUnmounted(() => {
   if (lyricLockHandler) {
-    window.electron?.ipcRenderer?.removeListener?.('toogleDesktopLyricLock', lyricLockHandler)
+    desktopBridge.electron?.ipcRenderer?.removeListener?.('toogleDesktopLyricLock', lyricLockHandler)
   }
   if (lyricOpenChangeHandler) {
-    window.electron?.ipcRenderer?.removeListener?.(
+    desktopBridge.electron?.ipcRenderer?.removeListener?.(
       'desktop-lyric-open-change',
       lyricOpenChangeHandler
     )
   }
   if (lyricCloseHandler) {
-    window.electron?.ipcRenderer?.removeListener?.('closeDesktopLyric', lyricCloseHandler)
+    desktopBridge.electron?.ipcRenderer?.removeListener?.('closeDesktopLyric', lyricCloseHandler)
   }
   window.removeEventListener('global-music-control', globalControls)
   if (openPlaylistHandler) window.removeEventListener('open-playlist', openPlaylistHandler)
@@ -623,7 +623,7 @@ watch(
   () => userInfo.value.volume,
   (newVolume) => {
     if (newVolume !== undefined) {
-      setVolume(newVolume)
+      if (Audio.value.volume !== newVolume) controlAudio.setVolume(newVolume)
     }
   },
   { immediate: true }
@@ -642,87 +642,32 @@ const handleIdleChange = (idle: boolean) => {
 }
 
 // 左侧操作：喜欢/取消喜欢（支持切换）
-const onToggleLike = async () => {
-  try {
-    // 获取当前播放歌曲对象
-    const currentSong = restoredSong(list.value, userInfo.value, songInfo.value)
-    if (!currentSong) {
-      MessagePlugin.warning('当前没有正在播放的歌曲')
-      return
-    }
-
-    // 读取持久化的“我的喜欢”歌单ID
-    const favIdRes = await window.api.songList.getFavoritesId()
-    let favoritesId: string | null = (favIdRes && favIdRes.data) || null
-
-    // 如果已有ID但歌单不存在，则置空
-    if (favoritesId) {
-      const existsRes = await songListAPI.exists(favoritesId)
-      if (!existsRes.success || !existsRes.data) {
-        favoritesId = null
-      }
-    }
-
-    // 如果没有ID，尝试查找同名歌单；找不到则创建
-    if (!favoritesId) {
-      const searchRes = await songListAPI.search('我的喜欢', 'local')
-      if (searchRes.success && Array.isArray(searchRes.data)) {
-        const exact = searchRes.data.find((pl) => pl.name === '我的喜欢' && pl.source === 'local')
-        favoritesId = exact?.id || null
-      }
-      if (!favoritesId) {
-        const createRes = await songListAPI.create('我的喜欢', '', 'local')
-        if (!createRes.success || !createRes.data?.id) {
-          MessagePlugin.error(createRes.error || '创建“我的喜欢”失败')
-          return
-        }
-        favoritesId = createRes.data.id
-      }
-      // 持久化ID到主进程配置
-      await window.api.songList.setFavoritesId(favoritesId)
-    }
-    cachedFavoritesId = favoritesId
-
-    // 根据当前状态决定添加或移除
-    if (likeState.value) {
-      const removeRes = await songListAPI.removeSong(
-        favoritesId!,
-        (userInfo.value.lastPlaySongKey || userInfo.value.lastPlaySongId) as any
-      )
-      if (removeRes.success && removeRes.data) {
-        likeState.value = false
-        NotifyPlugin.info({
-          title: '已取消喜欢',
-          content: `《${currentSong.name || '未知歌曲'}》已从“我的喜欢”移除`,
-          duration: 3000,
-          placement: 'bottom-right',
-          closeBtn: true
-        })
-      } else {
-        MessagePlugin.error(removeRes.error || '取消喜欢失败')
-      }
-    } else {
-      const addRes = await songListAPI.addSongs(favoritesId!, [
-        _.cloneDeep(toRaw(currentSong)) as any
-      ])
-      if (addRes.success) {
-        likeState.value = true
-        NotifyPlugin.success({
-          title: '已添加到喜欢',
-          content: `《${currentSong.name || '未知歌曲'}》已加入“我的喜欢”`,
-          duration: 3000,
-          placement: 'bottom-right',
-          closeBtn: true
-        })
-      } else {
-        MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
-      }
-    }
-  } catch (error: any) {
-    console.error('切换喜欢状态失败:', error)
-    MessagePlugin.error('操作失败，请稍后重试')
-  }
+const onFavoriteChanged = (event:Event) => {
+  const {id,identity,liked}=(event as CustomEvent).detail
+  cachedFavoritesId=id
+  const current=restoredSong(list.value,userInfo.value,songInfo.value)
+  if (current && songKey(current)===identity) likeState.value=liked
 }
+onMounted(()=>favoriteChanged.addEventListener('change',onFavoriteChanged))
+onUnmounted(()=>favoriteChanged.removeEventListener('change',onFavoriteChanged))
+const onToggleLike = async (location:'player'|'shortcut'='player') => {
+  try {
+    const current=restoredSong(list.value,userInfo.value,songInfo.value)
+    if (!current) {MessagePlugin.warning('当前没有正在播放的歌曲');return}
+    await runTrackLike(current,!likeState.value,location,list.value,async (song,liked)=>{
+      const previous=await applyTrackFavorite(song,liked)
+      /* 界面内点击静默(按钮本身已有状态反馈);
+       * 全局快捷键 / 任务栏缩略图触发时窗口可能不在前台,改用系统通知。 */
+      if (previous!==liked && location==='shortcut') {
+        const name=song.name || '未知歌曲'
+        const what=song.singer ? `${name}-${song.singer}` : name
+        void desktopBridge.api?.systemNotification
+          ?.show(liked ? '已喜欢' : '已取消喜欢', `${what} Ciallo～(∠・ω )⌒☆`)
+          ?.catch(() => {})
+      }
+      return previous
+    })
+  } catch(error) {MessagePlugin.error(error instanceof Error?error.message:'操作失败，请稍后重试')}}
 
 const onDownload = async () => {
   try {
@@ -1366,44 +1311,15 @@ const handleProgressMouseLeave = () => {
 }
 
 // 进度条拖动处理
-const handleProgressClick = (event: MouseEvent) => {
-  if (dlnaStore.currentDevice) {
-    MessagePlugin.warning('投屏模式下不支持拖拽进度')
-    return
-  }
-  if (!progressRef.value) return
-
-  const rect = progressRef.value.getBoundingClientRect()
-  const offsetX = event.clientX - rect.left
-  const percentage = (offsetX / rect.width) * 100
-
-  // 更新临时进度值，使UI立即响应
-  tempProgressPercentage.value = percentage
-  cursorProgressPercentage.value = percentage
-
-  const wasPlaying = Audio.value.isPlay
-  const newTime = (percentage / 100) * Audio.value.duration
-  if (dlnaStore.currentDevice) {
-    // Pause local audio while DLNA seeks/buffers
-    if (Audio.value.audio && !Audio.value.audio.paused) {
-      Audio.value.audio.pause()
-    }
-    dlnaStore.seek(newTime).then(() => {
-      seekTo(newTime)
-      // Wait a bit for DLNA to buffer, then sync and resume
-      setTimeout(async () => {
-        if (wasPlaying && Audio.value.audio) {
-          const position = await dlnaStore.getPosition()
-          if (position && typeof position === 'number') {
-            Audio.value.audio.currentTime = position
-          }
-          Audio.value.audio.play().catch(() => {})
-        }
-      }, 1000)
-    })
-  } else {
-    seekTo(newTime)
-  }
+const handleProgressKey = (event: KeyboardEvent) => {
+  const duration = Audio.value.duration
+  if (!duration || dlnaStore.currentDevice) return
+  const current = Audio.value.currentTime
+  const target = ({ ArrowLeft: current - 5, ArrowRight: current + 5, Home: 0, End: duration } as Record<string, number>)[event.key]
+  if (typeof target !== 'number') return
+  event.preventDefault()
+  event.stopPropagation()
+  void seekTo(Math.max(0, Math.min(duration, target))).catch(console.warn)
 }
 
 const handleProgressDragMove = (event: MouseEvent) => {
@@ -1430,30 +1346,8 @@ const handleProgressDragEnd = (event: MouseEvent) => {
   const rect = progressRef.value.getBoundingClientRect()
   const offsetX = Math.max(0, Math.min(event.clientX - rect.left, rect.width))
   const percentage = (offsetX / rect.width) * 100
-  const wasPlaying = Audio.value.isPlay
   const newTime = (percentage / 100) * Audio.value.duration
-
-  if (dlnaStore.currentDevice) {
-    // Pause local audio while DLNA seeks/buffers
-    if (Audio.value.audio && !Audio.value.audio.paused) {
-      Audio.value.audio.pause()
-    }
-    dlnaStore.seek(newTime).then(() => {
-      seekTo(newTime)
-      // Wait a bit for DLNA to buffer, then sync and resume
-      setTimeout(async () => {
-        if (wasPlaying && Audio.value.audio) {
-          const position = await dlnaStore.getPosition()
-          if (position && typeof position === 'number') {
-            Audio.value.audio.currentTime = position
-          }
-          Audio.value.audio.play().catch(() => {})
-        }
-      }, 1000)
-    })
-  } else {
-    seekTo(newTime)
-  }
+  if (!dlnaStore.currentDevice) void seekTo(newTime).catch(console.warn)
 
   isDraggingProgress.value = false
   window.removeEventListener('mousemove', handleProgressDragMove)
@@ -1567,7 +1461,15 @@ watch(showFullPlay, (val) => {
         ref="progressRef"
         class="progress-bar"
         @mousedown="handleProgressDragStart($event)"
-        @click.stop="handleProgressClick"
+        role="slider"
+        aria-label="播放进度"
+        aria-valuemin="0"
+        :aria-valuemax="Math.round(Audio.duration || 0)"
+        :aria-valuenow="Math.round(Audio.currentTime || 0)"
+        :aria-disabled="!!dlnaStore.currentDevice"
+        tabindex="0"
+        @keydown="handleProgressKey"
+        @click.stop
         @mouseenter="handleProgressMouseEnter"
         @mousemove="handleProgressMouseMove"
         @mouseleave="handleProgressMouseLeave"
@@ -1630,7 +1532,7 @@ watch(showFullPlay, (val) => {
               variant="text"
               shape="circle"
               :disabled="!songInfo.songmid"
-              @click.stop="onToggleLike"
+              @click.stop="onToggleLike()"
             >
               <heart-icon
                 :fill-color="isLiked ? ['#FF7878', '#FF7878'] : ''"

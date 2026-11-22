@@ -29,9 +29,9 @@ CLI 提供以下 **9 种模板，每种都有 TS / JS 两个变体**。它们是
 ## 创建命令
 
 ```shell
-npm create ceru-plugin@latest my-source -- --template source --lang ts
-npm create ceru-plugin@latest my-vue -- --template vue --lang ts
-npm create ceru-plugin@latest my-react -- --template react --lang js
+npm create ceru-plugin@0.3.16 my-source -- --template source --lang ts
+npm create ceru-plugin@0.3.16 my-vue -- --template vue --lang ts
+npm create ceru-plugin@0.3.16 my-react -- --template react --lang js
 ```
 
 进入工程后运行 `npm install`、`npm run dev`。TS 和 JS 都通过同一套 CLI 打包；JS 工程可使用 JSDoc 与 SDK 类型提示。

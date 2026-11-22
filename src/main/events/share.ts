@@ -3,7 +3,9 @@ import * as crypto from 'crypto'
 import pluginService from '../services/plugin'
 import { createShareDescriptor, readShareDescriptor } from '../services/plugin/sharing'
 import { normalizeMusicItem } from '@common/musicItem'
-import { toPluginTrack } from '@common/pluginMusic'
+import { toPluginTrack, toAppTrack } from '@common/pluginMusic'
+import { sharingBus } from '../services/plugin/operations/bus'
+import { operationTrack } from '../services/plugin/operations/track'
 
 /**
  * 分享相关 IPC：仅暴露最小必要能力 —— 获取当前插件的源码 + md5 指纹。
@@ -95,15 +97,21 @@ export default function InitShareService() {
   })
   ipcMain.handle('share:descriptor:create', async (_event, source: string, song: any) => {
     song = normalizeMusicItem(song)
-    const provider = pluginService.getV2Provider(
-      source,
-      song.pluginResource?.pluginId,
-      'sharing.describe'
-    )
-    if (!provider) throw new Error('请先安装提供该音源的插件')
-    const ref = { ...toPluginTrack(song).ref, pluginId: provider.host.getPluginInfo().id }
-    const descriptor = await provider.host.invokeV2Provider(source, 'sharing.describe', [ref, {}])
-    return createShareDescriptor(descriptor)
+    const track=operationTrack(song)
+    const create=async(selected=track)=>{
+      const same=selected.ref.providerId===track.ref.providerId&&selected.ref.id===track.ref.id
+      const target=same?song:normalizeMusicItem(toAppTrack({...selected,ref:{...selected.ref,scope:'provider'}}))
+      const targetSource=same?source:selected.ref.providerId
+      const provider=pluginService.getV2Provider(targetSource,target.pluginResource?.scope==='provider'?undefined:target.pluginResource?.pluginId,'sharing.describe')
+      if(!provider)throw Error('请先安装提供该音源的插件')
+      const ref={...toPluginTrack(target).ref,pluginId:provider.host.getPluginInfo().id}
+      const descriptor=await provider.host.invokeV2Provider(targetSource,'sharing.describe',[ref,{}])
+      return createShareDescriptor(descriptor)
+    }
+    if(!sharingBus.names().includes('share.create'))return create()
+    const outcome=await sharingBus.run('share.create',{track},{kind:'ui',location:'share-descriptor'},input=>create(input.track))
+    if(!outcome.result)throw Error('分享已由插件取消')
+    return outcome.result
   })
   ipcMain.handle('share:descriptor:read', (_event, id) => readShareDescriptor(id))
   ipcMain.handle(

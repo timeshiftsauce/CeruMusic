@@ -1,17 +1,17 @@
 <!doctype html>
-<html>
-  <head lang="zh-CN">
+<html lang="zh-CN">
+  <head>
     <meta charset="UTF-8" />
+    <!-- data: keeps frozen plugin frames working; unsafe-eval is required by
+         the bundled fingerprint/graphics libraries. Inline script is blocked. The fixed TDesign sprite URL preserves existing icons. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob: data: 'unsafe-eval' https://tdesign.gtimg.com/icon/0.3.2/fonts/index.js; style-src 'self' 'unsafe-inline' data: blob: https:; img-src 'self' file: data: blob: http: https: ceru-cover:; font-src 'self' data: blob: https:; connect-src 'self' http: https: ws: wss: ceru-media: ceru-cover:; media-src 'self' file: data: blob: http: https: ceru-media: ceru-local:; worker-src 'self' blob: data:; frame-src 'self' data: blob: http: https:; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>澜音 Music</title>
-    <script
-      defer
-      src="https://umami.shiqianjiang.cn/script.js"
-      data-website-id="62b3c383-7648-4f65-b59e-2ef73c3cc29d"
-    ></script>
+
   </head>
 
   <body>
     <div id="app"></div>
+    <iframe hidden tabindex="-1" aria-hidden="true" title="访问统计" sandbox="allow-scripts" referrerpolicy="no-referrer" src="./analytics.html"></iframe>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

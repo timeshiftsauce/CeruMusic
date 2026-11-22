@@ -57,6 +57,7 @@
         <span class="artist">{{ lyricData.artistName }}</span>
       </div>
     </div>
+    <PluginRegion name="desktopLyric" :visible="regionVisible" :content="regionContent" :position-ms="playSeekMs" :playing="lyricData.playStatus" surface-class="plugin-desktop-lyric">
     <TransitionGroup
       tag="div"
       :name="transitionName"
@@ -139,13 +140,19 @@
         &nbsp;
       </span>
     </TransitionGroup>
+    </PluginRegion>
   </div>
   <!-- </NConfigProvider> -->
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import SvgIcon from '@renderer/components/SvgIcon.vue'
-import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import PluginRegion from '@renderer/components/PluginRegion.vue'
+import { pluginContributions } from '@renderer/services/pluginState'
+import { regionView, restoreSkin } from '@renderer/plugin/regions'
+import { reactive, ref, computed, provide, onMounted, onBeforeUnmount } from 'vue'
+import { regionTrackIdentity } from '@renderer/plugin/regionTrack'
 import { useWindowSize, useRafFn, useTimeoutFn, useDebounceFn, useThrottleFn } from '@vueuse/core'
 import type { ComponentPublicInstance } from 'vue'
 import type { LyricLine, LyricWord } from '@applemusic-like-lyrics/lyric'
@@ -205,6 +212,8 @@ const lyricData = reactive<LyricData>({
 })
 
 let baseMs = 0
+const trackRevision = ref<number | null>(null)
+provide(regionTrackIdentity, trackRevision)
 let anchorTick = 0
 
 const playSeekMs = ref<number>(0)
@@ -249,6 +258,36 @@ const lyricConfig = reactive<LyricConfig>({
 })
 
 const isHovered = ref<boolean>(false)
+const regionVisible = ref(!document.hidden)
+let refreshRevision = 0
+const refreshRegion = async () => {
+  const revision = ++refreshRevision
+  if (!regionVisible.value) return
+  try {
+    const [inventory] = await Promise.all([desktopBridge.api.plugins.contributions(), restoreSkin()])
+    if (revision === refreshRevision) pluginContributions.value = inventory
+  } catch (error) {
+    if (revision === refreshRevision) pluginContributions.value = []
+    console.warn('读取桌面歌词插件失败:', error)
+  }
+}
+const updateVisibility = () => {
+  regionVisible.value = !document.hidden
+  void refreshRegion()
+}
+const projectLine = (line?: LyricLine) => line ? {
+  startTimeMs:line.startTime, endTimeMs:line.endTime, text:line.words.map(word => word.word).join(''),
+  words:line.words.map(word => ({text:word.word, startTimeMs:word.startTime, endTimeMs:word.endTime, romanization:word.romanWord})),
+  translation:line.translatedLyric, romanization:line.romanLyric, isBackground:line.isBG, isDuet:line.isDuet
+} : null
+const regionContent = computed(() => {
+  if (!regionVisible.value || !regionView('desktopLyric')) return {}
+  const lines = lyricConfig.showYrc && lyricData.yrcData?.length ? lyricData.yrcData : lyricData.lrcData
+  const index = currentLyricIndex.value
+  return { track: lyricData.playName ? {title:lyricData.playName, artists:lyricData.artistName ? [lyricData.artistName] : []} : null,
+    current:projectLine(lines?.[index]), next:projectLine(lines?.[index+1]), locked:lyricConfig.isLock,
+    palette:{accent:lyricConfig.playedColor, foreground:lyricConfig.unplayedColor, background:'transparent'}, layout:'cover' }
+})
 const isInitializing = ref(true)
 const { start: startHoverTimer } = useTimeoutFn(
   () => {
@@ -471,9 +510,9 @@ const cachedBounds = reactive({
 const updateCachedBounds = async () => {
   try {
     const [winBounds, stored, workAreas] = await Promise.all([
-      window.electron?.ipcRenderer?.invoke?.('get-window-bounds'),
-      window.electron?.ipcRenderer?.invoke?.('get-desktop-lyric-option'),
-      window.electron?.ipcRenderer?.invoke?.('get-all-work-area')
+      desktopBridge.electron?.ipcRenderer?.invoke?.('get-window-bounds'),
+      desktopBridge.electron?.ipcRenderer?.invoke?.('get-desktop-lyric-option'),
+      desktopBridge.electron?.ipcRenderer?.invoke?.('get-all-work-area')
     ])
     cachedBounds.x = winBounds?.x ?? 0
     cachedBounds.y = winBounds?.y ?? 0
@@ -641,7 +680,7 @@ const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
       newX = Math.round(Math.max(dragState.minX, Math.min(dragState.maxX - newWidth, newX)))
       newY = Math.round(Math.max(dragState.minY, Math.min(dragState.maxY - newHeight, newY)))
     }
-    window.electron?.ipcRenderer?.send?.('move-window', newX, newY, newWidth, newHeight)
+    desktopBridge.electron?.ipcRenderer?.send?.('move-window', newX, newY, newWidth, newHeight)
     cursorStyle.value =
       dragState.resizeEdge === 'top-left' || dragState.resizeEdge === 'bottom-right'
         ? 'nwse-resize'
@@ -664,7 +703,7 @@ const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
         Math.max(dragState.minY, Math.min(dragState.maxY - dragState.winHeight, newWinY))
       )
     }
-    window.electron?.ipcRenderer?.send?.(
+    desktopBridge.electron?.ipcRenderer?.send?.(
       'move-window',
       newWinX,
       newWinY,
@@ -756,7 +795,7 @@ const fontSizeToHeight = (size: number) => {
 const pushWindowHeight = (nextHeight: number) => {
   if (!Number.isFinite(nextHeight)) return
   if (dragState.isDragging) return
-  window.electron?.ipcRenderer?.send?.('update-window-height', nextHeight)
+  desktopBridge.electron?.ipcRenderer?.send?.('update-window-height', nextHeight)
 }
 
 watch(
@@ -771,31 +810,35 @@ watch(
 )
 
 const sendToMain = (eventName: string, ...args: any[]) => {
-  window.electron?.ipcRenderer?.send?.(eventName, ...args)
+  desktopBridge.electron?.ipcRenderer?.send?.(eventName, ...args)
 }
 const sendToMainWin = (eventName: string, ...args: any[]) => {
-  window.electron?.ipcRenderer?.send?.('send-main-event', eventName, ...args)
+  desktopBridge.electron?.ipcRenderer?.send?.('send-main-event', eventName, ...args)
 }
 
 const toggleLyricLock = async () => {
   const next = !lyricConfig.isLock
-  window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', next)
+  desktopBridge.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', next)
   lyricConfig.isLock = next
 }
 // const tempToggleLyricLock = (isLock: boolean) => {
 //   if (!lyricConfig.isLock) return
-//   window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', isLock)
+//   desktopBridge.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', isLock)
 // }
 
 onMounted(() => {
-  window.electron?.ipcRenderer?.on?.(
+  updateVisibility()
+  document.addEventListener('visibilitychange',updateVisibility)
+  desktopBridge.electron.ipcRenderer.on('plugin:desktop-lyric-refresh', refreshRegion)
+  desktopBridge.electron?.ipcRenderer?.on?.(
     'play-song-change',
-    (_event, data: { name?: string; artist?: string }) => {
+    (_event, data: { name?: string; artist?: string; revision?: number }) => {
+      if (typeof data?.revision === 'number' && Number.isSafeInteger(data.revision)) trackRevision.value = data.revision
       lyricData.playName = data?.name || ''
       lyricData.artistName = data?.artist || ''
     }
   )
-  window.electron?.ipcRenderer?.on?.('play-lyric-change', (_event, lines: LyricLine[]) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('play-lyric-change', (_event, lines: LyricLine[]) => {
     lyricData.lrcData = lines || []
     // 优先把逐字歌词当作 yrcData（如果行 words 长度>1）
     lyricData.yrcData =
@@ -805,10 +848,10 @@ onMounted(() => {
     lyricData.lyricLoading = false
     if (isInitializing.value) isInitializing.value = false
   })
-  window.electron?.ipcRenderer?.on?.('play-lyric-index', (_event, index: number) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('play-lyric-index', (_event, index: number) => {
     lyricData.lyricIndex = index
   })
-  window.electron?.ipcRenderer?.on?.(
+  desktopBridge.electron?.ipcRenderer?.on?.(
     'play-lyric-progress',
     (
       _event,
@@ -825,7 +868,7 @@ onMounted(() => {
       }
     }
   )
-  window.electron?.ipcRenderer?.on?.('play-status-change', (_event, status: boolean) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('play-status-change', (_event, status: boolean) => {
     lyricData.playStatus = !!status
     if (lyricData.playStatus) {
       resumeSeek()
@@ -835,7 +878,7 @@ onMounted(() => {
       pauseSeek()
     }
   })
-  window.electron?.ipcRenderer?.on?.('desktop-lyric-option-change', (_event, option: any) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('desktop-lyric-option-change', (_event, option: any) => {
     if (!option) return
     const merged = { ...option }
     lyricConfig.fontSize = Number(merged.fontSize) || lyricConfig.fontSize
@@ -854,13 +897,13 @@ onMounted(() => {
     const height = fontSizeToHeight(lyricConfig.fontSize)
     if (height) pushWindowHeight(height)
   })
-  window.electron?.ipcRenderer?.on?.('set-desktop-lyric-font', (_event, font: string) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('set-desktop-lyric-font', (_event, font: string) => {
     lyricConfig.fontFamily = font || lyricConfig.fontFamily
   })
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_event, lock: boolean) => {
+  desktopBridge.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_event, lock: boolean) => {
     lyricConfig.isLock = !!lock
   })
-  window.electron?.ipcRenderer
+  desktopBridge.electron?.ipcRenderer
     ?.invoke?.('get-desktop-lyric-option')
     .then((opt: any) => {
       if (opt) {
@@ -897,10 +940,13 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseleave', handleMouseLeave)
   // 通知主进程：桌面歌词窗口已准备就绪，便于主窗口侧补发快照
-  window.electron?.ipcRenderer?.send?.('lyric-window-ready')
+  desktopBridge.electron?.ipcRenderer?.send?.('lyric-window-ready')
 })
 
 onBeforeUnmount(() => {
+  ++refreshRevision
+  document.removeEventListener('visibilitychange',updateVisibility)
+  desktopBridge.electron.ipcRenderer.removeAllListeners('plugin:desktop-lyric-refresh')
   pauseSeek()
   document.removeEventListener('pointerdown', onDocPointerDown)
   document.removeEventListener('mousemove', handleMouseMove)
@@ -911,6 +957,7 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 .desktop-lyric {
+  :deep(.plugin-desktop-lyric) { flex: 1 1 auto; min-height: 0; pointer-events: none; }
   display: flex;
   flex-direction: column;
   height: 100%;

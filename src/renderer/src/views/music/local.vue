@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, computed, onMounted, onBeforeUnmount, toRaw, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   ChevronRightIcon,
   RefreshIcon,
@@ -221,7 +222,7 @@ const moreActionSelect = (e: 'add-to-playlist' | 'clear' | 'batch-batch' | 'togg
 }
 
 const selectDirs = async () => {
-  const dirs = await (window as any).api.localMusic.selectDirs()
+  const dirs = await (desktopBridge as any).api.localMusic.selectDirs()
   if (Array.isArray(dirs)) {
     scanDirs.value = Array.from(new Set([...(scanDirs.value || []), ...dirs]))
   }
@@ -229,7 +230,7 @@ const selectDirs = async () => {
 }
 
 const saveDirs = async () => {
-  await (window as any).api.localMusic.setDirs(toRaw(scanDirs.value))
+  await (desktopBridge as any).api.localMusic.setDirs(toRaw(scanDirs.value))
   showDirModal.value = false
   MessagePlugin.success('目录已保存')
 }
@@ -240,7 +241,7 @@ const removeDir = (d: string) => {
 }
 
 const clearScan = async () => {
-  const api = (window as any).api
+  const api = (desktopBridge as any).api
   if (!api?.localMusic?.clearIndex) return
   const res = await api.localMusic.clearIndex()
   if (res?.success) {
@@ -295,7 +296,7 @@ const rankCandidate = (song: MusicItem, it: any) => {
 }
 
 const searchAcrossSources = async (keyword: string) => {
-  const api = (window as any).api
+  const api = (desktopBridge as any).api
   const resAll: any[] = []
   for (const src of sourcesOrder) {
     try {
@@ -354,13 +355,13 @@ const applyMatch = async (candidate: any) => {
   try {
     let pic = candidate.img
     if (!pic) {
-      const p = await (window as any).api.music.requestSdk('getPic', {
+      const p = await (desktopBridge as any).api.music.requestSdk('getPic', {
         source: candidate.source,
         songInfo: candidate
       })
       if (typeof p !== 'object') pic = p
     }
-    const writeRes = await (window as any).api.localMusic.writeTags(
+    const writeRes = await (desktopBridge as any).api.localMusic.writeTags(
       song.path,
       {
         name: candidate.name,
@@ -444,7 +445,7 @@ const scanLibrary = async () => {
   loading.value = true
   scanProgress.value = { processed: 0, total: 0, running: true }
   try {
-    const api = (window as any).api
+    const api = (desktopBridge as any).api
     if (!api || !api.localMusic || !api.localMusic.scan) {
       MessagePlugin.error('请在Electron应用中使用本地扫描功能')
       return
@@ -528,7 +529,7 @@ const addToLocalPlaylist = async (song: MusicItem) => {
       return
     }
   }
-  const res = await (window as any).api.songList.addSongs(selectedPlaylistId.value, [song])
+  const res = await (desktopBridge as any).api.songList.addSongs(selectedPlaylistId.value, [song])
   if (res?.success) MessagePlugin.success('已添加到本地歌单')
   else MessagePlugin.error(res?.error || '添加失败')
 }
@@ -568,7 +569,7 @@ const matchBatch = async () => {
   batchState.value = { total: need.length, done: 0, running: true }
   try {
     const ids = need.map((s) => String(s.songmid))
-    await (window as any).api.localMusic.batchMatch(ids)
+    await (desktopBridge as any).api.localMusic.batchMatch(ids)
   } catch (e: any) {
     MessagePlugin.error('启动匹配失败: ' + e.message)
     batchState.value.running = false
@@ -576,9 +577,9 @@ const matchBatch = async () => {
 }
 
 onMounted(async () => {
-  const saved = await (window as any).api.localMusic.getDirs()
+  const saved = await (desktopBridge as any).api.localMusic.getDirs()
   if (Array.isArray(saved)) scanDirs.value = saved
-  const list = await (window as any).api.localMusic.getList()
+  const list = await (desktopBridge as any).api.localMusic.getList()
   if (Array.isArray(list)) {
     songs.value = list
     console.log('本地音乐库:', { ...toRaw(songs.value) })
@@ -586,12 +587,12 @@ onMounted(async () => {
   }
 
   // 监听扫描进度
-  window.api.localMusic.onScanProgress((processed: number, total: number) => {
+  desktopBridge.api.localMusic.onScanProgress((processed: number, total: number) => {
     scanProgress.value = { processed, total, running: true }
   })
 
   // 监听扫描完成
-  window.api.localMusic.onScanFinished((resList: any[]) => {
+  desktopBridge.api.localMusic.onScanFinished((resList: any[]) => {
     songs.value = Array.isArray(resList) ? resList : []
     for (const s of songs.value) ensureDuration(s)
     scanProgress.value.running = false
@@ -599,14 +600,14 @@ onMounted(async () => {
   })
 
   // 监听批量匹配进度
-  window.api.localMusic.onBatchMatchProgress((processed: number, total: number) => {
+  desktopBridge.api.localMusic.onBatchMatchProgress((processed: number, total: number) => {
     batchState.value = { total, done: processed, running: true }
   })
 
-  window.api.localMusic.onBatchMatchFinished(async (res: any) => {
+  desktopBridge.api.localMusic.onBatchMatchFinished(async (res: any) => {
     batchState.value.running = false
     MessagePlugin.success(`批量匹配完成，成功匹配 ${res.matched} 首`)
-    const list = await (window as any).api.localMusic.getList()
+    const list = await (desktopBridge as any).api.localMusic.getList()
     if (Array.isArray(list)) {
       songs.value = list
       for (const s of songs.value) ensureDuration(s)
@@ -618,9 +619,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearLocateScrollTimers()
   clearLocateBtnTimer()
-  window.api.localMusic.removeScanProgress()
-  window.api.localMusic.removeScanFinished()
-  window.api.localMusic.removeBatchMatchListeners()
+  desktopBridge.api.localMusic.removeScanProgress()
+  desktopBridge.api.localMusic.removeScanFinished()
+  desktopBridge.api.localMusic.removeBatchMatchListeners()
 })
 
 watch(hasCurrentPlayingSong, (value) => {
@@ -637,7 +638,7 @@ watch(hasCurrentPlayingSong, (value) => {
 async function coverLoader(song: MusicItem, signal: AbortSignal) {
   if (signal.aborted) return ''
   if (song?.hasCover === false) return ''
-  const data = await (window as any).api.localMusic.getCoverBase64(String(song.songmid))
+  const data = await (desktopBridge as any).api.localMusic.getCoverBase64(String(song.songmid))
   if (signal.aborted) return ''
   if (data) {
     song.hasCover = true
@@ -684,7 +685,7 @@ function handleAddBatchToSongList(batchSongs: MusicItem[], playlist: any) {
     MessagePlugin.warning('未选择歌曲')
     return
   }
-  window.api.songList
+  desktopBridge.api.songList
     .addSongs(
       playlist.id,
       batchSongs.map((s) => toRaw(s) as any)

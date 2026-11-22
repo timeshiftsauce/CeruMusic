@@ -14,6 +14,7 @@ import {
   GetAlbumDetailArg
 } from './type'
 import pluginService from '../plugin/index'
+import { searchLocal } from './localSource'
 import { assertResourceRef, retargetTrackRef } from '@shiqianjiang/ceru-plugin-sdk'
 import {
   isProviderTrackRef,
@@ -29,8 +30,45 @@ import { localMusicIndexService } from '../LocalMusicIndex'
 import { readTags } from '../../utils/tagUtils'
 import { musicCacheService } from '../musicCache'
 import download from '../../utils/downloadSongs'
+import { randomUUID } from 'node:crypto'
+import { interceptsResolve, resolveBus } from '../plugin/operations/bus'
+import { interceptsLyrics } from '../plugin/operations/bus'
+import { runLyrics } from '../plugin/operations/lyrics'
+import { runDownloadTasks } from '../plugin/operations/downloads'
+import type { CrLyric, OperationSource } from '@shiqianjiang/ceru-plugin-sdk'
 
 const v2Track = toAppTrack
+
+async function enqueueDownloads(tasks:DownloadSingleSongArgs[],from?:string,eager=false) {
+  const host=from?pluginService.getPluginById(from):undefined
+  if(from&&(!host||host.isDisabled()))throw Error('发起下载的插件已停止')
+  const descriptor=host?.getDescriptor()
+  const lifetime=host?.getAccessSignal()
+  const source:OperationSource=descriptor?{kind:'plugin',pluginId:descriptor.id,runtime:descriptor.runtime}:{kind:'ui',location:'download'}
+  const assertActive=()=>{
+    lifetime?.throwIfAborted()
+    if(host&&(host.isDisabled()||pluginService.getPluginById(from!)!==host))throw Error('发起下载的插件已停止')
+    if(host&&!descriptor?.permissions.some(permission=>permission.name==='downloads.create'&&host.getGrantedPermissions().includes(permission.key)))throw Error('创建下载的权限已撤销')
+  }
+  assertActive()
+  return runDownloadTasks(tasks,source,async (selected,bypassHooks=false)=>{
+    const results:any[]=[]
+    for(const task of selected) {
+      try {
+        assertActive()
+        let url=task.lazy?task.songInfo.typeUrl?.[task.quality]??'':''
+        if(eager&&!url) {
+          const resolved=await main(task.songInfo.source).getMusicUrl(task)
+          if(typeof resolved!=='string'||!resolved)throw Error('无法获取歌曲下载链接')
+          url=resolved
+        }
+        const result=await download({...task.songInfo},url,task.tagWriteOptions??{},task.pluginId,task.quality,task.path,source,assertActive,bypassHooks)
+        results.push({success:true,songmid:task.songInfo.songmid,...result})
+      } catch(error:any) {results.push({success:false,songmid:task.songInfo.songmid,error:error.message||String(error)})}
+    }
+    return results
+  })
+}
 
 /**
  * 判定一个歌词文档是否真的有可显示内容。
@@ -42,10 +80,8 @@ function hasLyricContent(document: any): boolean {
   if (!document || typeof document !== 'object') return false
   const lines = Array.isArray(document.lines) ? document.lines : null
   if (lines && lines.length > 0) return true
-  return (
-    typeof document.raw === 'string' ||
-    typeof document.content === 'string' ||
-    typeof document.text === 'string'
+  return [document.plainText, document.raw, document.content, document.text].some(
+    (text) => typeof text === 'string' && text.trim().length > 0
   )
 }
 
@@ -141,14 +177,19 @@ function main(source: string = 'wy') {
     return provider.host.invokeV2Action(action, { ...input, song, source: currentSource })
   }
   return {
-    async search({ keyword, page = 1, limit = 30 }: SearchArg) {
+    async search({ keyword, page = 1, limit = 30, cursor }: SearchArg) {
+      if (source === 'local') {
+        const offset = (page-1)*limit
+        const result = await searchLocal({query:keyword,kinds:['track'],filters:{},cursor:String(offset),limit})
+        return v2Page({...result,totalEstimate:offset+result.items.length+(result.nextCursor ? 1 : 0)}) as SearchResult
+      }
       const provider = requireV2('tracks.search')
       const result = await provider.host.invokeV2Provider(source, 'tracks.search', [
         {
           query: keyword,
           kinds: ['track'],
           filters: {},
-          cursor: page > 1 ? String(page) : undefined,
+          cursor: cursor ?? (page > 1 ? String(page) : undefined),
           limit
         }
       ])
@@ -156,6 +197,11 @@ function main(source: string = 'wy') {
     },
 
     async tipSearch({ keyword }: { keyword: string }) {
+      const tracks = pluginService.getV2Provider(source, undefined, 'tracks.suggest')
+      if (tracks) {
+        try { return await tracks.host.invokeV2Provider(source,'tracks.suggest',[keyword]) as TipSearchResult }
+        catch { return [] as TipSearchResult }
+      }
       const provider = pluginService.getV2Action(source, 'search.tips')
       if (!provider) return [] as TipSearchResult
       try {
@@ -166,6 +212,21 @@ function main(source: string = 'wy') {
       }
     },
 
+    async getPlaybackUrl(args: GetMusicUrlArg): Promise<string | {error:string}> {
+      if (!interceptsResolve()) return this.getMusicUrl(args)
+      const song=args.songInfo, ref=normalizeAppTrackRef(song.pluginResource)
+      const provider=String(ref?.providerId ?? song.source ?? source), raw=String(ref?.id ?? song.songmid ?? '')
+      const portable=provider!=='local' && provider!=='private' && (!ref || isProviderTrackRef(ref)) && /^[\w.-]{1,128}$/.test(provider) && /^[\w.-]{1,256}$/.test(raw)
+      const track={ref:{kind:'track' as const,providerId:portable?provider:'private',id:portable?raw:randomUUID()},title:String(song.name ?? '').slice(0,512),metadata:{artists:String(song.singer ?? '').split('、').filter(Boolean).slice(0,32).map(artist=>artist.slice(0,256))}}
+      let result:string | {error:string}={error:'未能解析播放地址'}
+      await resolveBus.run('player.resolve',{track,quality:args.quality},{kind:'system',location:'playback'},async selected=>{
+        const same=track.ref.providerId===selected.track.ref.providerId && track.ref.id===selected.track.ref.id
+        const songInfo=same?song:toAppTrack({...selected.track,ref:{...selected.track.ref,scope:'provider'}})
+        result=await this.getMusicUrl({...args,songInfo,quality:selected.quality,qualityOrder:same?args.qualityOrder:undefined})
+        return {ok:typeof result==='string' && result.length>0}
+      })
+      return result
+    },
     async getMusicUrl({ songInfo, quality, isCache, qualityOrder }: GetMusicUrlArg) {
       try {
         const resource = normalizeAppTrackRef(songInfo.pluginResource)
@@ -174,6 +235,7 @@ function main(source: string = 'wy') {
           if (resource.kind !== 'track') throw new Error('只能播放歌曲资源')
         }
         const currentSource = resource?.providerId || songInfo.source || source
+        if (currentSource === 'local') return localMusicIndexService.getUrlById(resource?.id ?? songInfo.songmid) ?? {error:'未找到本地文件'}
         const provider = pluginService.getV2Provider(
           currentSource,
           resource?.scope === 'provider' ? undefined : resource?.pluginId,
@@ -190,7 +252,12 @@ function main(source: string = 'wy') {
         // 一首歌一个 key（不含 connectionId），音频文件 / 歌词 / 封面共用。
         // 本地音乐不缓存（文件本就在磁盘上）。
         const cacheable = isCache !== false && musicCacheService.isCacheable(songInfo)
-        const songId = musicCacheService.songCacheKey(songInfo)
+        const songId = JSON.stringify([
+          'plugin-audio',
+          provider.pluginId,
+          effectiveRef?.connectionId ?? null,
+          musicCacheService.songCacheKey(songInfo)
+        ])
 
         // 先检查缓存（带上音质：缓存音质低于本次请求时视为未命中，会回源重取）
         if (cacheable) {
@@ -303,7 +370,18 @@ function main(source: string = 'wy') {
       }
     },
 
-    async getLyric({
+    async getLyric(args:GetLyricArg):Promise<any> {
+      if(args.useFormat != null || !interceptsLyrics()) return this.getRawLyric(args)
+      let original:any
+      const lyric=await runLyrics(args.songInfo,async()=>{
+        original=await this.getRawLyric({...args,grepLyricInfo:false})
+        if(original.error) throw Error(original.error)
+        return hasLyricContent(original.crlyric)?original.crlyric:null
+      }).catch(error=>({error:String(error)}))
+      if(lyric && 'error' in lyric) return lyric
+      return {crlyric:lyric && args.grepLyricInfo?filterLyricInfo(lyric,args.useStrictMode??false):lyric}
+    },
+    async getRawLyric({
       songInfo,
       grepLyricInfo = false,
       useStrictMode = false,
@@ -333,12 +411,11 @@ function main(source: string = 'wy') {
         // 与音频、封面同一个 key：同一首歌的元信息只有一份，与音质无关。
         const lyricKey = isDisplayLyric ? musicCacheService.songCacheKey(songInfo) : ''
         if (isDisplayLyric) {
-          const cached = await musicCacheService.getCachedLyricObject<import('@shiqianjiang/ceru-plugin-sdk').CrLyric>(
-            lyricKey
-          )
-          // 命中也要套用当前的过滤偏好，保证与「未命中」路径的返回值形态一致，
-          // 否则用户改了过滤设置却只在首次播放生效。
-          if (cached) {
+          let cached = await musicCacheService.getCachedLyricObject<CrLyric>(lyricKey)
+          if (!hasLyricContent(cached)) {
+            cached = await musicCacheService.getCachedLyricObject<CrLyric>(lyricMarkerKey(lyricKey))
+          }
+          if (cached && hasLyricContent(cached)) {
             return { crlyric: grepLyricInfo ? filterLyricInfo(cached, useStrictMode) : cached }
           }
         }
@@ -366,13 +443,13 @@ function main(source: string = 'wy') {
             })
           ).text
         }
-        if (isDisplayLyric && res) musicCacheService.cacheLyricObject(lyricKey, res)
         // 与封面缓存一致：写一份「这首歌取过歌词」的标记。
         // 当插件返回空文档、或插件侧请求在并发下失败时，渲染层拿不到歌词就会
         // 守着同一个 inFlightMetadataKey 不再重试 —— 用户看到「这次播放没有歌词」，
         // 切走再切回来（inFlightMetadataKey 已换）才重新拉一次。
         // 有了标记，下一次请求可以直接绕过插件用缓存补齐。
         if (isDisplayLyric && hasLyricContent(res)) {
+          musicCacheService.cacheLyricObject(lyricKey, res)
           musicCacheService.cacheLyricObject(lyricMarkerKey(lyricKey), res)
         }
         return { crlyric: grepLyricInfo ? filterLyricInfo(res, useStrictMode) : res }
@@ -392,7 +469,8 @@ function main(source: string = 'wy') {
         ])
       ) as PlaylistResult
     },
-    async parseLyrics({ text, track }: { text: string; track: any }): Promise<any> {
+    async parseLyrics({ text, track, songInfo }: { text: string; track: any; songInfo?:GetLyricArg['songInfo'] }): Promise<any> {
+      if(songInfo && interceptsLyrics()) return runLyrics(songInfo,()=>this.parseLyrics({text,track}))
       if (source === 'local') {
         const song = localMusicIndexService.getSongById(String(track?.id ?? ''))
         if (song?.path)
@@ -406,7 +484,7 @@ function main(source: string = 'wy') {
               id: String(track.id)
             },
             converters: pluginService.getLyricConverters().flatMap((host) =>
-              (host.getManifest().contributes?.lyricConverters ?? []).map((converter: any) => ({
+              (host.getDescriptor().lyricConverters).map((converter: any) => ({
                 formats: converter.formats,
                 parse: (request: import('@shiqianjiang/ceru-plugin-sdk').LyricParseRequest) =>
                   host.convertLyrics('parse', request, converter.id, 3000)
@@ -433,14 +511,15 @@ function main(source: string = 'wy') {
     },
 
     async getPlaylistTags() {
-      const provider = requireV2('playlists.categories')
+      const provider = pluginService.getV2Provider(source, undefined, 'playlists.categories')
+      if (!provider) throw new Error(`未安装提供「${source}」歌单分类的音源插件`)
       const result = await provider.host.invokeV2Provider(source, 'playlists.categories', [])
       const groups = new Map<string, any[]>()
       const hotTag: any[] = []
       for (const item of result.items) {
-        const group = item.extensions?.group || '分类'
+        const group = item.extensions?.group || item.subtitle || '分类'
         const tag = { id: item.ref.id, name: item.title }
-        if (item.extensions?.hot) hotTag.push(tag)
+        if (item.extensions?.hot || group === '热门') hotTag.push(tag)
         const list = groups.get(group) ?? []
         list.push(tag)
         groups.set(group, list)
@@ -459,14 +538,16 @@ function main(source: string = 'wy') {
       page?: number
       limit?: number
     }) {
-      const provider = requireV2('playlists.list')
+      const provider = pluginService.getV2Provider(source, undefined, 'playlists.list')
+      if (!provider) throw new Error(`未安装提供「${source}」歌单的音源插件`)
       const res = await provider.host.invokeV2Provider(source, 'playlists.list', [
         {
-          pluginId: provider.host.getPluginInfo().id,
+          pluginId: provider.pluginId,
           providerId: source,
           kind: 'playlist-category',
-          id: tagId || 'hot',
-          data: { sortId, limit }
+          id: tagId || '全部',
+          data: { sortId, limit },
+          scope: 'provider'
         },
         String(page)
       ])
@@ -479,69 +560,34 @@ function main(source: string = 'wy') {
         if (ref.kind !== 'playlist' || ref.id !== id || ref.providerId !== source)
           throw new Error('歌单资源与请求不匹配')
       }
-      const provider = pluginService.getV2Provider(source, ref?.pluginId, 'playlists.get')
+      const provider = pluginService.getV2Provider(
+        source,
+        ref?.scope === 'provider' ? undefined : ref?.pluginId,
+        'playlists.get'
+      )
       if (!provider) throw new Error('未安装提供此歌单的插件，请先安装并启用原插件')
       const res = await provider.host.invokeV2Provider(source, 'playlists.get', [
         ref ?? {
           pluginId: provider.host.getPluginInfo().id,
           providerId: source,
           kind: 'playlist',
-          id
+          id,
+          scope: 'provider'
         },
         ref ? cursor : String(page)
       ])
       return v2Page(res) as PlaylistDetailResult
     },
 
-    async downloadSingleSong({
-      pluginId,
-      songInfo,
-      quality,
-      tagWriteOptions,
-      lazy,
-      path
-    }: DownloadSingleSongArgs) {
-      let url = ''
-      if (lazy && songInfo.typeUrl && songInfo.typeUrl[quality]) {
-        url = songInfo.typeUrl[quality]
-      }
-      if (!url) {
-        const result = await this.getMusicUrl({ pluginId, songInfo, quality })
-        if (typeof result === 'object') throw new Error('无法获取歌曲链接')
-        url = result
-      }
-      if (!url) throw new Error('无法获取歌曲下载链接')
-      return await download(songInfo, url, tagWriteOptions, pluginId, quality, path)
+    async downloadSingleSong(args: DownloadSingleSongArgs & {from?:string}) {
+      const [result]=await enqueueDownloads([args],args.from,true)
+      if(!result)return {cancelled:true,message:'下载已由插件取消'}
+      if(result.success===false)throw Error(result.error)
+      return result
     },
 
-    async downloadBatchSongs({ tasks }: { tasks: DownloadSingleSongArgs[] }) {
-      const results: any[] = []
-      for (const task of tasks) {
-        try {
-          // 直接加入 DownloadManager 队列，URL 由 urlFetcher 按需获取（受并发数控制）。
-          // 若已有现成 URL（lazy 模式）则直接使用，避免重复请求。
-          const url =
-            task.lazy && task.songInfo.typeUrl?.[task.quality]
-              ? task.songInfo.typeUrl[task.quality]
-              : ''
-          const res = download(
-            task.songInfo,
-            url,
-            task.tagWriteOptions,
-            task.pluginId,
-            task.quality,
-            task.path
-          )
-          results.push({ success: true, songmid: task.songInfo.songmid, ...res })
-        } catch (e: any) {
-          results.push({
-            success: false,
-            songmid: task.songInfo.songmid,
-            error: e.message || String(e)
-          })
-        }
-      }
-      return results
+    async downloadBatchSongs({ tasks,from }: { tasks: DownloadSingleSongArgs[];from?:string }) {
+      return enqueueDownloads(tasks,from)
     },
 
     async parsePlaylistId({ url }: { url: string }) {
@@ -570,14 +616,14 @@ function main(source: string = 'wy') {
         }
       }
     },
-    async searchPlaylist({ keyword, page = 1, limit = 30 }: SearchArg) {
+    async searchPlaylist({ keyword, page = 1, limit = 30, cursor }: SearchArg) {
       const provider = requireV2('playlists.search')
       const result = await provider.host.invokeV2Provider(source, 'playlists.search', [
         {
           query: keyword,
           kinds: ['playlist'],
           filters: {},
-          cursor: page > 1 ? String(page) : undefined,
+          cursor: cursor ?? (page > 1 ? String(page) : undefined),
           limit
         }
       ])
@@ -585,7 +631,8 @@ function main(source: string = 'wy') {
     },
 
     async getLeaderboards() {
-      const provider = requireV2('charts.list')
+      const provider = pluginService.getV2Provider(source, undefined, 'charts.list')
+      if (!provider) throw new Error(`未安装提供「${source}」排行榜的音源插件`)
       const result = await provider.host.invokeV2Provider(source, 'charts.list', [])
       return (result?.items || []).map((item: any) => ({
         id: item.ref?.id,
@@ -598,9 +645,10 @@ function main(source: string = 'wy') {
     },
 
     async getLeaderboardDetail({ id, page }: { id: string; page: number }) {
-      const provider = requireV2('charts.getTracks')
+      const provider = pluginService.getV2Provider(source, undefined, 'charts.getTracks')
+      if (!provider) throw new Error(`未安装提供「${source}」排行榜的音源插件`)
       const result = await provider.host.invokeV2Provider(source, 'charts.getTracks', [
-        { pluginId: provider.pluginId, providerId: source, kind: 'chart', id },
+        { pluginId: provider.pluginId, providerId: source, kind: 'chart', id, scope: 'provider' },
         String(page)
       ])
       return v2Page(result) as PlaylistDetailResult

@@ -63,7 +63,9 @@
                 @change="(value) => changeCapability(row, String(value || ''))"
               />
               <div v-else class="routing-provider">
-                <span>{{ row.implementations.map((item) => item.manifest.name).join('、') }}</span>
+                <span>{{
+                  row.implementations.map((item) => item.descriptor.name).join('、')
+                }}</span>
                 <small>已注册 · 当前未接入统一分配</small>
               </div>
             </div>
@@ -82,7 +84,7 @@
                 @change="(value) => changeUI(row, String(value || ''))"
               />
               <div v-else class="routing-provider">
-                <span>{{ row.implementations[0].manifest.name }}</span>
+                <span>{{ row.implementations[0].descriptor.name }}</span>
                 <small>
                   {{ row.status }} · {{ row.selectable ? '仅此插件提供' : '由所属插件提供' }}
                 </small>
@@ -103,7 +105,7 @@ import {
   selectCapabilityImplementation,
   selectUIImplementation
 } from '@renderer/services/pluginState'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { describePluginCapability } from '@renderer/utils/pluginCapabilityLabels'
 import { isRoutablePluginCapability } from '@common/pluginCapabilities'
 import { getPluginContributionGroups } from '@renderer/utils/pluginContributionCatalog'
@@ -126,7 +128,7 @@ const rows = computed<Row[]>(() => {
   const byKey = new Map<string, Row>()
   for (const plugin of enabledPlugins.value) {
     const providers = new Set<string>([
-      ...(plugin.manifest.contributes?.providers ?? []).map((provider: any) => provider.id),
+      ...(plugin.descriptor.providers ?? []).map((provider: any) => provider.id),
       ...Object.keys(plugin.providerMethods ?? {})
     ])
     for (const source of providers) {
@@ -138,7 +140,7 @@ const rows = computed<Row[]>(() => {
       ]
       for (const capability of capabilities) {
         const key = `${source}:${capability}`
-        const { label, description } = describePluginCapability(capability, plugin.manifest)
+        const { label, description } = describePluginCapability(capability, plugin.descriptor)
         const row: Row = byKey.get(key) ?? {
           key,
           source,
@@ -159,7 +161,7 @@ const rows = computed<Row[]>(() => {
 const groupedRows = computed(() => {
   const result = new Map<string, { source: string; name: string; rows: Row[] }>()
   for (const row of rows.value) {
-    const provider = row.implementations[0]?.manifest.contributes?.providers?.find(
+    const provider = row.implementations[0]?.descriptor.providers?.find(
       (item: any) => item.id === row.source
     )
     const group: { source: string; name: string; rows: Row[] } = result.get(row.source) ?? {
@@ -220,15 +222,15 @@ const options = (row: Row) => {
   const sourceOwner = enabledPlugins.value.find(
     (item) =>
       item.pluginId === sourceOwnerId &&
-      item.manifest.contributes?.providers?.some((provider: any) => provider.id === row.source)
+      item.descriptor.providers?.some((provider: any) => provider.id === row.source)
   )
   const automatic = sourceOwner
     ? (row.implementations.find((item) => item.pluginId === sourceOwner.pluginId) ??
       row.implementations[0])
     : row.implementations[0]
   return [
-    { label: `自动（${automatic?.manifest.name || '当前音源未提供'}）`, value: '' },
-    ...row.implementations.map((item) => ({ label: item.manifest.name, value: item.pluginId }))
+    { label: `自动（${automatic?.descriptor.name || '当前音源未提供'}）`, value: '' },
+    ...row.implementations.map((item) => ({ label: item.descriptor.name, value: item.pluginId }))
   ]
 }
 const selection = (key: string) => store.userInfo.capabilityPluginMap?.[key] || ''
@@ -241,8 +243,8 @@ async function changeCapability(row: Row, pluginId: string) {
 }
 
 const uiOptions = (row: any) => [
-  { label: `自动（${row.implementations[0].manifest.name}）`, value: '' },
-  ...row.implementations.map((item: any) => ({ label: item.manifest.name, value: item.pluginId }))
+  { label: `自动（${row.implementations[0].descriptor.name}）`, value: '' },
+  ...row.implementations.map((item: any) => ({ label: item.descriptor.name, value: item.pluginId }))
 ]
 const uiSelection = (row: any) => store.userInfo.uiPluginMap?.[row.key] || ''
 function changeUI(row: any, pluginId: string) {

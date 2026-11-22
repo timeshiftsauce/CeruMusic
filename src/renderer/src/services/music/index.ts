@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { LoadingPlugin, NotifyPlugin } from 'tdesign-vue-next'
 
 import {
@@ -91,7 +92,7 @@ async function request(
   }
 
   // ipc request music service
-  const musicServiceRes: Response = await (window as any).api.music.request(api, args)
+  const musicServiceRes: Response = await (desktopBridge as any).api.music.request(api, args)
   if (musicServiceRes.success) {
     return musicServiceRes.data
   } else {

@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 // 基础样式
 import './assets/base.css'
 import 'animate.css'
@@ -51,7 +52,7 @@ const settingsStore = useSettingsStore(pinia)
 watch(
   () => settingsStore.settings.macStatusBarLyricEnabled,
   (enabled) => {
-    ;(window as any).electron?.ipcRenderer?.send?.('set-mac-status-bar-lyric-enabled', !!enabled)
+    ;(desktopBridge as any).electron?.ipcRenderer?.send?.('set-mac-status-bar-lyric-enabled', !!enabled)
   },
   { immediate: true }
 )

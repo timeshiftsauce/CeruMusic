@@ -15,7 +15,7 @@ export async function request<T extends keyof MainApi>(
     const { source, ...args } = options
     if (!source) throw new Error('请配置音源')
     const Api = main(source)
-    if (Api.hasOwnProperty(method)) {
+    if (method !== 'getRawLyric' && Api.hasOwnProperty(method)) {
       return await (Api[method] as (args: any) => any)(args)
     }
     throw new Error(`未知的方法: ${method}`)

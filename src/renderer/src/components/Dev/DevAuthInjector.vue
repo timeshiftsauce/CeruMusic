@@ -17,7 +17,7 @@
  * 生产构建时 import.meta.env.DEV 是 false，整个组件树会被 tree-shake 掉。
  */
 import { ref, computed } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { CodeIcon, CloseIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@renderer/store/Auth'
 

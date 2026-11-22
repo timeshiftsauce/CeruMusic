@@ -7,7 +7,7 @@ export function createShareDescriptor(input: any) {
   if (ref.kind !== 'track') throw new Error('只能分享歌曲资源')
   const data = {
     version: 1,
-    track: { pluginId: ref.pluginId, providerId: ref.providerId, kind: 'track', id: ref.id },
+    track: { pluginId: ref.pluginId, providerId: ref.providerId, kind: 'track', id: ref.id, ...(ref.scope === 'provider' ? {scope:'provider'} : {}) },
     title: String(input.title || '').slice(0, 200),
     artists: (input.artists || []).slice(0, 12).map((name: any) => String(name).slice(0, 120))
   }
@@ -30,10 +30,10 @@ export function readShareDescriptor(id: string) {
     data.artists.some((name: any) => typeof name !== 'string')
   )
     throw new Error('分享信息格式错误')
-  const { pluginId, providerId, kind, id: resourceId } = data.track
+  const { pluginId, providerId, kind, id: resourceId, scope } = data.track
   return {
     version: 1,
-    track: { pluginId, providerId, kind, id: resourceId },
+    track: { pluginId, providerId, kind, id: resourceId, ...(scope==='provider'?{scope}:{}) },
     title: data.title,
     artists: data.artists
   }

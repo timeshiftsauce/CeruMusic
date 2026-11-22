@@ -20,6 +20,7 @@ export const playSetting = defineStore('playSetting', {
     isPauseTransition: true, // 是否开启暂停播放过渡
     isSeamlessTransition: false, // 是否开启无感过渡（智能交叉淡化）
     useAmlLyricRenderer: true, // 使用 AppleMusicLike 的歌词组件渲染
+    showLyricRomanization: false,
     isGrepLyricInfo: false, // 是否开启歌词信息 grep
     strictGrep: false, // 是否开启严格歌词信息 grep
     // 系统媒体控件（SMTC）是否使用高清封面：开启后按「高清封面协议」向插件
@@ -44,6 +45,7 @@ export const playSetting = defineStore('playSetting', {
     getIsPauseTransition: (state) => state.isPauseTransition,
     getIsSeamlessTransition: (state) => state.isSeamlessTransition,
     getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer,
+    getShowLyricRomanization: (state) => state.showLyricRomanization,
     getIsGrepLyricInfo: (state) => state.isGrepLyricInfo,
     getStrictGrep: (state) => state.strictGrep,
     getSmtcHiresCover: (state) => state.smtcHiresCover
@@ -97,6 +99,9 @@ export const playSetting = defineStore('playSetting', {
     },
     setUseAmlLyricRenderer(use: boolean) {
       this.useAmlLyricRenderer = use
+    },
+    setShowLyricRomanization(show: boolean) {
+      this.showLyricRomanization = show
     },
     setIsGrepLyricInfo(isGrepLyricInfo: boolean) {
       this.isGrepLyricInfo = isGrepLyricInfo

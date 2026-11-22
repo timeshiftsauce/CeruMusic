@@ -53,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, computed, onMounted, onUnmounted, toRaw } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { appEntryQueue } from '@renderer/services/entryQueue'
@@ -149,12 +150,12 @@ const handleAction = async (actionType: string) => {
       try {
         if (!notice.value.pluginId) throw new Error('更新缺少目标插件')
         const result: any = notice.value.guestId
-          ? await window.api.plugins.guestUpdate(
+          ? await desktopBridge.api.plugins.guestUpdate(
               notice.value.pluginId,
               notice.value.guestId,
               notice.value.updateUrl
             )
-          : await window.api.plugins.updateFromUrl(notice.value.pluginId, notice.value.updateUrl)
+          : await desktopBridge.api.plugins.updateFromUrl(notice.value.pluginId, notice.value.updateUrl)
 
         if (result && typeof result === 'object' && 'error' in result) {
           throw new Error(result.error)
@@ -185,7 +186,7 @@ const handleAction = async (actionType: string) => {
       handleClose()
     } else if (actionType === 'confirm' && notice.value.updateUrl) {
       try {
-        const result = await window.api.plugins.downloadAndAddPlugin(
+        const result = await desktopBridge.api.plugins.downloadAndAddPlugin(
           notice.value!.updateUrl!,
           notice.value!.pluginType || 'cr'
         )
@@ -247,7 +248,7 @@ let event: () => void
 // 生命周期
 onMounted(() => {
   // 监听来自主进程的插件通知
-  event = window.api.pluginNotice.onPluginNotice(handlePluginNotice)
+  event = desktopBridge.api.pluginNotice.onPluginNotice(handlePluginNotice)
 })
 onUnmounted(() => {
   event()

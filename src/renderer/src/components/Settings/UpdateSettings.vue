@@ -36,7 +36,7 @@ const handleCheckUpdate = async () => {
 
 onMounted(() => {
   // 可以在这里获取当前版本号
-  // currentVersion.value = await window.api.getAppVersion()
+  // currentVersion.value = await desktopBridge.api.getAppVersion()
 })
 </script>
 

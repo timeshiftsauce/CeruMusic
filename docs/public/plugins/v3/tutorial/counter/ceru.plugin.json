@@ -1,0 +1,34 @@
+{
+  "manifest": {
+    "manifestVersion": 3,
+    "id": "tutorial.counter",
+    "name": "练习计数器",
+    "version": "0.1.0",
+    "description": "在澜音侧栏显示一个会记住次数的 Vue 计数器",
+    "dataSchemas": { "config": 1, "state": 1 },
+    "engines": { "hostApi": "^3.0.0", "logicRuntime": "ceru-js@1" },
+    "entry": {
+      "logic": { "module": "logic.main" },
+      "views": [{ "id": "counter-view", "kind": "component", "module": "view.counter" }]
+    },
+    "provides": {
+      "actions": [
+        { "id": "counter.read", "title": "读取计数" },
+        { "id": "counter.increment", "title": "计数加一" }
+      ]
+    },
+    "ui": {
+      "pages": [{
+        "id": "counter-page",
+        "title": "练习计数器",
+        "mount": "sidebar",
+        "group": "library",
+        "icon": { "kind": "host", "name": "search" },
+        "view": "counter-view"
+      }]
+    }
+  },
+  "framework": "vue",
+  "entries": { "logic.main": "src/index.ts", "view.counter": "src/Counter.vue" },
+  "output": "dist/plugin.js"
+}

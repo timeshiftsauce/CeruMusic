@@ -8,6 +8,7 @@
     <n-card
       v-if="SearchStore.focus && (SearchStore.value || SearchStore.history.length)"
       class="search-suggest"
+      @mousedown.prevent
       content-style="padding: 0"
       :style="{
         height: `${searchSuggestHeights}px`,
@@ -27,32 +28,21 @@
         </div>
         <!-- 搜索建议 -->
         <Transition name="fade" mode="out-in" @after-leave="calcSearchSuggestHeights">
-          <div
-            v-if="
-              SearchStore.value &&
-              Object.keys(searchSuggestData)?.length &&
-              searchSuggestData?.order
-            "
-            ref="searchSuggestRef"
-            class="all-suggest"
-          >
-            <div v-for="(item, index) in searchSuggestData.order" :key="index" class="suggest">
+          <div v-if="SearchStore.value && groups.length" ref="searchSuggestRef" class="all-suggest">
+            <div v-for="(group, index) in groups" :key="index" class="suggest">
               <div class="suggest-type">
-                <SvgIcon :name="searchSuggestionsType[item].icon" />
-                <n-text>{{ searchSuggestionsType[item].name }}</n-text>
+                <SvgIcon :name="searchSuggestionsType[group.kind].icon" />
+                <n-text>{{ searchSuggestionsType[group.kind].name }}</n-text>
               </div>
               <div
-                v-for="(suggestItem, suggestIndex) in searchSuggestData[item]"
+                v-for="(suggestItem, suggestIndex) in group.items"
                 :key="suggestIndex"
                 class="suggest-item"
-                @click="emit('toSearch', suggestItem.name, item)"
+                @click="emit('toSearch', suggestItem.name, group.kind)"
               >
                 <n-text class="name">{{ suggestItem.name }}</n-text>
-                <n-text v-if="suggestItem?.artist" class="artist" depth="3">
-                  {{ suggestItem.artist.name }}
-                </n-text>
-                <n-text v-else-if="suggestItem?.artists" class="artist" depth="3">
-                  {{ suggestItem.artists[0].name }}
+                <n-text v-if="suggestItem.artist" class="artist" depth="3">
+                  {{ suggestItem.artist }}
                 </n-text>
               </div>
             </div>
@@ -79,26 +69,32 @@
 </template>
 
 <script setup lang="ts">
-import { searchValue as useSearchStore } from '@renderer/store/search'
-import { watchDebounced } from '@vueuse/core'
-import { ref, nextTick, watch } from 'vue'
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { useSearchStore } from '@renderer/store'
+import { computed, ref, nextTick, watch } from 'vue'
+import { interceptsSuggestions } from '@renderer/plugin/operations'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
 const emit = defineEmits<{
   toSearch: [key: number | string, type: string]
 }>()
 
-watch(
-  () => LocalUserDetailStore().userSource.source,
-  () => {
-    getSearchSuggest(SearchStore.value)
-  }
-)
-
 const SearchStore = useSearchStore()
+const user = LocalUserDetailStore()
 
 // 搜索建议数据
-const searchSuggestData = ref<any>({})
+type Kind = keyof typeof searchSuggestionsType
+interface Suggestion {kind:Kind; name:string; artist?:string}
+const suggestions = ref<Suggestion[]>([])
+const groups = computed(() => {
+  const grouped: {kind:Kind;items:Suggestion[]}[] = []
+  for (const item of suggestions.value) {
+    const last = grouped[grouped.length - 1]
+    if (last?.kind === item.kind) last.items.push(item)
+    else grouped.push({kind:item.kind,items:[item]})
+  }
+  return grouped
+})
 const searchSuggestHeights = ref<number>(0)
 
 // 搜索建议元素
@@ -128,30 +124,20 @@ const searchSuggestionsType = {
 }
 
 // 获取搜索建议
-const getSearchSuggest = async (keywords: string) => {
-  searchSuggestData.value = {}
-  try {
-    console.log('获取搜索建议', keywords)
-    // 使用网易云音乐的搜索建议API
-    const result = await window.api.music.requestSdk('tipSearch', {
-      source: toRaw(LocalUserDetailStore().userSource.source || 'wy'),
-      keyword: keywords
-    })
-    console.log('result', result)
-
-    if (result) {
-      const res = result
-      // 若为纯数组则包装为分组结构，保证模板可渲染
-      searchSuggestData.value = Array.isArray(res) ? { order: ['songs'], songs: res } : res
-    } else {
-      searchSuggestData.value = {}
+function displayItems(raw:any):Suggestion[] {
+  const source = Array.isArray(raw) ? {order:['songs'],songs:raw} : raw
+  const rows:Suggestion[] = []
+  for (const kind of Array.isArray(source?.order) ? source.order : []) {
+    if (!Object.hasOwn(searchSuggestionsType,kind) || !Array.isArray(source[kind])) continue
+    for (const value of source[kind]) {
+      const name = typeof value === 'string' ? value : value?.name
+      if (typeof name !== 'string' || !name.trim() || name.length > 512) continue
+      const artist = value?.artist?.name ?? value?.artists?.[0]?.name
+      rows.push({kind,name,...(typeof artist==='string'?{artist}:{})})
+      if (rows.length === 100) return rows
     }
-
-    // 计算高度
-    nextTick(calcSearchSuggestHeights)
-  } catch (error) {
-    console.error('获取搜索建议失败:', error)
   }
+  return rows
 }
 
 // 计算高度
@@ -178,19 +164,28 @@ watch([() => SearchStore.focus, () => !!SearchStore.value, () => SearchStore.his
 )
 
 // 搜索框改变
-watchDebounced(
-  () => SearchStore.value,
-  (val) => {
-    if (!val || val === '') {
-      // 清空输入时丢弃旧建议,避免与搜索历史同时出现
-      searchSuggestData.value = {}
-      nextTick(calcSearchSuggestHeights)
-      return
-    }
-    getSearchSuggest(val)
-  },
-  { debounce: 300 }
-)
+watch([() => SearchStore.value, () => SearchStore.focus, () => user.userSource], ([query, focused, selected], _, onCleanup) => {
+  suggestions.value = []
+  void nextTick(calcSearchSuggestHeights)
+  if (!focused || !query.trim() || query.length > 4096 || !selected.source) return
+  let active = true
+  const timer = setTimeout(async () => {
+    let rows:Suggestion[] = []
+    try {
+      rows = displayItems(await desktopBridge.api.music.requestSdk('tipSearch',{source:selected.source,keyword:query}))
+      if (active && interceptsSuggestions()) {
+        const names = await desktopBridge.api.plugins.searchSuggest({query,items:rows.map(row=>row.name)})
+        const remaining = [...rows]
+        rows = names.map(name => {
+          const index = remaining.findIndex(row => row.name === name)
+          return index < 0 ? {kind:'songs',name} : remaining.splice(index,1)[0]
+        })
+      }
+    } catch (error) { console.warn('获取搜索建议失败:',error) }
+    if (active) { suggestions.value=rows; void nextTick(calcSearchSuggestHeights) }
+  },300)
+  onCleanup(()=>{active=false;clearTimeout(timer)})
+}, {deep:true,flush:'sync'})
 </script>
 
 <style lang="scss" scoped>

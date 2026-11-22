@@ -1,14 +1,16 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, reactive, toRaw, onActivated, onDeactivated } from 'vue'
 import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { useMessage, useDialog } from 'naive-ui'
+import { interceptNativeMessages } from '@renderer/plugin/notifications'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { pluginContributions } from '@renderer/services/pluginState'
 
 const route = useRoute()
 const router = useRouter()
-const message = useMessage()
+const message = interceptNativeMessages(useMessage())
 const dialog = useDialog()
 
 const songPath = ref('')
@@ -62,7 +64,7 @@ onActivated(async () => {
   songMid.value = mid
 
   try {
-    const api = (window as any).api
+    const api = (desktopBridge as any).api
     // Get basic info including path from list (or fetch by id if needed)
     // Here we assume we can fetch by id or need to pass path.
     // Ideally we fetch full info by ID
@@ -134,7 +136,7 @@ const handleSave = async () => {
   if (!songPath.value || loading.value) return
   saving.value = true
   try {
-    const api = (window as any).api
+    const api = (desktopBridge as any).api
     const res = await api.localMusic.writeTags(
       songPath.value,
       {
@@ -202,8 +204,8 @@ const handleSearch = async () => {
       ...new Set(
         pluginContributions.value
           .filter((item) => item.enabled)
-          .flatMap(({ manifest }) =>
-            (manifest.contributes?.providers || [])
+          .flatMap(({ descriptor }) =>
+            (descriptor.providers || [])
               .filter((p: any) => p.protocols.includes('music.search@1'))
               .map((p: any) => p.id)
           )
@@ -212,7 +214,7 @@ const handleSearch = async () => {
     const all: any[] = []
     const searchPromises = sources.map(async (src) => {
       try {
-        const res = await (window as any).api.music.requestSdk('search', {
+        const res = await (desktopBridge as any).api.music.requestSdk('search', {
           source: src,
           keyword: kw,
           page: 1,
@@ -228,7 +230,7 @@ const handleSearch = async () => {
             if (!item?.img) {
               itemsWithIndex.push({ item, index })
               tasks.push(
-                (window as any).api.music.requestSdk('getPic', {
+                (desktopBridge as any).api.music.requestSdk('getPic', {
                   source: src,
                   songInfo: item
                 })
@@ -282,7 +284,7 @@ const applyResult = async (item: any) => {
       }
     } else {
       try {
-        const pic = await (window as any).api.music.requestSdk('getPic', {
+        const pic = await (desktopBridge as any).api.music.requestSdk('getPic', {
           source: item.source,
           songInfo: item
         })
@@ -294,7 +296,7 @@ const applyResult = async (item: any) => {
     }
 
     try {
-      const lyricRes = await (window as any).api.music.requestSdk('getLyric', {
+      const lyricRes = await (desktopBridge as any).api.music.requestSdk('getLyric', {
         source: item.source,
         songInfo: toRaw(item)
       })
@@ -302,12 +304,12 @@ const applyResult = async (item: any) => {
       if (lyricRes?.error) throw new Error(lyricRes.error)
       if (lyricRes?.crlyric) {
         const [standard, wordByWord] = await Promise.all([
-          window.api.music.requestSdk('exportLyrics', {
+          desktopBridge.api.music.requestSdk('exportLyrics', {
             source: item.source,
             document: lyricRes.crlyric,
             format: 'lrc'
           }),
-          window.api.music.requestSdk('exportLyrics', {
+          desktopBridge.api.music.requestSdk('exportLyrics', {
             source: item.source,
             document: lyricRes.crlyric,
             format: 'enhanced-lrc'

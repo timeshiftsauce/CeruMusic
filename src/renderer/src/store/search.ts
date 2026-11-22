@@ -6,6 +6,8 @@ export const SEARCH_HISTORY_LIMIT = 10
 export const searchValue = defineStore('search', {
   state: () => ({
     value: '',
+    submitted: '',
+    submission: 0,
     focus: false,
     /** 搜索历史,最新在前 */
     history: [] as string[]
@@ -15,6 +17,11 @@ export const searchValue = defineStore('search', {
     getFocus: (state) => state.focus
   },
   actions: {
+    submit(value: string) {
+      this.value = value
+      this.submitted = value.trim()
+      this.submission++
+    },
     setValue(value: string) {
       this.value = value
     },

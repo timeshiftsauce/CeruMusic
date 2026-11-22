@@ -2,6 +2,8 @@ import { sameSong, songKey } from '@common/musicItem'
 import { assertContentPage, assertResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import type { ContentEntity, ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import type { Router } from 'vue-router'
+import { runQueue, runQueueRemoval } from '@renderer/plugin/operations'
+import type { SongList } from '@renderer/types/audio'
 import { toAppTrack, toPluginTrack } from '@common/pluginMusic'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
@@ -10,6 +12,8 @@ import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { PlayMode } from '@renderer/types/audio'
 
 export const pluginPlaybackMethods = [
+  'music.play',
+  'music.enqueue',
   'services.player.getState',
   'services.player.play',
   'services.player.pause',
@@ -19,6 +23,7 @@ export const pluginPlaybackMethods = [
   'services.player.setVolume',
   'services.player.setMode',
   'services.queue.get',
+  'services.queue.clear',
   'services.queue.append',
   'services.queue.replace',
   'services.queue.remove',
@@ -32,7 +37,11 @@ export function markPluginQueueChanged(): void {
 }
 
 /** Main has already checked player.control and the calling plugin's resource ownership. */
-export async function handlePluginPlayback(method: string, args: unknown[]): Promise<unknown> {
+export async function handlePluginPlayback(
+  method: string,
+  args: unknown[],
+  pluginId?: string
+): Promise<unknown> {
   const store = LocalUserDetailStore()
   if (!store.initialization) store.init()
   const currentSong = useGlobalPlayStatusStore().player.songInfo
@@ -42,12 +51,66 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
     currentIndex: currentRef ? store.list.findIndex((song) => sameSong(song, currentRef)) : -1,
     revision: queueRevision
   })
+  if (method === 'music.play' || method === 'music.enqueue') {
+    if (useListenTogetherStore().isInRoom) throw new Error('请先退出一起听，再修改本地播放队列')
+    const items = args[0] as ContentEntity[]
+    assertContentPage({ items })
+    const songs = items.map(toAppTrack)
+    const commit = (selected: SongList[], position: 'next' | 'end') => {
+      if (useListenTogetherStore().isInRoom) throw Error('请先退出一起听，再修改本地播放队列')
+      const unique = [...new Map(selected.map((song) => [songKey(song), song])).values()]
+      const keep = store.list.filter((song) => !unique.some((item) => sameSong(song, item)))
+      const playing = useGlobalPlayStatusStore().player.songInfo
+      const current =
+        playing?.songmid != null ? keep.findIndex((song) => sameSong(song, playing)) : -1
+      if (position === 'next') keep.splice(current + 1, 0, ...unique)
+      else keep.push(...unique)
+      store.list = keep
+      markPluginQueueChanged()
+    }
+    if (method === 'music.play')
+      await (
+        await import('@renderer/utils/audio/globaPlayList')
+      ).playSong(songs[0], { pluginId, beforePlay: (selected) => commit([selected], 'end') })
+    else
+      await runQueue(
+        songs,
+        args[1] === 'next' ? 'next' : 'end',
+        store.list,
+        pluginId,
+        async (selected, position) => commit(selected, position)
+      )
+    return null
+  }
   if (method === 'services.queue.get') return queueState()
   if (method.startsWith('services.queue.')) {
     if (useListenTogetherStore().isInRoom) throw new Error('请先退出一起听，再修改本地播放队列')
-    if (method === 'services.queue.remove') {
+    if (method === 'services.queue.clear') {
+      await runQueueRemoval(
+        'queue.clear',
+        [...store.list],
+        store.list,
+        pluginId,
+        async (selected) => {
+          if (useListenTogetherStore().isInRoom) throw Error('请先退出一起听，再修改本地播放队列')
+          const targets = new Set(selected)
+          store.list = store.list.filter((song) => !targets.has(song))
+          markPluginQueueChanged()
+        }
+      )
+    } else if (method === 'services.queue.remove') {
       const refs = args[0] as ResourceRef[]
-      store.list = store.list.filter((song) => !refs.some((ref) => sameSong(song, ref)))
+      const requested = store.list.filter((song) => refs.some((ref) => sameSong(song, ref)))
+      await runQueueRemoval('queue.remove', requested, store.list, pluginId, async (selected) => {
+        if (useListenTogetherStore().isInRoom) throw Error('请先退出一起听，再修改本地播放队列')
+        const targets = new Set(selected)
+        const kept = store.list.filter((song) => !targets.has(song))
+        if (kept.length !== store.list.length) {
+          store.list = kept
+          markPluginQueueChanged()
+        }
+      })
+      return queueState()
     } else if (method === 'services.queue.reorder') {
       if (args[1] !== queueRevision) throw new Error('播放队列已变化，请重新读取后再排序')
       const refs = args[0] as ResourceRef[]
@@ -61,7 +124,27 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
       assertContentPage({ items })
       if (items.some((item) => item.ref.kind !== 'track')) throw new Error('播放队列只接收歌曲')
       const incoming = items.map(toAppTrack)
-      store.list = method === 'services.queue.replace' ? incoming : [...store.list, ...incoming]
+      if (method === 'services.queue.append') {
+        await runQueue(incoming, 'end', store.list, pluginId, async (selected, position) => {
+          if (useListenTogetherStore().isInRoom) throw Error('请先退出一起听，再修改本地播放队列')
+          const keys = new Set(store.list.map(songKey))
+          const fresh = selected.filter((song) => {
+            const key = songKey(song)
+            if (keys.has(key)) return false
+            keys.add(key)
+            return true
+          })
+          const now = useGlobalPlayStatusStore().player.songInfo
+          const index =
+            position === 'next'
+              ? store.list.findIndex((song) => sameSong(song, now)) + 1
+              : store.list.length
+          store.list.splice(index, 0, ...fresh)
+          markPluginQueueChanged()
+        })
+        return queueState()
+      }
+      store.list = incoming
       const seen = new Set<string>()
       store.list = store.list.filter((song) => {
         const key = songKey(song)
@@ -85,39 +168,45 @@ export async function handlePluginPlayback(method: string, args: unknown[]): Pro
       durationMs: Math.round((audio.duration || 0) * 1000),
       volume: Math.max(0, Math.min(1, (audio.volume || 0) / 100)),
       muted: !!audio.audio?.muted,
-      repeat:
-        mode === PlayMode.SINGLE ? 'one' : mode === PlayMode.SEQUENCE ? 'all' : 'off',
+      repeat: mode === PlayMode.SINGLE ? 'one' : mode === PlayMode.SEQUENCE ? 'all' : 'off',
       shuffle: mode === PlayMode.RANDOM
     }
   }
   if (method === 'services.player.play') {
     if (args[0] == null) {
-      await playback.handlePlay()
+      await playback.handlePlay(pluginId)
       return null
     }
     assertResourceRef(args[0])
     const ref = args[0]
     const song = store.list.find((item) => sameSong(item, ref))
     if (!song) throw new Error('歌曲不在播放队列中，请先添加歌曲')
-    await playback.playSong(song)
+    await playback.playSong(song, { pluginId })
     return null
   }
-  if (method === 'services.player.pause') await playback.handlePause()
-  else if (method === 'services.player.next') await playback.playNext()
-  else if (method === 'services.player.previous') await playback.playPrevious()
-  else if (method === 'services.player.seek') playback.seekTo(Number(args[0]) / 1000)
-  else if (method === 'services.player.setVolume') {
+  if (method === 'services.player.pause') await playback.handlePause(pluginId)
+  else if (method === 'services.player.next') await playback.playNext(pluginId)
+  else if (method === 'services.player.previous') await playback.playPrevious(pluginId)
+  else if (method === 'services.player.seek') {
+    if (typeof args[0] !== 'number' || !Number.isSafeInteger(args[0]) || args[0] < 0)
+      throw Error('无效的播放位置')
+    await playback.seekTo(args[0] / 1000, pluginId)
+  } else if (method === 'services.player.setVolume') {
     const volume = Number(args[0])
     if (!Number.isFinite(volume) || volume < 0 || volume > 1)
       throw new Error('音量必须在 0 到 1 之间')
-    playback.setVolume(Math.round(volume * 100))
+    await playback.setVolume(volume * 100, pluginId)
   } else if (method === 'services.player.setMode') {
     const mode = (args[0] ?? {}) as any
-    if (mode.shuffle === true) playback.playMode.value = PlayMode.RANDOM
-    else if (mode.repeat === 'one') playback.playMode.value = PlayMode.SINGLE
-    else if (mode.repeat === 'all') playback.playMode.value = PlayMode.SEQUENCE
-    else if (mode.repeat === 'off' || mode.shuffle === false)
-      playback.playMode.value = PlayMode.SEQUENCE
+    const target =
+      mode.shuffle === true
+        ? PlayMode.RANDOM
+        : mode.repeat === 'one'
+          ? PlayMode.SINGLE
+          : mode.repeat === 'all' || mode.shuffle === false
+            ? PlayMode.SEQUENCE
+            : undefined
+    if (target) await playback.setPlaybackMode(target, pluginId)
     if (typeof mode.muted === 'boolean' && audio.audio) audio.audio.muted = mode.muted
   } else throw new Error('不支持的插件播放操作')
   return null

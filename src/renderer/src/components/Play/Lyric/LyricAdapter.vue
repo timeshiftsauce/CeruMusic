@@ -7,10 +7,15 @@
         tabindex="-1"
         @wheel="handleUserScroll"
       >
-        <div id="lrc-placeholder" class="placeholder" />
+        <div class="placeholder" />
         <div
           v-for="(line, index) in lyricLines"
-          :id="`lrc-${index}`"
+          :data-lyric-index="index"
+          role="button"
+          :tabindex="index === (focusedLine ?? Math.max(0, scrollTargetIndex)) ? 0 : -1"
+          @focus="focusedLine = index"
+          @blur="focusedLine = null"
+          @keydown="onLineKey($event, index, line)"
           :key="index"
           :class="getLyricLineClass(line, index)"
           :style="getLyricLineStyle(index)"
@@ -39,7 +44,7 @@
             </span>
           </template>
           <span v-if="line.translatedLyric" class="tran">{{ line.translatedLyric }}</span>
-          <span v-if="line.romanLyric" class="roma">{{ line.romanLyric }}</span>
+          <span v-if="romanizations[index]" class="roma">{{ romanizations[index] }}</span>
         </div>
         <div class="placeholder" />
       </div>
@@ -89,7 +94,30 @@ const props = defineProps({
 
 const emit = defineEmits(['line-click'])
 
+const romanizations = computed(() =>
+  props.lyricLines.map(
+    (line) => line.romanLyric || line.words.map((word) => word.romanWord).filter(Boolean).join(' ')
+  )
+)
+
 const lyricScrollContainer = ref<HTMLElement | null>(null)
+const focusedLine = ref<number | null>(null)
+
+function onLineKey(event: KeyboardEvent, index: number, line: LyricLine) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!event.repeat) emitLineClick(line)
+    return
+  }
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+  event.preventDefault()
+  event.stopPropagation()
+  const target = index + (event.key === 'ArrowDown' ? 1 : -1)
+  const next = lyricScrollContainer.value?.querySelector<HTMLElement>(`[data-lyric-index="${target}"]`)
+  if (next) { handleUserScroll(); next.focus() }
+}
 
 const isYrcLine = (line: LyricLine) => {
   return Array.isArray(line.words) && line.words.length > 1
@@ -200,7 +228,7 @@ const lyricsScroll = (index: number) => {
   const container = lyricScrollContainer.value
   if (!container) return
   if (userScrolling.value) return
-  const lrcItemDom = document.getElementById(index >= 0 ? `lrc-${index}` : 'lrc-placeholder')
+  const lrcItemDom = container.querySelector<HTMLElement>(index >= 0 ? `[data-lyric-index="${index}"]` : '.placeholder')
   if (!lrcItemDom) return
   const containerHeight = container.clientHeight
   const elementTop = lrcItemDom.offsetTop
@@ -360,10 +388,10 @@ watch(scrollTargetIndex, (val, oldVal) => {
 // 监听对齐方式变化，重新滚动以确保位置正确
 watch(
   () => props.textAlign,
-  () => {
-    nextTick(() => setTimeout(() => lyricsScroll(scrollTargetIndex.value), 600))
-    nextTick(() => setTimeout(() => lyricsScroll(scrollTargetIndex.value), 800))
-  }
+  (_next, _previous, clean) => {
+    const timers = [600, 800].map(delay => setTimeout(() => lyricsScroll(scrollTargetIndex.value), delay))
+    clean(() => timers.forEach(timer => clearTimeout(timer)))
+  }, { flush: 'post' }
 )
 
 onMounted(() => {
@@ -382,7 +410,7 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style lang="scss" scoped>
+<style scoped>
 .lyric {
   position: relative;
   width: 100%;
@@ -392,222 +420,203 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   height: 100%;
   overflow: hidden;
-  .lyric-scroll-container {
-    width: 100%;
-    height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-left: 10px;
-    padding-right: v-bind("props.textAlign === 'center' ? '10px' : '80px'");
-    box-sizing: border-box;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    &::-webkit-scrollbar {
-      display: none;
-    }
-    @media (max-width: 990px) {
-      padding-right: 20px;
-    }
-  }
-  .placeholder {
-    width: 100%;
-    &:first-child {
-      height: 300px;
-      display: flex;
-      align-items: flex-end;
-    }
-    &:last-child {
-      height: 0;
-      padding-top: 100%;
-    }
-  }
-  .lyric-content {
-    width: 100%;
-    height: 100%;
-  }
-
-  .lrc-line {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: v-bind("props.textAlign === 'center' ? 'center' : 'flex-start'");
-    margin: clamp(4px, 1.2vh, 12px) 0;
-    padding: clamp(8px, 2vh, 16px) 16px;
-    transform: scale(0.9);
-    transform-origin: v-bind("props.textAlign === 'center' ? 'center' : 'left center'");
-    will-change: filter, opacity, transform;
-    transition:
-      filter 0.5s,
-      opacity 0.5s,
-      transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    cursor: pointer;
-    width: 100%;
-    opacity: 0.25;
-    text-align: v-bind(textAlign);
-    .content {
-      display: block;
-      font-size: var(--amll-lyric-player-font-size, 22px);
-      font-weight: var(--amll-lyric-player-font-weight, 600);
-
-      color: var(--amll-lyric-view-color, rgba(255, 255, 255, 1));
-      width: 100%;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      white-space: normal;
-      hyphens: auto;
-      text-align: v-bind(textAlign);
-      .content-text {
-        position: relative;
-        display: inline-block;
-        overflow: visible;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-        white-space: normal;
-        font-weight: var(--amll-lyric-player-font-weight, 600);
-        text-align: v-bind(textAlign);
-        .yrc-word {
-          font-weight: var(--amll-lyric-player-font-weight, 600);
-          display: inline-block;
-          box-sizing: border-box;
-          padding-block: 0.2em;
-          margin-block: -0.2em;
-          opacity: var(--yrc-opacity, 0.3);
-        }
-        &.end-with-space {
-          margin-right: 12px;
-          &:last-child {
-            margin-right: 0;
-          }
-        }
-      }
-    }
-    .tran {
-      margin-top: 8px;
-      opacity: 0.6;
-      font-size: calc(var(--amll-lyric-player-font-size, 22px) * 0.52);
-      color: var(--amll-lyric-view-color, rgba(255, 255, 255, 1));
-      transition: opacity 0.35s;
-      width: 100%;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      white-space: normal;
-      hyphens: auto;
-      text-align: v-bind(textAlign);
-    }
-    .roma {
-      margin-top: 4px;
-      opacity: 0.5;
-      font-size: calc(var(--amll-lyric-player-font-size, 22px) * 0.73);
-      color: var(--amll-lyric-view-color, rgba(255, 255, 255, 1));
-      transition: opacity 0.35s;
-      width: 100%;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      white-space: normal;
-      hyphens: auto;
-      text-align: v-bind(textAlign);
-    }
-    &.is-yrc {
-      .content {
-        display: flex;
-        flex-wrap: wrap;
-        width: 100%;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-        white-space: normal;
-        justify-content: v-bind("props.textAlign === 'center' ? 'center' : 'flex-start'");
-      }
-      .tran,
-      .roma {
-        opacity: 0.3;
-      }
-      &.is-bg {
-        opacity: 0.4;
-        transform: scale(0.7);
-        padding: 0px 20px;
-      }
-      &.is-duet {
-        transform-origin: right;
-        .content,
-        .tran,
-        .roma {
-          text-align: right;
-          justify-content: flex-end;
-        }
-      }
-    }
-    &.on {
-      opacity: 1 !important;
-      transform: scale(1.05);
-      .tran,
-      .roma {
-        opacity: 0.6;
-      }
-      &.is-bg {
-        opacity: 0.85 !important;
-      }
-    }
-    &::before {
-      content: '';
-      display: block;
-      position: absolute;
-      left: 0px;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      border-radius: 8px;
-      background-color: rgba(255, 255, 255, 0.14);
-      opacity: 0;
-      z-index: 0;
-      transform: scale(1.05);
-      transition:
-        transform 0.35s ease,
-        opacity 0.35s ease;
-      pointer-events: none;
-    }
-    @media (hover: hover) and (pointer: fine) {
-      .lyric &:hover {
-        opacity: 1;
-        &::before {
-          transform: scale(1);
-          opacity: 1;
-        }
-      }
-      .lyric &:active {
-        &::before {
-          transform: scale(0.95);
-        }
-      }
-    }
-  }
-
-  .lrc-line.is-yrc.on {
-    .content-text {
-      .yrc-word {
-        will-change: -webkit-mask-position-x, transform;
-        mask-image: linear-gradient(
-          to right,
-          rgba(0, 0, 0, var(--yrc-bright-alpha, 1)) 45.4545454545%,
-          rgba(0, 0, 0, var(--yrc-dark-alpha, 0.3)) 54.5454545455%
-        );
-        mask-size: 220% 100%;
-        mask-repeat: no-repeat;
-        -webkit-mask-image: linear-gradient(
-          to right,
-          rgba(0, 0, 0, var(--yrc-bright-alpha, 1)) 45.4545454545%,
-          rgba(0, 0, 0, var(--yrc-dark-alpha, 0.3)) 54.5454545455%
-        );
-        -webkit-mask-size: 220% 100%;
-        -webkit-mask-repeat: no-repeat;
-        -webkit-mask-position-x: var(--yrc-mask-x, 0%);
-        transform: translateY(var(--yrc-translate-y, 1.5px)) scale(var(--yrc-scale, 1));
-        transform-origin: center bottom;
-        transition: transform var(--yrc-anim-duration, 0.4s)
-          var(--yrc-anim-ease, cubic-bezier(0.25, 0.46, 0.45, 0.94));
-      }
-    }
+}
+.lyric .lyric-scroll-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-left: 10px;
+  padding-right: v-bind("props.textAlign === 'center' ? '10px' : '80px'");
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.lyric .lyric-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+@media (max-width: 990px) {
+  .lyric .lyric-scroll-container {
+    padding-right: 20px;
   }
 }
+.lyric .placeholder {
+  width: 100%;
+}
+.lyric .placeholder:first-child {
+  height: 300px;
+  display: flex;
+  align-items: flex-end;
+}
+.lyric .placeholder:last-child {
+  height: 0;
+  padding-top: 100%;
+}
+.lyric .lyric-content {
+  width: 100%;
+  height: 100%;
+}
+.lyric .lrc-line {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: v-bind("props.textAlign === 'center' ? 'center' : 'flex-start'");
+  margin: clamp(4px, 1.2vh, 12px) 0;
+  padding: clamp(8px, 2vh, 16px) 16px;
+  transform: scale(0.9);
+  transform-origin: v-bind("props.textAlign === 'center' ? 'center' : 'left center'");
+  will-change: filter, opacity, transform;
+  transition: filter 0.5s, opacity 0.5s, transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  cursor: pointer;
+  width: 100%;
+  opacity: 0.25;
+  text-align: v-bind(textAlign);
+}
+.lyric .lrc-line .content {
+  display: block;
+  font-size: var(--amll-lyric-player-font-size, 22px);
+  font-weight: var(--amll-lyric-player-font-weight, 600);
+  color: var(--amll-lyric-view-color, rgb(255, 255, 255));
+  width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  hyphens: auto;
+  text-align: v-bind(textAlign);
+}
+.lyric .lrc-line:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+  opacity: 1;
+  filter: none;
+}
+.lyric .lrc-line .content .content-text {
+  position: relative;
+  display: inline-block;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  font-weight: var(--amll-lyric-player-font-weight, 600);
+  text-align: v-bind(textAlign);
+}
+.lyric .lrc-line .content .content-text .yrc-word {
+  font-weight: var(--amll-lyric-player-font-weight, 600);
+  display: inline-block;
+  box-sizing: border-box;
+  padding-block: 0.2em;
+  margin-block: -0.2em;
+  opacity: var(--yrc-opacity, 0.3);
+}
+.lyric .lrc-line .content .content-text.end-with-space {
+  margin-right: 12px;
+}
+.lyric .lrc-line .content .content-text.end-with-space:last-child {
+  margin-right: 0;
+}
+.lyric .lrc-line .tran {
+  margin-top: 8px;
+  opacity: 0.6;
+  font-size: calc(var(--amll-lyric-player-font-size, 22px) * 0.52);
+  color: var(--amll-lyric-view-color, rgb(255, 255, 255));
+  transition: opacity 0.35s;
+  width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  hyphens: auto;
+  text-align: v-bind(textAlign);
+}
+.lyric .lrc-line .roma {
+  margin-top: 4px;
+  opacity: 0.5;
+  font-size: calc(var(--amll-lyric-player-font-size, 22px) * 0.73);
+  color: var(--amll-lyric-view-color, rgb(255, 255, 255));
+  transition: opacity 0.35s;
+  width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  hyphens: auto;
+  text-align: v-bind(textAlign);
+}
+.lyric .lrc-line.is-yrc .content {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  justify-content: v-bind("props.textAlign === 'center' ? 'center' : 'flex-start'");
+}
+.lyric .lrc-line.is-yrc .tran,
+.lyric .lrc-line.is-yrc .roma {
+  opacity: 0.3;
+}
+.lyric .lrc-line.is-yrc.is-bg {
+  opacity: 0.4;
+  transform: scale(0.7);
+  padding: 0px 20px;
+}
+.lyric .lrc-line.is-yrc.is-duet {
+  transform-origin: right;
+}
+.lyric .lrc-line.is-yrc.is-duet .content,
+.lyric .lrc-line.is-yrc.is-duet .tran,
+.lyric .lrc-line.is-yrc.is-duet .roma {
+  text-align: right;
+  justify-content: flex-end;
+}
+.lyric .lrc-line.on {
+  opacity: 1 !important;
+  transform: scale(1.05);
+}
+.lyric .lrc-line.on .tran,
+.lyric .lrc-line.on .roma {
+  opacity: 0.6;
+}
+.lyric .lrc-line.on.is-bg {
+  opacity: 0.85 !important;
+}
+.lyric .lrc-line::before {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 0px;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  z-index: 0;
+  transform: scale(1.05);
+  transition: transform 0.35s ease, opacity 0.35s ease;
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .lyric .lyric .lrc-line:hover {
+    opacity: 1;
+  }
+  .lyric .lyric .lrc-line:hover::before {
+    transform: scale(1);
+    opacity: 1;
+  }
+  .lyric .lyric .lrc-line:active::before {
+    transform: scale(0.95);
+  }
+}
+.lyric .lrc-line.is-yrc.on .content-text .yrc-word {
+  will-change: -webkit-mask-position-x, transform;
+  mask-image: linear-gradient(to right, rgba(0, 0, 0, var(--yrc-bright-alpha, 1)) 45.4545454545%, rgba(0, 0, 0, var(--yrc-dark-alpha, 0.3)) 54.5454545455%);
+  mask-size: 220% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, var(--yrc-bright-alpha, 1)) 45.4545454545%, rgba(0, 0, 0, var(--yrc-dark-alpha, 0.3)) 54.5454545455%);
+  -webkit-mask-size: 220% 100%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position-x: var(--yrc-mask-x, 0%);
+  transform: translateY(var(--yrc-translate-y, 1.5px)) scale(var(--yrc-scale, 1));
+  transform-origin: center bottom;
+  transition: transform var(--yrc-anim-duration, 0.4s) var(--yrc-anim-ease, cubic-bezier(0.25, 0.46, 0.45, 0.94));
+}
 </style>
-
-<style scoped></style>

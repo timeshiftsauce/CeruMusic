@@ -1,11 +1,36 @@
 import { readFile, stat } from 'node:fs/promises'
-import { basename } from 'node:path'
-import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
-import { readGuestInfo } from '@shiqianjiang/ceru-plugin-core/guests'
-import { getPendingDeepLinks } from '../../router/pendingLinks'
+import { basename, isAbsolute, resolve } from 'node:path'
+import { readInstalledArtifact, sniffManifestVersion } from './runtimes'
+import { readGuestInfo } from 'ceru-plugin-core-v2/guests'
+import { enqueueDeepLink, getPendingDeepLinks } from '../../router/pendingLinks'
 import pluginService from './index'
 
+/** Single-file plugins are small by contract; the same ceiling guards every local entry. */
+export const MAX_PLUGIN_FILE_BYTES = 16 * 1024 * 1024
+
 const drafts = new Map<number, { code: string; name: string; target?: string; native: boolean }>()
+
+/**
+ * Accept a plugin file the user dragged onto the window. The path is only
+ * validated and queued; reading and running the code stays in the shared
+ * prepare/commit flow used by deep links and command-line arguments.
+ */
+export async function queueExternalPluginFile(filePath: unknown): Promise<number> {
+  if (typeof filePath !== 'string' || !isAbsolute(filePath))
+    throw new Error('插件文件路径无效，请重新拖入插件文件')
+  const resolved = resolve(filePath)
+  if (!/\.js$/i.test(resolved)) throw new Error('只能添加 .js 插件文件')
+  let info
+  try {
+    info = await stat(resolved)
+  } catch {
+    throw new Error('插件文件不存在或无法读取')
+  }
+  if (!info.isFile()) throw new Error('请拖入单个 .js 插件文件')
+  if (info.size > MAX_PLUGIN_FILE_BYTES) throw new Error('插件文件过大（上限 16 MB）')
+  return enqueueDeepLink('plugin-file', resolved).sequence
+}
+
 export async function prepareExternalPlugin(sequence: number) {
   const entry = getPendingDeepLinks().find((item) => item.sequence === sequence)
   if (!entry || !['plugin-file', 'plugin-link'].includes(entry.kind))
@@ -13,7 +38,7 @@ export async function prepareExternalPlugin(sequence: number) {
   let code: string, name: string, target: string | undefined
   if (entry.kind === 'plugin-file') {
     const info = await stat(entry.value)
-    if (!info.isFile() || info.size > 16 * 1024 * 1024)
+    if (!info.isFile() || info.size > MAX_PLUGIN_FILE_BYTES)
       throw new Error('插件文件过大或不是普通文件')
     code = await readFile(entry.value, 'utf8')
     name = basename(entry.value)
@@ -26,8 +51,9 @@ export async function prepareExternalPlugin(sequence: number) {
     name = basename(new URL(url).pathname)
   }
   const parents = await pluginService.getPluginsList()
-  try {
-    const { manifest } = readPluginArtifact(code).header
+  const runtime = sniffManifestVersion(code)
+  if (runtime === 2 || runtime === 3 || target) {
+    const { manifest } = readInstalledArtifact(code, runtime).header
     const existing = parents.find((p) => p.pluginInfo.id === manifest.id)
     if (target && existing?.pluginId !== target) throw new Error('更新插件 ID 不匹配')
     drafts.set(sequence, { code, name, target, native: true })
@@ -35,15 +61,15 @@ export async function prepareExternalPlugin(sequence: number) {
       name: manifest.name,
       version: manifest.version,
       description: manifest.description || '',
+      componentViews: manifest.manifestVersion === 3 && !!manifest.entry.views?.some(view => view.kind === 'component'),
       update: !!existing,
       formats: [] as { value: string; label: string }[]
     }
-  } catch (error) {
-    if (target) throw error
+  } else {
     const adapters = parents
       .filter((p) => p.enabled)
       .flatMap((p) =>
-        (p.manifest.contributes?.guestAdapters || []).map((a: any) => ({
+        (p.descriptor?.guestAdapters || []).map((a: any) => ({
           value: p.pluginId + ':' + a.id,
           label: (a.title || a.format) + ' · ' + p.pluginInfo.name
         }))
@@ -55,6 +81,7 @@ export async function prepareExternalPlugin(sequence: number) {
       name: info.name,
       version: info.version,
       description: info.description || '',
+      componentViews: false,
       update: false,
       formats: adapters
     }

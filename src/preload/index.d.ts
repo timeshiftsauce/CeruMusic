@@ -7,6 +7,7 @@ import type {
   HotkeyStatus
 } from '../common/types/hotkeys'
 // 自定义 API 接口
+interface DevModeState {enabled:boolean;entries:{path:string;enabled:boolean;id?:string;runtime?:2|3;error?:string}[]}
 interface CustomAPI {
   musicDataRepair: {
     inspect: () => Promise<any>
@@ -83,9 +84,9 @@ interface CustomAPI {
       freedBytes?: number
       message?: string
     }>
-    /** 读取已落盘的封面图片，返回 file:// URL；未缓存返回 null */
+    /** 读取已落盘的封面图片地址，未缓存返回 null */
     getCoverFile: (songCacheKey: string) => Promise<string | null>
-    /** 把已下载的封面图片写入缓存，返回 file:// URL */
+    /** 把已下载的封面图片写入缓存，返回只读封面地址 */
     putCoverFile: (songCacheKey: string, data: ArrayBuffer, ext: string) => Promise<string | null>
     /** 清除某首歌的封面缓存（图片损坏时用） */
     invalidateCoverFile: (songCacheKey: string) => Promise<{ success: boolean }>
@@ -189,6 +190,11 @@ interface CustomAPI {
 
   // 插件管理API
   plugins: {
+    accountConnections: (pluginId:string,itemId:string,validate?:boolean) => Promise<{active:string|null;rows:{id:string;expired?:boolean;syncLikes?:boolean;summary:import('@shiqianjiang/ceru-plugin-sdk').AccountSummary}[]}>
+    accountLikes:(pluginId:string,itemId:string,connection:string,enabled:boolean,ref?:import('@shiqianjiang/ceru-plugin-sdk').ResourceRef)=>Promise<void>
+    accountCollection: (pluginId:string,itemId:string,capability:import('@shiqianjiang/ceru-plugin-sdk').AccountListCapability,connection:string,cursor?:string)=>Promise<import('@shiqianjiang/ceru-plugin-sdk').Page<import('@shiqianjiang/ceru-plugin-sdk').ContentEntity>>
+    cancelAccountQr: (pluginId:string,ticket:string) => Promise<void>
+    accountChange: (pluginId:string,itemId:string,action:'login'|'switch'|'logout',connection?:string,method?:'form'|'qrcode'|'oauth'|'browser') => Promise<boolean>
     accountLogout: (pluginId: string, itemId: string) => Promise<void>
     accountSummary: (
       pluginId: string,
@@ -210,15 +216,42 @@ interface CustomAPI {
     guestRemove: (pluginId: string, guestId: string) => Promise<void>
     guestPermissions: (pluginId: string, guestId: string) => Promise<string[]>
     guestSetPermissions: (pluginId: string, guestId: string, keys: string[]) => Promise<void>
+    hookControls: (change?:import('../common/pluginHookControls').HookControlChange) => Promise<import('../common/pluginHookControls').HookControls>
+    hookSnapshot: () => Promise<import('../common/pluginHookControls').HookSnapshot>
+    trackLike: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['track.like'],location:string) => Promise<{prevented:boolean;handledBy:string[]}>
+    playlistCreate: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['playlist.create']) => Promise<{prevented:boolean;handledBy:string[]}>
+    playlistDelete: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['playlist.delete']) => Promise<{prevented:boolean;handledBy:string[]}>
+    playlistExport: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['playlist.export']) => Promise<{prevented:boolean;handledBy:string[]}>
+    playlistImport: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['playlist.import']) => Promise<{prevented:boolean;handledBy:string[]}>
+    windowClose: (id:string,location:'titlebar'|'shortcut') => Promise<{prevented:boolean;handledBy:string[]}>
+    replayDownload: (token:string)=>Promise<unknown>
+    shareCreate: (id:string,input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['share.create'])=>Promise<{prevented:boolean;handledBy:string[];result:import('@shiqianjiang/ceru-plugin-sdk').ShareOperationResult|null}>
+    systemOperation: (id:string,name:import('@shiqianjiang/ceru-plugin-sdk').SystemOperationName,input:unknown)=>Promise<{prevented:boolean;handledBy:string[]}>
+    dispatchLink: (url:string)=>Promise<boolean>
+    playlistTracks: (id:string,name:'playlist.addTracks'|'playlist.removeTracks',input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['playlist.addTracks']) => Promise<{prevented:boolean;handledBy:string[]}>
+    searchQuery: (input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.query']) => Promise<string | null>
+    searchSuggest: (input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.suggest']) => Promise<string[]>
+    searchResults: (input:import('@shiqianjiang/ceru-plugin-sdk').OperationInputs['search.results']) => Promise<import('@shiqianjiang/ceru-plugin-sdk').SearchResultItem[]>
+    onHookNames: (callback:(snapshot:{revision:number;names:string[]})=>void) => () => void
+    runPlaybackOperation: (id:string,name:string,input:unknown,from?:string,system?:boolean) => Promise<{prevented:boolean;handledBy:string[]}>
     onUI: (callback: (request: any) => void) => () => void
     respondUI: (result: any) => Promise<any>
     uiReady: (ready: boolean) => Promise<boolean>
+    guardRoute: (to: import('@shiqianjiang/ceru-plugin-sdk').PluginRoute, from: import('@shiqianjiang/ceru-plugin-sdk').PluginRoute | null, owner?:string) => Promise<{prevented:boolean;handledBy:string[];redirect:import('@shiqianjiang/ceru-plugin-sdk').PluginRoute|null}>
+    routeCompleted: (to: import('@shiqianjiang/ceru-plugin-sdk').PluginRoute, from: import('@shiqianjiang/ceru-plugin-sdk').PluginRoute | null) => Promise<void>
+    reportEnvironment: (online: boolean, locale: string) => Promise<void>
     publishHostEvent: (event: string, value: unknown, pluginId?: string) => Promise<void>
     onUICancel: (callback: (request: { id: string }) => void) => () => void
     openSurface: (pluginId: string, surfaceId: string) => Promise<any>
+    skinChoice: (choice?: import('@common/pluginSkin').SkinChoice | null) => Promise<import('@common/pluginSkin').SkinPreferences>
+    regionChoice: (edit: import('@common/pluginSkin').RegionEdit) => Promise<import('@common/pluginSkin').SkinPreferences>
+    skinSetting: (edit: import('@common/pluginSkin').SkinSettingEdit) => Promise<import('@common/pluginSkin').SkinPreferences>
     mountSurface: (
       pluginId: string,
-      surfaceId: string
+      surfaceId: string,
+      slot?: string,
+      section?: import('@common/pluginPlaylistContext').PlaylistSectionContext,
+      region?: string
     ) => Promise<import('@common/pluginDrawer').PluginVisibleSession>
     surfaceReady: (
       pluginId: string,
@@ -248,12 +281,25 @@ interface CustomAPI {
       values: Record<string, unknown>
     ) => Promise<import('@shiqianjiang/ceru-plugin-sdk').JsonObject>
     closeDrawer: (pluginId: string, surfaceId: string, sessionId: string) => Promise<void>
+    strictMode:(enabled?:boolean)=>Promise<boolean>
+    devState:()=>Promise<DevModeState>
+    setDevMode:(enabled:boolean)=>Promise<DevModeState>
+    addDevFile:()=>Promise<DevModeState>
+    removeDevFile:(file:string)=>Promise<DevModeState>
+    onDevReloaded:(callback:()=>void)=>()=>void
+    musicSources: () => Promise<import('@shiqianjiang/ceru-plugin-sdk').MusicSource[]>
+    guardProviderSelection: (id:string, pluginId:string, providerId:string, source:string|null, provider:string|null) => Promise<boolean>
+    cancelProviderSelection: (id:string) => Promise<void>
+    evaluatePageVisibility: (pluginId: string, entryId: string, source: string | null, provider: string | null, kind?: 'page' | 'provider') => Promise<unknown>
     contributions: () => Promise<any[]>
+    getPathForFile: (file: File) => string
+    queueExternalFile: (filePath: string) => Promise<{ sequence: number }>
     prepareExternal: (sequence: number) => Promise<{
       name: string
       version: string
       description: string
       update: boolean
+      componentViews: boolean
       formats: { value: string; label: string }[]
     }>
     commitExternal: (sequence: number, format?: string) => Promise<any>
@@ -282,7 +328,7 @@ interface CustomAPI {
     getConfigSchema: (pluginId: string) => Promise<any>
     getConfig: (pluginId: string) => Promise<any>
     getPermissions: (pluginId: string) => Promise<any>
-    getManifest: (pluginId: string) => Promise<any>
+    getDescriptor: (pluginId: string) => Promise<any>
     savePermissions: (pluginId: string, permissions: string[]) => Promise<any>
     saveConfig: (pluginId: string, config: Record<string, any>) => Promise<any>
     testConnection: (pluginId: string) => Promise<any>
@@ -456,6 +502,14 @@ interface CustomAPI {
     readText: () => Promise<string>
   }
 
+  /** 系统级通知(操作系统通知中心);返回 false 表示平台不支持或参数无效 */
+  systemNotification: {
+    show: (title: string, body: string) => Promise<boolean>
+  }
+
+  /** 打开应用日志目录(主进程决定路径,不存在则先创建) */
+  openLogsDirectory: () => Promise<{ success: boolean; path?: string; message?: string }>
+
   systemAudio: {
     /** 必须先调用此方法获取一次性媒体采集授权（10s 过期、最多 4 次请求） */
     prepareCapture: () => Promise<boolean>
@@ -507,9 +561,13 @@ interface CustomAPI {
   }
 }
 
+export interface DesktopBridge {
+  electron: ElectronAPI
+  api: CustomAPI
+}
+
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: CustomAPI
+    ceruTakeDesktopBridge?: () => DesktopBridge | null
   }
 }

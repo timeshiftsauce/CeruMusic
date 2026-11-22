@@ -1,9 +1,30 @@
 //@ts-nocheck
 import DownloadManager from './DownloadManager'
-import { DownloadStatus, DownloadTask } from '../types/download'
-import { app } from 'electron'
-import path from 'path'
-import fs from 'fs/promises'
+import { DownloadStatus } from '../types/download'
+
+jest.mock('./plugin/media/mediaProtocol', () => ({
+  isPluginMediaUrl: (url: string) => url.startsWith('ceru-media:'),
+  pluginMedia: { has: jest.fn(), downloadUrl: jest.fn() }
+}))
+jest.mock('./networkProxy', () => ({ getCurrentProxyRule: () => null }))
+
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn().mockResolvedValue('[]'),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  rename: jest.fn().mockResolvedValue(undefined)
+}))
+
+jest.mock('electron-log', () => ({
+  transports: { file: {} },
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn()
+}))
+
+jest.mock('./ConfigManager', () => {
+  const configManager = { get: (_key, fallback) => fallback, set: jest.fn() }
+  return { ConfigManager: { getInstance: () => configManager }, configManager }
+})
 
 // Mocking electron's app.getPath
 jest.mock('electron', () => {
@@ -30,22 +51,72 @@ jest.mock('worker_threads', () => ({
 }))
 
 describe('DownloadManager', () => {
-  let downloadManager: DownloadManager
-  const testDataPath = path.join(__dirname, '..', '..', '..', 'test-data')
-  const downloadsFilePath = path.join(testDataPath, 'downloads.json')
-
-  beforeEach(async () => {
-    // Create a fresh DownloadManager for each test
-    downloadManager = new DownloadManager(1)
-    // Ensure the test-data directory exists and is clean
-    await fs.mkdir(testDataPath, { recursive: true })
-    await fs.mkdir(path.join(testDataPath, 'logs'), { recursive: true })
-    await fs.writeFile(downloadsFilePath, '[]')
+  it('resolves expired media tokens and gives only the local plaintext URL to its worker', async () => {
+    const {pluginMedia}=require('./plugin/media/mediaProtocol')
+    const {Worker}=require('worker_threads')
+    Worker.mockClear()
+    pluginMedia.has.mockReturnValue(false)
+    pluginMedia.downloadUrl.mockResolvedValue('http://127.0.0.1:41234/media/fresh')
+    const manager=new DownloadManager()
+    manager.processQueue=jest.fn()
+    manager.urlFetcher=jest.fn().mockResolvedValue('ceru-media://fresh')
+    const task={id:'encrypted',url:'ceru-media://expired',status:DownloadStatus.Queued,songInfo:{}}
+    manager.tasks=new Map([[task.id,task]])
+    await manager.startTask(task.id)
+    expect(manager.urlFetcher).toHaveBeenCalledTimes(1)
+    expect(task.url).toBe('ceru-media://fresh')
+    expect(Worker.mock.results[0].value.postMessage).toHaveBeenCalledWith(expect.objectContaining({url:'http://127.0.0.1:41234/media/fresh',requestHeaders:{}}))
   })
-
-  afterEach(async () => {
-    // Clean up the test-data directory
-    await fs.rm(testDataPath, { recursive: true, force: true })
+  it('does not launch a download worker after a pending media URL request is paused', async () => {
+    const {pluginMedia}=require('./plugin/media/mediaProtocol')
+    const {Worker}=require('worker_threads')
+    Worker.mockClear()
+    pluginMedia.has.mockReturnValue(true)
+    let ready
+    pluginMedia.downloadUrl.mockImplementation(()=>new Promise(resolve=>{ready=resolve}))
+    const manager=new DownloadManager()
+    manager.processQueue=jest.fn()
+    const task={id:'pending-media',url:'ceru-media://active',status:DownloadStatus.Queued,songInfo:{}}
+    manager.tasks=new Map([[task.id,task]])
+    const pending=manager.startTask(task.id)
+    manager.pauseTask(task.id)
+    ready('http://127.0.0.1:41234/media/fresh')
+    await pending
+    expect(Worker).not.toHaveBeenCalled()
+    expect(manager.initializingTasks.size).toBe(0)
+  })
+  it('retains the actual path when the worker corrects the detected audio format', () => {
+    const manager = new DownloadManager()
+    const task = {id:'detected',filePath:'/music/song.mp3',status:DownloadStatus.Downloading,progress:0}
+    manager.tasks = new Map([['detected',task]])
+    manager.processQueue = jest.fn()
+    const completed = jest.fn()
+    manager.on('task-completed',completed)
+    manager.onWorkerMessage('detected',{type:'completed',result:{path:'/music/song.wav'}})
+    expect(task.filePath).toBe('/music/song.wav')
+    expect(completed).toHaveBeenCalledWith(expect.objectContaining({filePath:'/music/song.wav',status:DownloadStatus.Completed}))
+  })
+  it('cancels a pending selection before advancing the queue and refuses started tasks atomically', () => {
+    const manager = new DownloadManager()
+    manager.processQueue = jest.fn()
+    const first = {id:'first',status:DownloadStatus.Queued,downloadedSize:0}
+    const second = {id:'second',status:DownloadStatus.Paused,downloadedSize:0}
+    manager.tasks = new Map([['first',first],['second',second]])
+    manager.queue = ['first','second','other']
+    manager.processQueue.mockImplementation(() => {
+      expect(manager.queue).toEqual(['other'])
+    })
+    manager.cancelPendingTasks(['first','second'])
+    expect(first.status).toBe(DownloadStatus.Cancelled)
+    expect(second.status).toBe(DownloadStatus.Cancelled)
+    first.status = DownloadStatus.Queued
+    manager.initializingTasks.add('second')
+    expect(() => manager.cancelPendingTasks(['first','second'])).toThrow('下载已开始')
+    expect(first.status).toBe(DownloadStatus.Queued)
+  })
+  let downloadManager: DownloadManager
+  beforeEach(() => {
+    downloadManager = new DownloadManager()
   })
 
   it('should add a new task to the queue', () => {
@@ -121,22 +192,18 @@ describe('DownloadManager', () => {
     let idCounter = 0
     uuid.v4.mockImplementation(() => `${++idCounter}`)
 
-    // Create a manager with limit 1
-    const limitManager = new DownloadManager(1)
-    // Need to clean up this manager's side effects if any, but beforeEach handles fs
-
-    const task1 = limitManager.addTask({}, 'url1', 'path1', {})
-    const task2 = limitManager.addTask({}, 'url2', 'path2', {})
+    const task1 = downloadManager.addTask({}, 'https://example.invalid/1', 'path1', {})
+    const task2 = downloadManager.addTask({}, 'https://example.invalid/2', 'path2', {})
 
     expect(task1.status).toBe(DownloadStatus.Downloading)
     expect(task2.status).toBe(DownloadStatus.Queued)
 
     // Increase limit to 2
-    limitManager.setMaxConcurrentDownloads(2)
+    downloadManager.setMaxConcurrentDownloads(2)
     expect(task2.status).toBe(DownloadStatus.Downloading)
 
     // Decrease limit back to 1
-    limitManager.setMaxConcurrentDownloads(1)
+    downloadManager.setMaxConcurrentDownloads(1)
     // Task 2 was started last, so it should be requeued (or task 1, implementation detail: we chose LIFO eviction)
     // Actually our implementation evicts the last added to active map.
     // Task 1 was active. Task 2 became active. So active map order: [task1, task2].

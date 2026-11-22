@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, shallowRef, onMounted, onBeforeUnmount } from 'vue'
 import {
   assertNativeView,
@@ -8,7 +9,7 @@ import {
 import type { PluginNativeSession } from '@common/pluginDrawer'
 import PlaylistGrid from '@renderer/components/Music/PlaylistGrid.vue'
 import { MoreIcon } from 'tdesign-icons-vue-next'
-const props = defineProps<{ session: PluginNativeSession; embedded?: boolean }>()
+const props = defineProps<{ session: PluginNativeSession; embedded?: boolean; heading?: string }>()
 // Views are replaced as immutable snapshots. Keep resource/action data cloneable for Electron IPC.
 const view = shallowRef<NativeView>()
 const loading = ref(false)
@@ -20,7 +21,7 @@ let disposed = false,
   generation = 0
 let unsubscribe: (() => void) | undefined
 const invoke = (action: string, input: any = {}) =>
-  window.api.plugins.surfaceAction(
+  desktopBridge.api.plugins.surfaceAction(
     props.session.pluginId,
     props.session.surfaceId,
     props.session.sessionId,
@@ -63,7 +64,7 @@ const cards = (section: NativeViewSection) =>
     total: item.playlist?.trackCount
   }))
 onMounted(async () => {
-  unsubscribe = window.api.plugins.onSurfaceState((event) => {
+  unsubscribe = desktopBridge.api.plugins.onSurfaceState((event) => {
     if (event.pluginId === props.session.pluginId && event.sessionId === props.session.sessionId) {
       if (event.closed) {
         disposed = true
@@ -74,7 +75,7 @@ onMounted(async () => {
     }
   })
   try {
-    await window.api.plugins.surfaceReady(
+    await desktopBridge.api.plugins.surfaceReady(
       props.session.pluginId,
       props.session.surfaceId,
       props.session.sessionId
@@ -91,10 +92,10 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div class="native-surface" :class="{ embedded }">
+  <div class="native-surface" :class="{ embedded, 'native-settings-card': !!heading }">
     <div v-if="view" class="native-heading">
       <div>
-        <h3 v-if="view.title">{{ view.title }}</h3>
+        <h3 v-if="view.title && view.title !== heading">{{ view.title }}</h3>
         <p v-if="view.description">{{ view.description }}</p>
       </div>
       <div class="native-actions">
@@ -196,6 +197,19 @@ onBeforeUnmount(() => {
   height: auto;
   overflow: visible;
   padding-bottom: 0;
+}
+.native-surface.native-settings-card {
+  height: auto;
+  padding: 20px 24px;
+  border: 1px solid var(--td-component-border);
+  border-radius: 12px;
+  background: var(--td-bg-color-container);
+}
+.native-settings-card .native-heading {
+  padding: 0;
+}
+.native-settings-card .native-heading p {
+  line-height: 1.8;
 }
 .native-heading h3,
 .native-section h3 {

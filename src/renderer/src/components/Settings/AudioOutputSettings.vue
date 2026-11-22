@@ -174,7 +174,7 @@ import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { useDlnaStore } from '@renderer/store/dlna'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 
 defineProps<{
   embedded?: boolean

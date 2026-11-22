@@ -13,6 +13,12 @@ const appRouter: RouteRecordRaw[] = [
     component: () => import('@renderer/views/home/index.vue'),
     children: [
       {
+        path: '/plugin/:pluginId/:pageId',
+        name: 'plugin-page',
+        props: true,
+        component: () => import('@renderer/components/PluginPage.vue')
+      },
+      {
         path: 'find',
         name: 'find',
         component: () => import('@renderer/views/music/find.vue')

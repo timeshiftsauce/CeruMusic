@@ -14,8 +14,8 @@ defineOptions({ name: 'HomeRoot' })
             :enter-active-class="`animate__animated ${route.meta.transitionIn} sidebar-page-transition`"
             :leave-active-class="`animate__animated ${route.meta.transitionOut} sidebar-page-transition`"
           >
-            <KeepAlive exclude="list">
-              <component :is="Component" />
+            <KeepAlive exclude="list,PluginPage">
+              <component :is="Component" :key="route.name==='list' ? route.fullPath : undefined" />
             </KeepAlive>
           </Transition>
         </router-view>

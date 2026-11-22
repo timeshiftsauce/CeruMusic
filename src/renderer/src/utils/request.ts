@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosInstance } from 'axios'
 import LogtoClient, { LogtoClientError } from '@logto/browser'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { io as ioClient, type Socket } from 'socket.io-client'
 import GlobaConfig from '@common/api/config.json'
 

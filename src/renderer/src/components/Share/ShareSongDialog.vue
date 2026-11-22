@@ -231,11 +231,12 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, computed, watch, toRaw } from 'vue'
 import { normalizeMusicItem, sameSong } from '@common/musicItem'
 import { collectShareComments } from './shareComments'
 import { storeToRefs } from 'pinia'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import BaseDialog from '@renderer/components/BaseDialog.vue'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -243,6 +244,8 @@ import shareAPI from '@renderer/api/share'
 import { useAuthStore } from '@renderer/store/Auth'
 import ShareConsentBar from './ShareConsentBar.vue'
 import { ensureShareResolverUploaded } from './uploadShareResolver'
+import { runShareCreate } from '@renderer/plugin/sharing'
+import type { ShareOperationResult } from '@shiqianjiang/ceru-plugin-sdk'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { sanitizeFileName } from '@renderer/utils/file'
 import {
@@ -281,7 +284,7 @@ const loading = ref(false)
 const statusText = ref('')
 const statusType = ref<'info' | 'error' | 'success'>('info')
 // 成功生成的分享结果（用于「打开链接 / 再次复制」按钮）
-const shareResult = ref<{ id: string; url: string; template: string } | null>(null)
+const shareResult = ref<ShareOperationResult | null>(null)
 
 // 海报相关状态
 const posterDataUrl = ref<string>('')
@@ -495,10 +498,6 @@ async function doShare() {
     MessagePlugin.warning('请先完成分享协议确认')
     return
   }
-  if (!authStore.isAuthenticated) {
-    MessagePlugin.warning('请先登录后再分享')
-    return
-  }
   if (!songInfo.value || songInfo.value.source === 'local') {
     MessagePlugin.warning('请选择插件提供的歌曲')
     return
@@ -507,8 +506,10 @@ async function doShare() {
   resetSteps()
   try {
     const selectedSong = JSON.parse(JSON.stringify(toRaw(songInfo.value)))
+    const result = await runShareCreate(selectedSong, async selectedSong => {
+    if (!authStore.isAuthenticated) throw Error('请先登录后再分享')
     setStep(0, 'active', '导出当前音源的播放解析模块...')
-    const resolver = await window.api.share.exportResolver(selectedSong.source, selectedSong)
+    const resolver = await desktopBridge.api.share.exportResolver(selectedSong.source, selectedSong)
     const song = normalizeMusicItem({ ...selectedSong, ...resolver.musicInfo })
     const preferred =
       localUserStore.userInfo.sourceQualityMap?.[song.source] ||
@@ -521,7 +522,7 @@ async function doShare() {
     if (!uploaded) {
       resetSteps()
       setStatus('')
-      return
+      return null
     }
     setStep(0, 'done', '服务器播放解析模块已就绪')
     setStep(1, 'active', '读取歌词与热门评论...')
@@ -533,7 +534,7 @@ async function doShare() {
         song: current,
         comments: player.value.comments.hotList
       },
-      (method, input) => window.api.music.requestSdk(method, input)
+      (method, input) => desktopBridge.api.music.requestSdk(method, input)
     ).catch((error) => {
       console.warn('分享热评读取失败:', error)
       commentWarning = '热评读取失败，本次分享未包含热评'
@@ -543,13 +544,13 @@ async function doShare() {
     if (!crlyric) {
       try {
         crlyric = (
-          await window.api.music.requestSdk('getLyric', { source: song.source, songInfo: song })
+          await desktopBridge.api.music.requestSdk('getLyric', { source: song.source, songInfo: song })
         )?.crlyric
       } catch {}
     }
     if (crlyric) {
       try {
-        const exported = await window.api.music.requestSdk('exportLyrics', {
+        const exported = await desktopBridge.api.music.requestSdk('exportLyrics', {
           source: song.source,
           document: JSON.parse(JSON.stringify(crlyric)),
           format: 'lrc'
@@ -578,10 +579,10 @@ async function doShare() {
       hotComments
     })
     setStep(2, 'done', '分享链接已生成')
-    shareResult.value = result
-    setStatus('分享成功，打开链接即可在网页播放', 'success')
     if (commentWarning) MessagePlugin.warning(commentWarning)
-    void buildPoster(result)
+    return result
+    }, applyShareResult)
+    applyShareResult(result)
   } catch (error: any) {
     const index = steps.value.findIndex((step) => step.state === 'active')
     if (index >= 0) setStep(index, 'error', error.message)
@@ -589,6 +590,20 @@ async function doShare() {
   } finally {
     loading.value = false
   }
+}
+
+function applyShareResult(result: ShareOperationResult | null) {
+  shareResult.value = result
+  if (!result) {
+    resetSteps()
+    setStatus('')
+    return
+  }
+  if (steps.value.every(step => step.state === 'pending')) {
+    steps.value = [{title:'生成分享链接',sub:'分享链接已就绪',state:'done'}]
+  }
+  setStatus('分享链接已生成', 'success')
+  void buildPoster(result)
 }
 </script>
 

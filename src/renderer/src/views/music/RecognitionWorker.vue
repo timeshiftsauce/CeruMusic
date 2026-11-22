@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { onMounted, onUnmounted } from 'vue'
 
 function loadScript(src: string) {
@@ -51,7 +52,7 @@ async function processFile(id: string, filePath: string) {
     // Read file via exposed API
     // Note: We need to use arrayBuffer.
     // The exposed api.file.readFile returns Buffer (Uint8Array) which is compatible.
-    const buffer = await (window as any).api.file.readFile(filePath)
+    const buffer = await (desktopBridge as any).api.file.readFile(filePath)
     if (!buffer) throw new Error('File read failed')
 
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -80,7 +81,7 @@ async function processFile(id: string, filePath: string) {
       if (typeof gen === 'function') {
         const fp = await gen(slice)
         // Send back result
-        ;(window as any).electron.ipcRenderer.send('worker:fp-generated', {
+        ;(desktopBridge as any).electron.ipcRenderer.send('worker:fp-generated', {
           id,
           fp,
           duration: slice.length / 8000,
@@ -94,7 +95,7 @@ async function processFile(id: string, filePath: string) {
     }
   } catch (e: any) {
     console.error('Worker processing failed:', e)
-    ;(window as any).electron.ipcRenderer.send('worker:fp-error', {
+    ;(desktopBridge as any).electron.ipcRenderer.send('worker:fp-error', {
       id,
       error: e?.message || 'Unknown error'
     })
@@ -103,16 +104,16 @@ async function processFile(id: string, filePath: string) {
 
 onMounted(() => {
   console.log('Recognition Worker Mounted')
-  ;(window as any).electron.ipcRenderer.on('worker:start-task', (_e, { id, filePath }) => {
+  ;(desktopBridge as any).electron.ipcRenderer.on('worker:start-task', (_e, { id, filePath }) => {
     console.log('Worker received task:', id, filePath)
     processFile(id, filePath)
   })
   // Notify main process that worker is ready
-  ;(window as any).electron.ipcRenderer.send('worker:ready')
+  ;(desktopBridge as any).electron.ipcRenderer.send('worker:ready')
 })
 
 onUnmounted(() => {
-  ;(window as any).electron.ipcRenderer.removeAllListeners('worker:start-task')
+  ;(desktopBridge as any).electron.ipcRenderer.removeAllListeners('worker:start-task')
 })
 </script>
 

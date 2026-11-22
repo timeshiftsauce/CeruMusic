@@ -1,9 +1,11 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { storeToRefs } from 'pinia'
-import { watch } from 'vue'
+import { watch, watchEffect } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useAppBackground } from '@renderer/composables/useAppBackground'
+import { createTrackRevision } from '@renderer/plugin/regionTrack'
 
 interface LyricWord {
   word: string
@@ -56,6 +58,13 @@ export function installDesktopLyricBridge() {
   const { userInfo } = storeToRefs(localUserStore)
 
   let lastIndex = -1
+  const trackRevision = createTrackRevision()
+  const pushSong = () => {
+    const song = player.value.songInfo
+    desktopBridge.electron?.ipcRenderer?.send?.('play-song-change', {
+      name: song?.name || '', artist: song?.singer || '', revision: trackRevision(song)
+    })
+  }
 
   // 读取真实播放时间（毫秒）。优先取音频元素实时时间：窗口被后台节流时
   // 渲染循环停摆，store 里的 currentTime 会冻结，导致进度推送失真。
@@ -71,34 +80,22 @@ export function installDesktopLyricBridge() {
     () => player.value.lyrics.lines,
     (lines) => {
       lastIndex = -1
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', buildLyricPayload(lines))
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-lyric-change', buildLyricPayload(lines))
       // 提示前端进入准备态
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', -1)
     },
     { immediate: true }
   )
 
   // 监听歌曲信息变化（同步歌名）
-  watch(
-    () => player.value.songInfo,
-    (song) => {
-      try {
-        const name = (song as any)?.name || ''
-        const artist = (song as any)?.singer || ''
-        if (name || artist) {
-          ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', { name, artist })
-        }
-      } catch {}
-    },
-    { immediate: true }
-  )
+  watchEffect(pushSong)
 
   // 播放状态推送
   let lastPlayState: any = undefined
   const checkPlayState = () => {
     if (controlAudio.Audio.isPlay !== lastPlayState) {
       lastPlayState = controlAudio.Audio.isPlay
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-status-change', lastPlayState)
     }
   }
   // 立即检查一次
@@ -108,13 +105,9 @@ export function installDesktopLyricBridge() {
   const pushSnapshot = () => {
     try {
       const currentSong = player.value.songInfo as any
-      const name = currentSong?.name || ''
-      const artist = currentSong?.singer || ''
-      if (name || artist) {
-        ;(window as any)?.electron?.ipcRenderer?.send?.('play-song-change', { name, artist })
-      }
+      pushSong()
       const currentLines = (player.value.lyrics?.lines as any[]) || []
-      ;(window as any)?.electron?.ipcRenderer?.send?.(
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.(
         'play-lyric-change',
         buildLyricPayload(currentLines)
       )
@@ -129,20 +122,20 @@ export function installDesktopLyricBridge() {
       }
       const idx = computeLyricIndex(ms, currentLines as any)
       lastIndex = idx
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
       let progress = 0
       if (idx >= 0 && currentLines[idx]) {
         const line = currentLines[idx] as any
         const dur = Math.max(1, (line.endTime ?? line.startTime + 1) - line.startTime)
         progress = Math.min(1, Math.max(0, (ms - line.startTime) / dur))
       }
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
         index: idx,
         progress,
         currentMs: ms,
         timestamp: performance.now()
       })
-      ;(window as any)?.electron?.ipcRenderer?.send?.(
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.(
         'play-status-change',
         !!controlAudio.Audio.isPlay
       )
@@ -153,11 +146,11 @@ export function installDesktopLyricBridge() {
   pushSnapshot()
 
   // 当桌面歌词窗口声明“准备就绪”时，再次推送快照，避免页面未加载时丢包
-  ;(window as any)?.electron?.ipcRenderer?.on?.('lyric-window-ready', () => {
+  ;(desktopBridge as any)?.electron?.ipcRenderer?.on?.('lyric-window-ready', () => {
     pushSnapshot()
   })
   // 当切换显示为开启时，补一次快照
-  ;(window as any)?.electron?.ipcRenderer?.on?.(
+  ;(desktopBridge as any)?.electron?.ipcRenderer?.on?.(
     'desktop-lyric-open-change',
     (_: any, open: boolean) => {
       if (open) pushSnapshot()
@@ -212,7 +205,7 @@ export function installDesktopLyricBridge() {
     }
 
     // 首先推送进度，便于前端做 30% 判定（避免 setTimeout 带来的抖动）
-    ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
+    ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-lyric-progress', {
       index: idx,
       progress,
       currentMs: ms,
@@ -222,7 +215,7 @@ export function installDesktopLyricBridge() {
     // 当行变化时，推送 index（立即切换高亮）
     if (idx !== lastIndex) {
       lastIndex = idx
-      ;(window as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('play-lyric-index', idx)
     }
     // 后台时不排帧：由兜底定时器驱动下一拍（见 driveLoop）
     if (!isAppBackground.value) {
@@ -255,7 +248,7 @@ export function installDesktopLyricBridge() {
   watch(isAppBackground, () => {
     // [诊断] 回声（排查托盘降载用，定位后可移除）
     try {
-      ;(window as any)?.electron?.ipcRenderer?.send?.('app-window-background-ack', {
+      ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('app-window-background-ack', {
         source: 'bridge',
         isAppBackground: isAppBackground.value
       })

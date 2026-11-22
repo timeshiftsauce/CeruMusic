@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
 
@@ -103,7 +104,7 @@ export function installGlobalMusicControls() {
 
   // 托盘或系统快捷键回调（若存在）
   try {
-    removeMusicCtrlListener = (window as any).api?.onMusicCtrl?.(() => {
+    removeMusicCtrlListener = (desktopBridge as any).api?.onMusicCtrl?.(() => {
       dispatch('toggle')
     })
   } catch {

@@ -66,8 +66,9 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 
 interface ServicePlaylist {
   id: string
@@ -105,7 +106,7 @@ async function loadPlaylists() {
   loading.value = true
   error.value = null
   try {
-    const result = await window.api.plugins.getPlaylists(props.pluginId)
+    const result = await desktopBridge.api.plugins.getPlaylists(props.pluginId)
     if (result?.error) {
       error.value = result.error
     } else {
@@ -121,7 +122,7 @@ async function loadPlaylists() {
 async function importPlaylist(pl: ServicePlaylist) {
   importingId.value = pl.id
   try {
-    const result = await window.api.plugins.importToLocal(props.pluginId, pl.id, pl.name)
+    const result = await desktopBridge.api.plugins.importToLocal(props.pluginId, pl.id, pl.name)
     if (result?.error) {
       MessagePlugin.error(`导入失败: ${result.error}`)
     } else if (result?.success) {

@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { getMusicStorage, setMusicStorage } from '@renderer/services/musicDataPersistence'
 import { savedCoverDetail } from '@common/musicAppearance'
 import {
@@ -16,7 +17,7 @@ import { filterLyricInfo, toPlayerLyrics } from '@common/pluginMusic'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, ref, computed, watch, toRaw, onScopeDispose, type ComputedRef } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { readLocalMusicMetadata } from '@renderer/utils/localMusicMetadata'
 import { contributionsRevision } from '@renderer/services/pluginState'
 import _ from 'lodash'
@@ -156,7 +157,7 @@ async function getBlobUrlFromUrl(
         .arrayBuffer()
         .then((buf) => {
           const ext = coverExtFromMime(blob.type) || coverExtFromUrl(url)
-          return window.api.musicCache.putCoverFile(cacheId, buf, ext)
+          return desktopBridge.api.musicCache.putCoverFile(cacheId, buf, ext)
         })
         .catch((e) => console.warn('写入封面缓存失败:', e))
     }
@@ -413,8 +414,9 @@ export const useGlobalPlayStatusStore = defineStore(
       try {
         if (clean.source === 'local') {
           const metadata = await readLocalMusicMetadata(String(clean.songmid))
-          const parsed = await window.api.music.requestSdk('parseLyrics', {
+          const parsed = await desktopBridge.api.music.requestSdk('parseLyrics', {
             source: 'local',
+            songInfo: clean,
             text: metadata?.lrc || '',
             track: {
               pluginId: 'local.library',
@@ -434,7 +436,7 @@ export const useGlobalPlayStatusStore = defineStore(
           }
           return
         }
-        const result = await window.api.music.requestSdk('getLyric', {
+        const result = await desktopBridge.api.music.requestSdk('getLyric', {
           source: clean.source,
           songInfo: clean,
           grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
@@ -485,7 +487,11 @@ export const useGlobalPlayStatusStore = defineStore(
       const localMetadata =
         clean.source === 'local'
           ? readLocalMusicMetadata(String(clean.songmid)).then((metadata) => {
-              Object.assign(clean, metadata)
+              Object.assign(clean, metadata, {
+                name: metadata.name.trim() || clean.name,
+                singer: metadata.singer.trim() || clean.singer,
+                albumName: metadata.albumName.trim() || clean.albumName
+              })
               return metadata
             })
           : undefined
@@ -500,17 +506,17 @@ export const useGlobalPlayStatusStore = defineStore(
         const coverCacheId = isLocal ? '' : songCacheKey(clean)
 
         // 「原链接」= 插件给出的**上游 CDN 地址**。它与最终用于显示的
-        // blob:/file: 完全不同 —— 只有它才能交给「高清封面协议」再转换。
-        // 缓存命中的 file:// 是本地文件、defaultCover 是兜底图，都不是原链接。
+        // 图片数据完全不同，只有上游地址才能交给「高清封面协议」再转换。
+        // 缓存图片与 defaultCover 都不是原链接。
         let sourceUrl = ''
 
         // 1) 本地封面缓存优先 —— 不依赖 song.img 是否还有效。
         // 旧缓存/旧歌单里存的 img 常是过期签名链接，若先拿它去联网必然失败。
-        // 命中即返回 file://，不做解码校验（校验留给加载失败时的兜底路径，
+        // 命中即返回图片数据，不做解码校验（校验留给加载失败时的兜底路径，
         // 否则每次启动都要多等一次图片解码）。
         if (coverCacheId) {
           try {
-            const local = await window.api.musicCache.getCoverFile(coverCacheId)
+            const local = await desktopBridge.api.musicCache.getCoverFile(coverCacheId)
             // 命中缓存：显示用它，但原链接仍要向插件补取（缓存文件无法反推上游）。
             if (local) return { cover: local, sourceUrl: '' }
           } catch (e) {
@@ -525,7 +531,7 @@ export const useGlobalPlayStatusStore = defineStore(
         if (isLocal) {
           url = (await localMetadata)?.img || ''
         } else {
-          const value = await window.api.music.requestSdk('getPic', {
+          const value = await desktopBridge.api.music.requestSdk('getPic', {
             source: clean.source,
             songInfo: clean
           })
@@ -541,7 +547,7 @@ export const useGlobalPlayStatusStore = defineStore(
         // 4) 兜底：下载失败时，若此前有本地缓存文件（可能损坏），清掉它，
         //    避免下次仍然命中一个加载不出来的文件。
         if (!cover && coverCacheId) {
-          await window.api.musicCache.invalidateCoverFile(coverCacheId).catch(() => {})
+          await desktopBridge.api.musicCache.invalidateCoverFile(coverCacheId).catch(() => {})
         }
 
         if (signal?.aborted) {
@@ -554,8 +560,9 @@ export const useGlobalPlayStatusStore = defineStore(
       const loadLyrics = async () => {
         if (clean.source === 'local') {
           const text = (await localMetadata)?.lrc || ''
-          const parsed = await window.api.music.requestSdk('parseLyrics', {
+          const parsed = await desktopBridge.api.music.requestSdk('parseLyrics', {
             source: 'local',
+            songInfo: clean,
             text,
             track: {
               pluginId: 'local.library',
@@ -573,7 +580,7 @@ export const useGlobalPlayStatusStore = defineStore(
             ? filterLyricInfo(parsed, playSettingStore.getStrictGrep)
             : parsed
         }
-        const result = await window.api.music.requestSdk('getLyric', {
+        const result = await desktopBridge.api.music.requestSdk('getLyric', {
           source: clean.source,
           songInfo: clean,
           grepLyricInfo: playSettingStore.getIsGrepLyricInfo,
@@ -779,7 +786,7 @@ export const useGlobalPlayStatusStore = defineStore(
       commitPrepared(prepared)
     }
 
-    const stopTagListener = window.api.localMusic.onTagsChanged(({ oldSongmid, song }) => {
+    const stopTagListener = desktopBridge.api.localMusic.onTagsChanged(({ oldSongmid, song }) => {
       localUserStore.list = localUserStore.list.map((item) =>
         item.source === 'local' && String(item.songmid) === oldSongmid ? { ...item, ...song } : item
       )
@@ -810,7 +817,7 @@ export const useGlobalPlayStatusStore = defineStore(
       if (!cacheId) return
       const token = ++startupCoverToken
       try {
-        const local = await window.api.musicCache.getCoverFile(cacheId)
+        const local = await desktopBridge.api.musicCache.getCoverFile(cacheId)
         // 期间用户可能已切歌 / 已有更新流程接管，过期结果直接丢弃
         if (!local || token !== startupCoverToken) return
         if (!sameSong(player.songInfo, song) || player.cover !== defaultCover) return
@@ -864,7 +871,7 @@ export const useGlobalPlayStatusStore = defineStore(
       }
       try {
         const method = type === 'hot' ? 'getHotComment' : 'getComment'
-        const res = await window.api.music.requestSdk(method, {
+        const res = await desktopBridge.api.music.requestSdk(method, {
           source: currentSongInfo.source || 'wy',
           songInfo: currentSongInfo,
           page,

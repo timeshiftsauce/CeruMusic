@@ -1,4 +1,6 @@
 import { BrowserWindow } from 'electron'
+import { publicLink } from '@shiqianjiang/ceru-plugin-sdk'
+import { enqueueDeepLink } from './pendingLinks'
 
 export type RouteHandler = (mainWindow: BrowserWindow, url: string) => void
 
@@ -21,6 +23,20 @@ export class DeepLinkRouter {
    * @returns true if a route was matched and handled, false otherwise
    */
   public match(mainWindow: BrowserWindow | null, url: string): boolean {
+    const safe = publicLink(url)
+    if (mainWindow && safe && safe.startsWith('cerumusic://')) {
+      enqueueDeepLink('public-link',safe)
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+      mainWindow.webContents.send('deeplink:changed')
+      return true
+    }
+    return this.dispatch(mainWindow,url)
+  }
+
+  /** Execute the built-in recognizer once, after the operation pipeline. */
+  public dispatch(mainWindow: BrowserWindow | null, url: string): boolean {
     if (!url.startsWith('cerumusic://')) return false
     if (!mainWindow) return false
 
@@ -31,7 +47,7 @@ export class DeepLinkRouter {
       const normalizedPath = `${parsed.host}${parsed.pathname}`.replace(/\/$/, '')
       for (const [route, handler] of this.routes.entries()) {
         // Match if the path equals the route or starts with it (for sub-paths)
-        if (normalizedPath === route || normalizedPath.startsWith(route)) {
+        if (normalizedPath === route || normalizedPath.startsWith(route+'/')) {
           // Common window actions for handled deep links
           if (mainWindow.isMinimized()) mainWindow.restore()
           if (!mainWindow.isVisible()) mainWindow.show()

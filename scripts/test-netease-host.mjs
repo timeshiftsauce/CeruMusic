@@ -13,7 +13,7 @@ const temporary = await mkdtemp(join(root, '.netease-host-'))
 try {
   const bundle = join(temporary, 'host.mjs')
   await build({
-    entryPoints: ['src/main/services/plugin/manager/PluginHost.ts'],
+    entryPoints: ['src/main/services/plugin/v2/V2PluginHost.ts'],
     outfile: bundle,
     bundle: true,
     platform: 'node',

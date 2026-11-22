@@ -17,8 +17,8 @@ hero:
       text: 使用文档
       link: /guide/
     - theme: alt
-      text: 开发插件 v2
-      link: /guide/plugins/v2/
+      text: 开发插件 v3
+      link: /guide/plugins/v3/
 
 features:
   - title: 多平台支持
@@ -131,7 +131,7 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 ## 文档与资源
 
 - [产品设计文档](#)：涵盖项目架构、核心功能设计和开发规范（不含任何音乐数据源信息）。
-- [插件开发文档](./guide/CeruMusicPluginDev)：仅提供插件开发技术规范，**明确要求插件开发者需遵守数据来源平台的用户协议与版权法**，禁止开发、传播获取非公开数据的插件。
+- [插件开发文档](./guide/plugins/v3/)提供插件开发教程与 API 参考。开发者需遵守数据来源平台的用户协议与版权法。
 
 ## 开源许可
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 /**
  * 单曲卡片二级动作面板
  *
@@ -80,7 +81,7 @@ watch(
   async (v) => {
     if (v && !playlistsLoaded.value) {
       try {
-        const res = await window.api?.songList?.getAll()
+        const res = await desktopBridge.api?.songList?.getAll()
         const items = (res as any)?.data || (res as any) || []
         playlists.value = items.map((p: any) => ({
           hashId: p.hashId || p.id,
@@ -183,7 +184,7 @@ async function addToList(pl: LocalPlaylist): Promise<void> {
   if (!song) return
   acting.value = true
   try {
-    const res = await window.api?.songList?.addSongs(pl.hashId, [JSON.parse(JSON.stringify(song))])
+    const res = await desktopBridge.api?.songList?.addSongs(pl.hashId, [JSON.parse(JSON.stringify(song))])
     const ok =
       (res as any)?.success !== false && (res as any)?.code !== -1 && (res as any) !== false
     if (ok) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 
 type ProxyMode = 'direct' | 'system' | 'custom'
 type ProxyProtocol = 'http' | 'socks5'
@@ -69,7 +70,7 @@ const fillForm = (cfg: Partial<ProxyForm>): void => {
 
 onMounted(async () => {
   try {
-    const cfg = await window.api?.settings?.getNetworkProxy?.()
+    const cfg = await desktopBridge.api?.settings?.getNetworkProxy?.()
     if (cfg) fillForm(cfg)
   } catch (error) {
     console.warn('读取网络代理配置失败:', error)
@@ -82,7 +83,7 @@ onMounted(async () => {
 const testProxy = async (): Promise<void> => {
   testing.value = true
   try {
-    const result = await window.api.settings.testNetworkProxy({ ...form })
+    const result = await desktopBridge.api.settings.testNetworkProxy({ ...form })
     if (result?.ok) {
       MessagePlugin.success(
         `${result.message}${result.elapsedMs ? `（耗时 ${result.elapsedMs}ms）` : ''}`
@@ -100,7 +101,7 @@ const testProxy = async (): Promise<void> => {
 const saveProxy = async (): Promise<void> => {
   saving.value = true
   try {
-    const result = await window.api.settings.setNetworkProxy({ ...form })
+    const result = await desktopBridge.api.settings.setNetworkProxy({ ...form })
     if (result?.success) {
       fillForm(result.config)
       MessagePlugin.success('代理设置已保存，立即生效')
@@ -116,7 +117,7 @@ const saveProxy = async (): Promise<void> => {
 
 const loadTrustSystemCa = async (): Promise<void> => {
   try {
-    const info = await window.api?.settings?.getTrustSystemCertificates?.()
+    const info = await desktopBridge.api?.settings?.getTrustSystemCertificates?.()
     if (info) {
       trustSystemCa.value = !!info.enabled
       caSupported.value = info.supported !== false
@@ -130,7 +131,7 @@ const onTrustSystemCaChange = async (value: boolean | string | number): Promise<
   const enabled = value === true
   trusting.value = true
   try {
-    const result = await window.api.settings.setTrustSystemCertificates(enabled)
+    const result = await desktopBridge.api.settings.setTrustSystemCertificates(enabled)
     if (!result?.success || result.applied === false) {
       trustSystemCa.value = !enabled
       if (result && result.applied === false) caSupported.value = false

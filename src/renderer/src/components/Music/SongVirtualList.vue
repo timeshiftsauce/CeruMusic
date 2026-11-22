@@ -156,6 +156,7 @@
               size="small"
               variant="outline"
               :disabled="selectedCount === 0"
+              aria-label="移除所选歌曲"
               @click="removeSelected"
             >
               <template #icon><DeleteIcon /></template>
@@ -217,7 +218,11 @@
             </div>
 
             <!-- 歌曲信息 -->
-            <div class="col-title" @click="handleSongClick(song)" @dblclick.prevent.stop="handleSongDoubleClick(song)">
+            <div
+              class="col-title"
+              @click="handleSongClick(song)"
+              @dblclick.prevent.stop="handleSongDoubleClick(song)"
+            >
               <div v-if="song.img" class="song-cover">
                 <s-image
                   :key="song.img"
@@ -315,9 +320,12 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { songKey } from '@common/musicItem'
+import { runTrackLike } from '@renderer/plugin/operations'
+import { favoriteChanged,applyTrackFavorite } from '@renderer/services/trackFavorites'
 import { getQualityDisplayName } from '@common/utils/quality'
-import { ref, computed, onMounted, onUnmounted, nextTick, toRaw, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import {
   DownloadIcon,
   PlayCircleIcon,
@@ -336,12 +344,11 @@ import { createMenuItem, createSeparator, calculateMenuPosition } from '../Conte
 import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
 import songListAPI from '@renderer/api/songList'
 import type { SongList } from '@common/types/songList'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
-import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
-import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
 import { useAuthStore } from '@renderer/store/Auth'
 import { useSettingsStore } from '@renderer/store/Settings'
+import { changePlaylistTracks } from '@renderer/services/playlistTrackChanges'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 
 const settingsStore = useSettingsStore()
@@ -848,8 +855,6 @@ const removeSelected = () => {
   const list = selectedSongs.value
   if (list.length === 0) return
   emit('removeBatch', list)
-  const removeIds = new Set(list.map(songKey))
-  selectedSet.value = new Set([...selectedSet.value].filter((id) => !removeIds.has(id)))
 }
 const addSelectedToSongList = (playlist: SongList) => {
   const list = selectedSongs.value
@@ -867,6 +872,10 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
           handlePlay(contextMenuSong.value)
         }
       }
+    }),
+    createMenuItem('trackLike', contextMenuSong.value && isLiked(contextMenuSong.value) ? '取消喜欢' : '加入我的喜欢', {
+      icon: HeartIcon,
+      onClick: () => { if (contextMenuSong.value) void onToggleLike(contextMenuSong.value) }
     }),
     createMenuItem('addToPlaylist', '添加到播放列表', {
       icon: AddIcon,
@@ -1070,7 +1079,7 @@ const contrastTextColor = 'var(--song-list-btn-color)'
 
 const loadFavorites = async () => {
   try {
-    const favIdRes = await (window as any).api?.songList?.getFavoritesId?.()
+    const favIdRes = await (desktopBridge as any).api?.songList?.getFavoritesId?.()
     const id: string | null = (favIdRes && favIdRes.data) || null
     favoritesId.value = id
     if (!id) {
@@ -1099,103 +1108,22 @@ const handlePlaylistUpdated = async () => {
 
 const isLiked = (song: Song) => likedSet.value.has(songKey(song))
 
-const ensureFavoritesId = async (): Promise<string | null> => {
-  if (favoritesId.value) {
-    const existsRes = await songListAPI.exists(favoritesId.value)
-    if (existsRes.success && existsRes.data) return favoritesId.value
-    favoritesId.value = null
-  }
-  const searchRes = await songListAPI.search('我的喜欢', 'local')
-  if (searchRes.success && Array.isArray(searchRes.data)) {
-    const exact = searchRes.data.find((pl) => pl.name === '我的喜欢' && pl.source === 'local')
-    if (exact?.id) {
-      favoritesId.value = exact.id
-      await (window as any).api?.songList?.setFavoritesId?.(favoritesId.value)
-      return favoritesId.value
-    }
-  }
-  const createRes = await songListAPI.create('我的喜欢', '', 'local')
-  if (!createRes.success || !createRes.data?.id) {
-    MessagePlugin.error(createRes.error || '创建“我的喜欢”失败')
-    return null
-  }
-  favoritesId.value = createRes.data.id
-  await (window as any).api?.songList?.setFavoritesId?.(favoritesId.value)
-  return favoritesId.value
+const onFavoriteChanged = (event:Event) => {
+  const {id,identity,liked}=(event as CustomEvent).detail
+  favoritesId.value=id
+  if (liked) likedSet.value.add(identity)
+  else likedSet.value.delete(identity)
 }
-
-const onToggleLike = async (song: Song) => {
-  try {
-    const id = await ensureFavoritesId()
-    if (!id) return
-    if (isLiked(song)) {
-      const removeRes = await songListAPI.removeSong(id, songKey(song))
-      if (removeRes.success && removeRes.data) {
-        likedSet.value.delete(songKey(song))
-        // MessagePlugin.success('已取消喜欢')
-      } else {
-        MessagePlugin.error(removeRes.error || '取消喜欢失败')
-      }
-    } else {
-      const addRes = await songListAPI.addSongs(id, [toRaw(song) as any])
-      if (addRes.success) {
-        likedSet.value.add(songKey(song))
-        // MessagePlugin.success('已添加到“我的喜欢”')
-      } else {
-        MessagePlugin.error(addRes.error || '添加到“我的喜欢”失败')
-      }
-    }
-  } catch (e: any) {
-    console.error('切换喜欢失败:', e)
-    MessagePlugin.error(e?.message || '操作失败，请稍后重试')
-  }
+onMounted(()=>favoriteChanged.addEventListener('change',onFavoriteChanged))
+onUnmounted(()=>favoriteChanged.removeEventListener('change',onFavoriteChanged))
+const onToggleLike = async (song:Song) => {
+  try {await runTrackLike(song,!isLiked(song),'song-list',props.songs,applyTrackFavorite)}
+  catch(error) {MessagePlugin.error(error instanceof Error?error.message:'操作失败，请稍后重试')}
 }
 
 // 添加歌曲到歌单
-const handleAddToSongList = async (song: Song, playlist: SongList) => {
-  try {
-    const cloudSong = mapSongsToCloud([song])[0]
-
-    // Cloud Only Playlist
-    if (playlist.meta?.isCloudOnly && playlist.meta?.cloudId) {
-      if (!cloudSong) throw new Error('本地文件歌曲不能加入云端歌单')
-      await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
-      MessagePlugin.success(`已将"${song.name}"添加到云端歌单"${playlist.name}"`)
-      return
-    }
-
-    // Local / Synced Playlist
-    const result = await songListAPI.addSongs(playlist.id, [toRaw(song) as any])
-    if (result.success) {
-      MessagePlugin.success(`已将"${song.name}"添加到歌单"${playlist.name}"`)
-
-      // 如果是已同步的本地歌单，尝试同步到云端
-      if (cloudSong && playlist.meta?.cloudId && playlist.meta?.isSynced) {
-        try {
-          const res = await cloudSongListAPI.addSongsToList(playlist.meta.cloudId, [cloudSong])
-          if (res && res.updatedAt) {
-            // Update local meta with new localUpdatedAt
-            const newMeta = await syncLocalMetaWithCloudUpdate(
-              playlist.id,
-              playlist.meta,
-              res.updatedAt
-            )
-            // Update in-memory playlist object to reflect change immediately
-            playlist.meta = { ...playlist.meta, ...newMeta, localUpdatedAt: res.updatedAt }
-          }
-        } catch (e: any) {
-          console.error('同步添加到云端失败:', e)
-          MessagePlugin.warning('本地添加成功，但同步云端失败: ' + (e.message || '未知错误'))
-        }
-      }
-    } else {
-      MessagePlugin.error(result.error || '添加到歌单失败')
-    }
-  } catch (error: any) {
-    console.error('添加到歌单失败:', error)
-    MessagePlugin.error('添加到歌单失败: ' + (error.message || '未知错误'))
-  }
-}
+const handleAddToSongList = (song: Song, playlist: SongList) =>
+  changePlaylistTracks('playlist.addTracks', playlist, [song], !!playlist.meta?.isCloudOnly)
 
 onMounted(async () => {
   // 组件挂载后触发一次重新计算

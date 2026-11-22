@@ -19,7 +19,7 @@ title: 开发 Vue 插件页面
 新建工程，不要覆盖前面教程中的 `my-plugin`：
 
 ```shell
-npm create ceru-plugin@latest my-counter-page -- --template vue --lang ts
+npm create ceru-plugin@0.3.16 my-counter-page -- --template vue --lang ts
 cd my-counter-page
 npm install
 npm run dev

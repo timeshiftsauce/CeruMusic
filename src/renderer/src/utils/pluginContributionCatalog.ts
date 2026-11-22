@@ -1,8 +1,8 @@
-import type { PluginManifest } from '@shiqianjiang/ceru-plugin-sdk'
+import type { PluginDescriptor } from '@common/pluginDescriptor'
 
 export interface CatalogPlugin {
   pluginId: string
-  manifest: PluginManifest
+  descriptor: PluginDescriptor
   providerMethods?: Record<string, string[]>
   actionIds?: string[]
   registrations?: Record<string, string[]>
@@ -24,7 +24,7 @@ interface ContributionGroup {
   rows: ContributionRow[]
 }
 
-type ContributionType = keyof NonNullable<PluginManifest['contributes']>
+type ContributionType = keyof typeof CONTRIBUTION_TYPES
 // Adding a contribution type to the SDK requires an explicit catalogue description.
 export const CONTRIBUTION_TYPES = {
   providers: { group: 'services', label: '音源接入', description: '提供音乐平台能力' },
@@ -52,7 +52,7 @@ export const CONTRIBUTION_TYPES = {
   },
   lyricConverters: { group: 'services', label: '歌词格式转换', description: '解析和导出歌词格式' },
   guestAdapters: { group: 'services', label: '插件兼容环境', description: '加载兼容格式的子插件' }
-} satisfies Record<ContributionType, { group: string; label: string; description: string }>
+} satisfies Record<string, { group: string; label: string; description: string }>
 
 const slotNames: Record<string, string> = {
   'home.header': '首页顶部',
@@ -90,8 +90,41 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
   const homeRows = new Map<string, ContributionRow>()
 
   for (const plugin of plugins) {
-    const contributions = plugin.manifest.contributes ?? {}
-    const surfaces = plugin.manifest.modules?.surfaces ?? []
+    const {
+      providers,
+      accounts,
+      homeSections,
+      pages,
+      importers,
+      slots,
+      menus,
+      styles,
+      actions: declaredActions,
+      lyricConverters,
+      guestAdapters,
+      views: surfaces,
+      ...other
+    } = plugin.descriptor
+    const contributions = {
+      providers,
+      accountItems: accounts.map((item) => ({ ...item, ...item.legacy })),
+      homeSections: [...homeSections, ...pages.filter((page) => page.mount === 'home-tab')],
+      playlistSections: pages.filter((page) => page.mount === 'playlist-section'),
+      playlistImporters: importers,
+      sidebarItems: pages.filter((page) => page.mount === 'sidebar'),
+      settingsPages: pages.filter((page) => page.mount === 'settings'),
+      uiExtensions: slots,
+      menus,
+      styles,
+      commands: declaredActions,
+      lyricConverters,
+      guestAdapters,
+      ...Object.fromEntries(
+        Object.entries(other).filter(
+          ([key, value]) => Array.isArray(value) && key !== 'permissions'
+        )
+      )
+    }
     const actions = plugin.registrations?.actions ?? plugin.actionIds
     for (const [type, rawItems] of Object.entries(contributions)) {
       const descriptor = Object.hasOwn(CONTRIBUTION_TYPES, type)
@@ -125,7 +158,7 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
           row.description = `音源接入 · ${plugin.providerMethods?.[id]?.length ?? 0} 项已注册能力`
           row.status = registrationStatus(plugin.registrations?.providers, id)
         } else if (type === 'commands') {
-          row.status = registrationStatus(actions, item.action)
+          row.status = registrationStatus(actions, id)
           row.description = `${row.description} · 插件内操作`
         } else if (type === 'accountItems') {
           row.description += item.logoutAction ? '、退出登录' : ''
@@ -155,14 +188,14 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
           row.description = `${slotNames[slot] || slot} · ${row.description}`
           if (type === 'menus') {
             const command = contributions.commands?.find((command) => command.id === item.commandId)
-            row.status = command ? registrationStatus(actions, command.action) : '缺少菜单操作'
+            row.status = command ? registrationStatus(actions, command.id) : '缺少菜单操作'
           }
         }
         if (item.view) {
           if (!surface) row.status = '缺少界面声明'
-          else if (type === 'playlistSections' && surface.kind !== 'native')
+          else if (type === 'playlistSections' && plugin.descriptor.runtime === 2 && surface.kind !== 'native')
             row.status = '需要原生界面'
-          else if (surface.kind === 'native' && actions && !actions.includes(surface.entry))
+          else if (surface.kind === 'native' && actions && !actions.includes(surface.module))
             row.status = '界面尚未注册'
         }
         if (type === 'homeSections' && (item.kind === 'playlists' || item.kind === 'charts')) {
@@ -189,12 +222,13 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
         key: JSON.stringify([plugin.pluginId, 'surface', surface.id]),
         label: surface.title || `插件界面 · ${surface.id}`,
         description: '通过所属插件的入口打开',
-        status: surface.kind === 'native' ? registrationStatus(actions, surface.entry) : '按需加载',
+        status:
+          surface.kind === 'native' ? registrationStatus(actions, surface.module) : '按需加载',
         implementations: [plugin],
         declarations: [{ pluginId: plugin.pluginId, type: 'modules.surfaces', id: surface.id }]
       })
     }
-    if (plugin.manifest.modules?.share) {
+    if (plugin.descriptor.hasShareResolver) {
       groups.services.rows.push({
         key: JSON.stringify([plugin.pluginId, 'share-module']),
         label: '分享播放解析',
@@ -208,7 +242,7 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
     // Runtime callbacks may be registered without a public command declaration.
     // Keep them in the owning plugin's operations, never in platform routing selectors.
     for (const action of actions ?? []) {
-      if (contributions.commands?.some((command) => command.action === action)) continue
+      if (contributions.commands?.some((command) => command.id === action)) continue
       groups.operations.rows.push({
         key: JSON.stringify([plugin.pluginId, 'registered-action', action]),
         label: action,
@@ -219,7 +253,9 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
       })
     }
     const registryTypes: Record<string, ContributionType> = {
-      providers: 'providers', importers: 'playlistImporters', lyricConverters: 'lyricConverters'
+      providers: 'providers',
+      importers: 'playlistImporters',
+      lyricConverters: 'lyricConverters'
     }
     for (const [registry, ids] of Object.entries(plugin.registrations ?? {})) {
       if (registry === 'actions') continue
@@ -229,7 +265,9 @@ export function getPluginContributionGroups(plugins: CatalogPlugin[]): Contribut
         groups[type ? 'services' : 'unknown'].rows.push({
           key: JSON.stringify([plugin.pluginId, 'registered', registry, id]),
           label: `${type ? CONTRIBUTION_TYPES[type].label : registry} · ${id}`,
-          description: type ? '插件已注册的服务，未提供界面说明' : '已注册扩展，当前澜音尚未识别此注册类型',
+          description: type
+            ? '插件已注册的服务，未提供界面说明'
+            : '已注册扩展，当前澜音尚未识别此注册类型',
           status: '已注册',
           implementations: [plugin],
           declarations: []

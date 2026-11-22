@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import AccountCollections from '@renderer/components/AccountCollections.vue'
+import { computed, ref, watch } from 'vue'
+import {pluginAccountItems,pluginConnections} from '@renderer/services/pluginAccounts'
+
+const historySource=ref('local')
+const sources=computed(()=>pluginAccountItems.value.filter(item=>{
+  const state=pluginConnections.value[item.key]
+  return item.runtime===3 && item.capabilities?.includes('history') && state?.rows.some(row=>row.id===state.active && !row.expired)
+}))
+watch(sources,value=>{if(!value.some(item=>item.key===historySource.value))historySource.value='local'})
 
 // 最近播放数据
 const recentSongs = ref([
@@ -112,7 +121,6 @@ const formatPlayTime = (timeStr: string): string => {
 
 <template>
   <div class="recent-container">
-    <div>待开发 作者正在麻溜赶代码 奈何还有期中考 不要抽我呀！</div>
     <!-- 页面标题和操作 -->
     <div class="page-header">
       <div class="header-left">
@@ -128,7 +136,11 @@ const formatPlayTime = (timeStr: string): string => {
     </div>
 
     <!-- 最近播放的歌单 -->
-    <div class="section">
+    <t-radio-group v-if="sources.length" v-model="historySource" variant="default-filled" aria-label="历史来源">
+      <t-radio-button value="local">本机</t-radio-button><t-radio-button v-for="source in sources" :key="source.key" :value="source.key">{{ source.title }}</t-radio-button>
+    </t-radio-group>
+    <AccountCollections v-if="historySource!=='local'" capability="history" :source-key="historySource" />
+    <div v-if="historySource==='local'" class="section">
       <h3 class="section-title">最近播放的歌单</h3>
       <div class="playlist-list">
         <div
@@ -156,7 +168,7 @@ const formatPlayTime = (timeStr: string): string => {
     </div>
 
     <!-- 最近播放的歌曲 -->
-    <div class="section">
+    <div v-if="historySource==='local'" class="section">
       <h3 class="section-title">最近播放的歌曲</h3>
       <div class="song-list">
         <div

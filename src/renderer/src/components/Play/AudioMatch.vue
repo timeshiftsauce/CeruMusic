@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { UploadIcon, MicrophoneIcon } from 'tdesign-icons-vue-next'
 
 const duration = 3

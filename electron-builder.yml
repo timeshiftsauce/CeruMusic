@@ -3,44 +3,25 @@ productName: 澜音
 directories:
   buildResources: build
 asar: true
+afterPack: scripts/after-pack.mjs
+# Ship application output and runtime resources only. Production node_modules
+# and the sanitized package.json are added by electron-builder automatically.
 files:
-  - '!resources/cmpl.png'
-  - '!dist/**'
-  - '!.git/**'
-  - '!.github/**'
-  - '!.claude/**'
-  - '!.sisyphus/**'
-  - '!.codegraph/**'
-  - '!.workflow/**'
-  - '!.startup-smoke-*/**'
-  - '!.tmp-*/**'
-  - '!temp/**'
-  - '!test-data/**'
-  - '!update-server/**'
-  - '!NVIDIA Corporation/**'
-  - '!*.log'
-  - '!*.log.*'
-  - '!**/*.log'
-  - '!**/*.log.*'
+  - 'out/**'
+  - 'resources/**'
+  - 'native/external-media-integration/*.node'
+  - 'EULA.txt'
+  - 'LICENSE'
+  - '!**/*.map'
+  - '!**/*.tsbuildinfo'
   - '!**/*.test.*'
   - '!**/*.spec.*'
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!website/*'
-  - '!scripts/*'
-  - '!assets/*'
-  - '!docs/*'
-  # Rust 原生模块只保留编译产物 (.node)；源码与 target/ 不打包。
-  - '!native/*/src/**'
-  - '!native/*/target/**'
-  - '!native/*/Cargo.toml'
-  - '!native/*/Cargo.lock'
-  - '!native/*/build.rs'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,.idea,.kiro,.codebuddy}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  # Build/test toolchains must never enter the production dependency tree.
+  - '!**/.env'
+  - '!**/.env.*'
+  - '!**/*.private.pem'
+  - '!**/.keys/**'
+  - '!**/.vscode/**'
+  # Build toolchains must never enter production dependencies.
   - '!node_modules/@esbuild/**'
   - '!node_modules/@rollup/**'
   - '!node_modules/@vitest/**'
@@ -48,7 +29,7 @@ files:
   - '!node_modules/rollup/**'
   - '!node_modules/vite/**'
   - '!node_modules/vitest/**'
-  # better-sqlite3 ships build-time C/C++ sources; runtime uses lib + prebuilds.
+  # Native modules need their binary and JS loader, not build sources.
   - '!node_modules/better-sqlite3/deps/**'
   - '!node_modules/better-sqlite3/src/**'
 asarUnpack:
@@ -81,6 +62,7 @@ win:
     - name: Ceru Music Protocol
       schemes:
         - cerumusic
+        - ceru
 nsis:
   include: build/installer.nsh
   license: EULA.txt
@@ -99,6 +81,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   allowElevation: true
 mac:
+  artifactName: ${name}-${version}-${arch}-mac.${ext}
   minimumSystemVersion: '13.0'
   icon: 'resources/icons/icon.icns'
   category: public.app-category.music
@@ -144,7 +127,6 @@ snap:
 deb:
   artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: false
-afterPack: scripts/after-pack-prune.mjs
 electronLanguages:
   - zh-CN
   - en-US

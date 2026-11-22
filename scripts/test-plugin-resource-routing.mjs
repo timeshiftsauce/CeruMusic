@@ -61,7 +61,7 @@ try {
   state.uiStore = { userInfo: { sourcePluginMap: { shared: 'runtime-owner' } } }
   state.uiContributions = { value: ['default', 'owner'].map(name => ({
     pluginId: 'runtime-' + name,
-    manifest: { name, contributes: { providers: [{ id: 'shared', name: 'Shared' }] } },
+    descriptor: { name, providers: [{ id: 'shared', name: 'Shared' }], actions: [], accounts: [], homeSections: [], pages: [], importers: [], slots: [], menus: [], styles: [], lyricConverters: [], guestAdapters: [], views: [] },
     providerMethods: { shared: ['tracks.resolve', 'tracks.search', 'tracks.future'] },
     actionIds: name === 'default' ? ['music.resolve', 'search.tips'] : ['play', 'render.library']
   })) }
@@ -93,7 +93,10 @@ try {
       electron: 'export const dialog={}',
       '../../utils/path': 'export const getAppDirPath=()=>"unused"',
       axios: 'export default {}',
-      './manager/PluginHost': 'export default class Host {}',
+      './v2/V2PluginHost': 'export default class Host {}',
+      '../networkProxy': 'export const getRequestAgentsFor=()=>{}',
+      './runtimes': 'export const readInstalledArtifact=()=>{}, sniffManifestVersion=()=>{}',
+      './v2/manifest': 'export const readV2Descriptor=()=>{}',
       './uiBridge': 'export const cancelPluginUI=()=>{}; export const pluginChanged=()=>{}',
       './logger': 'export default class Logger {}; export const getLog=()=>{}',
       './pluginConfig': [
@@ -108,8 +111,8 @@ try {
       ]
         .map((name) => `export const ${name}=()=>({})`)
         .join(';'),
-      '@shiqianjiang/ceru-plugin-core': 'export const readPluginArtifact=()=>{}',
-      '@shiqianjiang/ceru-plugin-core/guests': 'export class GuestStore {}',
+      'ceru-plugin-core-v2': 'export const readPluginArtifact=()=>{}',
+      'ceru-plugin-core-v2/guests': 'export class GuestStore {}',
       './storage': 'export const deletePluginStorage=()=>{}'
     },
     '\nexport const fixture = { loadedPlugins, installedPlugins, providerOwners, capabilityOwners };'
@@ -265,7 +268,7 @@ try {
     '../LocalMusicIndex': 'export const localMusicIndexService={}',
     '../../utils/tagUtils': 'export const readTags=()=>({})',
     '../musicCache':
-      'export const musicCacheService={getCachedMusicUrl:async key=>{s.cacheKeys.push(key);return s.cached},cacheMusic:async()=>{}}',
+      "import { songCacheKey } from '@common/musicItem'; export const musicCacheService={songCacheKey,isCacheable:()=>true,getCachedLyricObject:()=>null,cacheLyricObject:()=>{},getCachedMusicUrl:async key=>{s.cacheKeys.push(key);return s.cached},cacheMusic:async()=>{}}",
     '../../utils/downloadSongs': 'export default ()=>{}'
   })
   const api = sdk('shared')

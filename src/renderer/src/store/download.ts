@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { defineStore } from 'pinia'
 
 export enum DownloadStatus {
@@ -45,26 +46,26 @@ export const useDownloadStore = defineStore('download', {
 
       // Load initial tasks
       try {
-        const tasks = await window.api.download.getTasks()
+        const tasks = await desktopBridge.api.download.getTasks()
         this.tasks = tasks
       } catch (error) {
         console.error('Failed to load tasks:', error)
       }
 
       // Setup listeners
-      window.api.download.onTaskAdded((_event, task) => {
+      desktopBridge.api.download.onTaskAdded((_event, task) => {
         this.addTask(task)
       })
 
-      window.api.download.onTaskProgress((_event, updatedTask) => {
+      desktopBridge.api.download.onTaskProgress((_event, updatedTask) => {
         this.updateTask(updatedTask)
       })
 
-      window.api.download.onTaskStatusChanged((_event, updatedTask) => {
+      desktopBridge.api.download.onTaskStatusChanged((_event, updatedTask) => {
         this.updateTask(updatedTask)
       })
 
-      window.api.download.onTaskCompleted((_event, updatedTask) => {
+      desktopBridge.api.download.onTaskCompleted((_event, updatedTask) => {
         this.updateTask(updatedTask)
         try {
           // 应用更新任务完成后推送系统通知，点击直接安装
@@ -76,7 +77,7 @@ export const useDownloadStore = defineStore('download', {
               })
               n.onclick = () => {
                 try {
-                  window.api.autoUpdater.quitAndInstall()
+                  desktopBridge.api.autoUpdater.quitAndInstall()
                 } catch (e) {
                   console.error('调用安装失败', e)
                 }
@@ -98,16 +99,16 @@ export const useDownloadStore = defineStore('download', {
         }
       })
 
-      window.api.download.onTaskError((_event, updatedTask) => {
+      desktopBridge.api.download.onTaskError((_event, updatedTask) => {
         this.updateTask(updatedTask)
       })
 
-      window.api.download.onTaskDeleted((_event, taskId) => {
+      desktopBridge.api.download.onTaskDeleted((_event, taskId) => {
         this.removeTask(taskId)
       })
 
       // 批量重置任务列表（用于清空队列时一次性刷新）
-      window.api.download.onTasksReset((_event, tasks) => {
+      desktopBridge.api.download.onTasksReset((_event, tasks) => {
         this.tasks = tasks
       })
     },
@@ -138,48 +139,48 @@ export const useDownloadStore = defineStore('download', {
     },
 
     async pauseTask(taskId: string) {
-      await window.api.download.pauseTask(taskId)
+      await desktopBridge.api.download.pauseTask(taskId)
     },
 
     async pauseAllTasks() {
-      await window.api.download.pauseAllTasks()
+      await desktopBridge.api.download.pauseAllTasks()
     },
 
     async resumeAllTasks() {
-      await window.api.download.resumeAllTasks()
+      await desktopBridge.api.download.resumeAllTasks()
     },
 
     async validateFiles() {
-      const tasks = await window.api.download.validateFiles()
+      const tasks = await desktopBridge.api.download.validateFiles()
       this.tasks = tasks
     },
 
     async getMaxConcurrent() {
-      return await window.api.download.getMaxConcurrent()
+      return await desktopBridge.api.download.getMaxConcurrent()
     },
 
     async resumeTask(taskId: string) {
-      await window.api.download.resumeTask(taskId)
+      await desktopBridge.api.download.resumeTask(taskId)
     },
 
     async cancelTask(taskId: string) {
-      await window.api.download.cancelTask(taskId)
+      await desktopBridge.api.download.cancelTask(taskId)
     },
 
     async deleteTask(taskId: string, deleteFile: boolean = false) {
-      await window.api.download.deleteTask(taskId, deleteFile)
+      await desktopBridge.api.download.deleteTask(taskId, deleteFile)
     },
 
     async retryTask(taskId: string) {
-      await window.api.download.retryTask(taskId)
+      await desktopBridge.api.download.retryTask(taskId)
     },
 
     async openFileLocation(filePath: string) {
-      await window.api.download.openFileLocation(filePath)
+      await desktopBridge.api.download.openFileLocation(filePath)
     },
 
     async clearTasks(type: 'queue' | 'completed' | 'failed' | 'all') {
-      await window.api.download.clearTasks(type)
+      await desktopBridge.api.download.clearTasks(type)
     }
   },
   persist: false

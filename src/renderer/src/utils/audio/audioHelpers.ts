@@ -1,5 +1,6 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { toRaw } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { type SongList } from '@renderer/types/audio'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 
@@ -85,7 +86,7 @@ export const getCandidateSongs = async (
 
   const searchPromises = sources.map(async (source) => {
     try {
-      const res = await (window as any).api.music.requestSdk('search', {
+      const res = await (desktopBridge as any).api.music.requestSdk('search', {
         source,
         keyword: searchKeyword,
         page: 1,

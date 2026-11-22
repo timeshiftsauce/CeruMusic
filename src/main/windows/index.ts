@@ -1,3 +1,4 @@
+import { rendererEntryArgument } from './rendererEntry'
 import { BrowserWindow, BrowserWindowConstructorOptions, app } from 'electron'
 import { windowsLog } from '../logger'
 import { join } from 'path'
@@ -17,19 +18,12 @@ export const createWindow = (
       autoHideMenuBar: true, // 隐藏菜单栏
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
-        // 禁用渲染器沙盒
-        sandbox: false,
-        // 禁用同源策略
-        webSecurity: false,
-        // 允许 HTTP
-        allowRunningInsecureContent: true,
-        // 禁用拼写检查
+        additionalArguments: [rendererEntryArgument()],
+        sandbox: true,
         spellcheck: false,
-        // 启用 Node.js
-        nodeIntegration: true,
-        nodeIntegrationInWorker: true,
-        // 关闭上下文隔离，确保在窗口中注入 window.electron
-        contextIsolation: false,
+        nodeIntegration: false,
+        nodeIntegrationInWorker: false,
+        contextIsolation: true,
         backgroundThrottling: false
       }
     }

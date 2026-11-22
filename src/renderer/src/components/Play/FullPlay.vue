@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { seekTo } from '@renderer/utils/audio/globaPlayList'
 import '@applemusic-like-lyrics/core/style.css'
 import { LayoutReason, LayoutReasonStrategyMap } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
@@ -23,6 +25,9 @@ import {
   Fullscreen1Icon,
   FullscreenExit1Icon,
   ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  InfoCircleIcon,
   PenBallIcon
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
@@ -30,12 +35,20 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { useDlnaStore } from '@renderer/store/dlna'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 
 // 全局播放模式设置
 import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import PlaySettings from './PlaySettings.vue'
+import SkinSimulatorBar from './SkinSimulatorBar.vue'
+import { provide } from 'vue'
+import { useSkinSimulator, skinSimulatorKey } from '@renderer/plugin/skinSimulator'
+import { playbackIdentity, regionTrackIdentity } from '@renderer/plugin/regionTrack'
+import { regionClock } from '@renderer/plugin/regionClock'
+import PluginRegion from '../PluginRegion.vue'
+import { restoreSkin, regionView, regionNotices } from '@renderer/plugin/regions'
 import LyricAdapter from './Lyric/LyricAdapter.vue'
+import PlayerArtwork from './PlayerArtwork.vue'
 import CommentsOverlay from './CommentsOverlay.vue'
 import LyricCopyOverlay from './LyricCopyOverlay.vue'
 import ListenTogetherOverlay from './ListenTogetherOverlay.vue'
@@ -43,6 +56,7 @@ import LtDanmakuLayer from '@renderer/components/ListenTogether/LtDanmakuLayer.v
 import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 
 const playSetting = usePlaySettingStore()
+onMounted(() => { void restoreSkin().catch(() => {}) })
 // 只调整 seek 时的阶梯延迟，仍由 AMLL 对齐逐字高亮和间奏状态。
 watch(
   () => playSetting.getIsSeekLyricStagger,
@@ -245,6 +259,9 @@ const props = withDefaults(defineProps<Props>(), {
   mainColor: '#rgb(0,0,0)',
   disableAutoHide: false
 })
+const simulator = useSkinSimulator(computed(() => props.show))
+provide(skinSimulatorKey, simulator)
+provide(regionTrackIdentity, computed(() => simulator.active.value ? 'simulator:' + simulator.sample.value : playbackIdentity(player.value.songInfo)))
 // 定义事件
 const emit = defineEmits([
   'toggle-fullscreen',
@@ -398,13 +415,13 @@ watch(
 // 切换全屏模式
 const toggleFullscreen = () => {
   // 状态由主进程的 onFullscreenChanged 事件回写，避免双重 toggle
-  window.api.toggleFullscreen()
+  desktopBridge.api.toggleFullscreen()
 }
 
 // 监听原生全屏状态变化（来自主进程）
 let unsubscribeFullscreen: (() => void) | null = null
 onMounted(async () => {
-  unsubscribeFullscreen = window.api.onFullscreenChanged((value: boolean) => {
+  unsubscribeFullscreen = desktopBridge.api.onFullscreenChanged((value: boolean) => {
     isFullscreen.value = value
   })
 })
@@ -484,6 +501,7 @@ const currentLyricOffset = computed(() => {
 const effectiveLyricTime = computed(
   () => (Number(state.currentTime) || 0) + currentLyricOffset.value
 )
+provide(regionClock, { currentTime: effectiveLyricTime, playing: computed(() => isAudioPlaying.value) })
 
 let lyricSyncFrame: number | undefined
 let lyricAutoResumeTimer: ReturnType<typeof setTimeout> | undefined
@@ -576,7 +594,7 @@ const jumpTime = (e) => {
     MessagePlugin.warning('投屏模式下不支持拖拽进度')
     return
   }
-  if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
+  if (Audio.value.audio) void seekTo(e.line.getLine().startTime / 1000).catch(console.warn)
 }
 // 窗口后台（最小化 / 隐藏到托盘 / 页面不可见）时暂停高开销动画与渲染。
 // 注意：隐藏到托盘时 document.hidden 不会变化，状态以主进程推送为准。
@@ -585,7 +603,7 @@ const isAppActive = computed(() => !isAppBackground.value)
 // [诊断] 后台状态变化回声（排查托盘降载用，定位后可移除）
 watch(isAppActive, (active) => {
   try {
-    ;(window as any)?.electron?.ipcRenderer?.send?.('app-window-background-ack', {
+    ;(desktopBridge as any)?.electron?.ipcRenderer?.send?.('app-window-background-ack', {
       source: 'fullplay',
       isAppActive: active
     })
@@ -606,10 +624,10 @@ watch(
   async (visible) => {
     try {
       if (visible && !blockerActive.value) {
-        await (window as any)?.api?.powerSaveBlocker?.start?.()
+        await (desktopBridge as any)?.api?.powerSaveBlocker?.start?.()
         blockerActive.value = true
       } else if (!visible && blockerActive.value) {
-        await (window as any)?.api?.powerSaveBlocker?.stop?.()
+        await (desktopBridge as any)?.api?.powerSaveBlocker?.stop?.()
         blockerActive.value = false
       }
     } catch (e) {
@@ -636,7 +654,7 @@ onBeforeUnmount(async () => {
   // 组件卸载时确保恢复系统息屏
   if (blockerActive.value) {
     try {
-      await (window as any)?.api?.powerSaveBlocker?.stop?.()
+      await (desktopBridge as any)?.api?.powerSaveBlocker?.stop?.()
     } catch {}
     blockerActive.value = false
   }
@@ -763,11 +781,16 @@ watch(() => [props.songInfo, props.show], checkOverflow, { immediate: true })
 
 // 点击外部关闭设置面板
 const floatActionRef = ref<HTMLElement | null>(null)
+const skinButton = ref<HTMLButtonElement | null>(null)
+function closeSettings() {
+  showSettings.value = false
+  skinButton.value?.focus({ preventScroll: true })
+}
 const handleClickOutside = (event: MouseEvent) => {
   if (
     showSettings.value &&
     floatActionRef.value &&
-    !floatActionRef.value.contains(event.target as Node)
+    !event.composedPath().includes(floatActionRef.value)
   ) {
     showSettings.value = false
   }
@@ -790,7 +813,7 @@ const debouncedCheckOverflow = _.debounce(checkOverflow, 200)
 
 onMounted(() => {
   window.addEventListener('resize', debouncedCheckOverflow)
-  document.addEventListener('click', handleClickOutside)
+  document.addEventListener('click', handleClickOutside, true)
   window.addEventListener('keydown', handleKeyDown)
   // 初始检查
   setTimeout(checkOverflow, 500)
@@ -798,11 +821,67 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', debouncedCheckOverflow)
-  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('click', handleClickOutside, true)
   window.removeEventListener('keydown', handleKeyDown)
 })
 // removed redundant onBeforeUnmount
 // --- 滚动文字逻辑 End ---
+const skinCover = ref<string | null>(null)
+watch(() => {
+  if (!props.show || simulator.active.value || !actualCoverImage.value?.startsWith('ceru-cover://')) return null
+  return (['player.stage', 'player.artwork', 'player.background', 'player.visualizer', 'player.songInfo'] as const)
+    .some(name => regionView(name)) ? actualCoverImage.value : null
+}, async (source, _previous, clean) => {
+  skinCover.value = null
+  if (!source) return
+  const image = new Image()
+  let active = true
+  clean(() => { active = false; image.removeAttribute('src') })
+  image.crossOrigin = 'anonymous'
+  image.src = source
+  try {
+    await image.decode()
+    if (!active) return
+    const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    skinCover.value = canvas.toDataURL('image/webp', 0.85)
+  } catch { /* The selected skin can render its normal no-cover state. */ }
+}, { immediate: true })
+const regionContent = computed(() => {
+  if (simulator.active.value) return { track: simulator.track.value, durationMs: simulator.durationMs, artwork: null, layout: playSetting.getLayoutMode, palette: simulator.palette.value }
+  const artwork = actualCoverImage.value?.startsWith('ceru-cover://') ? skinCover.value : actualCoverImage.value
+  const song = player.value.songInfo
+  const durationMs = Number.isFinite(Audio.value.duration) ? Math.round(Audio.value.duration * 1000) : undefined
+  return { track: { title:songName.value, artists:[String(song?.singer ?? '')].filter(Boolean), album:String(song?.albumName ?? ''), durationMs }, durationMs,
+    artwork: typeof artwork === 'string' && /^data:image\/(png|jpeg|webp);base64,/i.test(artwork) && artwork.length < 2_000_000 ? artwork : null,
+    layout:playSetting.getLayoutMode, palette:{ accent: props.mainColor, foreground:useBlackText.value ? '#222' : '#fff', background:useBlackText.value ? '#f4f4f4' : '#242424' } }
+})
+const stageSelected = computed(() => props.show && !!regionView('player.stage'))
+const warnings = computed(() => regionNotices.value.filter(item => item.reason === 'warning'))
+const partsVisible = computed(() => props.show && !stageSelected.value)
+const displayedLyricLines = computed(() => {
+  const lines = toRaw(player.value.lyrics.lines)
+  if (playSetting.getShowLyricRomanization) return lines
+  return lines.map((line) => ({
+    ...line,
+    romanLyric: '',
+    words: line.words.map((word) => ({ ...word, romanWord: '' }))
+  }))
+})
+const lyricRegionContent = computed(() => !props.show || (!stageSelected.value && !regionView('player.lyrics')) ? {} : ({
+  track:regionContent.value.track, layout: regionContent.value.layout, palette:regionContent.value.palette,
+  forward:{alignPosition:playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34,
+    enableBlur:playSetting.getIsBlurLyric,enableSpring:playSetting.getisJumpLyric,enableScale:playSetting.getisJumpLyric},
+  lines:simulator.active.value ? simulator.fixture.value.lines : displayedLyricLines.value.map(line => ({startTimeMs:line.startTime, endTimeMs:line.endTime, text:line.words.map(word => word.word).join(''),
+    translation:line.translatedLyric, romanization:line.romanLyric, isBackground:line.isBG, isDuet:line.isDuet,
+    words:line.words.map(word => ({text:word.word, startTimeMs:word.startTime, endTimeMs:word.endTime, romanization:word.romanWord}))}))
+}))
+const stageContent = computed(() => stageSelected.value ? {...regionContent.value,...lyricRegionContent.value} : {})
 </script>
 
 <template>
@@ -811,11 +890,13 @@ onUnmounted(() => {
     :class="{
       active: props.show,
       'use-black-text': useBlackText,
-      idle: isIdle,
+      idle: isIdle && !stageSelected,
       animating: isAnimating
     }"
   >
+    <PluginRegion name="player.stage" :visible="props.show" :content="stageContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" :audio="Audio.audio" surface-class="plugin-stage">
     <!-- 兜底渐变背景：双层交替淡入，由封面取色生成；切歌时颜色平滑过渡 -->
+    <PluginRegion name="player.background" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" :audio="Audio.audio" surface-class="plugin-background">
     <div
       class="bg-fallback bg-fallback-a"
       :class="{ active: activeLayer === 'A' }"
@@ -836,31 +917,7 @@ onUnmounted(() => {
       }"
     ></div>
     <div v-if="showFestivalEffects" ref="festivalOverlay" class="festival-overlay"></div>
-    <!-- 全屏按钮 -->
-    <button
-      class="fullscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="toggleFullscreen"
-    >
-      <Fullscreen1Icon v-if="!isFullscreen" class="icon" />
-      <FullscreenExit1Icon v-else class="icon" />
-    </button>
-    <button
-      class="putawayscreen-btn"
-      :class="{ 'black-text': useBlackText }"
-      @click="emit('toggle-fullscreen')"
-    >
-      <ChevronDownIcon class="icon" />
-    </button>
-    <Transition name="fade-nav">
-      <TitleBarControls
-        v-if="props.show"
-        class="top"
-        style="-webkit-app-region: drag"
-        :color="useBlackText ? 'black' : 'white'"
-        :show-account="false"
-      />
-    </Transition>
+    </PluginRegion>
     <div
       class="playbox"
       :style="{
@@ -874,37 +931,27 @@ onUnmounted(() => {
         'single-column': !showLeftPanel
       }"
     >
-      <div class="left" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 }">
+      <div class="left" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 && !regionView('player.lyrics') }">
         <template v-if="playSetting.getLayoutMode === 'cd'">
-          <img
-            class="pointer"
-            :class="{ playing: isAudioPlaying }"
-            src="@renderer/assets/pointer.png"
-            alt="pointer"
-          />
-          <div
-            class="cd-container"
-            :class="{ playing: isAudioPlaying, 'no-lyric': player.lyrics.lines.length <= 0 }"
-            :style="!isAudioPlaying ? 'animation-play-state: paused;' : ''"
-          >
-            <!-- 黑胶唱片 -->
-            <div class="vinyl-record"></div>
-            <!-- 唱片标签 -->
-            <div class="vinyl-label">
-              <s-image :src="coverImage" shape="circle" class="cover" />
-              <div class="label-shine"></div>
-            </div>
-            <!-- 中心孔 -->
-            <div class="center-hole"></div>
-          </div>
+          <PluginRegion name="player.artwork" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-artwork">
+          <PlayerArtwork mode="vinyl" :artwork="coverImage" :alt="songName" :playing="isAudioPlaying" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 }">
+            <s-image :src="coverImage" shape="circle" class="cover" />
+          </PlayerArtwork>
+          </PluginRegion>
+          <PluginRegion v-if="regionView('player.songInfo')" name="player.songInfo" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-song-info" />
         </template>
 
         <template v-else-if="playSetting.getLayoutMode === 'cover'">
           <div class="cover-layout-container">
-            <div class="cover-wrapper-square" :class="{ playing: controlAudio.Audio.isPlay }">
-              <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
+            <div class="cover-wrapper-square">
+              <PluginRegion name="player.artwork" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-artwork">
+              <PlayerArtwork mode="square" :artwork="actualCoverImage" :alt="songName" :playing="controlAudio.Audio.isPlay">
+                <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
+              </PlayerArtwork>
+              </PluginRegion>
             </div>
             <div class="song-info-area">
+              <PluginRegion name="player.songInfo" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-song-info">
               <div ref="titleRef" class="song-title-large text-scroll-container">
                 <div class="text-scroll-wrapper" :class="{ 'animate-scroll': shouldScrollTitle }">
                   <div ref="titleContentRef" class="text-scroll-item">
@@ -925,19 +972,21 @@ onUnmounted(() => {
                 </span>
                 <span class="album">{{ (player.songInfo as any)?.albumName }}</span>
               </div>
+              </PluginRegion>
             </div>
           </div>
         </template>
       </div>
       <div
-        v-if="player.lyrics.lines.length > 0"
+        v-if="player.lyrics.lines.length > 0 || regionView('player.lyrics')"
         class="right"
         @contextmenu.prevent="lyricExtrasStore.openCopy()"
       >
+        <PluginRegion name="player.lyrics" :visible="partsVisible" :content="lyricRegionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-lyrics">
         <component
           :is="playSetting.getUseAmlLyricRenderer ? LyricPlayer : LyricAdapter"
           ref="lyricPlayerRef"
-          :lyric-lines="toRaw(player.lyrics.lines) || []"
+          :lyric-lines="displayedLyricLines"
           :current-time="effectiveLyricTime"
           :word-fade-width="0.5"
           :playing="isAudioPlaying"
@@ -955,25 +1004,45 @@ onUnmounted(() => {
           @touchend="scheduleLyricAutoResume"
           @line-click="jumpTime"
         />
+        </PluginRegion>
       </div>
     </div>
     <!-- 音频可视化组件 -->
     <div
-      v-if="props.show && coverImage && playSetting.getIsAudioVisualizer"
+      v-if="partsVisible && playSetting.getIsAudioVisualizer && (coverImage || regionView('player.visualizer'))"
       class="audio-visualizer-container"
       :class="{ idle: isIdle }"
     >
-      <AudioVisualizer
+      <PluginRegion name="player.visualizer" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" :audio="Audio.audio" surface-class="plugin-visualizer">
+      <AudioVisualizer v-if="coverImage"
         :show="Audio.isPlay && isAppActive"
         :height="70"
         :bar-count="80"
         :color="mainColor"
       />
+      </PluginRegion>
     </div>
+    </PluginRegion>
 
-    <div ref="floatActionRef" class="float-action" :class="{ idle: isIdle }">
-      <t-Tooltip content="播放器主题" placement="bottom">
-        <button class="skin-btn" @click="showSettings = !showSettings">
+    <SkinSimulatorBar />
+    <button class="fullscreen-btn" :class="{ 'black-text': useBlackText }" aria-label="切换全屏" @click="toggleFullscreen">
+      <Fullscreen1Icon v-if="!isFullscreen" class="icon" /><FullscreenExit1Icon v-else class="icon" />
+    </button>
+    <button class="putawayscreen-btn" :class="{ 'black-text': useBlackText }" aria-label="收起播放器" @click="emit('toggle-fullscreen')">
+      <ChevronDownIcon class="icon" />
+    </button>
+    <Transition name="fade-nav">
+      <TitleBarControls v-if="props.show" class="top" style="-webkit-app-region: drag" :color="useBlackText ? 'black' : 'white'" :show-account="false" />
+    </Transition>
+
+    <div ref="floatActionRef" class="float-action" :class="{ 'with-float-ball': settingsStore.settings.showFloatBall, idle: isIdle && !stageSelected && !showSettings && !warnings.length }" @keydown.esc.stop="closeSettings">
+      <div v-if="!showSettings && warnings.length" class="health-summary">
+        <InfoCircleIcon aria-hidden="true" />
+        <span role="status">{{ warnings.length === 1 ? '皮肤显示不够流畅' : `${warnings.length} 个区域显示不够流畅` }}</span>
+        <button type="button" @click="showSettings = true; skinButton?.focus()">查看<ChevronRightIcon aria-hidden="true" /></button>
+      </div>
+      <t-Tooltip content="播放器个性化" placement="left" :disabled="showSettings">
+        <button ref="skinButton" type="button" class="skin-btn" aria-label="播放器个性化" :aria-expanded="showSettings" :aria-controls="showSettings ? 'player-personalization' : undefined" @click="showSettings = !showSettings">
           <pen-ball-icon
             :fill-color="'transparent'"
             :stroke-color="'currentColor'"
@@ -982,8 +1051,9 @@ onUnmounted(() => {
           />
         </button>
       </t-Tooltip>
-      <Transition name="fade-up">
-        <div v-if="showSettings" class="settings-panel">
+      <Transition name="personalization-pop">
+        <div v-if="showSettings" id="player-personalization" class="settings-panel" role="region" aria-label="播放器个性化">
+          <div class="settings-heading"><strong>播放器个性化</strong><button type="button" aria-label="关闭个性化面板" @click="closeSettings"><CloseIcon aria-hidden="true" /></button></div>
           <PlaySettings />
         </div>
       </Transition>
@@ -1014,6 +1084,12 @@ onUnmounted(() => {
 </template>
 
 <style lang="scss" scoped>
+.full-play :deep(.plugin-stage) { position: absolute; inset: 0 0 var(--play-bottom-height); height: auto; z-index: 0; }
+.full-play :deep(.plugin-song-info) { width: 100%; height: 5.5rem; min-width: 0; }
+.full-play :deep(.plugin-visualizer) { width: 100%; height: 70px; }
+.full-play :deep(.plugin-background) { position: absolute; inset: 0; z-index: -1; pointer-events: none }
+.full-play :deep(.plugin-artwork) { width: 100%; aspect-ratio: 1; height: auto }
+.full-play :deep(.plugin-lyrics) { width: 100%; height: calc(100vh - var(--play-bottom-height)); min-height: 220px }
 .festival-overlay {
   position: absolute;
   top: 0;
@@ -1185,7 +1261,8 @@ onUnmounted(() => {
   width: auto;
   height: calc(100% + 1px);
   color: var(--text-color);
-  overflow: hidden; /* 裁掉未全屏时 bg-fallback 的 blur 光晕外溢到主内容区 */
+  overflow: clip;
+  container-type: size;
 
   &.animating {
     transition: top 0.28s cubic-bezier(0.8, 0, 0.8, 0.43);
@@ -1224,6 +1301,7 @@ onUnmounted(() => {
 
   .top {
     position: absolute;
+    top: 0;
     width: calc(100% - 200px);
     z-index: 1;
     right: 0;
@@ -1269,186 +1347,14 @@ onUnmounted(() => {
       margin: 0 0 var(--play-bottom-height) 0;
       perspective: 1000px;
 
-      .pointer {
-        user-select: none;
-        -webkit-user-drag: none;
-        position: absolute;
-        width: calc(var(--cd-size) / 3.5);
+      .vinyl-artwork { --record-margin: 0; }
+      .vinyl-artwork.no-lyric { --cd-size: 50vh; }
+      .vinyl-artwork :deep(.pointer) {
+        width: calc(var(--cd-width-auto) / 3.5);
         left: calc(50% - 1.8vh);
-        top: calc(50% - var(--cd-size) / 2 - calc(var(--cd-size) / 3.5) - 1vh);
-        transform: rotate(-20deg);
+        top: calc(50% - var(--cd-width-auto) / 2 - var(--cd-width-auto) / 3.5 - 1vh);
+        bottom: auto;
         transform-origin: 1.8vh 1.8vh;
-        z-index: 2;
-        transition: transform 0.3s;
-
-        &.playing {
-          transform: rotate(0deg);
-        }
-      }
-
-      .cd-container {
-        width: var(--cd-size);
-        height: var(--cd-size);
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: rotateRecord 33s linear infinite;
-        transition:
-          filter 0.3s ease,
-          width 0.3s ease,
-          height 0.3s ease;
-        filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.6));
-
-        /* 无歌词时唱片放大，唱针随 --cd-size 同步 */
-        &.no-lyric {
-          --cd-size: 50vh;
-        }
-
-        &:hover {
-          filter: drop-shadow(0 20px 45px rgba(0, 0, 0, 0.7));
-        }
-
-        /* 黑胶唱片主体 */
-        .vinyl-record {
-          aspect-ratio: 1/1;
-
-          // margin-top: calc(var(--play-bottom-height) / 2);
-          width: 100%;
-          height: 100%;
-          position: relative;
-          border-radius: 50%;
-          background: radial-gradient(circle at 50% 50%, #1a1a1a 0%, #0d0d0d 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-
-          /* 唱片纹理轨道 */
-          &::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background:
-              repeating-conic-gradient(
-                from 0deg,
-                transparent 0deg,
-                rgba(255, 255, 255, 0.02) 0.5deg,
-                transparent 1deg,
-                rgba(255, 255, 255, 0.01) 1.5deg,
-                transparent 2deg
-              ),
-              repeating-radial-gradient(
-                circle at 50% 50%,
-                transparent 0px,
-                rgba(255, 255, 255, 0.03) 1px,
-                transparent 2px,
-                transparent 8px
-              );
-            z-index: 1;
-          }
-
-          /* 唱片光泽效果 */
-          &::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(
-              ellipse at 30% 30%,
-              rgba(255, 255, 255, 0.08) 0%,
-              rgba(255, 255, 255, 0.04) 25%,
-              rgba(255, 255, 255, 0.02) 50%,
-              rgba(255, 255, 255, 0.01) 75%,
-              transparent 100%
-            );
-            border-radius: 50%;
-            z-index: 2;
-            animation: vinylShine 6s ease-in-out infinite;
-          }
-        }
-
-        /* 唱片标签区域 */
-        .vinyl-label {
-          position: absolute;
-          width: 60%;
-          height: 60%;
-          background: radial-gradient(
-            circle at 50% 50%,
-            rgba(40, 40, 40, 0.95) 0%,
-            rgba(25, 25, 25, 0.98) 70%,
-            rgba(15, 15, 15, 1) 100%
-          );
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 3;
-          box-shadow:
-            inset 0 0 20px rgba(0, 0, 0, 0.8),
-            inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-            0 0 10px rgba(0, 0, 0, 0.5);
-
-          :deep(.cover) {
-            position: relative;
-            z-index: 4;
-            border-radius: 50%;
-            overflow: hidden;
-            box-shadow:
-              0 0 20px rgba(0, 0, 0, 0.4),
-              inset 0 0 0 2px rgba(255, 255, 255, 0.1);
-            width: 95% !important;
-            height: 95% !important;
-            aspect-ratio: 1 / 1;
-
-            img {
-              user-select: none;
-              -webkit-user-drag: none;
-              border-radius: 50%;
-              filter: brightness(0.85) contrast(1.15) saturate(1.1);
-              width: 100% !important;
-              height: 100% !important;
-              object-fit: cover;
-            }
-          }
-
-          /* 标签光泽 */
-          .label-shine {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(
-              ellipse at 25% 25%,
-              rgba(255, 255, 255, 0.1) 0%,
-              transparent 50%
-            );
-            border-radius: 50%;
-            z-index: 5;
-            pointer-events: none;
-            animation: labelShine 8s ease-in-out infinite;
-          }
-        }
-
-        /* 中心孔 */
-        .center-hole {
-          position: absolute;
-          width: 8%;
-          height: 8%;
-          background: radial-gradient(circle, #000 0%, #111 30%, #222 70%, #333 100%);
-          border-radius: 50%;
-          z-index: 10;
-          box-shadow:
-            inset 0 0 8px rgba(0, 0, 0, 0.9),
-            0 0 3px rgba(0, 0, 0, 0.8);
-        }
       }
     }
 
@@ -1566,39 +1472,7 @@ onUnmounted(() => {
         aspect-ratio: 1/1;
         flex-shrink: 1;
         min-height: 0;
-        border-radius: 24px;
-        overflow: hidden; // 保留：裁封面圆角
-        // box-shadow:
-        //   0 25px 50px -12px rgba(0, 0, 0, 0.5),
-        //   0 0 0 1px rgba(255, 255, 255, 0.1);
-        transition: transform 0.44s cubic-bezier(0.44, 2, 0.64, 1);
         margin: 0 auto;
-        transform: scale(0.8);
-
-        &.playing {
-          transform: scale(1);
-
-          &:hover {
-            transition: transform 0.2s;
-            transform: scale(1.02);
-          }
-        }
-
-        &:hover {
-          transform: scale(0.82);
-        }
-
-        :deep(.cover-img-square) {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          user-select: none;
-          img {
-            -webkit-user-drag: none;
-
-            user-select: none;
-          }
-        }
       }
 
       .song-info-area {
@@ -1703,148 +1577,71 @@ onUnmounted(() => {
 }
 
 .float-action {
+  --tool-inset: 20px;
+  --tool-bottom: calc(var(--play-bottom-height) + 60px);
+  --skin-tint: v-bind(lightMainColor);
   position: absolute;
-  z-index: 5;
-  transition:
-    opacity 0.5s ease,
-    transform 0.5s ease;
-  &.idle {
-    opacity: 0;
-    transform: translateY(20px);
-    pointer-events: none;
+  z-index: 6;
+  right: var(--tool-inset);
+  bottom: var(--tool-bottom);
+  width: 50px;
+  height: 50px;
+  color: #f7f8fa;
+  transition: opacity 180ms ease;
+
+  &.idle:not(:focus-within) { opacity: 0; pointer-events: none; }
+  &.with-float-ball { --tool-inset: 60px; }
+  button:focus-visible { outline: 2px solid #c4e8dc; outline-offset: 3px; }
+}
+.skin-btn {
+  width: 100%; height: 100%; padding: 0; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid rgb(255 255 255 / 63%);
+  color: rgb(255 255 255 / 90%); background: rgb(255 255 255 / 15%); cursor: pointer;
+  backdrop-filter: blur(20px);
+  transition: background-color 220ms ease, box-shadow 280ms ease, transform 240ms ease;
+  &:hover, &[aria-expanded='true'] {
+    background: rgb(255 255 255 / 25%);
+    box-shadow: 0 8px 28px rgb(0 0 0 / 15%), 0 0 20px color-mix(in srgb, var(--skin-tint) 36%, transparent);
   }
-  --bottom-height: 60px;
-  right: 20px;
-  bottom: calc(var(--bottom-height) + var(--play-bottom-height));
-  .skin-btn {
-    backdrop-filter: blur(20px);
-    background: rgba(255, 255, 255, 0.15);
-    // box-shadow:
-    //   0 8px 32px 0 rgba(0, 0, 0, 0.1),
-    //   0 0 20px v-bind(lightMainColor),
-    //   inset 0 0 0 1px rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.628);
-    // border: none;
-    height: 50px;
-    width: 50px;
-    border-radius: 50%;
-    cursor: pointer;
-
-    /* 弹性过渡效果 */
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: 1px;
-
-    &:hover {
-      // transform: translateY(-2px);
-      background-color: rgba(255, 255, 255, 0.25);
-      box-shadow:
-        0 12px 40px 0 rgba(0, 0, 0, 0.15),
-        0 0 30px v-bind(lightMainColor),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-    }
-
-    &:active {
-      transform: translateY(1px) scale(0.92);
-      box-shadow:
-        0 4px 10px 0 rgba(0, 0, 0, 0.1),
-        0 0 10px v-bind(lightMainColor),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-      transition: all 0.1s ease;
-    }
-  }
-
-  .settings-panel {
-    max-height: calc(
-      100vh - 40px - 2.25rem - 70px - calc(var(--bottom-height) + var(--play-bottom-height))
-    );
-    display: flex;
-    flex-direction: column;
-    position: absolute;
-    bottom: 70px;
-    right: 0;
-    width: 340px;
-    background: rgb(30 30 30 / 29%);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border-radius: 24px;
-    padding: 20px;
-    box-shadow:
-      0 20px 50px rgba(0, 0, 0, 0.4),
-      0 0 0 1px rgba(255, 255, 255, 0.1);
-    transform-origin: bottom right;
-    z-index: 100;
-  }
+  &:active { transform: scale(.92); }
+}
+.settings-panel, .health-summary {
+  position: absolute;
+  right: 0; bottom: calc(100% + 20px);
+  box-sizing: border-box; color: #fff; background: rgb(30 30 30 / 36%);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 20px 50px rgb(0 0 0 / 40%), 0 0 0 1px rgb(255 255 255 / 10%);
+  transform-origin: bottom right;
+}
+.settings-panel {
+  display: flex; flex-direction: column;
+  width: min(380px, calc(100cqw - var(--tool-inset) - 16px));
+  max-height: calc(100cqh - var(--tool-bottom) - 104px);
+  border-radius: 24px; overflow: hidden; color-scheme: dark;
+}
+.settings-heading {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 2px;
+  strong { font-size: 18px; font-weight: 600; }
+  button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+  button:hover { background: rgb(255 255 255 / 10%); }
+}
+.health-summary {
+  display: flex; align-items: center; gap: 8px;
+  width: max-content; max-width: calc(100vw - var(--tool-inset) - 16px);
+  border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 12px; line-height: 1.5;
+  > .t-icon { color: #f2c77e; flex: none; }
+  button { display: inline-flex; align-items: center; gap: 2px; flex: none; min-height: 28px; padding-inline: 5px; border: 0; border-radius: 4px; color: #bcdfd3; background: transparent; font: inherit; cursor: pointer; }
+  button:hover { background: rgb(255 255 255 / 8%); }
+}
+.personalization-pop-enter-active { transition: transform 340ms cubic-bezier(.34, 1.56, .64, 1), opacity 230ms ease-out; }
+.personalization-pop-leave-active { transition: transform 220ms ease-in, opacity 200ms ease-in; pointer-events: none; }
+.personalization-pop-enter-from, .personalization-pop-leave-to { opacity: 0; transform: translateY(20px) scale(.95); }
+@media (prefers-reduced-motion: reduce) {
+  .float-action, .skin-btn, .personalization-pop-enter-active, .personalization-pop-leave-active { transition: none; }
+  .skin-btn:active { transform: none; }
 }
 
-.fade-up-enter-active,
-.fade-up-leave-active {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.fade-up-enter-from,
-.fade-up-leave-to {
-  opacity: 0;
-  transform: translateY(20px) scale(0.95);
-}
-
-@keyframes rotateRecord {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes vinylShine {
-  0% {
-    opacity: 0.1;
-    transform: rotate(0deg) scale(1);
-  }
-
-  50% {
-    opacity: 0.2;
-    transform: rotate(180deg) scale(1.1);
-  }
-
-  100% {
-    opacity: 0.1;
-    transform: rotate(360deg) scale(1);
-  }
-}
-
-@keyframes labelShine {
-  0% {
-    opacity: 0.05;
-    transform: rotate(0deg);
-  }
-
-  25% {
-    opacity: 0.15;
-  }
-
-  50% {
-    opacity: 0.1;
-    transform: rotate(180deg);
-  }
-
-  75% {
-    opacity: 0.15;
-  }
-
-  100% {
-    opacity: 0.05;
-    transform: rotate(360deg);
-  }
-}
 </style>
 
 <style lang="scss">

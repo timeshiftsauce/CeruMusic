@@ -23,7 +23,7 @@
     attach="body"
     @close="$emit('close')"
   >
-    <PluginWebSurface
+    <PluginViewSurface
       v-if="session?.kind === 'web'"
       :key="session.sessionId"
       :session="session"
@@ -107,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   Drawer as TDrawer,
@@ -119,7 +120,7 @@ import {
   Alert as TAlert
 } from 'tdesign-vue-next'
 import type { PluginDrawerSession } from '@common/pluginDrawer'
-import PluginWebSurface from './PluginWebSurface.vue'
+import PluginViewSurface from './PluginViewSurface.vue'
 import PluginNativeSurface from './PluginNativeSurface.vue'
 
 const props = defineProps<{ session: PluginDrawerSession | null }>()
@@ -219,7 +220,7 @@ async function run(index: number) {
     if (field.type === 'password') draft.value[field.bind] = ''
   }
   try {
-    const state = await window.api.plugins.drawerAction(
+    const state = await desktopBridge.api.plugins.drawerAction(
       session.pluginId,
       session.surfaceId,
       session.sessionId,

@@ -10,7 +10,7 @@
  * 提交成功后自动打开"一起听浮层"（叠加在 FullPlay 内部，不跳路由）。
  */
 import { ref, watch, computed, nextTick } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import type { RoomMode } from '@renderer/utils/listenTogether/types'
 

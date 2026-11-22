@@ -53,6 +53,8 @@ export interface PluginWebDrawerSession {
   title: string
   presentation: Omit<PluginDrawerSchema['presentation'], 'kind'> & { kind: 'drawer' | 'modal' }
   html: string
+  /** Verified self-contained ESM factory, loaded by the normal renderer only. */
+  componentSource?: string
   init: JsonObject
   state: JsonObject
 }

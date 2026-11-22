@@ -11,7 +11,7 @@
 import { computed } from 'vue'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { CloseIcon, MusicIcon, ChevronUpIcon, ChevronDownIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { useVirtualList } from '@vueuse/core'
 import type { QueueItem } from '@renderer/utils/listenTogether/types'
 

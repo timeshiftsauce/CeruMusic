@@ -5,7 +5,8 @@ import { useSettingsStore } from '@renderer/store/Settings'
 import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'
 import { useAuthStore } from '@renderer/store/Auth'
 import { CERU_API_RESOURCE } from '@common/api/resources'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 
 const request = new Request(CERU_API_RESOURCE)
 

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { getQualityDisplayName } from '@common/utils/quality'
+import { canPersistMusicData } from '@renderer/services/musicDataPersistence'
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { TreeRoundDotIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import fonts from '@renderer/assets/icon_font/icons'
+import SourceDisabledHint from '@renderer/components/SourceDisabledHint.vue'
 import {
-  providerIconUrls,
+  sourcePickerEntries,
   providerImplementations,
-  selectProviderImplementation
+  chooseSourceEntry
 } from '@renderer/services/pluginState'
 
 const emit = defineEmits(['switch-category'])
@@ -37,6 +39,7 @@ const currentSourceQualities = computed(() => {
   return selectedSource?.qualitys || []
 })
 const currentProviderOptions = computed(() =>
+  sourcePickerEntries.value.some(entry => entry.source === userInfo.value.selectSources && entry.split) ? [] :
   providerImplementations.value
     .filter((item) => item.providerId === userInfo.value.selectSources)
     .map((item) => ({ label: item.pluginName, value: item.pluginId }))
@@ -45,7 +48,7 @@ const currentProviderPlugin = computed({
   get: () => userInfo.value.sourcePluginMap?.[userInfo.value.selectSources || ''] || '',
   set: (pluginId: string) => {
     if (userInfo.value.selectSources)
-      void selectProviderImplementation(userInfo.value.selectSources, pluginId).catch((error) =>
+      void chooseSourceEntry(userInfo.value.selectSources, pluginId).catch((error) =>
         MessagePlugin.error(error?.message || '切换音源插件失败，已保留原选择')
       )
   }
@@ -121,22 +124,6 @@ watch(
   { immediate: true }
 )
 
-const selectSource = (sourceKey: string) => {
-  if (!hasPluginData.value) return
-
-  userInfo.value.selectSources = sourceKey
-
-  const source = userInfo.value.supportedSources?.[sourceKey]
-  if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
-  if (source && source.qualitys && source.qualitys.length > 0) {
-    const saved = userInfo.value.sourceQualityMap[sourceKey]
-    const useQuality =
-      saved && source.qualitys.includes(saved) ? saved : source.qualitys[source.qualitys.length - 1]
-    userInfo.value.sourceQualityMap[sourceKey] = useQuality
-    userInfo.value.selectQuality = useQuality
-  }
-}
-
 const onQualityChange = (value: any) => {
   if (
     currentSourceQualities.value.length > 0 &&
@@ -197,40 +184,45 @@ const goPlugin = () => {
       <div id="music-source" class="setting-group">
         <h3>音乐源选择</h3>
         <div class="source-cards">
-          <div
-            v-for="(source, key) in userInfo.supportedSources"
-            :key="key"
+          <SourceDisabledHint v-for="source in sourcePickerEntries.filter(entry => entry.source !== 'local')" :key="source.key" :reason="source.reason" v-slot="{ events }">
+          <button type="button" v-on="events"
             class="source-card"
-            :class="{ active: userInfo.selectSources === key }"
-            @click="selectSource(key as string)"
+            :class="{ active: source.selected }"
+            :aria-label="source.name"
+            :aria-description="source.reason"
+            :aria-disabled="source.disabled || undefined"
+            :disabled="!canPersistMusicData()"
+            :aria-pressed="source.selected"
+            @click="chooseSourceEntry(source.source, source.owner)"
           >
             <div class="source-icon">
               <img
-                v-if="providerIconUrls[key]"
-                :src="providerIconUrls[key]"
+                v-if="source.iconUrl"
+                :src="source.iconUrl"
                 :alt="source.name"
                 class="provider-logo"
               />
-              <component v-else-if="fonts[key]" :is="fonts[key]" style="font-size: 2em" />
-              <span v-else>{{ (source.name || String(key)).slice(0, 1) }}</span>
+              <component v-else-if="fonts[source.source]" :is="fonts[source.source]" style="font-size: 2em" />
+              <span v-else>{{ source.name.slice(0, 1) }}</span>
             </div>
             <div class="source-info">
               <div class="source-name">{{ source.name }}</div>
               <div class="source-type">{{ source.type || '音乐源' }}</div>
             </div>
-            <div v-if="userInfo.selectSources === key" class="source-check">
+            <div v-if="source.selected" class="source-check">
               <i class="iconfont icon-check"></i>
             </div>
-          </div>
+          </button>
+          </SourceDisabledHint>
         </div>
       </div>
 
-      <div v-if="currentSourceQualities.length > 0" id="music-quality" class="setting-group">
-        <template v-if="currentProviderOptions.length > 1">
+      <div v-if="currentProviderOptions.length > 1" class="setting-group">
           <h3>平台实现</h3>
           <t-select v-model="currentProviderPlugin" :options="currentProviderOptions" />
           <p class="quality-hint">同一平台由多个插件提供时，可在这里指定当前使用的实现。</p>
-        </template>
+      </div>
+      <div v-if="currentSourceQualities.length > 0" id="music-quality" class="setting-group">
         <h3>音质选择</h3>
         <div class="quality-slider-container">
           <t-slider
@@ -369,6 +361,8 @@ const goPlugin = () => {
   }
 
   .source-card {
+    font: inherit; color: inherit; text-align: start;
+    &:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -379,7 +373,9 @@ const goPlugin = () => {
     cursor: pointer;
     transition: all 0.2s ease;
 
-    &:hover {
+    &[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
+
+    &:hover:not([aria-disabled='true']) {
       border-color: var(--settings-source-card-hover-border);
       box-shadow: 0 4px 6px -1px var(--settings-group-shadow);
     }

@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 
 type Platform = 'netease' | 'qq' | 'kugou' | 'kuwo'
 type RemotePlaylist = { id: string; name: string; cover?: string; count?: number }
-const accounts = ref<Record<Platform, boolean>>({ netease: false, qq: false, kugou: false, kuwo: false })
+const accounts = ref<Record<Platform, boolean>>({
+  netease: false,
+  qq: false,
+  kugou: false,
+  kuwo: false
+})
 const loading = ref<Platform | null>(null)
 const syncing = ref<Platform | null>(null)
 const pickerPlatform = ref<Platform | null>(null)
@@ -17,7 +23,7 @@ const selectAll = ref(false)
 let stopListening: (() => void) | undefined
 
 const refresh = async () => {
-  accounts.value = await window.api.platformAccounts.status()
+  accounts.value = await desktopBridge.api.platformAccounts.status()
 }
 
 const signIn = async (platform: Platform) => {
@@ -27,7 +33,7 @@ const signIn = async (platform: Platform) => {
   }
   loading.value = platform
   try {
-    await window.api.platformAccounts.openLogin(platform)
+    await desktopBridge.api.platformAccounts.openLogin(platform)
   } catch (error) {
     MessagePlugin.error(error instanceof Error ? error.message : '无法打开平台登录窗口')
   } finally {
@@ -42,7 +48,10 @@ const submitKuwoLogin = async () => {
   }
   loading.value = 'kuwo'
   try {
-    await window.api.platformAccounts.kuwoLogin(kuwoUsername.value.trim(), kuwoPassword.value)
+    await desktopBridge.api.platformAccounts.kuwoLogin(
+      kuwoUsername.value.trim(),
+      kuwoPassword.value
+    )
     accounts.value.kuwo = true
     kuwoLoginOpen.value = false
     kuwoPassword.value = ''
@@ -56,7 +65,7 @@ const submitKuwoLogin = async () => {
 
 const signOut = async (platform: Platform) => {
   try {
-    await window.api.platformAccounts.logout(platform)
+    await desktopBridge.api.platformAccounts.logout(platform)
     accounts.value[platform] = false
     MessagePlugin.success('已退出平台账号')
   } catch (error) {
@@ -68,7 +77,7 @@ const syncPlaylists = async (platform: Platform) => {
   if (syncing.value) return
   syncing.value = platform
   try {
-    const result = await window.api.platformAccounts.syncPlaylists(platform)
+    const result = await desktopBridge.api.platformAccounts.syncPlaylists(platform)
     if (!Array.isArray(result)) throw new Error('读取平台歌单失败，请重试')
     remotePlaylists.value = result
     selectedIds.value = result.map((item) => item.id)
@@ -89,7 +98,7 @@ const importSelected = async () => {
     // Vue refs expose arrays as proxies; Electron IPC structured cloning can reject the proxy.
     // Send a fresh plain array across the preload boundary.
     const idsToImport = Array.from(selectedIds.value, (id) => String(id))
-    const result = await window.api.platformAccounts.syncPlaylists(platform, idsToImport)
+    const result = await desktopBridge.api.platformAccounts.syncPlaylists(platform, idsToImport)
     if (Array.isArray(result)) throw new Error('同步歌单失败')
     pickerPlatform.value = null
     const changes = [
@@ -119,11 +128,13 @@ watch(selectedIds, (ids) => {
 
 onMounted(() => {
   void refresh()
-  stopListening = window.api.platformAccounts.onChanged(({ platform, loggedIn, syncError }) => {
-    accounts.value[platform] = loggedIn
-    if (loggedIn && !syncError) MessagePlugin.success('扫码登录成功，请点击“同步歌单”选择导入')
-    if (syncError) MessagePlugin.error(`登录成功，但歌单同步失败：${syncError}`)
-  })
+  stopListening = desktopBridge.api.platformAccounts.onChanged(
+    ({ platform, loggedIn, syncError }) => {
+      accounts.value[platform] = loggedIn
+      if (loggedIn && !syncError) MessagePlugin.success('扫码登录成功，请点击“同步歌单”选择导入')
+      if (syncError) MessagePlugin.error(`登录成功，但歌单同步失败：${syncError}`)
+    }
+  )
 })
 
 onBeforeUnmount(() => stopListening?.())
@@ -144,10 +155,20 @@ onBeforeUnmount(() => stopListening?.())
           <p>{{ accounts.netease ? '已登录' : '使用网易云音乐 App 扫码登录' }}</p>
         </div>
         <div v-if="accounts.netease" class="account-actions">
-          <t-button variant="outline" :loading="syncing === 'netease'" @click="syncPlaylists('netease')">同步歌单</t-button>
+          <t-button
+            variant="outline"
+            :loading="syncing === 'netease'"
+            @click="syncPlaylists('netease')"
+            >同步歌单</t-button
+          >
           <t-button variant="outline" theme="danger" @click="signOut('netease')">退出</t-button>
         </div>
-        <t-button v-else theme="primary" :loading="loading === 'netease'" @click="signIn('netease')">
+        <t-button
+          v-else
+          theme="primary"
+          :loading="loading === 'netease'"
+          @click="signIn('netease')"
+        >
           扫码登录
         </t-button>
       </article>
@@ -159,7 +180,9 @@ onBeforeUnmount(() => stopListening?.())
           <p>{{ accounts.kugou ? '已登录' : '使用酷狗音乐账号登录' }}</p>
         </div>
         <div v-if="accounts.kugou" class="account-actions">
-          <t-button variant="outline" :loading="syncing === 'kugou'" @click="syncPlaylists('kugou')">同步歌单</t-button>
+          <t-button variant="outline" :loading="syncing === 'kugou'" @click="syncPlaylists('kugou')"
+            >同步歌单</t-button
+          >
           <t-button variant="outline" theme="danger" @click="signOut('kugou')">退出</t-button>
         </div>
         <t-button v-else theme="primary" :loading="loading === 'kugou'" @click="signIn('kugou')">
@@ -174,7 +197,9 @@ onBeforeUnmount(() => stopListening?.())
           <p>{{ accounts.kuwo ? '已登录' : '使用酷我音乐账号登录' }}</p>
         </div>
         <div v-if="accounts.kuwo" class="account-actions">
-          <t-button variant="outline" :loading="syncing === 'kuwo'" @click="syncPlaylists('kuwo')">同步歌单</t-button>
+          <t-button variant="outline" :loading="syncing === 'kuwo'" @click="syncPlaylists('kuwo')"
+            >同步歌单</t-button
+          >
           <t-button variant="outline" theme="danger" @click="signOut('kuwo')">退出</t-button>
         </div>
         <t-button v-else theme="primary" :loading="loading === 'kuwo'" @click="signIn('kuwo')">
@@ -189,7 +214,9 @@ onBeforeUnmount(() => stopListening?.())
           <p>{{ accounts.qq ? '已登录' : '使用 QQ 音乐 App 扫码登录' }}</p>
         </div>
         <div v-if="accounts.qq" class="account-actions">
-          <t-button variant="outline" :loading="syncing === 'qq'" @click="syncPlaylists('qq')">同步歌单</t-button>
+          <t-button variant="outline" :loading="syncing === 'qq'" @click="syncPlaylists('qq')"
+            >同步歌单</t-button
+          >
           <t-button variant="outline" theme="danger" @click="signOut('qq')">退出</t-button>
         </div>
         <t-button v-else theme="primary" :loading="loading === 'qq'" @click="signIn('qq')">
@@ -199,7 +226,12 @@ onBeforeUnmount(() => stopListening?.())
     </div>
 
     <div v-if="kuwoLoginOpen" class="playlist-picker-mask" @click.self="kuwoLoginOpen = false">
-      <section class="playlist-picker kuwo-login-dialog" role="dialog" aria-modal="true" aria-labelledby="kuwo-login-title">
+      <section
+        class="playlist-picker kuwo-login-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kuwo-login-title"
+      >
         <header class="picker-heading">
           <div>
             <h2 id="kuwo-login-title">登录酷我音乐</h2>
@@ -209,8 +241,16 @@ onBeforeUnmount(() => stopListening?.())
         </header>
         <form class="kuwo-login-form" @submit.prevent="submitKuwoLogin">
           <input v-model="kuwoUsername" autocomplete="username" placeholder="酷我账号 / 手机号" />
-          <input v-model="kuwoPassword" autocomplete="current-password" type="password" placeholder="密码" />
-          <p class="kuwo-login-note">使用酷我公开客户端登录接口。该旧接口使用 HTTP 传输，建议在可信网络登录。密码仅用于本次请求，不保存在澜音；登录票据会加密保存在本机。</p>
+          <input
+            v-model="kuwoPassword"
+            autocomplete="current-password"
+            type="password"
+            placeholder="密码"
+          />
+          <p class="kuwo-login-note">
+            使用酷我公开客户端登录接口。该旧接口使用 HTTP
+            传输，建议在可信网络登录。密码仅用于本次请求，不保存在澜音；登录票据会加密保存在本机。
+          </p>
           <footer class="picker-footer">
             <span></span>
             <div>
@@ -248,7 +288,13 @@ onBeforeUnmount(() => stopListening?.())
           <span>已选 {{ selectedIds.length }} 个</span>
           <div>
             <t-button variant="text" @click="pickerPlatform = null">取消</t-button>
-            <t-button theme="primary" :disabled="!selectedIds.length" :loading="syncing === pickerPlatform" @click="importSelected">导入所选</t-button>
+            <t-button
+              theme="primary"
+              :disabled="!selectedIds.length"
+              :loading="syncing === pickerPlatform"
+              @click="importSelected"
+              >导入所选</t-button
+            >
           </div>
         </footer>
       </section>
@@ -257,8 +303,6 @@ onBeforeUnmount(() => stopListening?.())
     <p class="privacy-note">
       登录窗口直接连接对应平台。登录凭据加密保存在本机当前用户目录，不会发送到澜音服务器。
     </p>
-
-
   </section>
 </template>
 
@@ -387,8 +431,6 @@ onBeforeUnmount(() => stopListening?.())
   line-height: 1.6;
 }
 
-
-
 .playlist-picker-mask {
   position: fixed;
   z-index: 3000;
@@ -419,19 +461,72 @@ onBeforeUnmount(() => stopListening?.())
   gap: 12px;
 }
 
-.picker-heading { margin-bottom: 16px; }
-.picker-heading h2 { margin: 0 0 6px; font-size: 18px; }
-.picker-heading p { margin: 0; color: var(--td-text-color-secondary); font-size: 13px; }
-.picker-footer { padding-top: 14px; color: var(--td-text-color-secondary); font-size: 13px; }
-.picker-footer > div { display: flex; gap: 8px; }
-.picker-close { border: 0; background: transparent; color: var(--td-text-color-secondary); font-size: 24px; cursor: pointer; }
-.playlist-picker-list { overflow: auto; min-height: 120px; border-top: 1px solid var(--td-component-border); border-bottom: 1px solid var(--td-component-border); }
-.playlist-option { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px 4px; border-bottom: 1px solid var(--td-component-border); cursor: pointer; }
-.playlist-option:last-child { border-bottom: 0; }
-.playlist-option input { accent-color: var(--td-brand-color); }
-.playlist-option img { width: 38px; height: 38px; border-radius: 6px; object-fit: cover; }
-.playlist-option small { margin-left: auto; color: var(--td-text-color-placeholder); white-space: nowrap; }
-.select-all { font-weight: 600; }
-.playlist-option-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
+.picker-heading {
+  margin-bottom: 16px;
+}
+.picker-heading h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.picker-heading p {
+  margin: 0;
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+}
+.picker-footer {
+  padding-top: 14px;
+  color: var(--td-text-color-secondary);
+  font-size: 13px;
+}
+.picker-footer > div {
+  display: flex;
+  gap: 8px;
+}
+.picker-close {
+  border: 0;
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  font-size: 24px;
+  cursor: pointer;
+}
+.playlist-picker-list {
+  overflow: auto;
+  min-height: 120px;
+  border-top: 1px solid var(--td-component-border);
+  border-bottom: 1px solid var(--td-component-border);
+}
+.playlist-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--td-component-border);
+  cursor: pointer;
+}
+.playlist-option:last-child {
+  border-bottom: 0;
+}
+.playlist-option input {
+  accent-color: var(--td-brand-color);
+}
+.playlist-option img {
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.playlist-option small {
+  margin-left: auto;
+  color: var(--td-text-color-placeholder);
+  white-space: nowrap;
+}
+.select-all {
+  font-weight: 600;
+}
+.playlist-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

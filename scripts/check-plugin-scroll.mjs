@@ -14,30 +14,31 @@ try {
   const errors = []
   page.on('pageerror', error => { errors.push(error.message); console.error(error.message) })
   page.on('response', response => { if(response.status()>=400) console.error(response.status(),response.url()) })
-  await page.route('**/src/services/pluginState.ts*', route => route.fulfill({contentType:'text/javascript',body:`import {ref} from '${vueModule}';export const pluginContributions=ref(window.fixtures.map(p=>({pluginId:p.pluginId,manifest:p.manifest,enabled:p.enabled})));export const refreshPluginContributions=async()=>{}; export const activePluginContributions=ref(window.fixtures.filter(p=>p.enabled)); export const selectCapabilityImplementation=async()=>{};export const selectUIImplementation=()=>{};`}))
+  await page.route('**/src/services/pluginState.ts*', route => route.fulfill({contentType:'text/javascript',body:`import {ref} from '${vueModule}';export const pluginContributions=ref(window.fixtures.map(p=>({pluginId:p.pluginId,descriptor:p.descriptor,enabled:p.enabled})));export const refreshPluginContributions=async()=>{}; export const activePluginContributions=ref(window.fixtures.filter(p=>p.enabled)); export const selectCapabilityImplementation=async()=>{};export const selectUIImplementation=()=>{};`}))
   await page.route('**/src/store/LocalUserDetail.ts*', route => route.fulfill({contentType:'text/javascript',body:`export const LocalUserDetailStore=()=>window.testStore;`}))
   await page.route('**/src/components/ServicePlugin/ImportPlaylist.vue*', route => route.fulfill({contentType:'text/javascript',body:`export default {render(){return null}};`}))
   await page.addInitScript(() => {
     const platforms = ['QQ音乐','网易云音乐','酷狗音乐','酷我音乐','咪咕音乐','GitCode']
     window.fixtures = ['聆澜音源','洛雪兼容环境'].map((name,index) => {
       const providers = platforms.slice(0,index?5:6).map((name,i)=>({id:String(i),name,qualities:['128k','flac']}))
-      return {pluginId:String(index),enabled:index===0,pluginInfo:{name,version:'0.1.0',author:'澜音',description:index?'导入洛雪音源，使用熟悉的搜索、歌单和排行榜。':'提供音乐搜索、歌单、排行榜与歌词，支持多平台音源。'},manifest:{name,version:'0.1.0',author:'澜音',contributes:{providers,...(index?{guestAdapters:[{id:"lx",format:"lx",title:"洛雪插件",badge:{label:"LX",backgroundColor:"#16875d",textColor:"#ffffff"}}]}:{})},permissions:[]},supportedSources:Object.fromEntries(providers.map(p=>[p.id,{name:p.name,qualitys:p.qualities}]))}
+      return {pluginId:String(index),enabled:index===0,pluginInfo:{name,version:'0.1.0',author:'澜音',description:index?'导入洛雪音源，使用熟悉的搜索、歌单和排行榜。':'提供音乐搜索、歌单、排行榜与歌词，支持多平台音源。'},descriptor:{name,version:'0.1.0',author:'澜音',actions:[],views:[],pages:[],homeSections:[],accounts:[],styles:[],menus:[],slots:[],importers:[],lyricConverters:[],guestAdapters:[],providers,...(index?{guestAdapters:[{id:"lx",format:"lx",title:"洛雪插件",badge:{label:"LX",backgroundColor:"#16875d",textColor:"#ffffff"}}]}:{}),permissions:[]},supportedSources:Object.fromEntries(providers.map(p=>[p.id,{name:p.name,qualitys:p.qualities}]))}
     })
     // Keep the list overflowing even when settings spacing becomes more compact.
     window.guestFixtures = Array.from({length:12},(_,index)=>({id:String(index),adapterId:'lx',name:`洛雪音源 ${index+1}`,version:'1.0.0',author:'音源开发者',selected:false,state:'stopped',providers:[]}))
     window.fixtures[0].providerMethods=Object.fromEntries(window.fixtures[0].manifest.contributes.providers.map(p=>[p.id,['tracks.search','tracks.resolve','tracks.lyrics','playlists.search','playlists.categories','playlists.list','playlists.get','charts.list','charts.getTracks']]))
     window.fixtures[0].actionIds=['search.tips','search.hot','comments.hot','comments.get','artwork.get','playlist.parse','recognize','album.list']
     window.testStore={initialization:true,userInfo:{pluginId:'0'},init(){}}
-    window.api={plugins:{
+    const fixtureApi ={plugins:{
       loadAllPlugins:async()=>structuredClone(window.fixtures),
       setActive:async id=>{await new Promise(r=>setTimeout(r,250));window.fixtures.forEach(p=>p.enabled=p.pluginId===id);return true},
       setEnabled:async(id,enabled)=>{await new Promise(r=>setTimeout(r,250));window.fixtures.find(p=>p.pluginId===id).enabled=enabled;return{success:true}},
       setProviderOwner:async()=>true,
-      getManifest:async id=>({data:window.fixtures.find(p=>p.pluginId===id).manifest}),
+      getDescriptor:async id=>({data:window.fixtures.find(p=>p.pluginId===id).descriptor}),
       getPermissions:async()=>({data:[]}),
       guestList:async id=>id==='1'?structuredClone(window.guestFixtures):[],
       guestSelect:async(parentId,guestId)=>{window.fixtures.find(p=>p.pluginId===parentId).enabled=true;window.guestFixtures.forEach(g=>{g.selected=g.id===guestId;g.state=g.selected?'ready':'stopped'})}
     }}
+    window.ceruTakeDesktopBridge = () => ({ api: fixtureApi })
   })
   await page.route('**/__plugin_design_preview', route => route.fulfill({contentType:'text/html',body:`<!doctype html><html lang="zh"><meta charset="utf-8"><style>html,body{height:100%;margin:0;overflow:hidden}body{background:#f7f8fa;font-family:'Microsoft YaHei',sans-serif}#app{height:100%;min-height:0}</style><div id="app"></div><script type="module">import{createApp}from'${vueModule}';import Plugin from'/src/views/settings/sections/PluginSection.vue';createApp(Plugin).mount('#app');</script></html>`}))
   await page.goto(baseURL + '/__plugin_design_preview', {waitUntil:'domcontentloaded'})

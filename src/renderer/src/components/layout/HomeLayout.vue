@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
+import { canPersistMusicData } from '@renderer/services/musicDataPersistence'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
+import PluginSidebarIcon from '@renderer/components/PluginSidebarIcon.vue'
 import { SearchIcon, MicrophoneIcon } from 'tdesign-icons-vue-next'
 import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -10,11 +13,15 @@ import { GuideStep } from 'tdesign-vue-next'
 import {
   homeSections,
   activePluginContributions,
+  isPluginPageVisible,
   contributionsLoaded,
   pluginRestorationComplete,
   startupHomeAvailable,
+  chooseSourceEntry,
+  sourcePickerEntries,
   providerIconUrls
 } from '@renderer/services/pluginState'
+import SourceDisabledHint from '../SourceDisabledHint.vue'
 
 let stopWatchEffect: (() => void) | null = null
 
@@ -27,7 +34,7 @@ onMounted(() => {
   // Listen for global hotkey to open audio output selector
   // Note: Logic moved to App.vue to support global toggle and prevent duplicate listeners.
   // This listener is removed to avoid conflict.
-  // window.electron.ipcRenderer.on('hotkeys:toggle-audio-output-selector', () => {
+  // desktopBridge.electron.ipcRenderer.on('hotkeys:toggle-audio-output-selector', () => {
   //   router.push({
   //     path: '/settings',
   //     query: { category: 'playlist', section: 'audio-output', t: Date.now() }
@@ -106,13 +113,15 @@ const menuList = computed(() =>
   baseMenuList.filter((item) => item.path !== '/home/find' || startupHomeAvailable.value)
 )
 const pluginPages = computed(() =>
-  activePluginContributions.value.flatMap(({ pluginId, manifest }) =>
-    (manifest.contributes?.sidebarItems || []).map((page: any) => ({ ...page, pluginId }))
-  )
+  activePluginContributions.value.flatMap(({ pluginId, descriptor, sidebarIconUrls }) =>
+    descriptor.pages.filter((page: any) => page.mount === 'sidebar' && isPluginPageVisible(page)).map((page: any) => ({
+      ...page, pluginId, iconUrl: sidebarIconUrls?.[page.id]
+    }))
+  ).sort((left,right) => (left.order ?? 0) - (right.order ?? 0))
 )
-const menuActive = ref(0)
 const router = useRouter()
 const route = useRoute()
+const isCurrentMenu = (path: string) => route.path === path || route.path.startsWith(path + '/')
 watch(
   [contributionsLoaded, pluginRestorationComplete, homeSections, startupHomeAvailable],
   ([ready, restored, sections]) => {
@@ -128,44 +137,21 @@ watch(
 )
 const source_list_show = ref(false)
 
-// 监听路由变化，更新激活的菜单项
-watch(
-  () => route.path,
-  (newPath) => {
-    const index = menuList.value.findIndex((item) => newPath.startsWith(item.path))
-    menuActive.value = index
-  },
-  { immediate: true }
-)
 
 // 检查是否有插件数据
 const hasPluginData = computed(() => {
   const LocalUserDetail = LocalUserDetailStore()
   return !!(
-    LocalUserDetail.userInfo.pluginId &&
     LocalUserDetail.userInfo.supportedSources &&
     Object.keys(LocalUserDetail.userInfo.supportedSources).length > 0
   )
 })
 
 // 音源名称映射
-const openPluginPage = (page: any) => window.api.plugins.openSurface(page.pluginId, page.view)
-
-// 动态音源列表数据，基于supportedSources
-const sourceList = computed(() => {
-  const LocalUserDetail = LocalUserDetailStore()
-  const supportedSources = LocalUserDetail.userInfo.supportedSources
-
-  if (!supportedSources) return []
-
-  const list = Object.keys(supportedSources).map((key) => ({
-    key,
-    name: supportedSources[key].name || key,
-    icon: sourceicon[key] || key,
-    iconUrl: providerIconUrls.value[key]
-  }))
-  return list
-})
+const openPluginPage = (page: any) =>
+  activePluginContributions.value.find(item => item.pluginId === page.pluginId)?.descriptor.runtime === 3
+    ? router.push({name: 'plugin-page', params: {pluginId: page.pluginId, pageId: page.id}})
+    : desktopBridge.api.plugins.openSurface(page.pluginId, page.view)
 
 // 切换音源选择器显示状态
 const toggleSourceList = () => {
@@ -173,32 +159,9 @@ const toggleSourceList = () => {
 }
 
 // 选择音源
-const selectSource = (sourceKey: string) => {
-  if (!hasPluginData.value) return
-
-  const LocalUserDetail = LocalUserDetailStore()
-  LocalUserDetail.userInfo.selectSources = sourceKey
-
-  // 聚合模式不需要写入质量映射，质量由单曲自身 source 决定
-  if (sourceKey !== 'mix') {
-    const sourceDetail = LocalUserDetail.userInfo.supportedSources?.[sourceKey]
-    if (!LocalUserDetail.userInfo.sourceQualityMap) {
-      LocalUserDetail.userInfo.sourceQualityMap = {}
-    }
-    if (sourceDetail && sourceDetail.qualitys && sourceDetail.qualitys.length > 0) {
-      const saved = LocalUserDetail.userInfo.sourceQualityMap[sourceKey]
-      const useQuality =
-        saved && sourceDetail.qualitys.includes(saved)
-          ? saved
-          : sourceDetail.qualitys[sourceDetail.qualitys.length - 1]
-      LocalUserDetail.userInfo.sourceQualityMap[sourceKey] = useQuality
-      LocalUserDetail.userInfo.selectQuality = useQuality
-    }
-  }
-
-  // 更新音源图标
-  source.value = sourceicon[sourceKey] || sourceKey
+const selectSource = async (sourceKey: string, owner?: string) => {
   source_list_show.value = false
+  await chooseSourceEntry(sourceKey, owner)
 }
 
 // 点击遮罩关闭音源选择器
@@ -206,10 +169,6 @@ const handleMaskClick = () => {
   source_list_show.value = false
 }
 
-const handleClick = (index: number): void => {
-  menuActive.value = index
-  router.push(menuList.value[index].path)
-}
 
 // 导航历史前进后退功能
 const goBack = (): void => {
@@ -230,6 +189,7 @@ const inputRef = ref<any>(null)
 // 处理搜索事件
 const handleSearch = async () => {
   if (!SearchStore.getValue.trim()) return
+  SearchStore.submit(SearchStore.getValue)
   // 记录搜索历史(最近搜索置顶)
   SearchStore.addHistory(SearchStore.getValue)
   // 重新设置搜索关键字
@@ -253,6 +213,7 @@ const handleKeyDown = () => {
 const handleSuggestionSelect = (suggestion: any, _type: any) => {
   SearchStore.setValue(suggestion)
   handleSearch()
+  inputRef.value?.blur?.()
 }
 
 // 已迁移到 App.vue 全局引导
@@ -374,25 +335,30 @@ function checkGuide() {
 
         <nav class="nav-section">
           <t-button
-            v-for="(item, index) in menuList"
-            :key="index"
-            :variant="menuActive == index ? 'base' : 'text'"
-            :class="menuActive == index ? 'nav-button active' : 'nav-button'"
+            v-for="item in menuList"
+            :key="item.path"
+            :variant="isCurrentMenu(item.path) ? 'base' : 'text'"
+            class="nav-button"
+            :class="{ active: isCurrentMenu(item.path) }"
+            :aria-current="isCurrentMenu(item.path) ? 'page' : undefined"
             block
-            @click="handleClick(index)"
+            @click="router.push(item.path)"
           >
-            <i :class="`iconfont ${item.icon} nav-icon`"></i>
-            {{ item.name }}
+            <i :class="`iconfont ${item.icon} nav-icon`" aria-hidden="true"></i>
+            <span class="nav-label">{{ item.name }}</span>
           </t-button>
           <t-button
             v-for="page in pluginPages"
-            :key="page.pluginId + page.id"
+            :key="JSON.stringify([page.pluginId,page.id])"
             variant="text"
             block
             class="nav-button"
+            :class="{active: route.name === 'plugin-page' && route.params.pluginId === page.pluginId && route.params.pageId === page.id}"
             @click="openPluginPage(page)"
-            >{{ page.title }}</t-button
           >
+            <PluginSidebarIcon :url="page.iconUrl" :monochrome="page.icon?.kind === 'host' && !page.icon.name.startsWith('platform.')" />
+            <span class="nav-label">{{ page.title }}</span>
+          </t-button>
         </nav>
       </div>
     </t-aside>
@@ -411,11 +377,11 @@ function checkGuide() {
 
             <div class="search-container">
               <div class="search-input">
-                <div class="source-selector" @click="toggleSourceList">
+                <button type="button" class="search-end-button source-selector" aria-label="选择音源" :aria-expanded="source_list_show" @click="toggleSourceList">
                   <img
                     v-if="currentProviderIcon"
                     :src="currentProviderIcon"
-                    class="icon provider-logo"
+                    class="provider-logo"
                     alt=""
                   />
                   <span v-else-if="source === 'mix'" class="source-fallback">聚</span>
@@ -427,7 +393,7 @@ function checkGuide() {
                   <svg v-else class="icon" aria-hidden="true">
                     <use :xlink:href="`#icon-${source}`"></use>
                   </svg>
-                </div>
+                </button>
                 <!-- 透明遮罩 -->
                 <transition name="mask">
                   <div v-if="source_list_show" class="source-mask" @click="handleMaskClick"></div>
@@ -436,12 +402,16 @@ function checkGuide() {
                 <transition name="source">
                   <div v-if="source_list_show" class="source-list">
                     <div class="items">
-                      <div
-                        v-for="item in sourceList"
-                        :key="item.key"
+                      <SourceDisabledHint v-for="item in sourcePickerEntries.filter(entry => entry.source !== 'local')" :key="item.key" :reason="item.reason" v-slot="{ events }">
+                      <button type="button" v-on="events"
                         class="source-item"
-                        :class="{ active: source === item.icon }"
-                        @click="selectSource(item.key)"
+                        :class="{ active: item.selected }"
+                        :aria-pressed="item.selected"
+                        :aria-disabled="item.disabled || undefined"
+                        :aria-description="item.reason"
+                        :aria-label="item.name"
+                        :disabled="!canPersistMusicData()"
+                        @click="!item.disabled && selectSource(item.source, item.owner)"
                       >
                         <img
                           v-if="item.iconUrl"
@@ -449,15 +419,16 @@ function checkGuide() {
                           class="source-icon provider-logo"
                           alt=""
                         />
-                        <span v-else-if="item.key === 'mix'" class="source-fallback">聚</span>
-                        <span v-else-if="!sourceicon[item.key]" class="source-fallback">{{
+                        <span v-else-if="item.source === 'mix'" class="source-fallback">聚</span>
+                        <span v-else-if="!sourceicon[item.source]" class="source-fallback">{{
                           item.name.slice(0, 1)
                         }}</span>
                         <svg v-else class="source-icon" aria-hidden="true">
-                          <use :xlink:href="`#icon-${item.icon}`"></use>
+                          <use :xlink:href="`#icon-${sourceicon[item.source]}`"></use>
                         </svg>
                         <span class="source-name">{{ item.name }}</span>
-                      </div>
+                      </button>
+                      </SourceDisabledHint>
                     </div>
                   </div>
                 </transition>
@@ -466,41 +437,28 @@ function checkGuide() {
                   v-model="SearchStore.value"
                   :disabled="!hasPluginData"
                   :placeholder="hasPluginData ? '搜索音乐、歌手' : '安装音源插件后搜索在线音乐'"
-                  style="width: 100%"
+                  class="search-field"
                   @enter="handleKeyDown"
                   @focus="SearchStore.setFocus(true)"
                   @blur="SearchStore.setFocus(false)"
-                >
-                  <template #suffix>
-                    <t-button
-                      theme="primary"
-                      variant="text"
-                      shape="circle"
-                      style="display: flex; align-items: center; justify-content: center"
-                      @click="handleSearch"
-                    >
-                      <SearchIcon style="font-size: 16px; color: var(--td-text-color-primary)" />
-                    </t-button>
-                  </template>
-                </t-input>
+                />
+                <button type="button" class="search-end-button search-submit" aria-label="搜索" @click="handleSearch">
+                  <SearchIcon class="search-glyph" />
+                </button>
                 <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
               <t-tooltip v-if="hasPluginData" content="听歌识曲（Beta）" placement="bottom">
-                <t-button
-                  shape="circle"
-                  theme="default"
-                  variant="text"
-                  class="nav-btn"
-                  style="width: 32px; height: 32px; margin: 0; flex-shrink: 0"
+                <button
+                  type="button"
+                  class="recognize-button"
+                  aria-label="听歌识曲"
                   @click="router.push('/home/recognize')"
                 >
-                  <template #icon>
-                    <MicrophoneIcon />
-                  </template>
-                </t-button>
+                  <MicrophoneIcon class="recognize-glyph" aria-hidden="true" />
+                </button>
               </t-tooltip>
 
-              <TitleBarControls :show-account="true"></TitleBarControls>
+              <TitleBarControls class="header-controls" :show-account="true"></TitleBarControls>
             </div>
           </div>
 
@@ -619,14 +577,33 @@ function checkGuide() {
         justify-content: flex-start;
         height: 2.4rem;
         text-align: left;
-        padding: 0.7rem 1rem;
+        padding: 0 1rem;
         border-radius: 0.5rem;
         border: none;
 
-        .nav-icon {
-          margin-right: 0.75rem;
-          font-size: 1rem;
+        :deep(.t-button__text) {
+          align-items: center;
+          gap: 0.75rem;
+          min-width: 0;
         }
+
+        .nav-icon,
+        .sidebar-page-icon {
+          display: grid;
+          place-items: center;
+          flex: 0 0 1rem;
+          width: 1rem;
+          height: 1rem;
+          font-size: 1rem;
+          line-height: 1;
+        }
+
+        .nav-label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
         div {
           display: none !important;
           visibility: hidden;
@@ -700,22 +677,69 @@ function checkGuide() {
     }
 
     .search-container {
+      --end-button-size: max(2rem, var(--td-comp-size-m, 32px));
       display: flex;
       flex: 1;
       position: relative;
       align-items: center;
-      justify-content: space-between;
+      column-gap: 0.25rem;
+
+      .header-controls {
+        margin-inline-start: auto;
+      }
+
+      .search-input,
+      .recognize-button {
+        background-color: var(--td-bg-color-container);
+      }
+
+      .recognize-button {
+        -webkit-app-region: no-drag;
+        margin-inline-start: 0.25rem;
+        display: grid;
+        place-items: center;
+        flex: 0 0 var(--end-button-size);
+        width: var(--end-button-size);
+        height: var(--end-button-size);
+        box-sizing: border-box;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        color: var(--td-text-color-primary);
+        cursor: pointer;
+
+      }
+
+      .search-input .search-submit,
+      .recognize-button {
+        transition: box-shadow 0.2s;
+
+        &:hover {
+          box-shadow: inset 0 0 0 var(--end-button-size) var(--home-source-selector-hover);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--td-brand-color);
+          outline-offset: 2px;
+        }
+
+        > .search-glyph,
+        > .recognize-glyph {
+          width: 1.125rem;
+          height: 1.125rem;
+        }
+      }
 
       .search-input {
+        --end-icon-size: 1.25rem;
         -webkit-app-region: no-drag;
         display: flex;
         align-items: center;
         transition: width 0.3s;
-        padding: 0 0.5rem;
+        padding: 0 0.125rem;
+        height: var(--end-button-size);
         width: min(18.75rem, 400px);
-        margin-right: 0.5rem;
-        border-radius: 1.25rem !important;
-        background-color: var(--td-bg-color-container);
+        border-radius: 999px;
         overflow: visible;
         position: relative;
 
@@ -723,27 +747,49 @@ function checkGuide() {
           width: max(18.75rem, 400px);
         }
 
-        .source-selector {
-          display: flex;
-          align-items: center;
+        .search-field {
+          flex: 1 1 0;
+          min-width: 0;
+        }
+
+        .search-end-button {
+          display: grid;
+          place-items: center;
+          flex: 0 0 var(--end-button-size);
+          height: var(--end-button-size);
           cursor: pointer;
           box-sizing: border-box;
-          padding: 0.25rem;
-          aspect-ratio: 1 / 1;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: var(--td-text-color-primary);
           border-radius: 999px;
-          overflow: hidden;
-          transition: background-color 0.2s;
 
-          &:hover {
-            background-color: var(--home-source-selector-hover);
+          > .icon, > .provider-logo, > .source-fallback {
+            width: var(--end-icon-size);
+            height: var(--end-icon-size);
+          }
+
+          &.search-submit {
+            margin-inline-start: auto;
+          }
+
+          > .provider-logo {
+            border-radius: 50%;
+          }
+
+          &.source-selector {
+            transition: background-color 0.2s;
+
+            &:hover {
+              background-color: var(--home-source-selector-hover);
+            }
           }
 
           .source-fallback {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 2em;
-            aspect-ratio: 1 / 1;
             border-radius: 999px;
             font-size: 0.75rem;
             font-weight: 700;
@@ -811,6 +857,8 @@ function checkGuide() {
           }
 
           .source-item {
+            width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
+            &:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
             border-radius: 5px;
             display: flex;
             align-items: center;
@@ -823,7 +871,9 @@ function checkGuide() {
               margin: 0;
             }
 
-            &:hover {
+            &[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
+
+            &:hover:not([aria-disabled='true']) {
               background-color: var(--home-source-item-hover);
             }
 
@@ -864,10 +914,8 @@ function checkGuide() {
         border-radius: 0rem !important;
         border: none;
         box-shadow: none;
-        &.t-input--suffix {
-          padding-right: 0 !important;
-          background-color: transparent;
-        }
+        padding-inline: 0;
+        background-color: transparent;
       }
 
       .settings-btn {

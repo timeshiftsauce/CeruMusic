@@ -1,15 +1,15 @@
 <template>
   <div class="user-capsule-container">
     <n-dropdown
-      v-model:show="menuShown"
       v-if="(authStore.isAuthenticated && authStore.user) || pluginAccountItems.length"
+      v-model:show="menuShown"
       style="-webkit-app-region: none"
       :options="userOpt"
       placement="bottom-start"
       trigger="hover"
       :theme-overrides="dropdownTheme"
       @select="handleMenuSelect"
-      @update:show="(show) => show && refreshPluginAccounts()"
+      @update:show="(show) => show && refreshPluginAccounts(undefined, true)"
     >
       <div
         class="user-capsule"
@@ -19,39 +19,37 @@
             : ''
         "
       >
-        <t-avatar
-          v-if="authStore.user?.picture"
-          :image="authStore.user.picture"
-          size="small"
-          style="margin-right: 4px"
-        />
+        <t-avatar v-if="authStore.user?.picture" :image="authStore.user.picture" size="small" />
         <t-avatar
           v-else
           size="small"
-          style="margin-right: 4px; background: rgba(125, 125, 125, 0.2); color: inherit"
+          style="background: rgba(125, 125, 125, 0.2); color: inherit"
           >{{ Name.split('')[0] }}</t-avatar
         >
         <span class="user-name">{{ authStore.isAuthenticated ? Name : '未登录' }}</span>
       </div>
     </n-dropdown>
     <div v-else class="user-capsule" @click="handleLogin">
-      <t-avatar :image="defaultAvatar" size="small" style="margin-right: 4px" />
+      <t-avatar :image="defaultAvatar" size="small" />
       <span class="user-name">未登录</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import defaultAvatar from '@renderer/assets/user.webp'
 import { useAuthStore } from '@renderer/store/Auth'
 import { PoweroffIcon, UserIcon } from 'tdesign-icons-vue-next'
 import { NIcon, type DropdownOption } from 'naive-ui'
-import { Avatar, Tag, MessagePlugin } from 'tdesign-vue-next'
+import { Avatar, Tag } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   pluginAccountItems,
   pluginAccountSummaries,
+  pluginConnections,
   refreshPluginAccounts
 } from '@renderer/services/pluginAccounts'
 import { h, type Component } from 'vue'
@@ -122,6 +120,23 @@ const mainAccountOptions: DropdownOption[] = [
     ]
   }
 ]
+function loginChoices(item: (typeof pluginAccountItems.value)[number]) {
+  const methods = item.loginMethods.filter(
+    (method) =>
+      method === 'form' || method === 'qrcode' || method === 'oauth' || method === 'browser'
+  )
+  return methods.map((method) => ({
+    key: item.key + ':login:' + method,
+    label:
+      method === 'qrcode'
+        ? '扫码登录'
+        : method === 'oauth'
+          ? '浏览器授权'
+          : method === 'browser'
+            ? '网页登录'
+            : '表单登录'
+  }))
+}
 const userOpt = computed<DropdownOption[]>(() => [
   ...(authStore.isAuthenticated
     ? mainAccountOptions
@@ -133,16 +148,36 @@ const userOpt = computed<DropdownOption[]>(() => [
     key: item.key,
     props: { class: 'plugin-account-option' },
     children:
-      pluginAccountSummaries.value[item.key]?.signedIn && item.logoutAction
+      item.runtime === 3 && pluginConnections.value[item.key]?.rows.length
         ? [
-            {
-              key: item.key + ':logout',
-              label: '退出登录',
-              disabled: loggingOut.value === item.key,
-              icon: renderIcon(PoweroffIcon)
-            }
+            ...pluginConnections.value[item.key].rows.map((row) => ({
+              key: item.key + (row.expired ? ':renew:' : ':switch:') + row.id,
+              label: row.summary.displayName + (row.expired ? ' · 需要重新登录' : ''),
+              disabled: !row.expired && row.id === pluginConnections.value[item.key].active
+            })),
+            ...(item.multiple && loginChoices(item).length
+              ? [
+                  {
+                    key: item.key + ':add',
+                    label: '添加账号',
+                    ...(loginChoices(item).length > 1 ? { children: loginChoices(item) } : {})
+                  }
+                ]
+              : []),
+            { key: item.key + ':logout', label: '退出当前账号', icon: renderIcon(PoweroffIcon) }
           ]
-        : undefined,
+        : item.runtime === 3 && loginChoices(item).length > 1
+          ? loginChoices(item)
+          : pluginAccountSummaries.value[item.key]?.signedIn && item.logoutAction
+            ? [
+                {
+                  key: item.key + ':logout',
+                  label: '退出登录',
+                  disabled: loggingOut.value === item.key,
+                  icon: renderIcon(PoweroffIcon)
+                }
+              ]
+            : undefined,
     label: () => {
       const account = pluginAccountSummaries.value[item.key]
       return h(
@@ -160,7 +195,12 @@ const userOpt = computed<DropdownOption[]>(() => [
         [
           h(
             Avatar,
-            { image: account?.avatarUrl || defaultAvatar, size: '34px', shape: 'circle' },
+            {
+              image: account?.avatarUrl || defaultAvatar,
+              size: '34px',
+              shape: 'circle',
+              style: 'flex-shrink: 0'
+            },
             { default: () => item.title.slice(0, 1) }
           ),
           h('span', { class: 'plugin-account-details' }, [
@@ -175,7 +215,13 @@ const userOpt = computed<DropdownOption[]>(() => [
             ? [
                 h(
                   Tag,
-                  { size: 'small', theme: 'warning', shape: 'round', variant: 'light' },
+                  {
+                    size: 'small',
+                    theme: 'warning',
+                    shape: 'round',
+                    variant: 'light',
+                    style: 'display: inline-flex; align-items: center; flex-shrink: 0'
+                  },
                   { default: () => account.badge }
                 )
               ]
@@ -192,12 +238,55 @@ const handleLogin = () => {
 
 const handleMenuSelect = async (key: string | number) => {
   menuShown.value = false
+  const modern = pluginAccountItems.value.find(
+    (item) => item.runtime === 3 && (item.key === key || String(key).startsWith(item.key + ':'))
+  )
+  if (modern) {
+    const command = String(key).slice(modern.key.length + 1)
+    if (!command && !loginChoices(modern).length && modern.view) {
+      await desktopBridge.api.plugins
+        .openSurface(modern.pluginId, modern.view)
+        .catch((error) => MessagePlugin.error(error.message))
+      return
+    }
+    const action = command.startsWith('switch:')
+      ? 'switch'
+      : command === 'logout'
+        ? 'logout'
+        : 'login'
+    try {
+      const changed = await desktopBridge.api.plugins.accountChange(
+        modern.pluginId,
+        modern.id,
+        action,
+        action === 'switch'
+          ? command.slice(7)
+          : command.startsWith('renew:')
+            ? command.slice(6)
+            : undefined,
+        command === 'login:qrcode'
+          ? 'qrcode'
+          : command === 'login:form'
+            ? 'form'
+            : command === 'login:oauth'
+              ? 'oauth'
+              : command === 'login:browser'
+                ? 'browser'
+                : undefined
+      )
+      if (action === 'switch' && !changed) MessagePlugin.info('插件已取消切换，仍使用原账号')
+      await refreshPluginAccounts(modern.pluginId)
+    } catch (error: any) {
+      MessagePlugin.error(error.message || '账号操作失败')
+    }
+    return
+  }
   const logout = pluginAccountItems.value.find((item) => item.key + ':logout' === key)
   if (logout) {
     if (loggingOut.value) return
     loggingOut.value = logout.key
     try {
-      await window.api.plugins.accountLogout(logout.pluginId, logout.id)
+      await desktopBridge.api.plugins.accountLogout(logout.pluginId, logout.id)
       await refreshPluginAccounts(logout.pluginId)
     } catch (error: any) {
       MessagePlugin.error(error.message || '退出登录失败')
@@ -208,7 +297,7 @@ const handleMenuSelect = async (key: string | number) => {
   }
   const account = pluginAccountItems.value.find((item) => item.key === key)
   if (account) {
-    void window.api.plugins
+    void desktopBridge.api.plugins
       .openSurface(account.pluginId, account.view)
       .catch((error) => MessagePlugin.error(error.message || '打开账号失败'))
   } else if (key === 'login') {
@@ -240,6 +329,13 @@ const Name = computed(() => {
 :global(.n-dropdown-option-body.plugin-account-option) {
   height: auto !important;
   min-height: 58px;
+  display: flex;
+  align-items: center;
+}
+:global(.n-dropdown-option-body.plugin-account-option .n-dropdown-option-body__label) {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 :global(.plugin-account-details) {
   flex: 1;
@@ -276,9 +372,9 @@ const Name = computed(() => {
   .user-capsule {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 6px;
 
-    padding: 0.15rem 0.6rem 0.15rem calc((2rem - 24px) / 2);
+    padding: 0 8px 0 4px;
     border-radius: 999px;
     cursor: pointer;
     transition: background-color 0.2s;

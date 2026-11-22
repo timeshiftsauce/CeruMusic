@@ -12,7 +12,7 @@ title: 开发环境与依赖
 首次开发推荐从音乐数据模板开始：
 
 ```shell
-npm create ceru-plugin@latest my-plugin -- --template source --lang ts
+npm create ceru-plugin@0.3.16 my-plugin -- --template source --lang ts
 cd my-plugin
 npm install
 npm run dev

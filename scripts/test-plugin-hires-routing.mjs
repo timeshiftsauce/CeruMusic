@@ -64,7 +64,21 @@ try {
   state.contributions = {
     value: ['a', 'b'].map((name) => ({
       pluginId: 'plugin-' + name,
-      manifest: { name, contributes: { providers: [{ id: 'shared', name: 'Shared' }] } },
+      descriptor: {
+        name,
+        providers: [{ id: 'shared', name: 'Shared' }],
+        actions: [],
+        accounts: [],
+        homeSections: [],
+        pages: [],
+        importers: [],
+        slots: [],
+        menus: [],
+        styles: [],
+        lyricConverters: [],
+        guestAdapters: [],
+        views: []
+      },
       providerMethods: { shared: ['tracks.artworkHires', 'tracks.future'] },
       actionIds: ['artwork.hires']
     }))
@@ -101,7 +115,10 @@ try {
       '../../utils/path': 'export const getAppDirPath=()=>"unused"',
       '../networkProxy': 'export const getRequestAgentsFor=()=>({})',
       axios: 'export default {}',
-      './manager/PluginHost': 'export default class Host {}',
+      './v2/V2PluginHost': 'export default class Host {}',
+      '../networkProxy': 'export const getRequestAgentsFor=()=>{}',
+      './runtimes': 'export const readInstalledArtifact=()=>{}, sniffManifestVersion=()=>{}',
+      './v2/manifest': 'export const readV2Descriptor=()=>{}',
       './uiBridge': 'export const cancelPluginUI=()=>{}; export const pluginChanged=()=>{}',
       './logger': 'export default class Logger {}; export const getLog=()=>{}',
       './pluginConfig': [
@@ -116,8 +133,8 @@ try {
       ]
         .map((name) => `export const ${name}=()=>({})`)
         .join(';'),
-      '@shiqianjiang/ceru-plugin-core': 'export const readPluginArtifact=()=>{}',
-      '@shiqianjiang/ceru-plugin-core/guests': 'export class GuestStore {}',
+      'ceru-plugin-core-v2': 'export const readPluginArtifact=()=>{}',
+      'ceru-plugin-core-v2/guests': 'export class GuestStore {}',
       './storage': 'export const deletePluginStorage=()=>{}'
     },
     '\nexport const fixture = { loadedPlugins, installedPlugins };'

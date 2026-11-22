@@ -27,6 +27,7 @@
 </template>
 
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -50,8 +51,8 @@ const fetchBoards = async () => {
       boards.value = []
       return
     }
-    // Using window.api.music.requestSdk which maps to main process service
-    const res = await (window as any).api.music.requestSdk('getLeaderboards', { source })
+    // Using desktopBridge.api.music.requestSdk which maps to main process service
+    const res = await (desktopBridge as any).api.music.requestSdk('getLeaderboards', { source })
     if (request !== requestSequence) return
     if (res?.error) throw new Error(res.error)
     boards.value = Array.isArray(res) ? res : []

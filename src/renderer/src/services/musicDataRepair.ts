@@ -1,3 +1,4 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { h } from 'vue'
 import { DialogPlugin, Checkbox, Button } from 'tdesign-vue-next'
 import {
@@ -35,7 +36,7 @@ export function startupNeedsRepair(): boolean {
 export async function inspectMusicDataAtStartup() {
   const raw = snapshot()
   try {
-    baseline = { raw, inspection: await window.api.musicDataRepair.inspect() }
+    baseline = { raw, inspection: await desktopBridge.api.musicDataRepair.inspect() }
   } catch (error) {
     // Keep writes blocked, but allow welcome and the application shell to render.
     console.error('音乐数据检查失败，将在欢迎页结束后报告:', error)
@@ -43,7 +44,7 @@ export async function inspectMusicDataAtStartup() {
 }
 
 export async function coordinateMusicDataRepair(force = false): Promise<boolean> {
-  const api = window.api.musicDataRepair
+  const api = desktopBridge.api.musicDataRepair
   setMusicDataPersistence(false)
   let resumeWrites = false
   let rehydrate = false
@@ -213,7 +214,7 @@ function showRepairResult(result: any): Promise<void> {
                 h('p', `备份位置：${result.directory}`),
                 h(
                   Button,
-                  { variant: 'outline', onClick: () => window.api.musicDataRepair.openBackup() },
+                  { variant: 'outline', onClick: () => desktopBridge.api.musicDataRepair.openBackup() },
                   () => '打开备份目录'
                 )
               ]

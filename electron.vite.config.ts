@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
+import { build as buildBrowserLibrary, type Plugin } from 'vite'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -8,8 +9,52 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
+
+function desktopViewLibrary(): Plugin {
+  const entry = resolve(__dirname, 'src/renderer/src/plugin/desktopComponents.ts')
+  return {
+    name: 'desktop-player-view-library',
+    async buildStart() {
+      this.addWatchFile(entry)
+      const result = await buildBrowserLibrary({
+        root: __dirname,
+        configFile: false,
+        publicDir: false,
+        plugins: [vue()],
+        build: {
+          write: false,
+          lib: { entry, formats: ['iife'], name: 'DesktopComponents' },
+          rollupOptions: {
+            external: ['vue'],
+            output: { globals: { vue: 'desktopVue' }, exports: 'named' }
+          }
+        }
+      })
+      const files = (Array.isArray(result) ? result : [result]).flatMap((part) =>
+        'output' in part ? part.output : []
+      )
+      const entryChunk = files.find((file) => file.type === 'chunk' && file.isEntry)
+      const stylesheet = files.find(
+        (file) => file.type === 'asset' && file.fileName.endsWith('.css')
+      )
+      if (entryChunk?.type !== 'chunk' || stylesheet?.type !== 'asset')
+        throw Error('Missing desktop component library output')
+      for (const id of entryChunk.moduleIds)
+        if (!id.startsWith('\0')) this.addWatchFile(id.split('?')[0])
+      this.emitFile({
+        type: 'asset',
+        fileName: 'desktop-components.json',
+        source: JSON.stringify({
+          factory: 'function(desktopVue){' + entryChunk.code + '\nreturn DesktopComponents}',
+          styles: Buffer.from(stylesheet.source).toString('utf8')
+        })
+      })
+    }
+  }
+}
 export default defineConfig(({ command }) => ({
   main: {
+    plugins: [desktopViewLibrary()],
     resolve: {
       alias: {
         '@common': resolve('src/common')
@@ -38,6 +83,7 @@ export default defineConfig(({ command }) => ({
     }
   },
   preload: {
+    build: { externalizeDeps: { exclude: ['@electron-toolkit/preload'] } },
     resolve: {
       alias: {
         '@common': resolve('src/common')
@@ -45,9 +91,13 @@ export default defineConfig(({ command }) => ({
     }
   },
   renderer: {
-    // Contract-only ESM stays live when the plugin SDK is upgraded during development.
+    // Local runtime packages can change without a version bump during development.
+    // Keep their ESM live so Vite does not retain a previous vendor archive.
     optimizeDeps: {
-      exclude: ['@shiqianjiang/ceru-plugin-sdk'],
+      exclude: [
+        '@shiqianjiang/ceru-plugin-sdk',
+        '@shiqianjiang/ceru-plugin-core/component-runtime'
+      ],
       include: ['@applemusic-like-lyrics/core', '@applemusic-like-lyrics/vue', 'qrcode']
     },
     build: {
@@ -86,6 +136,11 @@ export default defineConfig(({ command }) => ({
            */
           manualChunks(id: string) {
             if (!id.includes('node_modules')) return undefined
+            // The injected Vue SDK imports TDesign at module initialization.
+            // Keep it beside TDesign to avoid a misc -> TDesign -> misc cycle.
+            if (/[\\/]@shiqianjiang[\\/]ceru-plugin-sdk[\\/]dist[\\/]vue[\\/]/.test(id)) {
+              return 'vendor-tdesign'
+            }
             // 匹配优先级从特定到一般
             if (
               /[\\/]node_modules[\\/]@vue[\\/]/.test(id) ||

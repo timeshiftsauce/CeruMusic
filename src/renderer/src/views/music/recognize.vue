@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, onUnmounted } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import {
   MicrophoneIcon,
   StopCircleIcon,
@@ -12,7 +13,7 @@ import {
   PlayIcon
 } from 'tdesign-icons-vue-next'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { playSong } from '@renderer/utils/audio/globaPlayList'
+import { playSong, seekTo } from '@renderer/utils/audio/globaPlayList'
 import { searchValue } from '@renderer/store/search'
 import { useRouter } from 'vue-router'
 
@@ -94,7 +95,7 @@ async function start() {
     }
 
     // 必须先调用 prepareCapture 拿一次性媒体采集授权（10s 过期）
-    const capturePrepared = await window.api.systemAudio.prepareCapture()
+    const capturePrepared = await desktopBridge.api.systemAudio.prepareCapture()
     if (!capturePrepared) {
       MessagePlugin.error('当前采集请求未获授权，请重新点击开始识别')
       reset()
@@ -102,7 +103,7 @@ async function start() {
     }
 
     // Get system audio stream
-    const sourceId = await window.api.systemAudio.getDefaultScreenSourceId()
+    const sourceId = await desktopBridge.api.systemAudio.getDefaultScreenSourceId()
     if (!sourceId) {
       MessagePlugin.error('无法获取系统音频采集源，请重新点击开始识别')
       reset()
@@ -210,7 +211,7 @@ async function tryRecognize(blob: Blob) {
         const fp = await gen(pcm8k)
         console.log('[AudioRecognize] Generated FP length:', fp.length)
 
-        const result = await window.api.music.requestSdk('recognize', {
+        const result = await desktopBridge.api.music.requestSdk('recognize', {
           source: 'wy',
           fp,
           duration: audioBuffer.duration
@@ -297,7 +298,7 @@ async function onFilePicked(e: Event) {
       const gen = (window as any).GenerateFP
       if (typeof gen === 'function') {
         const fp = await gen(slice)
-        const result = await window.api.music.requestSdk('recognize', {
+        const result = await desktopBridge.api.music.requestSdk('recognize', {
           source: 'wy',
           fp,
           duration: slice.length / 8000
@@ -351,16 +352,10 @@ async function handlePlayResult(song: any) {
   if (song.startTime && song.startTime > 0) {
     // startTime is usually in ms
     const seconds = song.startTime / 1000
-    // Wait a bit for player to be ready or just set it
-    // The player might need time to load.
-    // playSong is async and waits for start(), but buffering might take time.
-    // However, setCurrentTime in store just sets the state, which should be fine if audio element is present.
+    const media = audioStore.Audio.audio, url = audioStore.Audio.url
     setTimeout(() => {
-      audioStore.setCurrentTime(seconds)
-      if (audioStore.Audio.audio) {
-        audioStore.Audio.audio.currentTime = seconds
-      }
-      MessagePlugin.success(`已跳转至识别片段: ${formatTime(seconds)}`)
+      if (audioStore.Audio.audio !== media || audioStore.Audio.url !== url) return
+      void seekTo(seconds).catch(console.warn)
     }, 500)
   }
 }
@@ -373,7 +368,7 @@ function formatTime(seconds: number) {
 
 function handleSearchResult(song: any) {
   if (!song) return
-  searchStore.setValue(song.name)
+  searchStore.submit(song.name)
   router.push({ name: 'search' })
 }
 

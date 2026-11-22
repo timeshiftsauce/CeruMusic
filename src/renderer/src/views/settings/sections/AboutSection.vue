@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref } from 'vue'
 import Versions from '@renderer/components/Versions.vue'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
+import { CertificateIcon, ErrorCircleIcon, FolderIcon, HistoryIcon, LockOnIcon } from 'tdesign-icons-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
+import ReleaseNotesDialog from '@renderer/components/ReleaseNotesDialog.vue'
+
+const releaseNotesDialog = ref<InstanceType<typeof ReleaseNotesDialog>>()
 
 const settingsStore = useSettingsStore()
 const { settings } = storeToRefs(settingsStore)
@@ -21,7 +27,7 @@ const { checkForUpdates } = useAutoUpdate()
 
 const getAppVersion = async () => {
   try {
-    const version = await window.electron.ipcRenderer.invoke('get-app-version')
+    const version = await desktopBridge.electron.ipcRenderer.invoke('get-app-version')
     if (version) {
       appVersion.value = version
     }
@@ -46,6 +52,15 @@ const handleCheckUpdate = async () => {
 
 const openLink = (url: string) => {
   window.open(url, '_blank')
+}
+
+const handleOpenLogs = async () => {
+  try {
+    const result = await desktopBridge.api.openLogsDirectory()
+    if (!result?.success) MessagePlugin.error(result?.message || '打开日志目录失败')
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error ? error.message : '打开日志目录失败')
+  }
 }
 </script>
 
@@ -72,7 +87,23 @@ const openLink = (url: string) => {
 
     <!-- 版本信息 -->
     <div id="about-version" class="setting-group">
-      <h3>版本信息</h3>
+      <div class="group-heading">
+        <div>
+          <h3>版本信息</h3>
+          <p>查看当前运行环境与应用更新</p>
+        </div>
+        <t-tooltip content="更新日志" placement="top">
+          <t-button
+            variant="text"
+            shape="circle"
+            size="large"
+            aria-label="更新日志"
+            @click="releaseNotesDialog?.open()"
+          >
+            <template #icon><HistoryIcon /></template>
+          </t-button>
+        </t-tooltip>
+      </div>
       <div class="version-section">
         <Versions />
         <div class="update-actions">
@@ -80,11 +111,18 @@ const openLink = (url: string) => {
             <t-switch v-model:value="autoUpdate" @change="updateAutoUpdate"></t-switch>
             <div>应用启动时检查更新</div>
           </div>
-          <t-button theme="primary" :loading="isCheckingUpdate" @click="handleCheckUpdate">
-            {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
-          </t-button>
+          <div class="update-buttons">
+            <t-button variant="outline" @click="handleOpenLogs">
+              <template #icon><FolderIcon /></template>
+              打开日志目录
+            </t-button>
+            <t-button theme="primary" :loading="isCheckingUpdate" @click="handleCheckUpdate">
+              {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
+            </t-button>
+          </div>
         </div>
       </div>
+      <ReleaseNotesDialog ref="releaseNotesDialog" />
     </div>
 
     <!-- 技术栈 -->
@@ -125,9 +163,7 @@ const openLink = (url: string) => {
           @click="openLink('https://sadidc.com/aff/VQAXGBZT')"
         >
           <span class="tech-name">伤心的云</span>
-          <span class="tech-desc"
-            >🔗 强烈推荐 服务器低至一元 1000mbps超高带宽,16h16g 38.99元/月
-          </span>
+          <span class="tech-desc">强烈推荐 服务器低至一元 1000mbps超高带宽,16h16g 38.99元/月</span>
         </div>
         <div
           class="tech-item link"
@@ -135,7 +171,7 @@ const openLink = (url: string) => {
           @click="openLink('https://www.rainyun.com/sqj_')"
         >
           <span class="tech-name">雨云</span>
-          <span class="tech-desc">🔗 提供的性价比云服务支持，新人半价起，服务器低至7.5元</span>
+          <span class="tech-desc">提供的性价比云服务支持，新人半价起，服务器低至7.5元</span>
         </div>
       </div>
     </div>
@@ -188,21 +224,21 @@ const openLink = (url: string) => {
       <h3>法律声明</h3>
       <div class="legal-notice">
         <div class="notice-item">
-          <h4>🔒 数据与内容责任</h4>
+          <h4><LockOnIcon /> 数据与内容责任</h4>
           <p>
             本项目不直接获取、存储、传输任何音乐数据或版权内容，仅提供插件运行框架。
             用户通过插件获取的所有数据，其合法性由插件提供者及用户自行负责。
           </p>
         </div>
         <div class="notice-item">
-          <h4>⚖️ 版权合规要求</h4>
+          <h4><CertificateIcon /> 版权合规要求</h4>
           <p>
             用户承诺仅通过合规插件获取音乐相关信息，且获取、使用版权内容的行为符合
             《中华人民共和国著作权法》及相关法律法规，不侵犯任何第三方合法权益。
           </p>
         </div>
         <div class="notice-item">
-          <h4>🚫 使用限制</h4>
+          <h4><ErrorCircleIcon /> 使用限制</h4>
           <p>
             本项目仅允许用于非商业、纯技术学习目的，禁止用于任何商业运营、盈利活动，
             禁止修改后用于侵犯第三方权益的场景。
@@ -212,22 +248,22 @@ const openLink = (url: string) => {
       <h3 style="margin-top: 2rem">关于我们</h3>
       <div class="legal-notice">
         <div class="notice-item">
-          <h4>😊 时迁酱</h4>
+          <h4>时迁酱</h4>
           <p>
             你好呀好呀～我是 (时迁酱)
             <br />
-            一枚普普通通的高中生，因为好奇+喜欢，悄悄自学了一点编程✨！
+            一枚普普通通的高中生，因为好奇+喜欢，悄悄自学了一点编程！
             <br />
             <br />
             没想到今天你能用上我做的软件——「澜音」，它其实是我学 Electron 时孵出来的小demo！
             <br />
-            看到它真的能运行、还有人愿意用，我真的超级开心＋骄傲的！💖
+            看到它真的能运行、还有人愿意用，我真的超级开心＋骄傲的！
             <br />
             <br />
-            当然啦，平时还是要乖乖写作业上课哒～但我还是会继续挤出时间，让澜音慢慢长大，越走越远哒！💪
+            当然啦，平时还是要乖乖写作业上课哒～但我还是会继续挤出时间，让澜音慢慢长大，越走越远哒！
             <br />
             <br />
-            如果你也喜欢它，或者想给我加点零食鼓励🧋，欢迎打赏赞助哟～谢谢可爱的你！！
+            如果你也喜欢它，或者想给我加点零食鼓励，欢迎打赏赞助哟～谢谢可爱的你！！
             <img
               src="https://oss.shiqianjiang.cn/storage/default/20250907/image-2025082711173bb1bba3608ef15d0e1fb485f80f29c728186.png"
               alt="赞赏"
@@ -271,6 +307,9 @@ const openLink = (url: string) => {
 
 <style lang="scss" scoped>
 .settings-section {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding-bottom: 1rem;
   animation: fadeInUp 0.4s ease-out;
   animation-fill-mode: both;
 }
@@ -298,6 +337,10 @@ const openLink = (url: string) => {
     color: var(--settings-text-primary);
   }
 
+  > h3 {
+    margin-bottom: 1rem;
+  }
+
   > p {
     margin: 0 0 1.5rem;
     color: var(--settings-text-secondary);
@@ -310,12 +353,18 @@ const openLink = (url: string) => {
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  padding: 1rem 0;
+  padding: 1.25rem;
+  border: 1px solid var(--settings-group-border);
+  border-radius: 0.75rem;
+  background: var(--settings-tech-item-bg);
 
   .app-logo {
     width: 4rem;
     height: 4rem;
     flex-shrink: 0;
+    padding: 0.5rem;
+    border-radius: 0.75rem;
+    background: var(--settings-group-bg);
 
     img {
       width: 100%;
@@ -469,10 +518,18 @@ const openLink = (url: string) => {
     }
 
     h4 {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       margin: 0 0 0.5rem;
       font-size: 0.875rem;
       font-weight: 600;
       color: var(--settings-text-primary);
+
+      :deep(svg) {
+        flex: 0 0 18px;
+        color: var(--td-brand-color-5);
+      }
     }
 
     p {
@@ -493,14 +550,41 @@ const openLink = (url: string) => {
 
   .update-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
 
     .update-option {
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
+
+    .update-buttons {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-left: auto;
+    }
+  }
+}
+
+.group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  h3 {
+    margin-bottom: 0.25rem;
+  }
+
+  p {
+    margin: 0;
+    color: var(--settings-text-secondary);
+    font-size: 0.875rem;
   }
 }
 
@@ -518,6 +602,10 @@ const openLink = (url: string) => {
 }
 
 @media (max-width: 768px) {
+  .setting-group {
+    padding: 1rem;
+  }
+
   .app-header {
     flex-direction: column;
     text-align: center;
@@ -533,6 +621,11 @@ const openLink = (url: string) => {
   }
 
   .contact-actions {
+    flex-direction: column;
+  }
+
+  .group-heading {
+    align-items: flex-start;
     flex-direction: column;
   }
 }

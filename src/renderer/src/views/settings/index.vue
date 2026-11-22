@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import PluginPage from '@renderer/components/PluginPage.vue'
+import { activePluginContributions, isPluginPageVisible } from '@renderer/services/pluginState'
 import type { DropdownMenuProps, DropdownOption } from 'naive-ui'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import {
@@ -23,6 +25,15 @@ import { searchItems, type SearchItem } from './searchIndex'
 import { settingsCategories, settingsGroups, resolveSettingsCategory, type SettingsCategoryKey } from './categories'
 
 const activeCategory = ref<SettingsCategoryKey>('appearance')
+
+const selectedExtension = ref('')
+const extensionPages = computed(() => activePluginContributions.value.flatMap(({pluginId,descriptor}) =>
+  descriptor.runtime === 3 ? descriptor.pages.filter((page: any) => page.mount === 'settings' && isPluginPageVisible(page)).map((page: any) => ({...page,pluginId,key:JSON.stringify([pluginId,page.id]),pluginName:descriptor.name})) : []
+).sort((left,right) => (left.order ?? 0) - (right.order ?? 0) || left.key.localeCompare(right.key)))
+const extension = computed(() => extensionPages.value.find(page => page.key === selectedExtension.value))
+watch(extensionPages, pages => {
+  if (selectedExtension.value && !pages.some(page => page.key === selectedExtension.value)) selectedExtension.value = ''
+})
 const route = useRoute()
 const contentPanelRef = ref<HTMLElement>()
 const scrollPositions: Record<string, number> = {}
@@ -62,6 +73,7 @@ function cancelPendingScroll() {
   highlightedElement = undefined
 }
 const switchCategory = async (categoryKey: string) => {
+  selectedExtension.value = ''
   const key = resolveSettingsCategory(categoryKey)
   if (!key || activeCategory.value === key) return
   cancelPendingScroll()
@@ -144,14 +156,32 @@ onBeforeUnmount(cancelPendingScroll)
               :key="category.key"
               type="button"
               class="nav-item"
-              :class="{ active: activeCategory === category.key }"
-              :aria-current="activeCategory === category.key ? 'page' : undefined"
+              :class="{ active: !extension && activeCategory === category.key }"
+              :aria-current="!extension && activeCategory === category.key ? 'page' : undefined"
               :title="category.description"
               @click="switchCategory(category.key)"
             >
               <component :is="categoryIcons[category.key]" class="nav-icon" aria-hidden="true" />
               <span>{{ category.label }}</span>
-              <span v-if="activeCategory === category.key" class="active-dot" aria-hidden="true"></span>
+              <span
+                v-if="!extension && activeCategory === category.key"
+                class="active-dot"
+                aria-hidden="true"
+              ></span>
+            </button>
+          </div>
+          <div v-if="extensionPages.length" class="nav-group">
+            <div class="nav-group-label">插件页面</div>
+            <button
+              v-for="page in extensionPages"
+              :key="page.key"
+              type="button"
+              class="nav-item"
+              :class="{ active: extension?.key === page.key }"
+              :title="page.pluginName"
+              @click="selectedExtension = page.key"
+            >
+              {{ page.title }}
             </button>
           </div>
         </nav>
@@ -159,11 +189,19 @@ onBeforeUnmount(cancelPendingScroll)
       <main class="content-panel" aria-label="设置内容">
         <div class="page-heading">
           <div class="page-heading-copy">
-            <h1>{{ currentCategory.label }}</h1>
-            <p>{{ currentCategory.description }}</p>
+            <h1>{{ extension?.title ?? currentCategory.label }}</h1>
+            <p>
+              {{
+                extension
+                  ? extension.pluginName === extension.title
+                    ? '管理插件账号与功能'
+                    : extension.pluginName
+                  : currentCategory.description
+              }}
+            </p>
           </div>
           <n-dropdown
-            v-if="sectionLinks.length > 1 && activeCategory !== 'plugins'"
+            v-if="!extension && sectionLinks.length > 1 && activeCategory !== 'plugins'"
             trigger="click"
             placement="bottom-end"
             :options="sectionDropdownOptions"
@@ -177,10 +215,27 @@ onBeforeUnmount(cancelPendingScroll)
             </n-button>
           </n-dropdown>
         </div>
-        <div ref="contentPanelRef" class="panel-content" :class="{ 'panel-content-contained': activeCategory === 'plugins' }">
-          <div class="section-container" :class="{ 'section-container-wide': activeCategory === 'plugins' }">
-            <KeepAlive>
-              <component :is="currentComponent" :key="activeCategory" @switch-category="switchCategory" />
+        <div
+          ref="contentPanelRef"
+          class="panel-content"
+          :class="{ 'panel-content-contained': activeCategory === 'plugins' }"
+        >
+          <div
+            class="section-container"
+            :class="{ 'section-container-wide': activeCategory === 'plugins' }"
+          >
+            <PluginPage
+              v-if="extension"
+              :key="extension.key"
+              :plugin-id="extension.pluginId"
+              :page-id="extension.id"
+            />
+            <KeepAlive v-else>
+              <component
+                :is="currentComponent"
+                :key="activeCategory"
+                @switch-category="switchCategory"
+              />
             </KeepAlive>
           </div>
         </div>
@@ -208,7 +263,12 @@ onBeforeUnmount(cancelPendingScroll)
   border-bottom: 1px solid var(--settings-group-border);
   z-index: 1000;
 }
-.settings-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 .sidebar {
   width: 236px;
   box-sizing: border-box;
@@ -226,7 +286,9 @@ onBeforeUnmount(cancelPendingScroll)
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.nav-group + .nav-group { margin-top: 20px; }
+.nav-group + .nav-group {
+  margin-top: 20px;
+}
 .nav-group-label {
   padding: 0 12px 8px;
   color: var(--settings-text-secondary);
@@ -253,7 +315,11 @@ onBeforeUnmount(cancelPendingScroll)
   color: var(--settings-nav-label-color);
   background: transparent;
   cursor: pointer;
-  transition: background-color 0.16s, color 0.16s, border-color 0.16s, transform 0.16s;
+  transition:
+    background-color 0.16s,
+    color 0.16s,
+    border-color 0.16s,
+    transform 0.16s;
   &:hover {
     background: var(--settings-nav-hover-bg);
     transform: translateX(2px);
@@ -265,10 +331,31 @@ onBeforeUnmount(cancelPendingScroll)
     font-weight: 650;
   }
 }
-.nav-icon { flex-shrink: 0; width: 18px; height: 18px; opacity: 0.78; }
-.nav-item.active .nav-icon { opacity: 1; }
-.active-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.content-panel { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--settings-main-bg); }
+.nav-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  opacity: 0.78;
+}
+.nav-item.active .nav-icon {
+  opacity: 1;
+}
+.active-dot {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.content-panel {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--settings-main-bg);
+}
 .page-heading {
   display: flex;
   align-items: center;
@@ -277,7 +364,9 @@ onBeforeUnmount(cancelPendingScroll)
   flex-shrink: 0;
   padding: 32px max(40px, calc((100% - 960px) / 2)) 20px;
 }
-.page-heading-copy { min-width: 0; }
+.page-heading-copy {
+  min-width: 0;
+}
 h1 {
   margin: 0;
   color: var(--settings-text-primary);
@@ -292,18 +381,47 @@ h1 {
   line-height: 1.55;
   color: var(--settings-text-secondary);
 }
-.section-jump { flex-shrink: 0; }
-.panel-content { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 40px 40px; scrollbar-gutter: stable both-edges; }
-.section-container { max-width: 960px; margin: 0 auto; }
-.panel-content.panel-content-contained { overflow: hidden; display: flex; flex-direction: column; padding-top: 4px; scrollbar-gutter: auto; }
-.section-container-wide { width: 100%; flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.sidebar, .panel-content {
+.section-jump {
+  flex-shrink: 0;
+}
+.panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 40px 40px;
+  scrollbar-gutter: stable both-edges;
+}
+.section-container {
+  max-width: 960px;
+  margin: 0 auto;
+}
+.panel-content.panel-content-contained {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+  scrollbar-gutter: auto;
+}
+.section-container-wide {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sidebar,
+.panel-content {
   scrollbar-width: thin;
   scrollbar-color: var(--settings-group-border) transparent;
 }
-button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+button:focus-visible {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 2px;
+}
 // 仅统一设置页一级卡片，保留各设置组件内部的交互布局。
-.section-container :deep(.settings-section) { animation: none; }
+.section-container :deep(.settings-section) {
+  animation: none;
+}
 .section-container :deep(.settings-section > .setting-group),
 .section-container :deep(.settings-section > .setting-card) {
   border: 1px solid color-mix(in srgb, var(--settings-group-border) 65%, transparent);
@@ -312,38 +430,113 @@ button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset:
   animation: none;
   background: var(--settings-group-bg);
 }
-.section-container :deep(.settings-section > .setting-group) { padding: 24px; margin-bottom: 16px; }
-.section-container :deep(.settings-section > .setting-card > .t-card__header) { padding: 20px 24px 0; border: 0; }
-.section-container :deep(.settings-section > .setting-card > .t-card__body) { padding: 20px 24px 24px; }
-.section-container :deep(.settings-section > .setting-card .t-card__title) { font-size: 16px; font-weight: 600; }
-.section-container :deep(.setting-spacer) { height: 16px; }
-.section-container :deep(.settings-section > .setting-group > h3) { font-size: 16px; line-height: 1.5; margin: 0 0 18px; }
-.section-container :deep(.setting-item) { gap: 20px; }
-.section-container :deep(.setting-item > .item-info) { min-width: 0; }
-.section-container :deep(.setting-item > .t-switch) { flex-shrink: 0; }
-.section-container :deep(.item-desc) { line-height: 1.6; }
-.section-container :deep([id]) { scroll-margin-top: 16px; }
-:deep(.highlight-flash) { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
+.section-container :deep(.settings-section > .setting-group) {
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.section-container :deep(.settings-section > .setting-card > .t-card__header) {
+  padding: 20px 24px 0;
+  border: 0;
+}
+.section-container :deep(.settings-section > .setting-card > .t-card__body) {
+  padding: 20px 24px 24px;
+}
+.section-container :deep(.settings-section > .setting-card .t-card__title) {
+  font-size: 16px;
+  font-weight: 600;
+}
+.section-container :deep(.setting-spacer) {
+  height: 16px;
+}
+.section-container :deep(.settings-section > .setting-group > h3) {
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+.section-container :deep(.setting-item) {
+  gap: 20px;
+}
+.section-container :deep(.setting-item > .item-info) {
+  min-width: 0;
+}
+.section-container :deep(.setting-item > .t-switch) {
+  flex-shrink: 0;
+}
+.section-container :deep(.item-desc) {
+  line-height: 1.6;
+}
+.section-container :deep([id]) {
+  scroll-margin-top: 16px;
+}
+:deep(.highlight-flash) {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 3px;
+}
 @media (max-width: 1100px) {
-  .sidebar { width: 190px; padding: 20px 8px; }
-  .page-heading { padding: 24px 24px 18px; }
-  .panel-content { padding: 20px 24px 32px; }
+  .sidebar {
+    width: 190px;
+    padding: 20px 8px;
+  }
+  .page-heading {
+    padding: 24px 24px 18px;
+  }
+  .panel-content {
+    padding: 20px 24px 32px;
+  }
 }
 @media (max-width: 760px) {
-  .settings-layout { flex-direction: column; }
-  .sidebar { width: auto; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--settings-group-border); overflow-x: auto; flex-shrink: 0; }
-  .sidebar-heading, .nav-group-label { display: none; }
-  .sidebar-nav, .nav-group { display: flex; gap: 4px; }
-  .nav-group + .nav-group { margin: 0; padding-left: 8px; border-left: 1px solid var(--settings-group-border); }
-  .nav-item { width: auto; white-space: nowrap; min-height: 38px; }
-  .active-dot { display: none; }
-  .page-heading { padding: 18px 18px 14px; }
-  h1 { font-size: 22px; }
-  .panel-content { padding: 16px 16px 28px; }
-  .panel-content-contained { padding-inline: 18px; }
-  .section-container :deep(.settings-section > .setting-group) { padding: 18px; }
+  .settings-layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: auto;
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--settings-group-border);
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .sidebar-heading,
+  .nav-group-label {
+    display: none;
+  }
+  .sidebar-nav,
+  .nav-group {
+    display: flex;
+    gap: 4px;
+  }
+  .nav-group + .nav-group {
+    margin: 0;
+    padding-left: 8px;
+    border-left: 1px solid var(--settings-group-border);
+  }
+  .nav-item {
+    width: auto;
+    white-space: nowrap;
+    min-height: 38px;
+  }
+  .active-dot {
+    display: none;
+  }
+  .page-heading {
+    padding: 18px 18px 14px;
+  }
+  h1 {
+    font-size: 22px;
+  }
+  .panel-content {
+    padding: 16px 16px 28px;
+  }
+  .panel-content-contained {
+    padding-inline: 18px;
+  }
+  .section-container :deep(.settings-section > .setting-group) {
+    padding: 18px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .nav-item { transition: none; }
+  .nav-item {
+    transition: none;
+  }
 }
 </style>

@@ -126,6 +126,10 @@ export class MusicDatabase {
     `)
   }
 
+  searchTracks(query: string, offset: number, limit: number) {
+    return this.db.prepare("SELECT songmid,name,singer,albumName,duration FROM tracks WHERE instr(lower(name),lower(?)) OR instr(lower(singer),lower(?)) OR instr(lower(albumName),lower(?)) OR ? = '' ORDER BY name COLLATE NOCASE,songmid LIMIT ? OFFSET ?").all(query,query,query,query,limit,offset) as Pick<TrackRow,'songmid'|'name'|'singer'|'albumName'|'duration'>[]
+  }
+
   getAllTracks(): TrackRow[] {
     return this.db.prepare('SELECT * FROM tracks').all() as TrackRow[]
   }

@@ -20,7 +20,7 @@
  */
 import { ref, computed, watch } from 'vue'
 import { CloseIcon, CopyIcon } from 'tdesign-icons-vue-next'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 
 const props = withDefaults(

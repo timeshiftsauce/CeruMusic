@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { songKey } from '@common/musicItem'
 /**
  * 帖子详情弹窗 —— 小红书风格全屏 modal
@@ -16,7 +17,8 @@ import { songKey } from '@common/musicItem'
  */
 import { ref, computed, nextTick, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
+import { DialogPlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import gsap from 'gsap'
 import {
   CloseIcon,
@@ -972,7 +974,7 @@ const att = computed(() => post.value?.attachment || null)
 /** 确保"我的喜欢"本地歌单存在 —— 返回其 id */
 async function ensureFavoritesId(): Promise<string | null> {
   try {
-    const cached = await (window as any).api?.songList?.getFavoritesId?.()
+    const cached = await (desktopBridge as any).api?.songList?.getFavoritesId?.()
     if (cached?.data) {
       const ex = await songListAPI.exists(cached.data)
       if (ex.success && ex.data) return cached.data
@@ -981,13 +983,13 @@ async function ensureFavoritesId(): Promise<string | null> {
     if (search.success && Array.isArray(search.data)) {
       const exact = search.data.find((pl: any) => pl.name === '我的喜欢' && pl.source === 'local')
       if (exact?.id) {
-        await (window as any).api?.songList?.setFavoritesId?.(exact.id)
+        await (desktopBridge as any).api?.songList?.setFavoritesId?.(exact.id)
         return exact.id
       }
     }
     const created = await songListAPI.create('我的喜欢', '', 'local')
     if (created.success && created.data?.id) {
-      await (window as any).api?.songList?.setFavoritesId?.(created.data.id)
+      await (desktopBridge as any).api?.songList?.setFavoritesId?.(created.data.id)
       return created.data.id
     }
   } catch (e) {

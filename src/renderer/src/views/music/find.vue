@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import AccountCollections from '@renderer/components/AccountCollections.vue'
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch, WatchHandle } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { openPluginPlaylist } from '@renderer/services/pluginPlaybackBridge'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { storeToRefs } from 'pinia'
 import LeaderBord from '@renderer/components/Find/LeaderBord.vue'
 import PluginSurface from '@renderer/components/PluginSurface.vue'
+import PluginPage from '@renderer/components/PluginPage.vue'
 import { ChevronDownIcon } from 'tdesign-icons-vue-next'
 import PlaylistGrid from '@renderer/components/Music/PlaylistGrid.vue'
 import { tryShowListenTogetherInvite } from '@renderer/services/listenTogetherInvite'
@@ -54,6 +57,20 @@ const customSections = computed(() =>
     .filter((section) => section.kind === 'custom' && section.view)
     .map((section) => ({ ...section, key: `${section.pluginId}:${section.id}` }))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+)
+// Naive UI measures its segment capsule on mount/value changes, but not when
+// dynamic panes change while the selected name stays the same (e.g. songlist).
+// Remount only for a different tab structure/owner, keeping normal tab animations.
+const homeTabsKey = computed(() =>
+  JSON.stringify([
+    ...customSections.value.map((tab) => [tab.key, tab.title]),
+    ...(playlistSection.value
+      ? [['songlist', playlistSection.value.pluginId, playlistSection.value.id, playlistSection.value.title]]
+      : []),
+    ...(chartSection.value
+      ? [['leaderboard', chartSection.value.pluginId, chartSection.value.id, chartSection.value.title]]
+      : [])
+  ])
 )
 const homeTab = ref('')
 watch(
@@ -122,7 +139,7 @@ const fetchTags = async (): Promise<void> => {
   if (!contributionsLoaded.value || !playlistSection.value || !userSource.value.source) return
   const generation = catalogGeneration
   try {
-    const res = await window.api.music.requestSdk('getPlaylistTags', {
+    const res = await desktopBridge.api.music.requestSdk('getPlaylistTags', {
       source: userSource.value.source
     })
     if (generation !== catalogGeneration) return
@@ -163,7 +180,7 @@ const fetchCategoryPlaylists = async (reset = false): Promise<void> => {
   }
   loadingMore.value = true
   try {
-    const res = await window.api.music.requestSdk('getCategoryPlaylists', {
+    const res = await desktopBridge.api.music.requestSdk('getCategoryPlaylists', {
       source: userSource.value.source,
       sortId: 'hot',
       tagId: activeTagId.value,
@@ -312,6 +329,7 @@ onDeactivated(() => {
       <h2>发现音乐</h2>
       <p>探索最新最热的音乐内容</p>
     </header>
+    <AccountCollections capability="recommend" />
 
     <div
       v-if="!homeSections.length && !pluginRestorationComplete"
@@ -326,7 +344,7 @@ onDeactivated(() => {
       v-else-if="!homeSections.length"
       description="使用提供首页的插件后，可浏览歌单和排行榜。"
     />
-    <n-tabs v-else type="segment" animated class="find-tabs" v-model:value="homeTab" size="small">
+    <n-tabs v-else :key="homeTabsKey" type="segment" animated class="find-tabs" v-model:value="homeTab" size="small">
       <n-tab-pane
         v-for="tab in customSections"
         :key="tab.key"
@@ -334,8 +352,9 @@ onDeactivated(() => {
         :tab="tab.title"
         class="find-tab-pane plugin-tab-pane"
       >
+        <PluginPage v-if="homeTab === tab.key && tab.runtime === 3" :plugin-id="tab.pluginId" :page-id="tab.id" />
         <PluginSurface
-          v-if="homeTab === tab.key"
+          v-else-if="homeTab === tab.key"
           :plugin-id="tab.pluginId"
           :surface-id="tab.view"
         />

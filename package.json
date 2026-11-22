@@ -1,6 +1,6 @@
 {
   "name": "ceru-music",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "澜音 - 一款简洁优雅的音乐播放器",
   "main": "./out/main/index.js",
   "author": "澜音团队",
@@ -18,16 +18,16 @@
     "dev:second": "node scripts/launch-second-instance.mjs",
     "check:packaging": "node scripts/check-production-deps.mjs",
     "build": "yarn run check:packaging && yarn run typecheck && cross-env NODE_OPTIONS=--max-old-space-size=4096 electron-vite build",
-    "onlybuild": "yarn run check:packaging && cross-env NODE_OPTIONS=--max-old-space-size=4096 electron-vite build  && electron-builder --win --x64",
+    "onlybuild": "yarn run check:packaging && cross-env NODE_OPTIONS=--max-old-space-size=4096 electron-vite build && electron-builder --win --x64 --publish never",
     "postinstall": "node scripts/prepare-native-modules.mjs",
-    "build:unpack": "yarn run build && electron-builder --dir",
+    "build:unpack": "yarn run build && electron-builder --dir --publish never",
     "build:win": "yarn run build && electron-builder --win --x64 --config --publish never",
     "build:mac": "yarn run build:native:emi && yarn run build && electron-builder --mac --config --publish never",
     "build:mac:intel": "cross-env NATIVE_TARGET=x86_64-apple-darwin yarn run build:native:emi && yarn run build && electron-builder --mac dmg:x64 zip:x64 --publish never",
     "build:mac:arm64": "cross-env NATIVE_TARGET=aarch64-apple-darwin yarn run build:native:emi && yarn run build && electron-builder --mac dmg:arm64 zip:arm64 --publish never",
     "build:mac:universal": "yarn run build:native:emi:universal && yarn run build && electron-builder --mac --universal --config --publish never",
     "build:linux": "yarn run build && electron-builder --linux --config --publish never",
-    "build:deps": "yarn run postinstall && yarn run build && electron-builder --win --x64 --config",
+    "build:deps": "yarn run postinstall && yarn run build && electron-builder --win --x64 --config --publish never",
     "buildico": "electron-icon-builder --input=./resources/logo.png --output=resources --flatten",
     "build:native:emi": "node scripts/build-native-emi.mjs",
     "build:native:emi:debug": "node scripts/build-native-emi.mjs --debug",
@@ -39,7 +39,8 @@
     "cleanup:win-aumid": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-windows-aumid.ps1",
     "test": "jest",
     "test:electron": "node scripts/test-electron-runtime.mjs",
-    "setup": "node scripts/setup-dependencies.mjs"
+    "setup": "node scripts/setup-dependencies.mjs",
+    "check:packaged-files": "node scripts/check-packaged-files.mjs"
   },
   "dependencies": {
     "@applemusic-like-lyrics/lyric": "1.1.0",
@@ -49,8 +50,12 @@
     "@langchain/core": "^0.3.71",
     "@langchain/deepseek": "^0.1.0",
     "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-core": "0.3.14",
-    "@shiqianjiang/ceru-plugin-sdk": "0.3.14",
+    "@shiqianjiang/ceru-plugin-core": "3.0.1",
+    "@shiqianjiang/ceru-plugin-issuer": "3.0.1",
+    "@shiqianjiang/ceru-plugin-sdk": "3.0.1",
+    "ceru-plugin-core-v2": "npm:@shiqianjiang/ceru-plugin-core@0.3.16",
+    "ceru-plugin-issuer-v2": "npm:@shiqianjiang/ceru-plugin-issuer@0.3.16",
+    "ceru-plugin-sdk-v2": "npm:@shiqianjiang/ceru-plugin-sdk@0.3.16",
     "@xmldom/xmldom": "0.9.12",
     "axios": "^1.13.2",
     "better-sqlite3": "13.0.3",
@@ -71,7 +76,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@applemusic-like-lyrics/core": "file:vendor/amll/applemusic-like-lyrics-core-0.6.0+git.5fee356.tgz",
+    "@applemusic-like-lyrics/core": "file:vendor/amll/applemusic-like-lyrics-core-0.6.0+git.e13c5e6.tgz",
     "@applemusic-like-lyrics/vue": "0.6.0",
     "@babel/plugin-transform-arrow-functions": "^7.27.1",
     "@babel/plugin-transform-classes": "^7.28.3",
@@ -106,11 +111,12 @@
     "@vitejs/plugin-vue": "^6.0.0",
     "@vueuse/core": "^13.9.0",
     "animate.css": "^4.1.1",
+    "color-extraction": "^1.0.8",
     "cross-env": "^10.1.0",
     "crypto-js": "^4.2.0",
     "dompurify": "^3.2.6",
     "echarts": "^6.1.0",
-    "electron": "^45.0.0",
+    "electron": "^45.3.2",
     "electron-builder": "^26.8.1",
     "electron-icon-builder": "^2.0.1",
     "electron-vite": "^5.0.0",
@@ -151,16 +157,15 @@
     "vue": "3.5.21",
     "vue-eslint-parser": "^10.2.0",
     "vue-router": "^4.5.1",
-    "vue-tsc": "3.0.3"
+    "vue-tsc": "3.0.3",
+    "@electron/asar": "3.4.1"
   },
   "resolutions": {
-    "@applemusic-like-lyrics/core": "file:vendor/amll/applemusic-like-lyrics-core-0.6.0+git.5fee356.tgz",
+    "@applemusic-like-lyrics/core": "file:vendor/amll/applemusic-like-lyrics-core-0.6.0+git.e13c5e6.tgz",
     "**/vitest/vite": "7.1.2",
     "buffer": "^6.0.3",
     "@langchain/core": "^0.3.71",
-    "@langchain/openai": "^0.6.7",
-    "@shiqianjiang/ceru-plugin-sdk": "0.3.14",
-    "@shiqianjiang/ceru-plugin-issuer": "0.3.14"
+    "@langchain/openai": "^0.6.7"
   },
   "engines": {
     "node": ">=22.14.0"

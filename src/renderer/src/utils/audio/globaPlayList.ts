@@ -1,10 +1,23 @@
+import { desktopBridge } from '@renderer/services/desktopBridge'
 import { songKey, selectSong, restoredSong, durationMilliseconds } from '@common/musicItem'
 import { ref, toRaw, watch } from 'vue'
+import {
+  interceptsAdvance,
+  interceptsQueueEnd,
+  interceptsShuffle,
+  runAdjustment,
+  runAdvance,
+  runPlay,
+  runPlaybackFailure,
+  runQueueEnd,
+  runShuffle,
+  runTransport
+} from '@renderer/plugin/operations'
 import { storeToRefs } from 'pinia'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { PlayMode, type SongList } from '@renderer/types/audio'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from '@renderer/plugin/notifications'
 import defaultCoverImg from '/default-cover.png'
 import mediaSessionController from '@renderer/utils/audio/useSmtc'
 import {
@@ -71,6 +84,16 @@ function _isThrottled(): boolean {
 }
 
 const setUrl = controlAudio.setUrl
+
+function reloadPlaybackUrl(url: string): void {
+  const audio = Audio.value.audio
+  if (audio) {
+    audio.pause()
+    if (audio.getAttribute('src') !== url.trim()) audio.removeAttribute('src')
+    audio.load()
+  }
+  setUrl(url)
+}
 const start = controlAudio.start
 const stop = controlAudio.stop
 const setCurrentTime = controlAudio.setCurrentTime
@@ -115,7 +138,9 @@ const getListenTogetherStore = async () => {
   return cachedLtStore
 }
 
-const handlePlay = async () => {
+const handlePlay = (pluginId?: string, system = false) =>
+  runTransport('player.resume', () => resumePlayback(pluginId), pluginId, system)
+const resumePlayback = async (pluginId?: string) => {
   cancelPendingAutoNext()
   /* 一起听:在房间且有控制权 → 发命令给服务端,不本地播放;
    * 服务端 SYNC 回来后 ensureRoomSongLoadedAndSynced/applySnapshot 驱动本地 audio。
@@ -137,7 +162,7 @@ const handlePlay = async () => {
           userInfo.value,
           useGlobalPlayStatusStore().player.songInfo as SongList
         ) || list.value[0]
-      await playSong(target)
+      await playSong(target, { pluginId })
     } else {
       MessagePlugin.warning('播放列表为空，请先添加歌曲')
     }
@@ -165,7 +190,9 @@ const handlePlay = async () => {
   }
 }
 
-const handlePause = async () => {
+const handlePause = (pluginId?: string, system = false) =>
+  runTransport('player.pause', pausePlayback, pluginId, system)
+const pausePlayback = async () => {
   cancelPendingAutoNext()
   /* 一起听:在房间且有控制权 → 发命令,不直接 stop 本地 */
   const lt = await getListenTogetherStore()
@@ -187,7 +214,7 @@ const handlePause = async () => {
   }
 }
 
-const togglePlayPause = async () => {
+const togglePlayPause = async (system = false) => {
   /* 一起听:在房间且有控制权时,以"本地 audio 实际状态"判断按钮意图。
    *
    * 不能用 lt.current.isPlaying —— 那是服务端权威状态,在以下情形会与本地音频
@@ -202,28 +229,32 @@ const togglePlayPause = async () => {
       MessagePlugin.warning('当前在一起听房间中,无播放控制权')
       return
     }
-    const a = Audio.value.audio
-    const localPlaying = a ? !a.paused : Audio.value.isPlay
-    if (localPlaying) {
-      lt.pause()
-    } else {
-      lt.play()
-    }
-    return
   }
   const a = Audio.value.audio
   const isActuallyPlaying = a ? !a.paused : Audio.value.isPlay
   if (isActuallyPlaying) {
-    await handlePause()
+    await handlePause(undefined, system)
   } else {
-    await handlePlay()
+    await handlePlay(undefined, system)
   }
 }
 
-const playSong = async (
-  song: SongList,
-  options: { immediate?: boolean; shouldAutoStart?: () => boolean } = {}
-) => {
+type PlayOptions = {
+  immediate?: boolean
+  shouldAutoStart?: () => boolean
+  pluginId?: string
+  beforePlay?: (song: SongList) => void
+}
+let playIntent = 0
+const playSong = (song: SongList, options: PlayOptions = {}): Promise<void> => {
+  const intent = ++playIntent
+  return runPlay(song, localUserStore.list, options.pluginId, async (selected) => {
+    if (intent !== playIntent) return
+    options.beforePlay?.(selected)
+    await playSelectedSong(selected, options)
+  })
+}
+const playSelectedSong = async (song: SongList, options: PlayOptions) => {
   const selection = ++selectionSequence
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
@@ -312,6 +343,16 @@ const playSong = async (
 
   // Monotonic IDs keep rapid clicks distinct, even within one millisecond.
   const requestId = ++currentPlayRequestId
+  const intent = playIntent
+  let failureHandled = false
+  const tryAutoNext = (reason: string, error: Parameters<typeof runPlaybackFailure>[1]) => {
+    if (failureHandled || requestId !== currentPlayRequestId || intent !== playIntent) return
+    failureHandled = true
+    void runPlaybackFailure(song, error, async () => {
+      if (requestId === currentPlayRequestId && intent === playIntent)
+        await advanceAfterFailure(reason)
+    }).catch(console.warn)
+  }
   pendingSongId = songKey(song)
   pendingMetadataController?.abort()
   const metadataController = new AbortController()
@@ -433,13 +474,7 @@ const playSong = async (
             if (!url || typeof url !== 'string' || url.includes('error')) continue
 
             if (Audio.value.audio) {
-              const a = Audio.value.audio
-              try {
-                a.pause()
-              } catch {}
-              a.removeAttribute('src')
-              a.load()
-              setUrl(url)
+              reloadPlaybackUrl(url)
 
               try {
                 await waitForAudioReady(Audio.value.audio)
@@ -466,27 +501,19 @@ const playSong = async (
 
         if (!playSuccess) {
           isLoadingSong.value = false
-          tryAutoNext('自动换源失败：所有源均无法播放')
+          tryAutoNext('自动换源失败：所有源均无法播放', 'resolve')
           return
         }
       } catch (e: any) {
         if (currentPlayRequestId !== requestId) return
         isLoadingSong.value = false
-        tryAutoNext('自动换源失败,原因:' + e?.message || '未知')
+        tryAutoNext('自动换源失败，原因：' + (e?.message || '未知'), 'resolve')
         return
       }
     } else {
       // 原源 URL 获取成功，尝试播放
-      if (Audio.value.audio) {
-        const a = Audio.value.audio
-        try {
-          a.pause()
-        } catch {}
-        a.removeAttribute('src')
-        a.load()
-      }
       const __ptSet = performance.now()
-      setUrl(urlToPlay)
+      reloadPlaybackUrl(urlToPlay)
       try {
         if (Audio.value.audio) {
           await waitForAudioReady(Audio.value.audio)
@@ -575,15 +602,16 @@ const playSong = async (
       mediaSessionController.updatePlaybackState('paused')
       return
     }
-    start()
-      .catch(async () => {
-        if (currentPlayRequestId !== requestId) return
-        tryAutoNext('启动播放失败')
-      })
-      .then(() => {
+    start().then(
+      () => {
         if (currentPlayRequestId !== requestId) return
         autoNextCount.value = 0
-      })
+      },
+      () => {
+        if (currentPlayRequestId !== requestId) return
+        tryAutoNext('启动播放失败', 'start')
+      }
+    )
 
     // 只有在确定是当前请求时，才挂载错误监听
     if (Audio.value.audio) {
@@ -666,7 +694,7 @@ const playSong = async (
                 }
                 start().catch(() => {
                   if (currentPlayRequestId !== requestId) return
-                  tryAutoNext('换源后启动播放失败')
+                  tryAutoNext('换源后启动播放失败', 'start')
                 })
                 break
               }
@@ -679,19 +707,19 @@ const playSong = async (
 
           if (!playSuccess) {
             isLoadingSong.value = false
-            tryAutoNext('所有自动换源尝试均失败')
+            tryAutoNext('所有自动换源尝试均失败', 'media')
           }
         } catch (e) {
           if (currentPlayRequestId !== requestId) return
           isLoadingSong.value = false
-          tryAutoNext('播放出错且自动换源失败')
+          tryAutoNext('播放出错且自动换源失败', 'media')
         }
       }
       Audio.value.audio.addEventListener('error', currentPlaybackErrorHandler, { once: true })
     }
   } catch (error: any) {
     if (currentPlayRequestId !== requestId) return
-    tryAutoNext('播放歌曲失败')
+    tryAutoNext('播放歌曲失败', 'playback')
     isLoadingSong.value = false
   } finally {
     if (!metadataCommitted) {
@@ -714,7 +742,7 @@ const playSong = async (
   }
 }
 
-const tryAutoNext = (reason: string) => {
+const advanceAfterFailure = async (reason: string) => {
   if (
     localUserStore.userSource.pluginId === undefined ||
     _isThrottled() ||
@@ -732,7 +760,7 @@ const tryAutoNext = (reason: string) => {
     return
   }
   autoNextCount.value++
-  playNext()
+  await playNext(undefined, true, 'error')
 }
 
 const savedPlayMode = String(userInfo.value.playMode || '')
@@ -748,14 +776,33 @@ const autoNextCount = ref(0)
 const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
 
 const shuffleOrder = ref<Array<number | string>>([])
+let shuffleRevision = 0
+let pendingShuffle: Promise<void> | undefined
 const buildShuffleOrder = () => {
-  const ids = list.value.map(songKey)
+  const revision = ++shuffleRevision
+  const songs = [...list.value]
+  const ids = songs.map(songKey)
+  const candidate = [...songs]
   // Fisher-Yates
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+  for (let index = candidate.length - 1; index > 0; index--) {
+    const target = Math.floor(Math.random() * (index + 1))
+    ;[candidate[index], candidate[target]] = [candidate[target], candidate[index]]
   }
-  shuffleOrder.value = ids
+  shuffleOrder.value = candidate.map(songKey)
+  pendingShuffle = runShuffle(candidate, (ordered) => {
+    if (
+      revision === shuffleRevision &&
+      playMode.value === PlayMode.RANDOM &&
+      ids.length === list.value.length &&
+      ids.every((id, index) => id === songKey(list.value[index]))
+    ) {
+      shuffleOrder.value = ordered.map(songKey)
+    }
+  })
+    ?.catch(console.warn)
+    .finally(() => {
+      if (revision === shuffleRevision) pendingShuffle = undefined
+    })
 }
 
 const isShuffleOrderValid = () => {
@@ -767,6 +814,8 @@ const isShuffleOrderValid = () => {
 
 const ensureShuffleOrder = (rebuild = false) => {
   if (list.value.length === 0) {
+    shuffleRevision++
+    pendingShuffle = undefined
     shuffleOrder.value = []
     return
   }
@@ -789,6 +838,8 @@ watch(
       ensureShuffleOrder()
       return
     }
+    shuffleRevision++
+    pendingShuffle = undefined
     shuffleOrder.value = []
   }
 )
@@ -803,16 +854,26 @@ watch(
   { deep: true }
 )
 
-const setPlayMode = (mode: PlayMode) => {
-  playMode.value = mode
-  userInfo.value.playMode = mode
-}
-
+const setPlaybackMode = (mode: PlayMode, pluginId?: string, system = false) =>
+  runAdjustment(
+    'player.setMode',
+    { mode },
+    (value) => {
+      playMode.value = {
+        sequence: PlayMode.SEQUENCE,
+        random: PlayMode.RANDOM,
+        single: PlayMode.SINGLE
+      }[value.mode]
+      if (!pluginId) userInfo.value.playMode = playMode.value
+    },
+    pluginId,
+    system
+  )
 const updatePlayMode = () => {
   const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
   const currentIndex = modes.indexOf(playMode.value)
   const nextIndex = (currentIndex + 1) % modes.length
-  setPlayMode(modes[nextIndex])
+  return setPlaybackMode(modes[nextIndex])
 }
 
 const resolveNextSong = ({
@@ -865,14 +926,72 @@ const resolveNextSong = ({
  * - SEQUENCE 模式按列表顺序循环
  * - 列表为空返回 null
  */
+const atQueueEnd = () => {
+  if (playMode.value === PlayMode.SINGLE || !list.value.length || cachedLtStore?.isInRoom)
+    return false
+  const current =
+    pendingSongId ??
+    userInfo.value.lastPlaySongKey ??
+    songKey(
+      restoredSong(
+        list.value,
+        userInfo.value,
+        useGlobalPlayStatusStore().player.songInfo as SongList
+      )
+    )
+  const tail =
+    playMode.value === PlayMode.RANDOM
+      ? shuffleOrder.value.at(-1)
+      : songKey(list.value[list.value.length - 1])
+  return current === tail
+}
+
 const getNextSong = (): SongList | null => {
+  if (interceptsQueueEnd() && atQueueEnd()) return null
+  if (
+    interceptsAdvance() ||
+    (playMode.value === PlayMode.RANDOM && (interceptsShuffle() || pendingShuffle))
+  )
+    return null
   return resolveNextSong({
     respectSingleMode: true,
     rebuildShuffleOnWrap: false
   })
 }
 
-const playPrevious = async () => {
+const resolvePlaybackAdvance = (respectSingleMode: boolean) => {
+  if (playMode.value !== PlayMode.RANDOM || (!interceptsShuffle() && !pendingShuffle))
+    return resolveNextSong({ respectSingleMode, rebuildShuffleOnWrap: true })
+  return resolveHookedShuffleAdvance(respectSingleMode)
+}
+
+const resolveHookedShuffleAdvance = async (respectSingleMode: boolean) => {
+  const token = pendingAutoNextToken,
+    intent = playIntent
+  ensureShuffleOrder()
+  let revision = shuffleRevision
+  const current = () =>
+    token === pendingAutoNextToken &&
+    intent === playIntent &&
+    revision === shuffleRevision &&
+    playMode.value === PlayMode.RANDOM
+  if (pendingShuffle) await pendingShuffle
+  if (!current() || !shuffleOrder.value.length) return null
+  const id = pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
+  if (id != null && shuffleOrder.value.indexOf(id) === shuffleOrder.value.length - 1) {
+    ensureShuffleOrder(true)
+    revision = shuffleRevision
+    if (pendingShuffle) await pendingShuffle
+    return current()
+      ? (list.value.find((song) => songKey(song) === shuffleOrder.value[0]) ?? null)
+      : null
+  }
+  return resolveNextSong({ respectSingleMode, rebuildShuffleOnWrap: false })
+}
+
+const playPrevious = (pluginId?: string, system = false) =>
+  runTransport('player.previous', () => previousPlayback(pluginId), pluginId, system)
+const previousPlayback = async (pluginId?: string) => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
   const lt = await getListenTogetherStore()
@@ -903,39 +1022,29 @@ const playPrevious = async () => {
     )
     const prevIndex = currentIndex <= 0 ? list.value.length - 1 : currentIndex - 1
     if (prevIndex >= 0 && prevIndex < list.value.length) {
-      await playSong(list.value[prevIndex])
+      await playSong(list.value[prevIndex], { pluginId })
     }
   } catch {
     MessagePlugin.error('播放上一首失败')
   }
 }
 
-const playNext = async () => {
+const playNext = (pluginId?: string, system = false, reason: 'user' | 'error' = 'user') =>
+  runAdvance(reason, list.value, (selected) => nextPlayback(selected, pluginId), pluginId, system)
+const nextPlayback = async (selected?: SongList, pluginId?: string) => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
   try {
     const lt = await getListenTogetherStore()
     if (lt.isInRoom) {
-      if (lt.canControl) {
-        lt.skip()
-      } else {
-        MessagePlugin.warning('当前在一起听房间中，无播放控制权')
-      }
+      if (lt.canControl) lt.skip()
+      else MessagePlugin.warning('当前在一起听房间中，无播放控制权')
       return
     }
-    if (list.value.length === 0) {
-      MessagePlugin.warning('播放列表为空，请先添加歌曲')
-      return
-    }
-    const nextSong = resolveNextSong({
-      respectSingleMode: false,
-      rebuildShuffleOnWrap: true
-    })
+    const advance = selected ?? resolvePlaybackAdvance(false)
+    const nextSong = advance instanceof Promise ? await advance : advance
     if (nextSong) {
-      await playSong(nextSong)
-    } else {
-      console.warn('[playback] next requested but no next song was resolved')
-      MessagePlugin.warning('没有找到下一首歌曲')
+      await playSong(nextSong, { pluginId })
     }
   } catch (error) {
     console.error('[playback] failed to play next song', error)
@@ -943,7 +1052,7 @@ const playNext = async () => {
   }
 }
 
-const playNextAutoNow = async () => {
+const playNextAutoNow = async (selected?: SongList) => {
   // 若无感过渡正在完成最后的推进，避免重复推进
   if (crossfadeManager.isFinalizingCurrentAdvance()) return
   const lt = await getListenTogetherStore()
@@ -957,6 +1066,10 @@ const playNextAutoNow = async () => {
   }
   if (list.value.length === 0) return
   try {
+    if (selected) {
+      await playSong(selected)
+      return
+    }
     if (playMode.value === PlayMode.SINGLE && userInfo.value.lastPlaySongId) {
       const currentSong = selectSong(
         list.value,
@@ -974,10 +1087,8 @@ const playNextAutoNow = async () => {
         return
       }
     }
-    const nextSong = resolveNextSong({
-      respectSingleMode: true,
-      rebuildShuffleOnWrap: true
-    })
+    const advance = resolvePlaybackAdvance(true)
+    const nextSong = advance instanceof Promise ? await advance : advance
     if (nextSong) {
       await playSong(nextSong)
     }
@@ -999,12 +1110,78 @@ const playNextAuto = () => {
   pendingAutoNextTimer = setTimeout(() => {
     if (token !== pendingAutoNextToken) return
     pendingAutoNextTimer = null
-    void playNextAutoNow()
+    if (crossfadeManager.isFinalizingCurrentAdvance()) return
+    const advance = () =>
+      runAdvance(
+        'ended',
+        list.value,
+        async (selected) => {
+          if (token === pendingAutoNextToken) await playNextAutoNow(selected)
+        },
+        undefined,
+        true
+      )
+    if (!interceptsQueueEnd()) {
+      void advance()
+      return
+    }
+    const intent = playIntent,
+      mode = playMode.value
+    const handleEnd = async () => {
+      if (mode === PlayMode.RANDOM && pendingShuffle) await pendingShuffle
+      if (token !== pendingAutoNextToken || intent !== playIntent || mode !== playMode.value) return
+      if (!atQueueEnd()) return advance()
+      const originalKeys = list.value.map(songKey)
+      await runQueueEnd(list.value, async (tracks) => {
+        if (
+          token !== pendingAutoNextToken ||
+          intent !== playIntent ||
+          mode !== playMode.value ||
+          !atQueueEnd() ||
+          originalKeys.length !== list.value.length ||
+          !originalKeys.every((key, index) => key === songKey(list.value[index]))
+        )
+          return
+        if (!tracks) return advance()
+        const moving = new Set(tracks.map(songKey))
+        localUserStore.replaceSongList([
+          ...list.value.filter((song) => !moving.has(songKey(song))),
+          ...tracks
+        ])
+        await playSong(tracks[0])
+      })
+    }
+    void handleEnd().catch(console.warn)
   }, delay)
 }
 
-const setVolume = (v: number) => controlAudio.setVolume(v)
-const seekTo = (time: number) => {
+const setVolume = (percent: number, pluginId?: string, system = false) => {
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw Error('音量超出范围')
+  return runAdjustment(
+    'player.setVolume',
+    { volume: percent / 100 },
+    (value) => controlAudio.setVolume(Math.round(value.volume * 100)),
+    pluginId,
+    system
+  )
+}
+const seekTo = (time: number, pluginId?: string, system = false) => {
+  const positionMs = Math.round(time * 1000)
+  if (!Number.isSafeInteger(positionMs) || positionMs < 0) throw Error('无效的播放位置')
+  const intent = playIntent,
+    currentUrl = Audio.value.url
+  return runAdjustment(
+    'player.seek',
+    { positionMs },
+    (value) => {
+      if (playIntent === intent && Audio.value.url === currentUrl)
+        applySeek(value.positionMs / 1000)
+    },
+    pluginId,
+    system
+  )
+}
+const applySeek = (time: number) => {
   cancelPendingAutoNext()
   /* 一起听:用同步缓存的 store 引用判断;若有控制权则发命令,等 SYNC 回来再 seek 本地。
    * 第一次进房的极短窗口内 cachedLtStore 可能尚未填充 —— 此时按非房间逻辑直接 seek
@@ -1029,19 +1206,19 @@ const onGlobalCtrl = (e: any) => {
   const val = e?.detail?.val
   switch (name) {
     case 'play':
-      void handlePlay()
+      void handlePlay(undefined, true)
       break
     case 'pause':
-      void handlePause()
+      void handlePause(undefined, true)
       break
     case 'toggle':
-      void togglePlayPause()
+      void togglePlayPause(true)
       break
     case 'playPrev':
-      void playPrevious()
+      void playPrevious(undefined, true)
       break
     case 'playNext':
-      void playNext()
+      void playNext(undefined, true)
       console.log('next')
       break
     case 'autoNext':
@@ -1050,7 +1227,7 @@ const onGlobalCtrl = (e: any) => {
     case 'volumeDelta':
       {
         const next = Math.max(0, Math.min(100, (Audio.value.volume || 0) + (Number(val) || 0)))
-        setVolume(next)
+        void setVolume(next, undefined, true).catch(console.warn)
       }
       break
     case 'seekDelta':
@@ -1059,27 +1236,24 @@ const onGlobalCtrl = (e: any) => {
         if (a) {
           const cur = a.currentTime || 0
           const target = Math.max(0, Math.min(a.duration || 0, cur + (Number(val) || 0)))
-          seekTo(target)
+          void seekTo(target, undefined, true).catch(console.warn)
         }
       }
       break
     case 'setPlayMode':
       {
         const v = String(val || '')
-        if (v === 'sequence') {
-          playMode.value = PlayMode.SEQUENCE
-          userInfo.value.playMode = playMode.value
-        } else if (v === 'random') {
-          playMode.value = PlayMode.RANDOM
-          userInfo.value.playMode = playMode.value
-        } else if (v === 'loop') {
-          // 兼容旧调用方：旧列表循环等同于 Mian 的顺序播放。
-          playMode.value = PlayMode.SEQUENCE
-          userInfo.value.playMode = playMode.value
-        } else if (v === 'toggleSingle') {
-          playMode.value = playMode.value === PlayMode.SINGLE ? PlayMode.SEQUENCE : PlayMode.SINGLE
-          userInfo.value.playMode = playMode.value
-        }
+        const target =
+          v === 'sequence'
+            ? PlayMode.SEQUENCE
+            : v === 'random'
+              ? PlayMode.RANDOM
+              : v === 'toggleSingle'
+                ? playMode.value === PlayMode.SINGLE
+                  ? PlayMode.SEQUENCE
+                  : PlayMode.SINGLE
+                : undefined
+        if (target) void setPlaybackMode(target, undefined, true).catch(console.warn)
       }
       break
   }
@@ -1090,10 +1264,10 @@ const installPlayback = async () => {
   initPlaylistEventListeners(localUserStore, playSong)
   if (playbackInstalled) return
   playbackInstalled = true
-  unsubscribeLocalTags = window.api.localMusic.onTagsChanged?.(({ oldSongmid, song }) => {
+  unsubscribeLocalTags = desktopBridge.api.localMusic.onTagsChanged?.(({ oldSongmid, song }) => {
     if (songInfo.value.source === 'local' && String(songInfo.value.songmid) === oldSongmid) {
       songInfo.value = { ...songInfo.value, ...song }
-      void window.api.localMusic.getCoverBase64(song.songmid).then((artworkUrl) => {
+      void desktopBridge.api.localMusic.getCoverBase64(song.songmid).then((artworkUrl) => {
         if (songInfo.value.source !== 'local' || String(songInfo.value.songmid) !== song.songmid)
           return
         mediaSessionController.updateMetadata({
@@ -1124,7 +1298,7 @@ const installPlayback = async () => {
   })
 
   // 注册插件限流监听（绑定到生命周期，避免重复注册）
-  _unsubscribeThrottle = window.api.pluginNotice.onPluginThrottle(
+  _unsubscribeThrottle = desktopBridge.api.pluginNotice.onPluginThrottle(
     ({ pluginId, reason, duration }) => {
       _throttledPlugins.add(pluginId)
       MessagePlugin.warning(
@@ -1147,7 +1321,7 @@ const installPlayback = async () => {
   )
 
   // 注册插件禁用监听：插件因崩溃次数过多被永久禁用，提示用户并停止换源
-  _unsubscribeDisabled = window.api.pluginNotice.onPluginDisabled(({ pluginId, reason }) => {
+  _unsubscribeDisabled = desktopBridge.api.pluginNotice.onPluginDisabled(({ pluginId, reason }) => {
     _disabledPlugins.add(pluginId)
     // 清理限流定时器（已禁用的插件不需要再恢复）
     const t = _throttleTimers.get(pluginId)
@@ -1308,7 +1482,7 @@ export {
   playNextAuto,
   playPrevious,
   updatePlayMode,
-  setPlayMode,
+  setPlaybackMode,
   togglePlayPause,
   handlePlay,
   handlePause,

@@ -1,20 +1,40 @@
-import { ipcMain } from 'electron'
+import { app, dialog, ipcMain } from 'electron'
+import {join} from 'node:path'
+import { DeveloperEntries } from '../services/plugin/devMode'
+import { loadSkinPreferences, saveSkinChoice, saveRegionChoice, saveSkinSetting, type SkinChoice } from '../services/plugin/skinChoice'
+import { parsePlayerRegion } from '@shiqianjiang/ceru-plugin-sdk'
+import type { RegionEdit, SkinSettingEdit } from '@common/pluginSkin'
+import {getAppDirPath} from '../utils/path'
+import {configManager} from '../services/ConfigManager'
+import {developerEntriesChanged, desktopLyricRequester, notifyDesktopLyricSelection} from '../services/plugin/uiBridge'
 import pluginService from '../services/plugin'
+import { createEnvironmentReporter } from '../services/plugin/lifecycle'
+import { callPluginUI } from '../services/plugin/uiBridge'
+import { getHookControls, hookSnapshot, operationBus, routeBus, searchBus, setupHookPolicy, updateHookControls } from '../services/plugin/operations/bus'
+import { isPlaybackOperation } from '@shiqianjiang/ceru-plugin-core/operations'
+import { libraryBus, windowBus, sharingBus, linkBus, notificationBus } from '../services/plugin/operations/bus'
+import { deepLinkRouter } from '../router'
+import { BrowserWindow } from 'electron'
+import { publicLink } from '@shiqianjiang/ceru-plugin-sdk'
+import { replayDownload } from '../services/plugin/operations/downloads'
+import type { OperationSource } from '@shiqianjiang/ceru-plugin-sdk'
 import ManageSongList from '../services/songList/ManageSongList'
 import { pluginLog } from '../logger'
 import { assertMainWindowRequest, assertPluginUIRequest } from '../services/plugin/uiBridge'
 import { assertAccountSummary } from '@shiqianjiang/ceru-plugin-sdk'
+import { playlistSectionProps, type PlaylistSectionContext } from '@common/pluginPlaylistContext'
 import {
   prepareExternalPlugin,
   commitExternalPlugin,
-  discardExternalPlugin
+  discardExternalPlugin,
+  queueExternalPluginFile
 } from '../services/plugin/externalInstall'
 
 let isPluginsInitialized = false
 
 const DEFAULT_HOST_EVENT_MAX_BYTES = 1024 * 1024
 const LARGE_HOST_EVENT_MAX_BYTES = 8 * 1024 * 1024
-const LARGE_HOST_EVENTS = new Set(['queue.changed', 'lyrics.changed'])
+const LARGE_HOST_EVENTS = new Set(['queue.changed', 'lyrics.changed','search.results','playlist.addTracks','playlist.removeTracks'])
 
 function assertHostEventPayloadSize(name: string, value: unknown): void {
   let serialized: string
@@ -36,6 +56,251 @@ function assertHostEventPayloadSize(name: string, value: unknown): void {
 }
 
 export default function InitPluginService() {
+  ipcMain.handle('plugin:link-dispatch', (event,url) => {
+    assertMainWindowRequest(event,'只有主界面可以处理链接')
+    if(!publicLink(url))throw Error('无效的公开链接')
+    return deepLinkRouter.dispatch(BrowserWindow.fromWebContents(event.sender),url)
+  })
+  ipcMain.handle('plugin:system-operation', async(event,id,name,input) => {
+    assertMainWindowRequest(event,'只有主界面可以发起系统操作')
+    if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw Error('无效的系统操作请求')
+    assertHostEventPayloadSize(name,input)
+    const execute=(value:unknown)=>callPluginUI('','operation.systemDefault',{id,input:value})
+    if(name==='link.open')return linkBus.run(name,input,{kind:'ui',location:'link-entry'},execute)
+    if(name==='notification.show')return notificationBus.run(name,input,{kind:'system',location:'in-app'},execute)
+    throw Error('不支持的系统操作')
+  })
+  ipcMain.handle('plugin:window-close', async (event,id,location) => {
+    assertMainWindowRequest(event, '只有主界面可以发起窗口关闭')
+    if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id) || !['titlebar','shortcut'].includes(location)) throw Error('无效的窗口关闭请求')
+    return windowBus.run('window.close',{}, {kind:'ui',location}, async input => {
+      await callPluginUI('', 'operation.default', {id,name:'window.close',input})
+    })
+  })
+  let pendingSelection: {id:string; cancel:AbortController} | undefined
+  ipcMain.handle('plugin:cancel-provider-selection', (event, id) => {
+    assertMainWindowRequest(event, '只有主界面可以取消音源选择')
+    if (pendingSelection?.id === id) pendingSelection?.cancel.abort()
+  })
+  ipcMain.handle('plugin:guard-provider-selection', async (event, id, pluginId, providerId, source, provider) => {
+    assertMainWindowRequest(event, '只有主界面可以发起音源选择')
+    if (![id,pluginId,providerId].every(value => typeof value === 'string' && value.length > 0 && value.length <= 256) ||
+        ![source,provider].every(value => value === null || (typeof value === 'string' && value.length <= 256))) return false
+    pendingSelection?.cancel.abort()
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) return false
+    const cancel = new AbortController()
+    pendingSelection = {id,cancel}
+    const abort = () => cancel.abort()
+    event.sender.once('destroyed', abort)
+    event.sender.once('render-process-gone', abort)
+    try {
+      return await host.allowProviderSelection(providerId, {selectedSource:source,selectedProvider:provider}, cancel.signal) && !cancel.signal.aborted
+    } catch { return false }
+    finally {
+      event.sender.off('destroyed', abort)
+      event.sender.off('render-process-gone', abort)
+      if (pendingSelection?.cancel === cancel) pendingSelection = undefined
+    }
+  })
+  ipcMain.handle('plugin:evaluate-page-visibility', async (event,pluginId,entryId,selectedSource,selectedProvider,kind = 'page') => {
+    assertMainWindowRequest(event,'只有主界面可以判断插件入口')
+    if (!['page','provider'].includes(kind) || ![pluginId,entryId].every(value => typeof value === 'string' && value.length <= 256) ||
+        ![selectedSource,selectedProvider].every(value => value === null || (typeof value === 'string' && value.length <= 256))) return null
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled() || host.getDescriptor().runtime !== 3) return null
+    const entries = kind === 'provider' ? host.getDescriptor().providers : host.getDescriptor().pages
+    const page = entries.find(item => item.id === entryId)
+    const predicate = (page?.when as { predicate?: string } | undefined)?.predicate
+    if (!predicate || !host.supportsAction(predicate)) return null
+    const result = await host.invokeV2Action(predicate,{[kind === 'provider' ? 'providerId' : 'pageId']:entryId,selectedSource,selectedProvider},AbortSignal.timeout(3000))
+    if (kind === 'provider' && result?.state === 'disabled') {
+      if (result.reason === undefined) return {state:'disabled'}
+      if (typeof result.reason === 'string' && result.reason.length <= 160) return {state:'disabled',reason:result.reason.trim()}
+    }
+    return typeof result === 'boolean' || result === 'force-show' || result === 'force-hide' ? result : null
+  })
+  const reportEnvironment = createEnvironmentReporter((name, ...args) => { void pluginService.publishLifecycle(name, ...args) })
+  ipcMain.handle('plugin:guard-route', async (event,to,from,owner) => {
+    assertMainWindowRequest(event,'只有主界面可以执行路由守卫')
+    assertHostEventPayloadSize('router.navigate',[to,from])
+    const host = owner && pluginService.getPluginById(owner)
+    const source: OperationSource = host ? {kind:'plugin',pluginId:host.getDescriptor().id,runtime:3} : {kind:'ui',location:'router'}
+    let redirect = null as typeof to | null
+    const result = await routeBus.run('router.navigate',{to,from},source,async value=>{
+      if (JSON.stringify(to)!==JSON.stringify(value.to)) redirect=value.to
+    })
+    return {prevented:result.prevented, handledBy:result.handledBy, redirect}
+  })
+  ipcMain.handle('plugin:route-completed', (event,to,from) => {
+    assertMainWindowRequest(event, '只有主界面可以上报路由')
+    assertHostEventPayloadSize('router.afterEach',[to,from])
+    return pluginService.routeCompleted(to,from)
+  })
+  ipcMain.handle('plugin:report-environment', (event, online, locale) => {
+    assertMainWindowRequest(event, '只有主界面可以上报环境状态')
+    reportEnvironment(online, locale)
+  })
+  setupHookPolicy(join(getAppDirPath(),'plugins','hooks-paused.json'),process.argv.includes('--safe-mode'))
+  const skinsPath = join(getAppDirPath(), 'plugins', 'skins.json')
+  ipcMain.handle('plugin:skin-choice', (event, choice?: SkinChoice | null) => {
+    if (choice === undefined && desktopLyricRequester(event)) return loadSkinPreferences(skinsPath)
+    assertPluginUIRequest(event)
+    if (choice === undefined) return loadSkinPreferences(skinsPath)
+    if (choice !== null) {
+      const host = pluginService.getPluginById(choice.pluginId)
+      if (!host || host.isDisabled() || !host.getDescriptor().skins.some(skin => skin.id === choice.skinId)) throw Error('播放器皮肤不可用')
+    }
+    saveSkinChoice(skinsPath, choice)
+    notifyDesktopLyricSelection()
+    return loadSkinPreferences(skinsPath)
+  })
+  ipcMain.handle('plugin:skin-setting', (event, edit:SkinSettingEdit) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(edit?.pluginId)
+    const descriptor = host?.getDescriptor()
+    const skin = descriptor?.skins.find(item => item.id === edit.skinId)
+    if (!host || host.isDisabled() || descriptor?.runtime !== 3 || !skin) throw Error('播放器皮肤不可用')
+    const saved = saveSkinSetting(skinsPath,edit,skin.settings)
+    notifyDesktopLyricSelection()
+    return saved
+  })
+  ipcMain.handle('plugin:region-choice', (event, edit: RegionEdit) => {
+    assertPluginUIRequest(event)
+    const choice = edit?.choice
+    if (choice && choice !== 'inherit') {
+      const host = pluginService.getPluginById(choice.pluginId)
+      const descriptor = host?.getDescriptor()
+      if (!host || host.isDisabled() || descriptor?.runtime !== 3 || !descriptor.regions.some(item => {
+        const contract = parsePlayerRegion(item.region)
+        return item.view === choice.view && contract?.name === edit.name && contract.version === 1
+      })) throw Error('该插件没有可用的区域视图')
+    }
+    const saved = saveRegionChoice(skinsPath, edit)
+    notifyDesktopLyricSelection()
+    return saved
+  })
+  ipcMain.handle('plugin:hook-controls',(event,update)=>{assertPluginUIRequest(event);return update===undefined?getHookControls():updateHookControls(update)})
+  const developers=new DeveloperEntries(()=>join(getAppDirPath(),'plugins'),{load:(file,code)=>pluginService.loadDevelopmentFile(file,code),stop:id=>pluginService.removeDevelopmentFile(id),changed:developerEntriesChanged})
+  ipcMain.handle('plugin:hook-snapshot', event => {assertPluginUIRequest(event);return hookSnapshot()})
+  ipcMain.handle('plugin:search-query', async (event, input) => {
+    assertPluginUIRequest(event)
+    assertHostEventPayloadSize('search.query',input)
+    let query: string | null = null
+    await searchBus.run('search.query',input,{kind:'ui',location:'search'},async value => {query=value.query})
+    return query
+  })
+  ipcMain.handle('plugin:search-suggest', async (event, input) => {
+    assertPluginUIRequest(event)
+    assertHostEventPayloadSize('search.suggest',input)
+    let items:string[] = []
+    await searchBus.run('search.suggest',input,{kind:'ui',location:'search'},async value => {
+      if ('items' in value) items=value.items
+    })
+    return items
+  })
+  ipcMain.handle('plugin:search-results', async (event, input) => {
+    assertPluginUIRequest(event)
+    assertHostEventPayloadSize('search.results',input)
+    let items:import('@shiqianjiang/ceru-plugin-sdk').SearchResultItem[] = []
+    await searchBus.run('search.results',input,{kind:'ui',location:'search'},async value=>{
+      if ('page' in value) items=value.page.items
+    })
+    return items
+  })
+  ipcMain.handle('plugin:run-playback-operation', async (event, id, name, input, from, system) => {
+    assertPluginUIRequest(event)
+    if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id) || !isPlaybackOperation(name)) throw Error('无效的播放操作')
+    const internalPlayback = name === 'player.error' || name === 'queue.shuffle' || name === 'player.queueEnded'
+    if (internalPlayback && (system !== true || from !== undefined)) throw Error('此操作只能由播放器发起')
+    if (name === 'player.queueEnded' && (!input || Object.keys(input).length !== 0)) throw Error('队尾通知不能携带续播歌曲')
+    assertHostEventPayloadSize(name,input)
+    let source: OperationSource = system === true ? {kind:'system',location:internalPlayback ? 'playback' : 'media-control'} : {kind:'ui',location:name.startsWith('player.') ? 'player' : 'queue'}
+    if (from) {
+      const host = pluginService.getPluginById(from)
+      if (!host || host.isDisabled()) throw Error('发起播放操作的插件已停止')
+      const descriptor = host.getDescriptor()
+      source = {kind:'plugin', pluginId:descriptor.id, runtime:descriptor.runtime}
+    }
+    return operationBus.run(name,input,source,async value => {
+      await callPluginUI('', 'operation.default', {id, name, input:value})
+    })
+  })
+  ipcMain.handle('plugin:track-like', async (event,id,input,location) => {
+    assertPluginUIRequest(event)
+    if(typeof id!=='string' || !/^[a-f0-9-]{36}$/.test(id) || !['player','song-list','shortcut'].includes(location)) throw Error('无效的收藏操作')
+    assertHostEventPayloadSize('track.like',input)
+    return libraryBus.run('track.like',input,{kind:location==='shortcut'?'system':'ui',location},async value=>{
+      await callPluginUI('','operation.default',{id,name:'track.like',input:value})
+    })
+  })
+  ipcMain.handle('plugin:playlist-create', async (event,id,input) => {
+    assertPluginUIRequest(event)
+    if (typeof id!=='string' || !/^[a-f0-9-]{36}$/.test(id) || input?.location!=='local') throw Error('无效的歌单创建请求')
+    assertHostEventPayloadSize('playlist.create',input)
+    return libraryBus.run('playlist.create',input,{kind:'ui',location:'playlists'},async value=>{
+      await callPluginUI('','operation.default',{id,name:'playlist.create',input:value})
+    })
+  })
+  ipcMain.handle('plugin:playlist-delete', async (event,id,input) => {
+    assertPluginUIRequest(event)
+    if (typeof id!=='string' || !/^[a-f0-9-]{36}$/.test(id)) throw Error('无效的歌单删除请求')
+    assertHostEventPayloadSize('playlist.delete',input)
+    return libraryBus.run('playlist.delete',input,{kind:'ui',location:'playlists'},async value=>{
+      await callPluginUI('','operation.default',{id,name:'playlist.delete',input:value})
+    })
+  })
+  ipcMain.handle('plugin:playlist-export', async (event,id,input) => {
+    assertPluginUIRequest(event)
+    if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id) || input?.playlist?.location !== 'local' || input?.format !== 'cmpl') throw Error('无效的歌单导出请求')
+    assertHostEventPayloadSize('playlist.export',input)
+    return libraryBus.run('playlist.export',input,{kind:'ui',location:'playlists'},async value=>{
+      await callPluginUI('', 'operation.default',{id,name:'playlist.export',input:value})
+    })
+  })
+  ipcMain.handle('plugin:download-replay',async(event,token)=>{
+    assertMainWindowRequest(event,'只有主界面可以撤销本次下载处理')
+    return replayDownload(token)
+  })
+  ipcMain.handle('plugin:share-create',async(event,id,input)=>{
+    assertMainWindowRequest(event,'只有主界面可以创建歌曲分享')
+    if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw Error('无效的分享请求')
+    assertHostEventPayloadSize('share.create',input)
+    return sharingBus.run('share.create',input,{kind:'ui',location:'song-share'},value=>callPluginUI('','operation.shareDefault',{id,input:value}))
+  })
+  ipcMain.handle('plugin:playlist-import', async (event,id,input) => {
+    assertPluginUIRequest(event)
+    if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id)) throw Error('无效的歌单导入请求')
+    assertHostEventPayloadSize('playlist.import',input)
+    return libraryBus.run('playlist.import',input,{kind:'ui',location:'playlist-import'},async value=>{
+      await callPluginUI('', 'operation.default',{id,name:'playlist.import',input:value})
+    })
+  })
+  ipcMain.handle('plugin:playlist-tracks', async (event, id, name, input) => {
+    assertPluginUIRequest(event)
+    if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id) || (name !== 'playlist.addTracks' && name !== 'playlist.removeTracks')) throw Error('无效的歌单歌曲请求')
+    assertHostEventPayloadSize(name, input)
+    return libraryBus.run(name, input, {kind:'ui', location:name === 'playlist.addTracks' ? 'song-list' : 'playlist-detail'}, async value => {
+      await callPluginUI('', 'operation.default', {id, name, input:value})
+    })
+  })
+  ipcMain.handle('plugin:strict-mode', (event, enabled?: boolean) => {
+    // Secondary lyric views must read the same rendering policy as the main
+    // window; changing that policy remains a main-window operation.
+    if (enabled !== undefined || !desktopLyricRequester(event)) assertPluginUIRequest(event)
+    if (enabled !== undefined) {
+      if (typeof enabled !== 'boolean') throw Error('无效的模式')
+      configManager.set('settings.pluginStrictMode',enabled)
+    }
+    return configManager.get('settings.pluginStrictMode',false)
+  })
+  let restored:Promise<unknown>|undefined
+  const restoreDev=()=>restored ??= developers.restore(configManager.get('settings.pluginDeveloperMode',false)).catch(error=>{restored=undefined;throw error})
+  app.once('will-quit',()=>{void developers.dispose()})
+  ipcMain.handle('plugin:dev-state',async event=>{assertPluginUIRequest(event);await restoreDev();return developers.snapshot()})
+  ipcMain.handle('plugin:dev-mode',async (event,enabled)=>{assertPluginUIRequest(event);if(typeof enabled!=='boolean')throw Error('无效的模式');await restoreDev();const state=await developers.restore(enabled);configManager.set('settings.pluginDeveloperMode',enabled);developerEntriesChanged();return state})
+  ipcMain.handle('plugin:dev-add',async event=>{assertPluginUIRequest(event);await restoreDev();if(!developers.snapshot().enabled)throw Error('开发者模式未启用');const file=await dialog.showOpenDialog({title:'选择要监听的本地插件产物',filters:[{name:'CeruMusic 插件',extensions:['js']}],properties:['openFile']});return file.canceled ? developers.snapshot() : developers.add(file.filePaths[0])})
+  ipcMain.handle('plugin:dev-remove',async (event,file)=>{assertPluginUIRequest(event);await restoreDev();return developers.remove(file)})
   ipcMain.handle('plugin:external:prepare', (_event, sequence: number) =>
     prepareExternalPlugin(sequence)
   )
@@ -45,23 +310,36 @@ export default function InitPluginService() {
   ipcMain.handle('plugin:external:discard', (_event, sequence: number) =>
     discardExternalPlugin(sequence)
   )
+  // Dragging a plugin file onto the window is one more local entry; it feeds the
+  // same pending queue as deep links and command-line arguments.
+  ipcMain.handle('plugin:external:queue-file', async (event, filePath: unknown) => {
+    assertMainWindowRequest(event, '只有澜音主界面可以添加插件')
+    const sequence = await queueExternalPluginFile(filePath)
+    event.sender.send('deeplink:changed')
+    return { sequence }
+  })
   ipcMain.handle(
     'plugin:playlist-import-menu',
     async (_event, pluginId: string, menuId: string) => {
       const host = pluginService.getPluginById(pluginId)
       if (!host || host.isDisabled()) throw new Error('请先使用提供此导入方式的插件')
-      const manifest = host.getManifest()
-      const menu = manifest.contributes?.menus?.find(
+      const descriptor = host.getDescriptor()
+      const menu = descriptor.menus.find(
         (item: any) => item.id === menuId && item.slot === 'playlist.import'
       )
-      const command = manifest.contributes?.commands?.find(
+      const command = descriptor.actions.find(
         (item: any) => item.id === menu?.commandId
       )
-      if (!command || !host.supportsAction(command.action)) throw new Error('插件未注册此导入操作')
-      return host.invokeV2Action(command.action, {})
+      if (!command || !host.supportsAction(command.id)) throw new Error('插件未注册此导入操作')
+      return host.invokeV2Action(command.id, {})
     }
   )
-  ipcMain.handle('plugin:restore-enabled', () => pluginService.restoreEnabledPlugins())
+  ipcMain.handle('plugin:restore-enabled', async event => {
+    assertPluginUIRequest(event)
+    await pluginService.restoreEnabledPlugins()
+    await restoreDev()
+    pluginService.markAppReady('plugins')
+  })
   ipcMain.handle(
     'plugin:publish-host-event',
     async (event, name: string, value: unknown, pluginId?: string) => {
@@ -71,11 +349,43 @@ export default function InitPluginService() {
       return null
     }
   )
+  ipcMain.handle('plugin:account-connections', async (event, pluginId:string, itemId:string, validate?:boolean) => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw Error('插件未运行')
+    return host.accountConnections(itemId,validate === true)
+  })
+  ipcMain.handle('plugin:account-collection',(event,pluginId:string,itemId:string,capability:import('@shiqianjiang/ceru-plugin-sdk').AccountListCapability,connection:string,cursor?:string)=>{
+    assertPluginUIRequest(event)
+    const host=pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled()) throw Error('插件未运行')
+    return host.accountCollection(itemId,capability,connection,cursor)
+  })
+  ipcMain.handle('plugin:account-qr-cancel',(event,pluginId:string,ticket:string)=>{
+    assertPluginUIRequest(event)
+    pluginService.getPluginById(pluginId)?.cancelAccountQr(ticket)
+  })
+  ipcMain.handle('plugin:account-likes',(event,pluginId:string,itemId:string,connection:string,enabled:boolean,ref?:import('@shiqianjiang/ceru-plugin-sdk').ResourceRef)=>{
+    assertPluginUIRequest(event)
+    const host=pluginService.getPluginById(pluginId)
+    if(!host || host.isDisabled())throw Error('插件未运行')
+    return host.accountLikes(itemId,connection,enabled,ref)
+  })
+  ipcMain.handle('plugin:account-change', async (event, pluginId:string, itemId:string, action:'login'|'switch'|'logout', connection?:string, method?:'form'|'qrcode'|'oauth'|'browser') => {
+    assertPluginUIRequest(event)
+    const host = pluginService.getPluginById(pluginId)
+    if (!host || host.isDisabled() || !['login','switch','logout'].includes(action)) throw Error('账号操作不可用')
+    return host.changeAccount(itemId,action,connection,method)
+  })
   ipcMain.handle('plugin:account-summary', async (event, pluginId: string, itemId: string) => {
     assertPluginUIRequest(event)
     const host = pluginService.getPluginById(pluginId)
     if (!host || host.isDisabled()) throw new Error('插件未运行')
-    const item = host.getManifest().contributes?.accountItems?.find((item) => item.id === itemId)
+    const item = host.getDescriptor().accounts.find(item => item.id === itemId)?.legacy
+    if (!item && host.getDescriptor().runtime === 3) {
+      const state = await host.accountConnections(itemId)
+      return state.rows.find(row=>row.id===state.active)?.summary ?? {signedIn:false,displayName:'未登录'}
+    }
     if (!item || !host.supportsAction(item.action)) throw new Error('插件未声明此账号展示')
     const summary = await host.invokeV2Action(item.action, {})
     assertAccountSummary(summary)
@@ -90,7 +400,7 @@ export default function InitPluginService() {
     assertPluginUIRequest(event)
     const host = pluginService.getPluginById(pluginId)
     if (!host || host.isDisabled()) throw new Error('插件未运行')
-    const item = host.getManifest().contributes?.accountItems?.find((item) => item.id === itemId)
+    const item = host.getDescriptor().accounts.find(item => item.id === itemId)?.legacy
     if (!item?.logoutAction || !host.supportsAction(item.logoutAction))
       throw new Error('插件未声明退出账号操作')
     await host.invokeV2Action(item.logoutAction, {})
@@ -117,15 +427,18 @@ export default function InitPluginService() {
   ipcMain.handle('plugin:guest-set-permissions', (_event, pluginId, guestId, keys) =>
     pluginService.setGuestPermissions(pluginId, guestId, keys)
   )
+  ipcMain.handle('plugin:music-sources', () => pluginService.getMusicSources())
   ipcMain.handle('plugin:contributions', async () =>
-    (await pluginService.getPluginsList()).map((p) => ({
+    (await pluginService.getPluginsList()).filter(p => p.descriptor).map((p) => ({
       pluginId: p.pluginId,
-      manifest: p.manifest,
+      descriptor: p.descriptor,
       enabled: p.enabled,
       requestedEnabled: p.requestedEnabled,
       order: p.order,
       providerMethods: p.providerMethods,
       providerIconUrls: p.providerIconUrls,
+      sidebarIconUrls: p.sidebarIconUrls,
+      skinPreviewUrls: p.skinPreviewUrls,
       actionIds: p.actionIds,
       loadError: p.loadError
     }))
@@ -187,14 +500,20 @@ export default function InitPluginService() {
     if (!host || host.isDisabled()) throw new Error('插件已停止')
     return host.invokeDrawer(surfaceId, sessionId, index, values)
   })
-  ipcMain.handle('plugin:mount-surface', (event, pluginId, surfaceId) => {
-    assertPluginUIRequest(event)
+  ipcMain.handle('plugin:mount-surface', (event, pluginId, surfaceId, slot?: string, section?: PlaylistSectionContext, region?: string) => {
+    const lyric = desktopLyricRequester(event)
+    if (!lyric) assertPluginUIRequest(event)
+    else if (region !== 'desktopLyric' || section !== undefined || slot !== undefined) throw Error('桌面歌词窗口不能挂载其他区域')
     const host = pluginService.getPluginById(pluginId)
     if (!host || host.isDisabled()) throw new Error('插件未运行')
-    return host.mountSurface(surfaceId)
+    if ((slot !== undefined || region !== undefined) && configManager.get('settings.pluginStrictMode',false)) throw Error('插件槽位或区域未启用')
+    if ([section, slot, region].filter(value => value !== undefined).length > 1) throw Error('无效的插件挂载位置')
+    const props = section === undefined ? {} : playlistSectionProps(host.getDescriptor(), surfaceId, section)
+    const mount = () => host.mountSurface(surfaceId, props, false, slot, region)
+    return lyric ? lyric.mount(mount) : mount()
   })
   ipcMain.handle('plugin:surface-ready', (event, pluginId, surfaceId, sessionId) => {
-    assertPluginUIRequest(event)
+    if (!desktopLyricRequester(event)?.owns(pluginId,surfaceId,sessionId)) assertPluginUIRequest(event)
     const host = pluginService.getPluginById(pluginId)
     if (!host || host.isDisabled()) throw new Error('插件未运行')
     return host.readySurface(surfaceId, sessionId)
@@ -202,7 +521,7 @@ export default function InitPluginService() {
   ipcMain.handle(
     'plugin:surface-action',
     async (event, pluginId, surfaceId, sessionId, action, input) => {
-      assertPluginUIRequest(event)
+      if (!desktopLyricRequester(event)?.owns(pluginId,surfaceId,sessionId)) assertPluginUIRequest(event)
       const host = pluginService.getPluginById(pluginId)
       if (!host || host.isDisabled()) throw new Error('插件未运行')
       try {
@@ -215,6 +534,8 @@ export default function InitPluginService() {
     }
   )
   ipcMain.handle('plugin:drawer-close', (event, pluginId, surfaceId, sessionId) => {
+    const lyric = desktopLyricRequester(event)
+    if (lyric?.owns(pluginId,surfaceId,sessionId)) return lyric.dispose()
     assertPluginUIRequest(event)
     return pluginService.getPluginById(pluginId)?.closeDrawer(surfaceId, sessionId)
   })
@@ -272,7 +593,7 @@ export default function InitPluginService() {
             pluginId: id,
             pluginInfo: host.getPluginInfo(),
             supportedSources: host.getSupportedSources(),
-            manifest: host.getManifest()
+            descriptor: host.getDescriptor()
           }
         : null
     } catch (error: any) {
@@ -335,6 +656,22 @@ export default function InitPluginService() {
     }
   })
 
+  ipcMain.handle('plugin:trusted-detail', async (event, pluginId) => {
+    assertMainWindowRequest(event, '只有主界面可以查看完全信任授权')
+    if (typeof pluginId !== 'string') throw Error('无效的插件 ID')
+    return pluginService.getTrustedConsentDetail(pluginId)
+  })
+  ipcMain.handle('plugin:trusted-set-consent', async (event, pluginId, allowed) => {
+    assertMainWindowRequest(event, '只有主界面可以修改完全信任授权')
+    if (typeof pluginId !== 'string' || typeof allowed !== 'boolean') throw Error('无效的授权请求')
+    return pluginService.setTrustedConsent(pluginId, allowed)
+  })
+  ipcMain.handle('plugin:trusted-revoke', async (event, pluginId) => {
+    assertMainWindowRequest(event, '只有主界面可以撤销完全信任授权')
+    if (typeof pluginId !== 'string') throw Error('无效的插件 ID')
+    return pluginService.setTrustedConsent(pluginId, false)
+  })
+
   ipcMain.handle('service-plugin-getPermissions', async (_, pluginId): Promise<any> => {
     try {
       return { data: pluginService.getPermissions(pluginId) }
@@ -343,9 +680,9 @@ export default function InitPluginService() {
     }
   })
 
-  ipcMain.handle('service-plugin-getManifest', async (_, pluginId): Promise<any> => {
+  ipcMain.handle('service-plugin-getDescriptor', async (_, pluginId): Promise<any> => {
     try {
-      return { data: pluginService.getManifest(pluginId) }
+      return { data: pluginService.getDescriptor(pluginId) }
     } catch (error: any) {
       return { error: error.message }
     }
@@ -353,7 +690,8 @@ export default function InitPluginService() {
 
   ipcMain.handle(
     'service-plugin-savePermissions',
-    async (_, pluginId, permissions): Promise<any> => {
+    async (event, pluginId, permissions): Promise<any> => {
+      assertMainWindowRequest(event, '只有主界面可以修改插件权限')
       try {
         return { data: pluginService.savePermissions(pluginId, permissions) }
       } catch (error: any) {

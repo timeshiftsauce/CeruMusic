@@ -34,7 +34,7 @@ npm --version
 在准备存放代码的目录执行：
 
 ```shell
-npm create ceru-plugin@latest my-plugin -- --template source --lang ts
+npm create ceru-plugin@0.3.16 my-plugin -- --template source --lang ts
 cd my-plugin
 npm install
 npm run dev
