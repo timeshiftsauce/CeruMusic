@@ -7,6 +7,7 @@ import { settingsSyncService } from '@renderer/services/SettingsSyncService'
 import { CERU_API_RESOURCE } from '@common/api/resources'
 import config from '../config'
 import router from '@renderer/router'
+import { isInvalidLogtoSession } from '@renderer/utils/auth/sessionError'
 
 const { redirectUri } = config
 const ceruRequest = new Request(CERU_API_RESOURCE)
@@ -29,11 +30,11 @@ export const useAuthStore = defineStore(
         }
       } catch (error: any) {
         console.error('Failed to init auth:', error)
-        if (error.cause.status >= 400 && error.cause.status < 500) {
+        if (isInvalidLogtoSession(error)) {
           MessagePlugin.error('登录过期，请重新登录')
-          outlogin()
+          await outlogin()
         } else {
-          MessagePlugin.error('初始化认证失败')
+          MessagePlugin.warning('暂时无法获取账号信息，登录状态已保留')
         }
       } finally {
         loading.value = false
@@ -63,9 +64,9 @@ export const useAuthStore = defineStore(
     }
 
     const outlogin = async () => {
-      logtoClient?.clearAccessToken()
-      logtoClient?.clearAllTokens()
+      await logtoClient?.clearAllTokens()
       isAuthenticated.value = false
+      user.value = null
       if (
         router.currentRoute.value.name !== 'home' &&
         router.currentRoute.value.name !== 'welcome' &&
@@ -104,7 +105,14 @@ export const useAuthStore = defineStore(
     const updateUserInfo = async () => {
       isAuthenticated.value = await logtoClient.isAuthenticated()
       if (isAuthenticated.value) {
-        user.value = await logtoClient.fetchUserInfo()
+        try {
+          user.value = await logtoClient.fetchUserInfo()
+        } catch (error: any) {
+          if (error?.cause?.status !== 401) throw error
+          // Userinfo can reject a cached access token before its local expiry estimate.
+          await logtoClient.clearAccessToken()
+          user.value = await logtoClient.fetchUserInfo()
+        }
       } else {
         user.value = null
       }
