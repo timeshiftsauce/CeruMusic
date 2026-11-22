@@ -110,6 +110,9 @@ class NativeMediaService {
     win.once('closed', () => {
       if (this.win === win) this.win = null
     })
+    // Always answer the renderer's availability probe. Binding only after a
+    // successful load caused an IPC rejection when the renderer mounted first.
+    this.bindIpc()
 
     // 已加载过就只更新窗口引用，不重复 initialize/registerEventHandler
     // （重复注册会让原生侧覆盖回调，且 WinRT SMTC 会重建会话）。
@@ -167,7 +170,6 @@ class NativeMediaService {
       return
     }
 
-    this.bindIpc()
   }
 
   private bindIpc(): void {

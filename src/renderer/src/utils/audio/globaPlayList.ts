@@ -103,8 +103,15 @@ const PluginErrorMsgs = [
 let cachedLtStore: any = null
 const getListenTogetherStore = async () => {
   if (cachedLtStore) return cachedLtStore
-  const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
-  cachedLtStore = useListenTogetherStore()
+  try {
+    const { useListenTogetherStore } = await import('@renderer/store/ListenTogether')
+    cachedLtStore = useListenTogetherStore()
+  } catch (error) {
+    // A failure to load the optional room-control module must not disable local
+    // playback controls such as play, pause, or next.
+    console.error('[playback] failed to load listen-together controls', error)
+    cachedLtStore = { isInRoom: false }
+  }
   return cachedLtStore
 }
 
@@ -906,25 +913,32 @@ const playPrevious = async () => {
 const playNext = async () => {
   cancelPendingAutoNext()
   crossfadeManager.cancel()
-  const lt = await getListenTogetherStore()
-  if (lt.isInRoom) {
-    if (lt.canControl) {
-      lt.skip()
-    } else {
-      MessagePlugin.warning('当前在一起听房间中，无播放控制权')
-    }
-    return
-  }
-  if (list.value.length === 0) return
   try {
+    const lt = await getListenTogetherStore()
+    if (lt.isInRoom) {
+      if (lt.canControl) {
+        lt.skip()
+      } else {
+        MessagePlugin.warning('当前在一起听房间中，无播放控制权')
+      }
+      return
+    }
+    if (list.value.length === 0) {
+      MessagePlugin.warning('播放列表为空，请先添加歌曲')
+      return
+    }
     const nextSong = resolveNextSong({
       respectSingleMode: false,
       rebuildShuffleOnWrap: true
     })
     if (nextSong) {
       await playSong(nextSong)
+    } else {
+      console.warn('[playback] next requested but no next song was resolved')
+      MessagePlugin.warning('没有找到下一首歌曲')
     }
-  } catch {
+  } catch (error) {
+    console.error('[playback] failed to play next song', error)
     MessagePlugin.error('播放下一首失败')
   }
 }

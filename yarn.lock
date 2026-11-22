@@ -5116,10 +5116,10 @@ electron-vite@^5.0.0:
     magic-string "^0.30.19"
     picocolors "^1.1.1"
 
-electron@44.4.3:
-  version "44.4.3"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-44.4.3.tgz#e4f7be5cb42324b8c08c34b957063cc6dccbe26d"
-  integrity sha512-LTpSFTB40qVCXIX5xMo+cgHI/Jjkbjw7VpB26PccEbroqOn72LBukeaDwPVo1fBYzSzs0c9iPuAucFCO7Tw81Q==
+electron@^45.0.0:
+  version "45.0.0"
+  resolved "https://registry.npmmirror.com/electron/-/electron-45.0.0.tgz#12588906d8c2605835737ecc4901494a1e0f3a26"
+  integrity sha512-yjz4uhMBcO6L5X7CWgRMobf2EMJPnb9j4zuf+nu/TU/6E4Sqfx7fn/a2eACo4qngjml/0JnsoZhxYroJLxLd2w==
   dependencies:
     "@electron-internal/extract-zip" "^1.0.1"
     "@electron/get" "^5.0.0"

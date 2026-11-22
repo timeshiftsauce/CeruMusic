@@ -148,18 +148,28 @@ process.on('uncaughtException', (error: any) => {
   console.error('Uncaught Exception:', error?.message || error)
 })
 
-// 关闭 Chromium 自带媒体会话（SMTC / MPRIS / NowPlayingInfoCenter）。
-//
-// 背景：页面上只要有 <audio> 在播放，Chromium 就会自己向系统注册一个媒体
-// 会话；单靠渲染端清 `navigator.mediaSession.metadata` 是清不掉的，结果系统
-// 里会同时出现两张卡片（本项目原生 SMTC + Chromium 的）。
-//
-// 这里关掉 Chromium 的 HardwareMediaKeyHandling 与 MediaSessionService，
-// 媒体键与系统卡片统一由 native/external-media-integration 原生模块负责。
-// 必须在 app ready 之前调用才生效。
-// 注：代价是渲染端的 navigator.mediaSession 回落通道失效 —— 但无原生模块时
-// 主进程会打日志提示，且 CeruMusic 当前所有发布平台都有原生实现。
-app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,MediaSessionService')
+// 原生媒体模块可用时由它独占系统媒体会话，避免 Chromium 额外注册一张卡片。
+// 模块缺失时保留 Chromium 媒体会话，确保媒体键仍有可用的回退通道。
+const nativeMediaRelativePath = path.join(
+  'native',
+  'external-media-integration',
+  'external-media-integration.node'
+)
+const nativeMediaModuleCandidates = app.isPackaged
+  ? [
+      path.join(process.resourcesPath, 'app.asar.unpacked', nativeMediaRelativePath),
+      path.join(process.resourcesPath, nativeMediaRelativePath)
+    ]
+  : [path.join(app.getAppPath(), nativeMediaRelativePath)]
+const hasNativeMediaModule = nativeMediaModuleCandidates.some((candidate) =>
+  fs.existsSync(candidate)
+)
+if (hasNativeMediaModule) {
+  // 必须在 app ready 之前调用才生效。
+  app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,MediaSessionService')
+} else {
+  console.warn('[emi] 原生媒体模块不存在；保留 Chromium 媒体会话作为回退')
+}
 
 // 注册自定义协议
 if (process.defaultApp) {
@@ -547,6 +557,15 @@ function createWindow(): void {
 
   initHotkeyService(mainWindow)
 
+  // Register the native media session before loading the renderer. The renderer
+  // probes `emi:is-available` during startup and caches the result, so doing this
+  // after `ready-to-show` can permanently disable F7/F9 media-key handling.
+  try {
+    nativeMediaService.init(mainWindow)
+  } catch (e) {
+    console.warn('[emi] init failed:', e)
+  }
+
   // 窗口后台状态广播：最小化 / 隐藏到托盘时通知渲染进程暂停高开销渲染。
   // 渲染层不依赖 document.visibilityState 判断托盘场景（win.hide() 不一定触发
   // visibility 变化），状态以本广播为准。
@@ -666,13 +685,6 @@ function createWindow(): void {
       console.warn('[thumbar] init failed:', e)
     }
 
-    // 系统媒体控件原生集成（SMTC / MPRIS / NowPlayingInfoCenter）——
-    // 加载失败时内部自动降级为浏览器 mediaSession，不影响播放。
-    try {
-      nativeMediaService.init(mainWindow!)
-    } catch (e) {
-      console.warn('[emi] init failed:', e)
-    }
   })
 
   // IPC：window-toggle-fullscreen 通过 events/index.ts 转发到这里

@@ -38,6 +38,7 @@ __pycache__/
 # target/ 是 cargo 的输出目录，体积大且可重建
 native/*/target/
 native/*/Cargo.lock
+!native/external-media-integration/Cargo.lock
 # napi 产出的 .node 二进制，由 yarn build:native:emi 生成
 native/*/*.node
 native/*/*.d.ts
