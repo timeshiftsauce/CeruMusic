@@ -115,9 +115,26 @@ try {
       '../../utils/path': 'export const getAppDirPath=()=>"unused"',
       '../networkProxy': 'export const getRequestAgentsFor=()=>({})',
       axios: 'export default {}',
+      './accounts/vault': 'export const pluginAccountVault={}',
+      './shared/permissions':
+        'export const encodePermissionKeys=()=>[]; export const readPermissionKeys=()=>[]',
+      './v3/lifecycleOnly': 'export const runLifecycleOnly=async()=>{}',
+      './lifecycle': 'export const createAppReadyGate=()=>()=>{}',
+      './v3/V3PluginHost': 'export default class Host {}',
+      './trusted/consent':
+        'export const trustedPublisher=()=>{}; export const trustedDeclaration=()=>{}; export const readTrustedConsent=()=>{}; export const requestTrustedConsent=()=>{}; export const writeTrustedConsent=()=>{}; export const trustedConsentDetail=()=>{}; export const trustedConsentRecords=()=>{}; export const stopTrustedRuntime=()=>{}',
+      './musicRegistry': `export const providerOwners=new Map(), capabilityOwners=new Map();
+        let order=()=>[]; export const setMusicOwnerOrder=f=>{order=f};
+        export const musicRegistry={changed(){},sources(){return []},provider(source,method,owner,eligible){
+          const preferred=owner || capabilityOwners.get(source+':'+method) || providerOwners.get(source);
+          const ids=preferred?[preferred,...order().filter(id=>id!==preferred)]:order();
+          const id=ids.find(id=>eligible(id)&&s.service.getPluginById(id)?.supportsV2Provider(source,method)); return id?{pluginId:id}:null;
+        }}`,
+      './v3/serviceRouter': 'export const pluginServices={onChange(){},missing(){return []}}',
       './v2/V2PluginHost': 'export default class Host {}',
       '../networkProxy': 'export const getRequestAgentsFor=()=>{}',
-      './runtimes': 'export const readInstalledArtifact=()=>{}, sniffManifestVersion=()=>{}',
+      './runtimes':
+        'export const describeInstalled=()=>{}, readInstalledArtifact=()=>{}, sniffManifestVersion=()=>{}',
       './v2/manifest': 'export const readV2Descriptor=()=>{}',
       './uiBridge': 'export const cancelPluginUI=()=>{}; export const pluginChanged=()=>{}',
       './logger': 'export default class Logger {}; export const getLog=()=>{}',
@@ -160,6 +177,11 @@ try {
   }
   const { default: sdk } = await bundle('src/main/services/musicSdk/service.ts', {
     '../plugin/index': 'export default s.service',
+    './localSource': 'export const searchLocal=async()=>({})',
+    '../plugin/operations/bus':
+      'export const interceptsResolve=()=>false, interceptsLyrics=()=>false, resolveBus={run:async()=>{}}',
+    '../plugin/operations/lyrics': 'export const runLyrics=async(_,fn)=>fn()',
+    '../plugin/operations/downloads': 'export const runDownloadTasks=async()=>[]',
     '../localLyrics': 'export const resolveLocalLyrics=()=>{}',
     '../LocalMusicIndex': 'export const localMusicIndexService={}',
     '../../utils/tagUtils': 'export const readTags=()=>({})',
