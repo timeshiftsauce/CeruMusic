@@ -154,7 +154,7 @@ export function publishPluginAccountChanged(pluginId: string): void {
 }
 
 export function pluginChanged(change?: {
-  type: 'installed' | 'updated' | 'uninstalled' | 'state-changed' | 'views-updated'
+  type: 'installed' | 'updated' | 'uninstalled' | 'state-changed' | 'views-updated' | 'guests-changed'
   views?: string[]
   pluginId: string
   enabled?: boolean

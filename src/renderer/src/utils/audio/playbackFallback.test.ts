@@ -84,6 +84,38 @@ function rejectOriginal(blockPlugin = false) {
   })
 }
 
+it('keeps the original provider error available after all playback attempts fail', async () => {
+  settings = { pluginAttempts: 1, strategies: { plugin: true, source: false, quality: false } }
+  resolveUrl.mockImplementationOnce(async (_song, options) => {
+    options?.report({ source: 'one', pluginId: 'a', error: '请重新登录音源账号' })
+    throw new Error('获取歌曲播放链接失败')
+  })
+  resolveUrl.mockRejectedValueOnce(new Error('备用音源没有这首歌'))
+
+  const fallback = createPlaybackFallback(song, () => true)
+  await expect(fallback.load(load)).resolves.toBeUndefined()
+
+  expect(resolveUrl).toHaveBeenCalledTimes(2)
+  expect(fallback.resolutionError).toBe('请重新登录音源账号')
+  expect(JSON.stringify(playbackTraces.value[0])).not.toContain('请重新登录音源账号')
+})
+
+it('clears a recovered error once playback starts and preserves a new failure reason', async () => {
+  settings = { pluginAttempts: 2, strategies: { plugin: true, source: false, quality: false } }
+  rejectOriginal()
+  resolveUrl.mockResolvedValueOnce('alternate-url')
+  resolveUrl.mockRejectedValueOnce(new Error('备用音源连接超时'))
+
+  const fallback = createPlaybackFallback(song, () => true)
+  const loaded = (await fallback.load(load))!
+  fallback.playing(loaded)
+  expect(fallback.resolutionError).toBeUndefined()
+
+  fallback.failPlayback(loaded, 'media')
+  await expect(fallback.load(load)).resolves.toBeUndefined()
+  expect(fallback.resolutionError).toBe('备用音源连接超时')
+})
+
 it('keeps cross-plugin resolution available when the original plugin blocks its own retries', async () => {
   settings.order = ['quality', 'plugin', 'source']
   rejectOriginal(true)

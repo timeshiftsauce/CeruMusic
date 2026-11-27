@@ -368,7 +368,11 @@ export default class DesktopPluginHost {
           }),
         request: runtime.requestNetwork,
         changed: () => {
-          pluginChanged()
+          pluginChanged(
+            runtime.descriptor.runtime === 3
+              ? { type: 'guests-changed', pluginId: this.pluginId! }
+              : undefined
+          )
           for (const { web } of this.webSessions.values())
             publishPluginSurface(this.pluginId!, web.sessionId, {
               ...(this.surfaceStates.get(web.surfaceId) ?? {}),

@@ -23,6 +23,7 @@ import {
 } from '@renderer/services/pluginState'
 import SourceDisabledHint from '../SourceDisabledHint.vue'
 
+const sourceListZIndex = 10_000_000
 let stopWatchEffect: (() => void) | null = null
 
 onMounted(() => {
@@ -391,13 +392,24 @@ function checkGuide() {
                 </button>
                 <!-- 透明遮罩 -->
                 <transition name="mask">
-                  <div v-if="source_list_show" class="source-mask" @click="handleMaskClick"></div>
+                  <div
+                    v-if="source_list_show"
+                    class="source-mask"
+                    :style="{ zIndex: sourceListZIndex - 1 }"
+                    @click="handleMaskClick"
+                  ></div>
                 </transition>
                 <!-- 音源选择列表 -->
                 <transition name="source">
-                  <div v-if="source_list_show" class="source-list">
+                  <div v-if="source_list_show" class="source-list" :style="{ zIndex: sourceListZIndex }">
                     <div class="items">
-                      <SourceDisabledHint v-for="item in sourcePickerEntries.filter(entry => entry.source !== 'local')" :key="item.key" :reason="item.reason" v-slot="{ events }">
+                      <SourceDisabledHint
+                        v-for="item in sourcePickerEntries.filter(entry => entry.source !== 'local')"
+                        :key="item.key"
+                        :reason="item.reason"
+                        :z-index="sourceListZIndex + 1"
+                        v-slot="{ events }"
+                      >
                       <button type="button" v-on="events"
                         class="source-item"
                         :class="{ active: item.selected }"
@@ -826,7 +838,6 @@ function checkGuide() {
           left: 0;
           right: 0;
           bottom: 0;
-          z-index: 9999999;
           background: transparent;
           cursor: pointer;
         }
@@ -835,7 +846,6 @@ function checkGuide() {
           position: absolute;
           top: 100%;
           left: 0;
-          z-index: 10000000;
           background: var(--home-source-list-bg);
           border: 1px solid var(--home-source-list-border);
           border-radius: 0.5rem;

@@ -2,7 +2,7 @@
 import { NTooltip } from 'naive-ui'
 import { ref, watch } from 'vue'
 
-const props = defineProps<{ reason?: string }>()
+const props = defineProps<{ reason?: string; zIndex?: number }>()
 const hovered = ref(false)
 const focused = ref(false)
 const events = {
@@ -15,7 +15,13 @@ watch(() => !!props.reason, () => { hovered.value = focused.value = false })
 </script>
 
 <template>
-  <NTooltip v-if="reason" trigger="manual" :show="hovered || focused" :style="{ maxWidth: 'min(320px, 90vw)', overflowWrap: 'anywhere' }">
+  <NTooltip
+    v-if="reason"
+    trigger="manual"
+    :show="hovered || focused"
+    :z-index="zIndex"
+    :style="{ maxWidth: 'min(320px, 90vw)', overflowWrap: 'anywhere' }"
+  >
     <template #trigger><slot :events="events" /></template>
     {{ reason }}
   </NTooltip>

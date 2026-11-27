@@ -917,6 +917,10 @@ onMounted(() => {
   cancelUI = desktopBridge.api.plugins.onUICancel(({ id }) => uiRequests.get(id)?.abort())
   changed = desktopBridge.api.plugins.onChanged((change) => {
     if (change?.type === 'views-updated') return
+    if (change?.type === 'guests-changed') {
+      invalidatePageVisibility(change.pluginId)
+      return
+    }
     if (
       change?.pluginId === drawer.value?.pluginId &&
       (change?.type === 'uninstalled' || change?.enabled === false)

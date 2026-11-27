@@ -97,6 +97,7 @@ export function createPlaybackFallback(song: SongList, current: () => boolean, b
     pluginOrder.indexOf(a.pluginId) - pluginOrder.indexOf(b.pluginId)
   const attempted = new Set<string>()
   const failedUrls = new Set<string>()
+  let resolutionError: string | undefined
   const originalRef = normalizeAppTrackRef(song.pluginResource)
   const privateSong = originalRef && !isProviderTrackRef(originalRef)
   const usedTargets = { source: new Set<string>(), plugin: new Set<string>() }
@@ -251,6 +252,7 @@ export function createPlaybackFallback(song: SongList, current: () => boolean, b
       item.score === undefined ? undefined : '歌曲匹配分 ' + item.score.toFixed(2)
     )
     let url: string
+    let reportedError: string | undefined
     try {
       url = await getSongRealUrl(toRaw(item.song), {
         target: fallback ? item.target : undefined,
@@ -259,7 +261,12 @@ export function createPlaybackFallback(song: SongList, current: () => boolean, b
         blockedPluginIds: [...new Set([...blocked, ...throttleUntil.keys()])].filter(isBlocked),
         report(result) {
           if (!current()) return
-          actual = { source: result.source, pluginId: result.pluginId, quality: result.quality }
+          reportedError = result.error
+          actual = {
+            source: result.source || item.target.source,
+            pluginId: result.pluginId,
+            quality: result.quality
+          }
           if (!fallback) Object.assign(primary, actual)
           attempted.add(key(item, actual))
           if (result.blockPlugin && result.pluginId) {
@@ -268,8 +275,12 @@ export function createPlaybackFallback(song: SongList, current: () => boolean, b
           }
         }
       })
-    } catch {
-      if (current()) trace.step('解析失败', 'error', actual)
+    } catch (error) {
+      if (current()) {
+        const message = reportedError?.trim() || (error instanceof Error ? error.message.trim() : '')
+        if (message) resolutionError ??= message
+        trace.step('解析失败', 'error', actual)
+      }
       return
     }
     if (!current()) return
@@ -331,6 +342,9 @@ export function createPlaybackFallback(song: SongList, current: () => boolean, b
   return {
     trace,
     autoNext: !preferences.enabled || preferences.autoNext,
+    get resolutionError() {
+      return resolutionError
+    },
     async load(loadAudio: (url: string) => Promise<void>): Promise<Loaded | undefined> {
       if (!current()) return
       trace.status('resolving')
@@ -354,6 +368,7 @@ export function createPlaybackFallback(song: SongList, current: () => boolean, b
       trace.step(stage === 'start' ? '启动播放失败' : '播放中断', 'error', result.target)
     },
     playing(result: Loaded) {
+      resolutionError = undefined
       trace.step('开始出声', 'success', result.target)
       trace.status('playing', result.target)
       if (background) trace.publish()

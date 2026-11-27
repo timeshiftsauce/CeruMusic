@@ -216,7 +216,7 @@ const playSong = (song:SongList, options:PlayOptions = {}):Promise<void> => {
   return runPlay(song,localUserStore.list,options.pluginId,async selected => {
     if (intent!==playIntent) return
     options.beforePlay?.(selected)
-    if (!options.fromFailure) autoNextCount.value = 0
+    if (!options.fromFailure) resetPlaybackFailures()
     await playSelectedSong(selected, options, intent)
   })
 }
@@ -319,14 +319,21 @@ const playSelectedSong = async (song: SongList, options: PlayOptions, intent: nu
   const tryAutoNext = (reason: string, error: Parameters<typeof runPlaybackFailure>[1]) => {
     if (failureHandled || !current()) return
     failureHandled = true
+    const detail = fallback.resolutionError?.slice(0, 500)
+    const noticeKey = detail || reason
+    if (!shownPlaybackErrors.has(noticeKey)) {
+      shownPlaybackErrors.add(noticeKey)
+      const message = detail ? `${reason}：${detail}` : reason
+      // Provider diagnostics are for the local toast and can contain private connection details.
+      void MessagePlugin.error({ content: () => message })
+    }
     void runPlaybackFailure(song, error, async () => {
       if (!current()) return
       if (fallback.autoNext) {
         fallback.trace.step('尝试自动跳过', 'warning')
-        await advanceAfterFailure(song, reason, current)
+        await advanceAfterFailure(song, current)
       } else {
         fallback.trace.step('停止自动推进播放列表', 'warning')
-        MessagePlugin.error(reason)
       }
     }).catch(console.warn)
   }
@@ -431,7 +438,7 @@ const playSelectedSong = async (song: SongList, options: PlayOptions, intent: nu
       if (!current() || markedPlaying === activating) return
       markedPlaying = activating
       fallback.playing(activating)
-      autoNextCount.value = 0
+      resetPlaybackFailures()
     }
 
     if (Audio.value.audio) {
@@ -548,17 +555,11 @@ const playSelectedSong = async (song: SongList, options: PlayOptions, intent: nu
   }
 }
 
-const advanceAfterFailure = async (song: SongList, reason: string, current: () => boolean) => {
+const advanceAfterFailure = async (song: SongList, current: () => boolean) => {
   const limit = Math.min(10, Math.max(3, getAutoNextLimit()), list.value.length - 1)
-  if (limit < 1) {
-    MessagePlugin.error(reason)
-    return
-  }
-  MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
+  if (limit < 1) return
   if (autoNextCount.value >= limit) {
-    MessagePlugin.error(
-      `自动下一首失败：${autoNextCount.value}/${limit > 10 ? 10 : limit}次。原因：${reason}`
-    )
+    MessagePlugin.warning(`已达到自动跳过上限（${limit} 首）`)
     return
   }
   autoNextCount.value++
@@ -569,6 +570,11 @@ const advanceAfterFailure = async (song: SongList, reason: string, current: () =
 const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
 const isLoadingSong = ref(false)
 const autoNextCount = ref(0)
+const shownPlaybackErrors = new Set<string>()
+const resetPlaybackFailures = () => {
+  autoNextCount.value = 0
+  shownPlaybackErrors.clear()
+}
 const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
 
 const shuffleOrder = ref<Array<number | string>>([])
@@ -1092,7 +1098,7 @@ const installPlayback = async () => {
 
   // 初始化无感过渡管理器：注入 getNextSong 回调，订阅 slotSwap 重置自动下一首计数
   controlAudio.subscribe('slotSwap', () => {
-    autoNextCount.value = 0
+    resetPlaybackFailures()
     // 关键：翻转槽位后，playSong 挂在旧 primary 上的 DOM error/playing 监听器仍然存在。
     // 翻转后 completeCrossfade 会对旧 primary 执行 removeAttribute('src') + load()，
     // 这会异步触发 'error' 事件，带着旧歌闭包跑 auto-switch，结果把上一首 URL 又写回了新 primary。

@@ -1349,6 +1349,14 @@ test('a v3 adapter upgrade retains the selected v2 child and its own grant ledge
       expect(await pluginService.getGuestPermissions(parent, guest.id)).toEqual(['network'])
       expect(JSON.parse(await readFile(ledger, 'utf8'))).toEqual(snapshot)
     }
+    const changed = jest.mocked((await import('../uiBridge')).pluginChanged)
+    changed.mockClear()
+    try {
+      await pluginService.setGuestPermissions(parent, guest.id, [])
+      expect(changed).toHaveBeenCalledWith({ type: 'guests-changed', pluginId: parent })
+    } finally {
+      await pluginService.setGuestPermissions(parent, guest.id, ['network'])
+    }
   } finally {
     await pluginService.addPlugin(original, 'adapter.js', parent)
   }
