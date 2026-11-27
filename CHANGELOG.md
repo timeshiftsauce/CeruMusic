@@ -13,7 +13,9 @@
 
 ---
 
-## [v2.6.0] - 2026-11-28 · 伴唱模式、无感过渡升级与自动换源
+## [v2.6.1] - 2026-11-28 · 伴唱模式、无感过渡升级与自动换源
+
+本版包含伴唱模式、无感过渡升级和自动换源，并修复了播放报错提示与插件权限调整的问题。已安装 v2.6.0 的用户可通过「检查更新」升级。
 
 ### 伴唱模式（Beta）
 
@@ -930,7 +932,7 @@ Linux 的 MPRIS 面板），顺带优化了更新下载与一批播放器细节�
 
 ---
 
-[v2.6.0]: https://github.com/timeshiftsauce/CeruMusic/releases/tag/v2.6.0
+[v2.6.1]: https://github.com/timeshiftsauce/CeruMusic/releases/tag/v2.6.1
 [v1.14.0]: https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.14.0
 [v1.13.0]: https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.13.0
 [v1.12.0]: https://github.com/timeshiftsauce/CeruMusic/releases/tag/v1.12.0
