@@ -1,44 +1,38 @@
 <template>
   <div class="user-capsule-container">
     <n-dropdown
-      v-if="(authStore.isAuthenticated && authStore.user) || pluginAccountItems.length"
-      v-model:show="menuShown"
+      :disabled="!hasAccountMenu"
+      :show="menuShown"
       style="-webkit-app-region: none"
       :options="userOpt"
       placement="bottom-start"
       trigger="hover"
       :theme-overrides="dropdownTheme"
       @select="handleMenuSelect"
-      @update:show="(show) => show && refreshPluginAccounts(undefined, true)"
+      @update:show="setMenuShown"
     >
-      <div
+      <button
+        type="button"
         class="user-capsule"
-        :style="
-          authStore.isAuthenticated
-            ? 'background: rgba(125, 125, 125, 0.1);border: 1px solid rgba(125, 125, 125, 0.2);'
-            : ''
-        "
+        :class="{ 'user-capsule--signed-in': signedIn }"
+        :aria-label="hasAccountMenu ? '账号菜单' : '登录澜音'"
+        :aria-haspopup="hasAccountMenu ? 'menu' : undefined"
+        :aria-expanded="hasAccountMenu ? menuShown : undefined"
+        @click="hasAccountMenu ? setMenuShown(true) : handleLogin()"
       >
-        <t-avatar v-if="authStore.user?.picture" :image="authStore.user.picture" size="small" />
-        <t-avatar
-          v-else
-          size="small"
-          style="background: rgba(125, 125, 125, 0.2); color: inherit"
-          >{{ Name.split('')[0] }}</t-avatar
-        >
-        <span class="user-name">{{ authStore.isAuthenticated ? Name : '未登录' }}</span>
-      </div>
+        <t-avatar v-if="avatarImage" :image="avatarImage" size="small" />
+        <t-avatar v-else size="small" class="user-capsule-initial">
+          {{ Name.split('')[0] }}
+        </t-avatar>
+        <span class="user-name">{{ signedIn ? Name : '未登录' }}</span>
+      </button>
     </n-dropdown>
-    <div v-else class="user-capsule" @click="handleLogin">
-      <t-avatar :image="defaultAvatar" size="small" />
-      <span class="user-name">未登录</span>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { desktopBridge } from '@renderer/services/desktopBridge'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import defaultAvatar from '@renderer/assets/user.webp'
 import { useAuthStore } from '@renderer/store/Auth'
@@ -69,6 +63,19 @@ const authStore = useAuthStore()
 const router = useRouter()
 const menuShown = ref(false)
 const loggingOut = ref('')
+const signedIn = computed(() => authStore.isAuthenticated && !!authStore.user)
+const hasAccountMenu = computed(() => signedIn.value || pluginAccountItems.value.length > 0)
+const avatarImage = computed(() => (signedIn.value ? authStore.user?.picture : defaultAvatar))
+
+function setMenuShown(show: boolean) {
+  if (show === menuShown.value || (show && !hasAccountMenu.value)) return
+  menuShown.value = show
+  if (show) void refreshPluginAccounts(undefined, true)
+}
+
+watch(hasAccountMenu, (available) => {
+  if (!available) setMenuShown(false)
+})
 
 const renderIcon = (icon: Component) => {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -138,7 +145,7 @@ function loginChoices(item: (typeof pluginAccountItems.value)[number]) {
   }))
 }
 const userOpt = computed<DropdownOption[]>(() => [
-  ...(authStore.isAuthenticated
+  ...(signedIn.value
     ? mainAccountOptions
     : [{ label: '登录澜音', key: 'login', icon: renderIcon(UserIcon) }]),
   ...(pluginAccountItems.value.length
@@ -355,34 +362,34 @@ const Name = computed(() => {
   color: var(--td-text-color-secondary);
 }
 .user-capsule-container {
-  .login-btn {
-    width: 2.25rem;
-    height: 2.25rem;
-    min-width: 2.25rem;
-    padding: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: v-bind(color);
-
-    &:hover {
-      background-color: var(--titlebar-btn-hover-bg);
-    }
-  }
-
   .user-capsule {
     display: flex;
     align-items: center;
     gap: 6px;
 
     padding: 0 8px 0 4px;
+    border: 0;
     border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
     cursor: pointer;
     transition: background-color 0.2s;
     height: 2rem;
     box-sizing: border-box;
 
+    &--signed-in {
+      border: 1px solid rgba(125, 125, 125, 0.2);
+      background: rgba(125, 125, 125, 0.1);
+    }
+
     &:hover {
+      background: rgba(125, 125, 125, 0.14);
+    }
+
+    .user-capsule-initial {
       background: rgba(125, 125, 125, 0.2);
+      color: inherit;
     }
 
     .user-name {

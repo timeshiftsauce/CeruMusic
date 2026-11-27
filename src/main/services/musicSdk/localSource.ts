@@ -8,21 +8,24 @@ import {
 } from '@shiqianjiang/ceru-plugin-sdk'
 
 const handles = new Map<string, { id: string; expires: number }>()
-export async function openLocalMedia(request: Request): Promise<Response> {
-  const url = new URL(request.url)
-  if (url.hostname !== 'track' || !['GET', 'HEAD'].includes(request.method))
-    return new Response(null, { status: 404 })
+export async function localMediaPath(address: string): Promise<string | undefined> {
+  const url = new URL(address)
+  if (url.protocol !== 'ceru-local:' || url.hostname !== 'track') return
   const token = url.pathname.slice(1),
     handle = handles.get(token)
   if (!handle || handle.expires <= Date.now()) {
     handles.delete(token)
-    return new Response(null, { status: 404 })
+    return
   }
   const { localMusicIndexService } = await import('../LocalMusicIndex')
-  const song = localMusicIndexService.getSongById(handle.id)
-  if (!song?.path) return new Response(null, { status: 404 })
+  return localMusicIndexService.getSongById(handle.id)?.path
+}
+
+export async function openLocalMedia(request: Request): Promise<Response> {
+  const file = ['GET', 'HEAD'].includes(request.method) && await localMediaPath(request.url)
+  if (!file) return new Response(null, { status: 404 })
   const { net } = await import('electron')
-  return net.fetch(pathToFileURL(song.path).href, {
+  return net.fetch(pathToFileURL(file).href, {
     method: request.method,
     signal: request.signal,
     headers: request.headers.has('range') ? { Range: request.headers.get('range')! } : {}

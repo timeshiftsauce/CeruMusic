@@ -8,10 +8,11 @@
  * 正常单词不受影响,复制出来的文本也不会多出字符。
  */
 import { h, type FunctionalComponent } from 'vue'
+import { STICKER_MAP } from '@renderer/utils/listenTogether/stickers'
 
-/** 捕获分组保留分隔符:偶数下标是普通文本,奇数下标是每个 "/" */
+/** 保留路径分隔符和贴纸标记，让正文可以逐段渲染。 */
 export function splitNoteText(content: string): string[] {
-  return content.split(/(\/)/)
+  return content.split(/(\/|\[sticker-\d+\])/)
 }
 
 /**
@@ -22,5 +23,20 @@ export const NoteText: FunctionalComponent<{ text: string }> = (props) =>
   h(
     'span',
     { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } },
-    splitNoteText(props.text).flatMap((part) => (part === '/' ? [part, h('wbr')] : [part]))
+    splitNoteText(props.text).map((part, index) => {
+      if (index % 2 === 0) return part
+      if (part === '/') return [part, h('wbr')]
+      const sticker = STICKER_MAP[part.slice(1, -1)]
+      if (!sticker) return part
+      return h('img', {
+        src: sticker.src,
+        alt: sticker.label,
+        title: sticker.label,
+        style: {
+          width: 'var(--note-sticker-size, 4em)',
+          height: 'var(--note-sticker-size, 4em)',
+          verticalAlign: 'middle'
+        }
+      })
+    })
   )

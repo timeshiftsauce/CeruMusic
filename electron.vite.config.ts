@@ -1,4 +1,6 @@
-import { resolve } from 'path'
+import { dirname, resolve } from 'path'
+import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { defineConfig } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import { build as buildBrowserLibrary, type Plugin } from 'vite'
@@ -9,6 +11,48 @@ import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver'
 import wasm from 'vite-plugin-wasm'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import topLevelAwait from 'vite-plugin-top-level-await'
+
+function fixSignalsmithBufferPlayback(): Plugin {
+  const moduleId = 'virtual:ceru-karaoke-stretch'
+  const resolvedId = '\0' + moduleId
+  return {
+    name: 'signalsmith-buffer-playback',
+    resolveId(id) {
+      return id === moduleId ? resolvedId : null
+    },
+    async load(id) {
+      if (id !== resolvedId) return
+      const require = createRequire(resolve('package.json'))
+      const entry = resolve(dirname(require.resolve('signalsmith-stretch')), 'SignalsmithStretch.mjs')
+      this.addWatchFile(entry)
+      const code = await readFile(entry, 'utf8')
+
+      // Signalsmith 1.3.2 reuses the first block's source index at each boundary.
+      // Intersect each queued buffer with the requested window before copying.
+      const start = code.indexOf('let blockSamples = 0;')
+      const end = code.indexOf('// constantly seeking', start)
+      if (start < 0 || end < 0) this.error('Review the Signalsmith buffered playback fix')
+      return code.slice(0, start) + `
+        const windowStart = inputSamplesEnd - this.bufferLength;
+        buffers.forEach(buffer => buffer.fill(0));
+        let start = this.audioBuffersStart;
+        for (const block of this.audioBuffers) {
+          const end = start + block[0].length;
+          const from = Math.max(start, windowStart);
+          const to = Math.min(end, inputSamplesEnd);
+          if (from < to) {
+            buffers.forEach((buffer, channel) => {
+              buffer.set(block[channel].subarray(from - start, to - start), from - windowStart);
+            });
+          }
+          if (end >= inputSamplesEnd) break;
+          start = end;
+        }
+
+        ` + code.slice(end)
+    }
+  }
+}
 
 function desktopViewLibrary(): Plugin {
   const entry = resolve(__dirname, 'src/renderer/src/plugin/desktopComponents.ts')
@@ -51,6 +95,7 @@ export default defineConfig(({ command }) => ({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
+          karaokeWorker: resolve(__dirname, 'src/main/workers/karaokeWorker.ts'),
           downloadWorker: resolve(__dirname, 'src/main/workers/downloadWorker.ts')
         },
         output: {
@@ -166,6 +211,7 @@ export default defineConfig(({ command }) => ({
       }
     },
     plugins: [
+      fixSignalsmithBufferPlayback(),
       vue(),
       vueDevTools(),
       wasm(),

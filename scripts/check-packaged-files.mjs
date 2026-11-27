@@ -37,6 +37,7 @@ export function checkPackagedFiles(target) {
   required('out/preload/index.js')
   required('out/renderer/index.html')
   required('out/main/desktop-components.json')
+  required('out/main/karaokeWorker.js')
   required('resources/logo.ico')
   required('LICENSE')
   required('EULA.txt')

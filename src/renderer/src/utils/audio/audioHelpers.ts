@@ -1,9 +1,3 @@
-import { desktopBridge } from '@renderer/services/desktopBridge'
-import { toRaw } from 'vue'
-import { MessagePlugin } from '@renderer/plugin/notifications'
-import { type SongList } from '@renderer/types/audio'
-import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
-
 export const strSim = (s1: string, s2: string) => {
   const t1 = (s1 || '').toLowerCase().trim()
   const t2 = (s2 || '').toLowerCase().trim()
@@ -36,8 +30,9 @@ export const parseInterval = (timeStr: string | undefined) => {
   return 0
 }
 
-export const waitForAudioReady = (audio: HTMLAudioElement): Promise<void> => {
+export const waitForAudioReady = (audio: HTMLAudioElement, signal?: AbortSignal): Promise<void> => {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted()
     if (!audio) {
       reject(new Error('音频元素未初始化'))
       return
@@ -46,99 +41,30 @@ export const waitForAudioReady = (audio: HTMLAudioElement): Promise<void> => {
       resolve()
       return
     }
-    const timeout = setTimeout(() => {
+    const cleanup = () => {
+      clearTimeout(timeout)
       audio.removeEventListener('canplay', onCanPlay)
       audio.removeEventListener('error', onError)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const timeout = setTimeout(() => {
+      cleanup()
       reject(new Error('音频加载超时'))
     }, 10000)
     const onCanPlay = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
+      cleanup()
       resolve()
     }
     const onError = () => {
-      clearTimeout(timeout)
-      audio.removeEventListener('canplay', onCanPlay)
-      audio.removeEventListener('error', onError)
+      cleanup()
       reject(new Error('音频加载失败'))
+    }
+    const onAbort = () => {
+      cleanup()
+      reject(signal?.reason)
     }
     audio.addEventListener('canplay', onCanPlay, { once: true })
     audio.addEventListener('error', onError, { once: true })
+    signal?.addEventListener('abort', onAbort, { once: true })
   })
-}
-
-export const getCandidateSongs = async (
-  originalSong: SongList,
-  userInfo: any
-): Promise<SongList[]> => {
-  MessagePlugin.loading('当前源播放失败，正在尝试自动换源...')
-  const qualityMap = userInfo.sourceQualityMap || {}
-  let sources = Object.keys(qualityMap)
-  if (sources.length === 0) {
-    sources = Object.keys(userInfo.supportedSources || {})
-  }
-  // 移除当前源
-  sources = sources.filter((s) => s !== originalSong.source)
-
-  const searchKeyword = `${originalSong.name} ${originalSong.singer}`.trim()
-  const originalDuration = parseInterval(originalSong.interval)
-
-  const searchPromises = sources.map(async (source) => {
-    try {
-      const res = await (desktopBridge as any).api.music.requestSdk('search', {
-        source,
-        keyword: searchKeyword,
-        page: 1,
-        limit: 15
-      })
-      return (res.list || []).map((item: any) => ({ ...item, source }))
-    } catch {
-      return []
-    }
-  })
-
-  const results = (await Promise.all(searchPromises)).flat()
-  const ranked = results
-    .map((item) => {
-      const nameScore = strSim(item.name, originalSong.name)
-      const singerScore = strSim(item.singer, originalSong.singer)
-      let score = nameScore * 0.6 + singerScore * 0.4
-
-      // 时长匹配逻辑
-      const itemDuration = parseInterval(item.interval)
-      if (originalDuration > 0 && itemDuration > 0) {
-        const diff = Math.abs(originalDuration - itemDuration)
-        if (diff <= 5) {
-          score += 0.2 // 时长非常接近，加分
-        } else if (diff > 40) {
-          score -= 0.3 // 时长差异过大，减分
-        }
-      }
-      return { item, score }
-    })
-    .filter((x) => x.score > 0.6) // 稍微严格一点的匹配
-    .sort((a, b) => b.score - a.score)
-
-  if (ranked.length === 0) {
-    throw new Error('未找到其他源的匹配歌曲')
-  }
-
-  return ranked.map((r) => r.item)
-}
-
-export const autoSwitchSource = async (originalSong: SongList, userInfo: any): Promise<string> => {
-  const candidates = await getCandidateSongs(originalSong, userInfo)
-  for (const item of candidates) {
-    try {
-      const url = await getSongRealUrl(toRaw(item))
-      if (url && typeof url === 'string' && !url.includes('error')) {
-        MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
-        return url
-      }
-    } catch {
-      continue
-    }
-  }
-  throw new Error('其他源也无法播放')
 }

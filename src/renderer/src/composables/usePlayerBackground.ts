@@ -60,7 +60,28 @@ export function usePlayerBackground(
       try {
         while (!current.disposed && current.requestedAlbum !== current.loadedAlbum) {
           const album = current.requestedAlbum
-          await current.player.setAlbum(album, false)
+          try {
+            // Mesh fetches string sources, including blob URLs. Decode under img-src
+            // and hand AMLL the image element so it never needs that connection.
+            let source: HTMLImageElement | '' = ''
+            if (album) {
+              const image = new Image()
+              image.crossOrigin = 'anonymous'
+              image.src = album
+              await image.decode()
+              source = image
+            }
+            if (current.disposed) return
+            if (current.requestedAlbum !== album) continue
+            await current.player.setAlbum(source, false)
+          } catch (error) {
+            if (current.disposed) return
+            if (current.requestedAlbum !== album) continue
+            current.loadedAlbum = album
+            ready.value = false
+            console.warn('加载播放页背景失败:', error)
+            return
+          }
           if (current.disposed) return
           current.loadedAlbum = album
         }

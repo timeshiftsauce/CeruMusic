@@ -1,6 +1,21 @@
 <script setup lang="ts">
+import PlaybackTraceDialog from './PlaybackTraceDialog.vue'
+
+import type { DropdownMenuProps, DropdownOption } from 'naive-ui'
+import type { SongList as Playlist } from '@common/types/songList'
+import PostCreateDialog from '@renderer/components/community/PostCreateDialog.vue'
+import {
+  closeCommunityShare,
+  communityShareDraft,
+  communityShareEvents,
+  openCommunityShare
+} from '@renderer/services/communityShareDraft'
+import { loadWritablePlaylists } from '@renderer/services/writablePlaylists'
+import { changePlaylistTracks } from '@renderer/services/playlistTrackChanges'
+import { trackMenuCapabilities } from '@renderer/services/trackMenuCapabilities'
+
 import { desktopBridge } from '@renderer/services/desktopBridge'
-import { restoredSong, songKey } from '@common/musicItem'
+import { restoredSong, songKey, type MusicItem } from '@common/musicItem'
 import { runTrackLike } from '@renderer/plugin/operations'
 import { favoriteChanged,applyTrackFavorite } from '@renderer/services/trackFavorites'
 import { getQualityDisplayName } from '@common/utils/quality'
@@ -25,6 +40,17 @@ const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
+import KaraokePanel from './KaraokePanel.vue'
+import { useRouter } from 'vue-router'
+import { MicrophoneIcon } from 'tdesign-icons-vue-next'
+const karaokeRouter = useRouter()
+const showKaraoke = ref(false)
+const moreAnchor = ref<HTMLElement | null>(null)
+function openModelDownloads() {
+  showKaraoke.value = false
+  showFullPlay.value = false
+  void karaokeRouter.push('/home/download')
+}
 import { PlayMode } from '@renderer/types/audio'
 import { DialogPlugin, InputNumber as TInputNumber } from 'tdesign-vue-next'
 import { MessagePlugin } from '@renderer/plugin/notifications'
@@ -39,7 +65,6 @@ import {
   playSong,
   playMode
 } from '@renderer/utils/audio/globaPlayList'
-import songCover from '@renderer/assets/images/song.jpg'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
 import {
   HeartIcon,
@@ -53,13 +78,17 @@ import {
   TimeIcon,
   UsergroupIcon,
   EditIcon,
-  RefreshIcon
+  RefreshIcon,
+  InfoCircleIcon,
+  LinkIcon,
+  FolderIcon
 } from 'tdesign-icons-vue-next'
 import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
 import { useDlnaStore } from '@renderer/store/dlna'
 import { crossfadeState, crossfadeManager } from '@renderer/utils/audio/crossfade'
 import CrossfadeHint from './CrossfadeHint.vue'
+import PlayerCover from './PlayerCover.vue'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 import ListenTogetherEntryDialog from '@renderer/components/ListenTogether/ListenTogetherEntryDialog.vue'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
@@ -77,6 +106,10 @@ const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { player } = storeToRefs(globalPlayStatus)
 const songInfo = computed(() => player.value.songInfo || ({} as any))
+const currentTrack = computed<MusicItem | undefined>(() =>
+  songInfo.value.songmid == null || songInfo.value.songmid === '' ? undefined : songInfo.value
+)
+const trackCapabilities = computed(() => trackMenuCapabilities(currentTrack.value))
 
 const {} = controlAudio
 
@@ -249,6 +282,20 @@ const blobOrUrlToDataUrl = async (src: string): Promise<string | null> => {
   if (!src) return null
   if (src.startsWith('data:')) return src
   try {
+    if (src.startsWith('blob:')) {
+      // Load through img-src instead of opening a fetch connection to a blob URL.
+      const image = new Image()
+      image.src = src
+      await image.decode()
+      const canvas = document.createElement('canvas')
+      const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight))
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+      const context = canvas.getContext('2d')
+      if (!context) return null
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/png')
+    }
     const resp = await fetch(src)
     const blob = await resp.blob()
     return await new Promise<string | null>((resolve) => {
@@ -324,6 +371,9 @@ watch(
 
 const showFullPlay = ref(false)
 const showComments = ref(false)
+watch(() => trackCapabilities.value.comments, (available) => {
+  if (!available) showComments.value = false
+})
 
 const toggleComments = () => {
   showComments.value = !showComments.value
@@ -622,6 +672,7 @@ onActivated(async () => {
 // 组件被停用时（缓存但不销毁）
 onDeactivated(() => {
   console.log('PlayMusic组件被停用')
+  showKaraoke.value = false
   // 仅记录状态，不主动暂停，避免页面切换导致音乐暂停
   // wasPlaying = Audio.value.isPlay
   isFull = showFullPlay.value
@@ -691,6 +742,28 @@ const onDownload = async () => {
 
 // 分享对话框
 const shareDialogVisible = ref(false)
+const websiteShareSong = ref<MusicItem>()
+const writablePlaylists = ref<Playlist[]>([])
+const loadingWritablePlaylists = ref(false)
+const moreMenuProps: DropdownMenuProps = (option) =>
+  option?.key === 'add-to-playlist' ? { style: 'max-height: 50vh; overflow-y: auto' } : {}
+
+function onMoreMenuShow(open: boolean) {
+  isMoreMenuOpen.value = open
+  if (!open || !currentTrack.value || loadingWritablePlaylists.value) return
+  loadingWritablePlaylists.value = true
+  void loadWritablePlaylists()
+    .then((playlists) => { writablePlaylists.value = playlists })
+    .catch(() => { writablePlaylists.value = [] })
+    .finally(() => { loadingWritablePlaylists.value = false })
+}
+
+function addCurrentTrackToPlaylist(key: string) {
+  const track = currentTrack.value
+  const playlist = writablePlaylists.value.find((item) => item.id === key)
+  if (!track || !playlist) return
+  void changePlaylistTracks('playlist.addTracks', playlist, [track], !!playlist.meta?.isCloudOnly)
+}
 
 // 一起听入口对话框（创建/加入二选一）
 const listenTogetherEntryVisible = ref(false)
@@ -786,10 +859,10 @@ const applyPlaybackRate = (rate: number) => {
   const a = Audio.value.audioA
   const b = Audio.value.audioB
   try {
-    if (a) a.playbackRate = rate
+    if (a) a.playbackRate = crossfadeManager.playbackRateFor(a, rate)
   } catch {}
   try {
-    if (b) b.playbackRate = rate
+    if (b) b.playbackRate = crossfadeManager.playbackRateFor(b, rate)
   } catch {}
 }
 const setPlaybackRate = (rate: number) => {
@@ -922,12 +995,39 @@ const switchQuality = async (quality: string) => {
 
 // 更多菜单选项
 const moreMenuOptions = computed(() => {
-  const opts: any[] = [
+  const shareOptions: DropdownOption[] = [
+    { label: '分享到社区', key: 'share:community', icon: () => h(ChatBubble1Icon, { size: '14' }) }
+  ]
+  if (trackCapabilities.value.websiteShare) {
+    shareOptions.push({
+      label: '分享到社交软件',
+      key: 'share:website',
+      icon: () => h(LinkIcon, { size: '14' })
+    })
+  }
+  const playlists = writablePlaylists.value.filter(
+    (item) => currentTrack.value?.source !== 'local' || !item.meta?.isCloudOnly
+  )
+  const opts: DropdownOption[] = [
     {
       label: '分享',
       key: 'share',
       icon: () => h(ShareIcon, { size: '16' }),
-      disabled: !songInfo.value.songmid
+      disabled: !currentTrack.value,
+      children: shareOptions
+    },
+    {
+      label: '添加到歌单',
+      key: 'add-to-playlist',
+      icon: () => h(FolderIcon, { size: '16' }),
+      disabled: !currentTrack.value,
+      children: playlists.length
+        ? playlists.map(({ id, name }) => ({ label: name, key: 'playlist:' + id }))
+        : [{
+            label: loadingWritablePlaylists.value ? '正在加载歌单…' : '暂无可添加的歌单',
+            key: 'playlist-empty',
+            disabled: true
+          }]
     }
   ]
 
@@ -992,6 +1092,11 @@ const moreMenuOptions = computed(() => {
     })
   }
 
+  opts.push({
+    label: '伴唱模式（Beta）',
+    key: 'karaoke',
+    icon: () => h(MicrophoneIcon, { size: '16' })
+  })
   opts.push({
     label: `播放倍速 · ${formatRate(playbackRate.value)}`,
     key: 'rate',
@@ -1070,12 +1175,38 @@ const moreMenuOptions = computed(() => {
     })
   }
 
+  opts.push({
+    label: '关于',
+    key: 'playback-about',
+    icon: () => h(InfoCircleIcon, { size: '16' }),
+    children: [
+      {
+        label: '歌曲来源链路',
+        key: 'playback-trace',
+        icon: () => h(LinkIcon, { size: '14' })
+      }
+    ]
+  })
   return opts
 })
 
+const showPlaybackTrace = ref(false)
 const handleMoreMenuSelect = (key: string) => {
-  if (key === 'share') {
-    if (!songInfo.value.songmid) return
+  if (key === 'karaoke') { showKaraoke.value = true; return }
+  if (key === 'playback-trace') {
+    showPlaybackTrace.value = true
+    return
+  }
+  if (key.startsWith('playlist:')) {
+    addCurrentTrackToPlaylist(key.slice('playlist:'.length))
+    return
+  }
+  if (key === 'share:community' && currentTrack.value) {
+    openCommunityShare({ type: 'song', song: currentTrack.value })
+    return
+  }
+  if (key === 'share:website' && currentTrack.value && trackCapabilities.value.websiteShare) {
+    websiteShareSong.value = { ...currentTrack.value }
     shareDialogVisible.value = true
     return
   }
@@ -1449,6 +1580,7 @@ watch(
 )
 
 watch(showFullPlay, (val) => {
+  showKaraoke.value = false
   if (val) {
     console.log('背景hei')
     bg.value = '#00000020'
@@ -1462,7 +1594,7 @@ watch(showFullPlay, (val) => {
   <div
     class="player-container"
     :style="!showFullPlay && 'box-shadow: none'"
-    :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay && !isMoreMenuOpen }"
+    :class="{ 'full-play-idle': isFullPlayIdle && showFullPlay && !isMoreMenuOpen && !showKaraoke }"
     @click.stop="toggleFullPlay"
   >
     <!-- 进度条 -->
@@ -1527,7 +1659,7 @@ watch(showFullPlay, (val) => {
       <!-- 左侧：封面 + 歌曲信息 + 歌曲操作 -->
       <div class="left-section">
         <div v-if="songInfo.songmid" class="album-cover">
-          <img :src="player.cover || songCover" alt="专辑封面" />
+          <PlayerCover :src="player.cover" alt="专辑封面" />
         </div>
 
         <div class="song-info">
@@ -1564,7 +1696,7 @@ watch(showFullPlay, (val) => {
             </t-button>
           </t-tooltip>
           <Transition name="comment-fade" mode="out-in" appear>
-            <div v-if="songInfo.source !== 'local' && showFullPlay" class="comment-btn-wrapper">
+            <div v-if="currentTrack && trackCapabilities.comments && showFullPlay" class="comment-btn-wrapper">
               <t-tooltip content="评论">
                 <t-button
                   class="control-btn"
@@ -1587,15 +1719,16 @@ watch(showFullPlay, (val) => {
             trigger="click"
             placement="top-start"
             :options="moreMenuOptions"
+            :menu-props="moreMenuProps"
             @select="handleMoreMenuSelect"
-            @update:show="(s: boolean) => (isMoreMenuOpen = s)"
+            @update:show="onMoreMenuShow"
           >
             <t-button
               class="control-btn"
               shape="circle"
               variant="text"
-              :disabled="!songInfo.songmid"
-              @click.stop
+              aria-label="更多播放选项"
+              @click.stop="moreAnchor = $event.currentTarget as HTMLElement"
             >
               <ellipsis-icon size="18" />
             </t-button>
@@ -1763,6 +1896,18 @@ watch(showFullPlay, (val) => {
     />
   </div>
 
+  <PlaybackTraceDialog
+    v-model:show="showPlaybackTrace"
+    :full-screen="showFullPlay"
+    :active-song="songInfo.name"
+    :cover="player.cover"
+    :accent="maincolor"
+  />
+
+  <KaraokePanel :show="showKaraoke" :full-screen="showFullPlay" :anchor="moreAnchor"
+    :rate="playbackRate" :casting="!!dlnaStore.currentDevice" @rate="setPlaybackRate"
+    @close="showKaraoke = false" @downloads="openModelDownloads" />
+
   <!-- 播放列表组件 -->
   <PlaylistDrawer
     ref="playlistDrawerRef"
@@ -1777,7 +1922,17 @@ watch(showFullPlay, (val) => {
   <CrossfadeHint />
 
   <!-- 分享对话框 -->
-  <ShareSongDialog v-model="shareDialogVisible" />
+  <ShareSongDialog v-model="shareDialogVisible" :song="websiteShareSong" />
+  <PostCreateDialog
+    :visible="!!communityShareDraft"
+    :initial-song="communityShareDraft?.type === 'song' ? communityShareDraft.song : undefined"
+    :initial-playlist="communityShareDraft?.type === 'playlist' ? communityShareDraft.playlist : undefined"
+    @update:visible="(visible) => { if (!visible) closeCommunityShare() }"
+    @created="(post) => {
+      communityShareEvents.emit('created', post)
+      MessagePlugin.success('笔记已发布')
+    }"
+  />
 
   <!-- 一起听入口对话框 -->
   <ListenTogetherEntryDialog v-model="listenTogetherEntryVisible" :mode="listenTogetherEntryMode" />
@@ -2160,14 +2315,6 @@ watch(showFullPlay, (val) => {
     overflow: hidden;
     margin-right: 12px;
     flex-shrink: 0;
-
-    img {
-      user-select: none;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      -webkit-user-drag: none;
-    }
   }
 
   .song-info {

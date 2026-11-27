@@ -11507,3 +11507,58 @@ electron@^45.3.2, electron@>=13.0.0:
     "@electron-internal/extract-zip" "^1.0.1"
     "@electron/get" "^5.0.0"
     "@types/node" "^24.9.0"
+
+"@types/dom-mediacapture-transform@^0.1.11":
+  version "0.1.12"
+  resolved "https://registry.npmjs.org/@types/dom-mediacapture-transform/-/dom-mediacapture-transform-0.1.12.tgz"
+  integrity sha512-d7/QsLRwF864A5mgIM/YrfiglHoYn7zgCcAoJgW404r+2DwnNr7EBbLnCWpmOMgH8y0te73L1AV6H1bmauaWFw==
+  dependencies:
+    "@types/dom-webcodecs" "*"
+
+"@types/dom-webcodecs@*", "@types/dom-webcodecs@0.1.13":
+  version "0.1.13"
+  resolved "https://registry.npmjs.org/@types/dom-webcodecs/-/dom-webcodecs-0.1.13.tgz"
+  integrity sha512-O5hkiFIcjjszPIYyUSyvScyvrBoV3NOEEZx/pMlsu44TKzWNkLVBBxnxJz42in5n3QIolYOcBYFCPZZ0h8SkwQ==
+
+fft.js@4.0.4:
+  version "4.0.4"
+  resolved "https://registry.npmjs.org/fft.js/-/fft.js-4.0.4.tgz"
+  integrity sha512-f9c00hphOgeQTlDyavwTtu6RiK8AIFjD6+jvXkNkpeQ7rirK3uFWVpalkoS4LAwbdX7mfZ8aoBfFVQX1Re/8aw==
+
+mediabunny@1.66.5:
+  version "1.66.5"
+  resolved "https://registry.npmjs.org/mediabunny/-/mediabunny-1.66.5.tgz"
+  integrity sha512-g2H+TdA0cKszM4ZKae9JszxWKLUpmte1Je/F9TY5Et0uO9a6k82V7HGrI3X9RT6ILFOK3Vi2nB9SjifWn5yyPw==
+  dependencies:
+    "@types/dom-mediacapture-transform" "^0.1.11"
+    "@types/dom-webcodecs" "0.1.13"
+
+onnxruntime-common@1.21.0:
+  version "1.21.0"
+  resolved "https://registry.npmjs.org/onnxruntime-common/-/onnxruntime-common-1.21.0.tgz"
+  integrity sha512-Q632iLLrtCAVOTO65dh2+mNbQir/QNTVBG3h/QdZBpns7mZ0RYbLRBgGABPbpU9351AgYy7SJf1WaeVwMrBFPQ==
+
+onnxruntime-node@1.21.0:
+  version "1.21.0"
+  resolved "https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.21.0.tgz"
+  integrity sha512-NeaCX6WW2L8cRCSqy3bInlo5ojjQqu2fD3D+9W5qb5irwxhEyWKXeH2vZ8W9r6VxaMPUan+4/7NDwZMtouZxEw==
+  dependencies:
+    global-agent "^3.0.0"
+    onnxruntime-common "1.21.0"
+    tar "^7.0.1"
+
+signalsmith-stretch@1.3.2:
+  version "1.3.2"
+  resolved "https://registry.npmjs.org/signalsmith-stretch/-/signalsmith-stretch-1.3.2.tgz"
+  integrity sha512-tJqRbwPCoWLSHXwO29UQ75u72IwPsHns3RG+TKzuOAp7OduJiJMzEtz32JEFbPFQcTR7aiKCIVc+/Kzw8bMZUw==
+
+tar@^7.0.1, tar@^7.4.3, tar@^7.5.6, tar@^7.5.7:
+  version "7.5.13"
+  resolved "https://registry.npmmirror.com/tar/-/tar-7.5.13.tgz"
+  integrity sha512-tOG/7GyXpFevhXVh8jOPJrmtRpOTsYqUIkVdVooZYJS/z8WhfQUX8RJILmeuJNinGAMSu1veBr4asSHFt5/hng==
+  dependencies:
+    "@isaacs/fs-minipass" "^4.0.0"
+    chownr "^3.0.0"
+    minipass "^7.1.2"
+    minizlib "^3.1.0"
+    yallist "^5.0.0"

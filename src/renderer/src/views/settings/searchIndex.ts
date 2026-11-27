@@ -103,6 +103,12 @@ export const searchItems: SearchItem[] = [
     keywords: ['eq', '音效']
   },
   {
+    id: 'playback-automix',
+    category: 'playlist',
+    title: '自动混音',
+    keywords: ['无感过渡', '节拍', '最大分析时间', 'BPM', 'AutoMix']
+  },
+  {
     id: 'playback-audio-effect',
     category: 'playlist',
     title: '高级音效处理',
@@ -116,6 +122,12 @@ export const searchItems: SearchItem[] = [
   },
 
   // Music Source
+  {
+    id: 'music-fallback',
+    category: 'music',
+    title: '自动换源',
+    keywords: ['失败', '降级', '跨插件', '跨音源', '优先级', '自动下一首']
+  },
   {
     id: 'music-source',
     category: 'music',

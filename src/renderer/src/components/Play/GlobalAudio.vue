@@ -14,9 +14,11 @@ import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { useEqualizerStore } from '@renderer/store/Equalizer'
 import { useAudioEffectsStore } from '@renderer/store/AudioEffects'
 import { useAudioOutputStore } from '@renderer/store/audioOutput'
+import { useDlnaStore } from '@renderer/store/dlna'
 import { storeToRefs } from 'pinia'
 import AudioManager from '@renderer/utils/audio/audioManager'
-import { crossfadeState } from '@renderer/utils/audio/crossfade'
+import { useKaraokePlayback } from '@renderer/utils/audio/karaokePlayback'
+import { crossfadeManager, crossfadeState } from '@renderer/utils/audio/crossfade'
 import { useAppBackground } from '@renderer/composables/useAppBackground'
 
 type AudioSlot = 'A' | 'B'
@@ -35,6 +37,9 @@ provide('audioSubscribe', audioStore.subscribe)
 
 // 判断事件是否来自当前活跃槽
 const isPrimarySlot = (slot: AudioSlot) => audioStore.Audio.primarySlot === slot
+const dlna = useDlnaStore()
+useKaraokePlayback(audioARef, () => audioStore.Audio.srcA, () => isPrimarySlot('A') && !dlna.currentDevice)
+useKaraokePlayback(audioBRef, () => audioStore.Audio.srcB, () => isPrimarySlot('B') && !dlna.currentDevice)
 
 // 应用均衡器设置
 const applyGlobalEQ = (el: HTMLAudioElement) => {
@@ -268,6 +273,11 @@ const handleSeeked = (slot: AudioSlot): void => {
   audioStore.publish('seeked')
 }
 
+const handleTimeUpdate = (slot: AudioSlot): void => {
+  if (!isPrimarySlot(slot) || audioStore.Audio.audio?.paused) return
+  audioStore.publish('timeupdate')
+}
+
 const handlePlay = (slot: AudioSlot): void => {
   const el = slot === 'A' ? audioARef.value : audioBRef.value
   // 确保 AudioContext 处于运行状态
@@ -294,7 +304,6 @@ const { isAppBackground } = useAppBackground()
 const progressTick = (): void => {
   const activeEl = audioStore.Audio.audio
   if (activeEl && !activeEl.paused) {
-    audioStore.publish('timeupdate')
     audioStore.setCurrentTime(activeEl.currentTime || 0)
   }
 }
@@ -372,6 +381,7 @@ const handleCanPlay = (slot: AudioSlot): void => {
 }
 
 onUnmounted(() => {
+  crossfadeManager.cancel()
   try {
     desktopBridge.api.pingService.stop()
   } catch {}
@@ -391,7 +401,6 @@ onUnmounted(() => {
       el.load()
     } catch {}
   }
-  audioStore.clearAllSubscribers()
 })
 </script>
 
@@ -403,6 +412,7 @@ onUnmounted(() => {
       crossorigin="anonymous"
       preload="auto"
       :src="audioStore.Audio.srcA"
+      @timeupdate="handleTimeUpdate('A')"
       @seeked="handleSeeked('A')"
       @play="handlePlay('A')"
       @pause="handlePause('A')"
@@ -417,6 +427,7 @@ onUnmounted(() => {
       crossorigin="anonymous"
       preload="auto"
       :src="audioStore.Audio.srcB"
+      @timeupdate="handleTimeUpdate('B')"
       @seeked="handleSeeked('B')"
       @play="handlePlay('B')"
       @pause="handlePause('B')"

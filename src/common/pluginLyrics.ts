@@ -1,5 +1,15 @@
 import type { CrLyric } from '@shiqianjiang/ceru-plugin-sdk'
 
+export type LyricWithSongwriters = CrLyric & { songwriters?: string[] }
+
+export function getLyricSongwriters(document: LyricWithSongwriters | undefined): string[] {
+  if (!Array.isArray(document?.songwriters)) return []
+  const names = document.songwriters
+    .map((name) => (typeof name === 'string' ? name.trim() : ''))
+    .filter(Boolean)
+  return [...new Set(names)]
+}
+
 const LYRIC_INFO_KEYS = [
   '作曲',
   '作词',

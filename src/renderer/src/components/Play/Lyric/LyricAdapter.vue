@@ -46,6 +46,7 @@
           <span v-if="line.translatedLyric" class="tran">{{ line.translatedLyric }}</span>
           <span v-if="romanizations[index]" class="roma">{{ romanizations[index] }}</span>
         </div>
+        <slot name="bottom-line" />
         <div class="placeholder" />
       </div>
     </div>

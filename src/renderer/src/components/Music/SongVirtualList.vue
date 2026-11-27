@@ -341,9 +341,11 @@ import type { ContextMenuItem, ContextMenuPosition } from '../ContextMenu/types'
 import songListAPI from '@renderer/api/songList'
 import type { SongList } from '@common/types/songList'
 import { MessagePlugin } from '@renderer/plugin/notifications'
-import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
+import { loadWritablePlaylists } from '@renderer/services/writablePlaylists'
+import { openCommunityShare } from '@renderer/services/communityShareDraft'
+import { trackMenuCapabilities } from '@renderer/services/trackMenuCapabilities'
+import { LinkIcon, ChatBubbleIcon } from 'tdesign-icons-vue-next'
 import { changePlaylistTracks } from '@renderer/services/playlistTrackChanges'
-import { useAuthStore } from '@renderer/store'
 import { useSettingsStore } from '@renderer/store/Settings'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 
@@ -935,19 +937,22 @@ const contextMenuItems = computed((): ContextMenuItem[] => {
       })
     )
   }
-  // 分享（非本地歌曲才能分享）
-  if (contextMenuSong.value?.source !== 'local') {
-    baseItems.push(
-      createMenuItem('share', '分享', {
-        icon: ShareIcon,
-        onClick: (_item: ContextMenuItem, _event: MouseEvent) => {
-          if (contextMenuSong.value) {
-            shareTargetSong.value = contextMenuSong.value
-            shareDialogVisible.value = true
-          }
+  const shareSong = contextMenuSong.value
+  if (shareSong) {
+    const children = [createMenuItem('share-community', '分享到社区', {
+      icon: ChatBubbleIcon,
+      onClick: () => openCommunityShare({ type: 'song', song: shareSong })
+    })]
+    if (trackMenuCapabilities(shareSong).websiteShare) {
+      children.push(createMenuItem('share-website', '分享到社交软件', {
+        icon: LinkIcon,
+        onClick: () => {
+          shareTargetSong.value = shareSong
+          shareDialogVisible.value = true
         }
-      })
-    )
+      }))
+    }
+    baseItems.push(createMenuItem('share', '分享', { icon: ShareIcon, children }))
   }
   // 如果是本地歌单，添加"移出本地歌单"选项
   if (props.isLocalPlaylist) {
@@ -1022,69 +1027,9 @@ const closeContextMenu = () => {
   contextMenuSong.value = null
 }
 
-// 加载歌单列表
 const loadPlaylists = async () => {
-  const AuthStore = useAuthStore()
   try {
-    async function getCloudSongList() {
-      if (!AuthStore.isAuthenticated) return []
-      return await cloudSongListAPI.getUserSongLists().catch((err) => {
-        MessagePlugin.error(err.message || '获取云歌单失败')
-        return []
-      })
-    }
-    const [localRes, cloudRes] = await Promise.all([songListAPI.getAll(), getCloudSongList()])
-
-    const localLists = (localRes.success ? localRes.data : []) || []
-    const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
-
-    // Merge Logic
-    const mergedLists: SongList[] = []
-    const localMap = new Map<string, SongList>()
-
-    // 1. Process Local Lists
-    localLists.forEach((l) => {
-      // Ensure meta exists
-      if (!l.meta) l.meta = {}
-      localMap.set(l.id, l)
-      mergedLists.push(l)
-    })
-
-    // 2. Process Cloud Lists
-    cloudLists.forEach((c) => {
-      // Try to find matching local list
-      let match = localMap.get(c.localId)
-
-      if (!match) {
-        // Try reverse lookup
-        match = mergedLists.find((l) => l.meta && l.meta.cloudId === c.id)
-      }
-
-      if (match) {
-        // Mark as synced
-        match.meta.cloudId = c.id
-        match.meta.isSynced = true
-        match.meta.localUpdatedAt = c.updatedAt
-      } else {
-        // Cloud only list
-        mergedLists.push({
-          id: c.id,
-          name: c.name + '[云端]',
-          description: c.describe,
-          coverImgUrl: c.cover,
-          createTime: '',
-          updateTime: c.updatedAt,
-          source: 'local',
-          meta: {
-            isCloudOnly: true,
-            cloudId: c.id,
-            localUpdatedAt: c.updatedAt
-          }
-        })
-      }
-    })
-
-    playlists.value = mergedLists
+    playlists.value = await loadWritablePlaylists()
   } catch (error) {
     console.error('加载歌单失败:', error)
   }
@@ -1202,6 +1147,7 @@ const scrollToSong = (songmid: string | number, source: string) => {
 
 defineExpose({
   scrollToSong,
+  scrollContainer,
   sortedSongs,
   sortType,
   resetSort: () => {

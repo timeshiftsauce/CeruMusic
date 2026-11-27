@@ -92,8 +92,8 @@ git push gitee v1.14.0
 
 - 4 个矩阵节点 (`windows-latest` / `macos-15-intel` / `macos-latest` / `ubuntu-latest`)
   各自构建并上传产物
-- 每个节点会跑 "Extract changelog section" 步骤,日志里能看到 body preview
-- Release 步骤把产物与 body 一起发布到 GitHub Releases
+- 四个节点通过后，发布任务从 `CHANGELOG.md` 提取对应版本的说明，并检查各平台安装包和更新描述文件
+- 发布任务将完整产物和更新说明一起上传到 GitHub Releases
 
 打开 [Releases](https://github.com/timeshiftsauce/CeruMusic/releases) 确认:
 

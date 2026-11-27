@@ -1,3 +1,5 @@
+import { calculateBestQuality } from '@common/utils/quality'
+import { PlaybackProviderError, type PlaybackAttemptResult } from '@common/playbackAttempt'
 import {
   SearchArg,
   SearchResult,
@@ -176,14 +178,155 @@ function main(source: string = 'wy') {
     if (!provider) return fallback
     return provider.host.invokeV2Action(action, { ...input, song, source: currentSource })
   }
+  type AttemptOptions = {
+    ownerId?: string
+    blockedPluginIds?: string[]
+    scopedRecovery?: boolean
+    skipCachedAudio?: boolean
+    preferredQuality?: string
+  }
+  const resolveMusicUrl = async (
+    { songInfo, quality, isCache, qualityOrder }: GetMusicUrlArg,
+    options: AttemptOptions = {}
+  ): Promise<PlaybackAttemptResult> => {
+    let target: PlaybackAttemptResult = { source, quality }
+    try {
+      const resource = normalizeAppTrackRef(songInfo.pluginResource)
+      if (resource) {
+        if (!isProviderTrackRef(resource)) assertResourceRef(resource)
+        if (resource.kind !== 'track') throw new Error('只能播放歌曲资源')
+      }
+      const currentSource = resource?.providerId || songInfo.source || source
+      target = { ...target, source: currentSource }
+      if (currentSource === 'local') {
+        const url = localMusicIndexService.getUrlById(resource?.id ?? songInfo.songmid)
+        return url ? { ...target, url } : { ...target, error: '未找到本地文件' }
+      }
+      const privateOwner = resource && !isProviderTrackRef(resource) ? resource.pluginId : undefined
+      const ownerId = options.ownerId ?? privateOwner
+      const provider = pluginService.getV2Provider(
+        currentSource,
+        ownerId,
+        'tracks.resolve'
+      )
+      if (!provider) throw new Error('请先安装提供该音源的插件')
+      target.pluginId = provider.pluginId
+      // Capability routing can use a different implementation from the selected
+      // platform owner. Resolve and cache against the actual provider's quality ladder.
+      if (options.scopedRecovery) {
+        const advertised = provider.host.getDescriptor().providers.find(({ id }) => id === currentSource)?.qualities
+        if (advertised?.length) {
+          qualityOrder = advertised
+          if (options.preferredQuality !== undefined) {
+            quality = calculateBestQuality(songInfo.types, options.preferredQuality, advertised) ??
+              advertised.at(-1) ?? quality
+            target.quality = quality
+          }
+        }
+      }
+      if (privateOwner && ownerId && provider.host.getPluginInfo().id !== privateOwner &&
+          provider.pluginId !== privateOwner) {
+        throw new Error('私有歌曲只能由原插件解析')
+      }
+      if (options.blockedPluginIds?.includes(provider.pluginId)) {
+        return { ...target, error: '插件已拦截本轮换源', blockPlugin: true }
+      }
+      const effectiveRef = resource
+        ? isProviderTrackRef(resource)
+          ? targetAppTrackRef(resource, provider.host.getPluginInfo().id)
+          : retargetTrackRef(resource, provider.host.getPluginInfo().id)
+        : undefined
+      // Resolve selection first: changing playback implementations must also change the cache.
+      //
+      // 一首歌一个 key（不含 connectionId），音频文件 / 歌词 / 封面共用。
+      // 本地音乐不缓存（文件本就在磁盘上）。
+      const cacheable = isCache !== false && musicCacheService.isCacheable(songInfo)
+      const songId = JSON.stringify([
+        'plugin-audio',
+        provider.pluginId,
+        effectiveRef?.connectionId ?? null,
+        musicCacheService.songCacheKey(songInfo)
+      ])
+
+      // 先检查缓存（带上音质：缓存音质低于本次请求时视为未命中，会回源重取）
+      if (cacheable && !options.skipCachedAudio) {
+        const cachedUrl = await musicCacheService.getCachedMusicUrl(
+          songId,
+          quality,
+          qualityOrder ?? []
+        )
+        if (cachedUrl) {
+          return { ...target, url: cachedUrl }
+        }
+      }
+
+      // 没有缓存时才发起网络请求
+      const originalUrl = await provider.host.getMusicUrl(
+        currentSource,
+        effectiveRef ? { ...songInfo, pluginResource: effectiveRef } : songInfo,
+        quality,
+        options.scopedRecovery
+      )
+      // 按需异步缓存，不阻塞返回
+      if (cacheable) {
+        musicCacheService
+          .cacheMusic(songId, originalUrl, quality, qualityOrder ?? [])
+          .catch((error) => {
+            console.warn('缓存歌曲失败:', error)
+          })
+      }
+
+      return { ...target, url: originalUrl }
+    } catch (e: any) {
+      return {
+        ...target,
+        error: '获取歌曲失败 ' + (e.message || e.error || String(e)),
+        blockPlugin: e instanceof PlaybackProviderError && e.blockPlugin
+      }
+    }
+  }
+
+  const playbackAttempt = async (args: GetMusicUrlArg, options: AttemptOptions = {}) => {
+    if (!interceptsResolve()) return resolveMusicUrl(args, options)
+    const song = args.songInfo
+    const ref = normalizeAppTrackRef(song.pluginResource)
+    const provider = String(ref?.providerId ?? song.source ?? source)
+    const raw = String(ref?.id ?? song.songmid ?? '')
+    const portable = provider !== 'local' && provider !== 'private' &&
+      (!ref || isProviderTrackRef(ref)) && /^[\w.-]{1,128}$/.test(provider) && /^[\w.-]{1,256}$/.test(raw)
+    const track = {
+      ref: { kind: 'track' as const, providerId: portable ? provider : 'private', id: portable ? raw : randomUUID() },
+      title: String(song.name ?? '').slice(0, 512),
+      metadata: { artists: String(song.singer ?? '').split('、').filter(Boolean).slice(0, 32).map(artist => artist.slice(0, 256)) }
+    }
+    let result: PlaybackAttemptResult = { source, error: '未能解析播放地址' }
+    await resolveBus.run('player.resolve', { track, quality: args.quality }, { kind: 'system', location: 'playback' }, async (selected) => {
+      const same = track.ref.providerId === selected.track.ref.providerId && track.ref.id === selected.track.ref.id
+      const songInfo = same ? song : toAppTrack({ ...selected.track, ref: { ...selected.track.ref, scope: 'provider' } })
+      result = await resolveMusicUrl(
+        { ...args, songInfo, quality: selected.quality, qualityOrder: same ? args.qualityOrder : undefined },
+        {
+          ...options,
+          ownerId: provider === selected.track.ref.providerId || same ? options.ownerId : undefined,
+          preferredQuality: same && selected.quality === args.quality ? options.preferredQuality : undefined
+        }
+      )
+      return { ok: !!result.url }
+    })
+    return result
+  }
+
   return {
-    async search({ keyword, page = 1, limit = 30, cursor }: SearchArg) {
+    async search({ keyword, page = 1, limit = 30, cursor, ownerId }: SearchArg) {
       if (source === 'local') {
         const offset = (page-1)*limit
         const result = await searchLocal({query:keyword,kinds:['track'],filters:{},cursor:String(offset),limit})
         return v2Page({...result,totalEstimate:offset+result.items.length+(result.nextCursor ? 1 : 0)}) as SearchResult
       }
-      const provider = requireV2('tracks.search')
+      const provider = ownerId
+        ? pluginService.getV2Provider(source, ownerId, 'tracks.search')
+        : requireV2('tracks.search')
+      if (!provider) throw new Error('插件不支持此平台的歌曲搜索')
       const result = await provider.host.invokeV2Provider(source, 'tracks.search', [
         {
           query: keyword,
@@ -212,86 +355,21 @@ function main(source: string = 'wy') {
       }
     },
 
-    async getPlaybackUrl(args: GetMusicUrlArg): Promise<string | {error:string}> {
-      if (!interceptsResolve()) return this.getMusicUrl(args)
-      const song=args.songInfo, ref=normalizeAppTrackRef(song.pluginResource)
-      const provider=String(ref?.providerId ?? song.source ?? source), raw=String(ref?.id ?? song.songmid ?? '')
-      const portable=provider!=='local' && provider!=='private' && (!ref || isProviderTrackRef(ref)) && /^[\w.-]{1,128}$/.test(provider) && /^[\w.-]{1,256}$/.test(raw)
-      const track={ref:{kind:'track' as const,providerId:portable?provider:'private',id:portable?raw:randomUUID()},title:String(song.name ?? '').slice(0,512),metadata:{artists:String(song.singer ?? '').split('、').filter(Boolean).slice(0,32).map(artist=>artist.slice(0,256))}}
-      let result:string | {error:string}={error:'未能解析播放地址'}
-      await resolveBus.run('player.resolve',{track,quality:args.quality},{kind:'system',location:'playback'},async selected=>{
-        const same=track.ref.providerId===selected.track.ref.providerId && track.ref.id===selected.track.ref.id
-        const songInfo=same?song:toAppTrack({...selected.track,ref:{...selected.track.ref,scope:'provider'}})
-        result=await this.getMusicUrl({...args,songInfo,quality:selected.quality,qualityOrder:same?args.qualityOrder:undefined})
-        return {ok:typeof result==='string' && result.length>0}
-      })
-      return result
+    async getPlaybackUrl(args: GetMusicUrlArg): Promise<string | { error: string }> {
+      const { url, error } = await playbackAttempt(args)
+      return url ?? { error: error ?? '未能解析播放地址' }
     },
-    async getMusicUrl({ songInfo, quality, isCache, qualityOrder }: GetMusicUrlArg) {
-      try {
-        const resource = normalizeAppTrackRef(songInfo.pluginResource)
-        if (resource) {
-          if (!isProviderTrackRef(resource)) assertResourceRef(resource)
-          if (resource.kind !== 'track') throw new Error('只能播放歌曲资源')
-        }
-        const currentSource = resource?.providerId || songInfo.source || source
-        if (currentSource === 'local') return localMusicIndexService.getUrlById(resource?.id ?? songInfo.songmid) ?? {error:'未找到本地文件'}
-        const provider = pluginService.getV2Provider(
-          currentSource,
-          resource?.scope === 'provider' ? undefined : resource?.pluginId,
-          'tracks.resolve'
-        )
-        if (!provider) throw new Error('请先安装提供该音源的插件')
-        const effectiveRef = resource
-          ? isProviderTrackRef(resource)
-            ? targetAppTrackRef(resource, provider.host.getPluginInfo().id)
-            : retargetTrackRef(resource, provider.host.getPluginInfo().id)
-          : undefined
-        // Resolve selection first: changing playback implementations must also change the cache.
-        //
-        // 一首歌一个 key（不含 connectionId），音频文件 / 歌词 / 封面共用。
-        // 本地音乐不缓存（文件本就在磁盘上）。
-        const cacheable = isCache !== false && musicCacheService.isCacheable(songInfo)
-        const songId = JSON.stringify([
-          'plugin-audio',
-          provider.pluginId,
-          effectiveRef?.connectionId ?? null,
-          musicCacheService.songCacheKey(songInfo)
-        ])
 
-        // 先检查缓存（带上音质：缓存音质低于本次请求时视为未命中，会回源重取）
-        if (cacheable) {
-          const cachedUrl = await musicCacheService.getCachedMusicUrl(
-            songId,
-            quality,
-            qualityOrder ?? []
-          )
-          if (cachedUrl) {
-            return cachedUrl
-          }
-        }
+    async getPlaybackAttempt(args: GetMusicUrlArg & Omit<AttemptOptions, 'scopedRecovery'>) {
+      const { ownerId, blockedPluginIds, skipCachedAudio, preferredQuality } = args
+      return playbackAttempt(args, {
+        ownerId, blockedPluginIds, skipCachedAudio, preferredQuality, scopedRecovery: true
+      })
+    },
 
-        // 没有缓存时才发起网络请求
-        const originalUrl = await provider.host.getMusicUrl(
-          currentSource,
-          effectiveRef ? { ...songInfo, pluginResource: effectiveRef } : songInfo,
-          quality
-        )
-        // 按需异步缓存，不阻塞返回
-        if (cacheable) {
-          musicCacheService
-            .cacheMusic(songId, originalUrl, quality, qualityOrder ?? [])
-            .catch((error) => {
-              console.warn('缓存歌曲失败:', error)
-            })
-        }
-
-        return originalUrl
-      } catch (e: any) {
-        return {
-          error: '获取歌曲失败 ' + (e.message || e.error || String(e))
-        }
-      }
+    async getMusicUrl(args: GetMusicUrlArg): Promise<string | { error: string }> {
+      const { url, error } = await resolveMusicUrl(args)
+      return url ?? { error: error ?? '未能解析播放地址' }
     },
 
     async getPic({ songInfo }: GetMusicPicArg) {

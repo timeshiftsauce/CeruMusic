@@ -17,6 +17,7 @@ try {
     bundle: true,
     platform: 'node',
     format: 'esm',
+    banner: { js: "const __dirname = import.meta.dirname;" },
     packages: 'external',
     alias: { '@common': join(root, 'src/common') },
     plugins: [

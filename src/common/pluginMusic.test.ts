@@ -1,7 +1,12 @@
 import { describe, expect, jest, test } from '@jest/globals'
 import { exportBuiltinLyrics, parseLocalLyrics } from './localLyrics'
 import { normalizeAppTrackRef, targetAppTrackRef } from './pluginMusic'
-import { filterLyricInfo, sanitizeLyricText, toPlayerLyrics } from './pluginLyrics'
+import {
+  filterLyricInfo,
+  getLyricSongwriters,
+  sanitizeLyricText,
+  toPlayerLyrics
+} from './pluginLyrics'
 
 jest.mock('@shiqianjiang/ceru-plugin-sdk', () => ({
   assertLyricsDocument: () => undefined
@@ -122,6 +127,24 @@ describe('plugin lyric compatibility', () => {
 
     expect(lines[0].words.map((word) => word.romanWord)).toEqual(['ni', 'hao'])
     expect(lines[0].romanLyric).toBe('')
+  })
+
+  test('preserves TTML songwriter credits outside the timed lines after export', () => {
+    const ttml = `
+      <tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"
+          itunes:timing="Line">
+        <head><metadata><iTunesMetadata xmlns="http://music.apple.com/lyric-ttml-internal">
+          <songwriters><songwriter> Alice &amp; Bob </songwriter><songwriter>Chen</songwriter></songwriters>
+        </iTunesMetadata></metadata></head>
+        <body dur="2.000"><div begin="1.000" end="2.000"><p begin="1.000" end="2.000" itunes:key="L1">Hello</p></div></body>
+      </tt>`
+    const parsed = parseLocalLyrics(ttml, { ...track, kind: 'track' })
+    expect(getLyricSongwriters(parsed ?? undefined)).toEqual(['Alice & Bob', 'Chen'])
+    expect(toPlayerLyrics(parsed!).map((line) => line.words[0].word)).toEqual(['Hello'])
+
+    const exported = exportBuiltinLyrics(parsed!, 'ttml')!
+    const roundtrip = parseLocalLyrics(exported.text, { ...track, kind: 'track' })
+    expect(getLyricSongwriters(roundtrip ?? undefined)).toEqual(['Alice & Bob', 'Chen'])
   })
 
   test('keeps timed TTML translations through parse and export', () => {

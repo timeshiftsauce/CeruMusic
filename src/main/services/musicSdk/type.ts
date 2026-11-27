@@ -8,6 +8,7 @@ export interface sdkArg {
 
 export interface SearchArg {
   cursor?: string
+  ownerId?: string
   keyword: string
   page: number
   limit: number

@@ -44,7 +44,24 @@ const check = `
     const registry = requireApp('registry-js')
     assert.ok(Array.isArray(registry.enumerateKeys('HKEY_CURRENT_USER', 'Software')))
   }
-  console.log(JSON.stringify({ electron: process.versions.electron, arch: process.arch, sqlite: 'ok', registry: process.platform === 'win32' ? 'ok' : 'unused' }))
+  async function checkOnnx() {
+    const ort = requireApp('onnxruntime-node')
+    // ONNX opset 13 Identity graph with a single float32 input and output.
+    const model = Buffer.from('CAg6QgoQCgF4EgF5IghJZGVudGl0eRIMbmF0aXZlX3Ntb2tlWg8KAXgSCgoICAESBAoCCAFiDwoBeRIKCggIARIECgIIAUICEA0=', 'base64')
+    const session = await ort.InferenceSession.create(model, { executionProviders: ['cpu'] })
+    try {
+      const result = await session.run({ x: new ort.Tensor('float32', Float32Array.of(42), [1]) })
+      assert.deepEqual(Array.from(result.y.data), [42])
+    } finally {
+      await session.release()
+    }
+  }
+  checkOnnx().then(() => {
+    console.log(JSON.stringify({ electron: process.versions.electron, arch: process.arch, sqlite: 'ok', registry: process.platform === 'win32' ? 'ok' : 'unused', onnx: 'ok' }))
+  }).catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
 `
 const result = spawnSync(executable, ['-e', check, appRoot], {
   env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },

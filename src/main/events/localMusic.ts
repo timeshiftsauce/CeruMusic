@@ -3,6 +3,8 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import fs from 'fs'
 import fsp from 'fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { MAX_ANALYSIS_BYTES } from '@common/automix'
 import { join } from 'path'
 import pLimit from 'p-limit'
 import { localMusicIndexService } from '../services/LocalMusicIndex'
@@ -13,6 +15,7 @@ import { is } from '@electron-toolkit/utils'
 import musicService from '../services/musicSdk/service'
 import pluginService from '../services/plugin'
 import { httpFetch } from '../utils/request'
+import { musicCacheService } from '../services/musicCache'
 
 let workerWindow: BrowserWindow | null = null
 
@@ -541,6 +544,34 @@ ipcMain.handle('local-music:get-url', async (_e, id: string | number) => {
   const u = localMusicIndexService.getUrlById(id)
   if (!u) return { error: '未找到本地文件' }
   return u
+})
+
+ipcMain.handle('local-music:read-analysis-audio', async (_event, url: string) => {
+  try {
+    const file = fileURLToPath(url)
+    const indexed =
+      localMusicIndexService.getStatByPath(file) ||
+      (process.platform === 'win32' && localMusicIndexService.getStatByPath(normPath(file) || file))
+    if (!indexed && !musicCacheService.hasCachedAudioFile(file)) return null
+    const handle = await fsp.open(file, 'r')
+    try {
+      const stat = await handle.stat()
+      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_ANALYSIS_BYTES) return null
+      const { size } = stat
+      const data = new Uint8Array(size)
+      let offset = 0
+      while (offset < size) {
+        const { bytesRead } = await handle.read(data, offset, size - offset, offset)
+        if (!bytesRead) return null
+        offset += bytesRead
+      }
+      return data.buffer
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return null
+  }
 })
 
 ipcMain.handle('local-music:get-cover', async (_e, trackId: string) => {

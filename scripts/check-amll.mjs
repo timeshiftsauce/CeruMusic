@@ -1,21 +1,26 @@
 import assert from 'node:assert/strict'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createServer } from 'vite'
 import { chromium } from 'playwright'
 
 const directory = resolve('.tmp/amll-check')
 await mkdir(directory, { recursive: true })
+const appHtml = await readFile(resolve('src/renderer/index.html'), 'utf8')
+const [, policy] = appHtml.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/) ?? []
+assert.ok(policy)
+const fixturePolicy = policy.replace('script-src ', "script-src 'nonce-amll-check' ")
 await writeFile(
   resolve(directory, 'index.html'),
   `<!doctype html>
-<html><head><meta charset="utf-8"><style>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${fixturePolicy}"><style>
 body { margin: 0; background: #181820; color: white; font-family: sans-serif }
 #background { position: absolute; inset: 0 }
 #lyrics { position: absolute; inset: 30px 5% 30px 48%; height: 650px;
   --amll-lp-font-size: 36px; --amll-lp-color: white }
 canvas { z-index: 0 !important }
-</style></head><body><div id="app"></div><script type="module">
+</style></head><body><div id="app"></div><script type="module" nonce="amll-check">
 import { createApp, ref, reactive, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { LyricPlayer } from '@applemusic-like-lyrics/vue'
@@ -40,7 +45,9 @@ function cover(colors) {
   colors.forEach((color, i) => gradient.addColorStop(i / (colors.length - 1), color))
   ctx.fillStyle = gradient; ctx.fillRect(0, 0, 256, 256); return canvas.toDataURL()
 }
-state.album = cover(['#ff651a', '#d52176', '#682dbe', '#131c62'])
+const coverData = cover(['#ff651a', '#d52176', '#682dbe', '#131c62'])
+const bytes = Uint8Array.from(atob(coverData.split(',')[1]), ch => ch.charCodeAt(0))
+state.album = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }))
 createApp({ setup() {
   const host = ref(null); const lyric = ref(null)
   const { ready } = usePlayerBackground(host, {
@@ -64,7 +71,7 @@ const server = await createServer({
   configFile: false,
   cacheDir: resolve(directory, 'cache'),
   root: process.cwd(),
-  resolve: { alias: { '@renderer': resolve('src/renderer/src') } },
+  resolve: { alias: { '@renderer': resolve('src/renderer/src'), '@common': resolve('src/common') } },
   optimizeDeps: { entries: [resolve(directory, 'index.html')] },
   server: { host: '127.0.0.1', port: 0 }
 })
@@ -79,6 +86,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', (message) => {
+    if (/Content Security Policy|loading album resource|Failed to load album resource/.test(message.text()))
+      errors.push(message.text())
+  })
   await page.goto(server.resolvedUrls.local[0] + '.tmp/amll-check/index.html')
   await page.waitForFunction(() => window.fixture?.ready.value)
 

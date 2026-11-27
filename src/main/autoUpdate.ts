@@ -87,27 +87,35 @@ export function buildMirrorUrl(mirror: string, originalUrl: string): string {
  * gh-proxy 类镜像对未知路径返回 404/403 属正常（服务是活的），
  * 若按 res.ok 判定会把可用镜像误判为超时。
  */
-async function probeMirror(mirror: string, timeoutMs = 6000): Promise<number | null> {
+async function probeMirror(mirror: string, cancellation?: AbortSignal): Promise<number | null> {
   // 用 GitHub 静态小资源作探测目标，拼接方式与真实下载完全一致。
   // mirror 为空串时即「直连」——直接请求原始 URL，同样能反映 GitHub 直连速度。
   const probeTarget =
     'https://raw.githubusercontent.com/timeshiftsauce/CeruMusic/refs/heads/main/docs/assets/head.jpg'
   const url = mirror ? buildMirrorUrl(mirror, probeTarget) : probeTarget
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  const signal = cancellation ? AbortSignal.any([ctrl.signal, cancellation]) : ctrl.signal
+  const timer = setTimeout(() => ctrl.abort(), 6000)
   const started = Date.now()
   try {
     // HEAD 更省流量；部分代理不支持 HEAD，失败时降级用 GET + Range 取首字节。
-    let res = await net.fetch(url, { method: 'HEAD', signal: ctrl.signal })
+    let res = await net.fetch(url, { method: 'HEAD', signal })
     if (!res.ok) {
       res = await net.fetch(url, {
         method: 'GET',
         headers: { Range: 'bytes=0-0' },
-        signal: ctrl.signal
+        signal
       })
-      // 读掉 body 确保首字节真正到达
+      // 读取首块即可。有的代理会忽略 Range 并返回整个文件。
       try {
-        await res.arrayBuffer()
+        const reader = res.body?.getReader()
+        if (reader) {
+          try {
+            await reader.read()
+          } finally {
+            await reader.cancel()
+          }
+        }
       } catch {}
     }
     // 只要拿到了 HTTP 响应就说明链路可达（包含 404/403，说明代理服务本身活着）。
@@ -150,8 +158,10 @@ async function mapWithConcurrency<T, R>(
  * 探测受并发上限约束（MIRROR_PROBE_CONCURRENCY）。
  */
 export async function probeMirrors(
-  mirrors?: string[]
+  mirrors?: string[],
+  signal?: AbortSignal
 ): Promise<Array<{ url: string; ms: number | null }>> {
+  signal?.throwIfAborted()
   const explicit = !!(mirrors && mirrors.length)
   const list = (explicit ? mirrors! : availableMirrors).filter(Boolean)
   const fromServer = !explicit && list !== FALLBACK_MIRRORS
@@ -159,12 +169,14 @@ export async function probeMirrors(
     `镜像测速开始：共 ${list.length} 个（来源：${explicit ? '调用方指定' : fromServer ? '服务器下发' : '内置兜底'}，并发 ${MIRROR_PROBE_CONCURRENCY}）`
   )
   const [directMs, mirrorResults] = await Promise.all([
-    probeMirror(''), // 空串 = 原生直连
+    probeMirror('', signal), // 空串 = 原生直连
     mapWithConcurrency(list, MIRROR_PROBE_CONCURRENCY, async (mirror) => {
-      const ms = await probeMirror(mirror)
+      signal?.throwIfAborted()
+      const ms = await probeMirror(mirror, signal)
       return { url: mirror, ms }
     })
   ])
+  signal?.throwIfAborted()
   // 可用的按延迟升序在前，超时的排在其后（保持相对顺序）
   const ok = mirrorResults
     .filter((r) => r.ms != null)

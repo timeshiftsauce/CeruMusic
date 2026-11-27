@@ -1,3 +1,4 @@
+import { PlaybackProviderError } from '@common/playbackAttempt'
 import { musicRegistry } from '../musicRegistry'
 import {
   projectPluginRoute,
@@ -771,15 +772,22 @@ export default class DesktopPluginHost {
       scope: 'provider' as const
     }
   }
-  async getMusicUrl(source: string, song: any, quality: string): Promise<string> {
+  async getMusicUrl(source: string, song: any, quality: string, scopedRecovery = false): Promise<string> {
     const result = await this.invokeV2Provider(source, 'tracks.resolve', [
       this.resource(source, song),
       quality
     ])
     if (!result.ok) {
-      if (['await-user', 'stop-current', 'retry-later'].includes(result.error.recovery?.mode))
+      const blockPlugin = ['await-user', 'stop-current', 'retry-later'].includes(
+        result.error.recovery?.mode
+      )
+      // A playback attempt tracks stop-current locally. Only a timed retry-later
+      // applies beyond that playback session.
+      if (blockPlugin && (!scopedRecovery ||
+          (result.error.recovery?.mode === 'retry-later' && (result.error.retryAfterMs ?? 0) > 0))) {
         this.onThrottle?.(this.pluginId!, result.error.message, result.error.retryAfterMs)
-      throw new Error(result.error.message)
+      }
+      throw new PlaybackProviderError(result.error.message, blockPlugin)
     }
     if (this.getDescriptor().runtime === 3) {
       const prepared = await pluginMedia.prepare(this.pluginId!, result, this.services.accessSignal())

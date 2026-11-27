@@ -24,7 +24,12 @@ import { ContextMenu } from '@renderer/components/ContextMenu'
 import type { ContextMenuItem, ContextMenuPosition } from '@renderer/components/ContextMenu/types'
 import { createMenuItem, createSeparator } from '@renderer/components/ContextMenu/utils'
 import { parseShareLink } from '@renderer/utils/listenTogether/shareLink'
-import { STICKERS, STICKER_MAP, KAOMOJI } from '@renderer/utils/listenTogether/stickers'
+import {
+  KAOMOJI,
+  STICKER_MAP,
+  STICKER_PACKS,
+  type StickerPackId
+} from '@renderer/utils/listenTogether/stickers'
 import MessageCard from './MessageCard.vue'
 import SongCardActions from './SongCardActions.vue'
 import type { ShareDetail, PlaylistShareDetail } from '@renderer/api/share'
@@ -141,12 +146,8 @@ onMounted(() => void scrollToBottom())
 /* 输入区 */
 const draft = ref('')
 const showEmoji = ref(false)
-/* 表情面板分类:'sticker' 图片贴纸(发送一条独立 sticker 消息),'kaomoji' 颜文字(插入输入框作为文本)。
- * 用同一个面板容器,只切换内部网格内容,避免上下抖动。 */
-const emojiTab = ref<'sticker' | 'kaomoji'>('sticker')
-
-/* 贴纸面板使用的列表与 id→资源 映射,定义在
- * `@renderer/utils/listenTogether/stickers` —— 这里只消费,不在组件内硬编码 */
+const emojiTab = ref<StickerPackId | 'kaomoji'>('sticker')
+const activePack = computed(() => STICKER_PACKS.find((pack) => pack.id === emojiTab.value))
 
 /* ============================================================
  *  @ 提及 / 回复 / 复制
@@ -763,19 +764,23 @@ const visibleRows = computed<ChatRow[]>(() => {
 
       <transition name="emoji-fade">
         <div v-if="showEmoji" class="sticker-panel-wrapper">
-          <!-- 分类切换 tab —— 贴纸/颜文字。tab 放面板顶部,内容区只换 grid,
-               面板本身高度由内容决定不会跳动 -->
-          <div class="emoji-tabs">
+          <div class="emoji-tabs" role="group" aria-label="表情分类">
             <button
+              v-for="pack in STICKER_PACKS"
+              :key="pack.id"
+              type="button"
               class="emoji-tab"
-              :class="{ active: emojiTab === 'sticker' }"
-              @click="emojiTab = 'sticker'"
+              :class="{ active: emojiTab === pack.id }"
+              :aria-pressed="emojiTab === pack.id"
+              @click="emojiTab = pack.id"
             >
-              贴纸
+              {{ pack.label }}
             </button>
             <button
+              type="button"
               class="emoji-tab"
               :class="{ active: emojiTab === 'kaomoji' }"
+              :aria-pressed="emojiTab === 'kaomoji'"
               @click="emojiTab = 'kaomoji'"
             >
               颜文字
@@ -783,9 +788,9 @@ const visibleRows = computed<ChatRow[]>(() => {
           </div>
 
           <!-- 贴纸网格 —— 点击发送一条 sticker 消息 -->
-          <div v-if="emojiTab === 'sticker'" class="sticker-panel">
+          <div v-if="activePack" class="sticker-panel">
             <button
-              v-for="s in STICKERS"
+              v-for="s in activePack.stickers"
               :key="s.id"
               class="sticker-btn"
               :title="s.label"

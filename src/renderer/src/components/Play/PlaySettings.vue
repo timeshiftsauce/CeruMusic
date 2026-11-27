@@ -9,6 +9,7 @@ import { usePlaySettingStore } from '@renderer/store'
 import { backgroundRenderers } from '@renderer/config/backgroundRenderers'
 import PluginSkinSettings from './PluginSkinSettings.vue'
 import SkinPreview from './SkinPreview.vue'
+import AutomixSettings from '../Settings/AutomixSettings.vue'
 
 const playSetting = usePlaySettingStore()
 const section = ref<'appearance' | 'playback'>('appearance')
@@ -104,11 +105,6 @@ const settingSections = computed(() => [
         label: '暂停播放过渡',
         value: playSetting.getIsPauseTransition,
         update: (val: boolean) => playSetting.setIsPauseTransition(val)
-      },
-      {
-        label: '无感过渡(智能交叉淡化)',
-        value: playSetting.getIsSeamlessTransition,
-        update: (val: boolean) => playSetting.setIsSeamlessTransition(val)
       },
       {
         label: '使用 Apple 风格歌词',
@@ -266,6 +262,7 @@ const settingSections = computed(() => [
     </template>
     <template v-else v-for="group in settingSections" :key="group.title">
       <div class="panel-header">{{ group.title }}</div>
+      <AutomixSettings v-if="group.title === '播放设置'" />
       <div v-for="item in group.items" :key="item.label" class="control-row">
         <span>{{ item.label }}</span>
         <t-switch :aria-label="item.label" :value="item.value" @update:value="item.update" />

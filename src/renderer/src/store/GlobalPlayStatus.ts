@@ -761,6 +761,30 @@ export const useGlobalPlayStatusStore = defineStore(
         }
     }
 
+    function commitTransitionSong(
+      song: SongList,
+      metadata: Promise<Awaited<ReturnType<typeof prepareSong>> | null>
+    ) {
+      commitPrepared({
+        song,
+        cover: defaultCover,
+        sourceUrl: '',
+        crlyric: undefined,
+        colors: null,
+        lines: [],
+        dispose: () => {}
+      })
+      const revision = metadataRevision
+      void metadata.then((prepared) => {
+        if (!prepared) return
+        if (revision !== metadataRevision) {
+          prepared.dispose()
+          return
+        }
+        commitPrepared(prepared)
+      })
+    }
+
     async function updatePlayerInfo(song: SongList, force = false) {
       // Hydrating songInfo is not the same as loading its artwork and lyrics.
       if (!force && preparedSongKey === keyOf(song)) {
@@ -939,6 +963,7 @@ export const useGlobalPlayStatusStore = defineStore(
       reloadSnapshot,
       prepareSong,
       commitPrepared,
+      commitTransitionSong,
       updatePlayerInfo,
       fetchComments
     }

@@ -50,19 +50,17 @@ function cancelWindowRequests(sender: number, message: string) {
 export function bindPluginUIWindow(window: BrowserWindow): void {
   mainWindow = window
   ready = false
-  window.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    // Hash-router navigation and subframe loads keep the mounted Vue bridge alive.
-    if (mainWindow !== window || isInPlace || !isMainFrame) return
-    ready = false
-    cancelWindowRequests(window.webContents.id, '主界面正在重新加载，请重试')
-  })
   const sender = window.webContents.id
+  const disconnect = (message: string) => {
+    if (mainWindow === window) ready = false
+    cancelWindowRequests(sender, message)
+  }
+  // The renderer's bridge survives hash changes, subframe loads and cancelled navigations.
+  window.webContents.on('did-navigate', () => disconnect('主界面正在重新加载，请重试'))
+  window.webContents.on('render-process-gone', () => disconnect('主界面已断开，请重试'))
   window.once('closed', () => {
-    cancelWindowRequests(sender, '主界面已关闭')
-    if (mainWindow === window) {
-      mainWindow = undefined
-      ready = false
-    }
+    disconnect('主界面已关闭')
+    if (mainWindow === window) mainWindow = undefined
   })
 }
 

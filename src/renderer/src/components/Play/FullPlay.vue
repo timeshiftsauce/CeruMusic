@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { desktopBridge } from '@renderer/services/desktopBridge'
 import { seekTo } from '@renderer/utils/audio/globaPlayList'
+import { getLyricSongwriters } from '@common/pluginLyrics'
 import '@applemusic-like-lyrics/core/style.css'
 import { LayoutReason, LayoutReasonStrategyMap } from '@applemusic-like-lyrics/core'
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
@@ -864,6 +865,9 @@ const regionContent = computed(() => {
 const stageSelected = computed(() => props.show && !!regionView('player.stage'))
 const warnings = computed(() => regionNotices.value.filter(item => item.reason === 'warning'))
 const partsVisible = computed(() => props.show && !stageSelected.value)
+const lyricSongwriters = computed(() =>
+  playSetting.getIsGrepLyricInfo ? [] : getLyricSongwriters(player.value.lyrics.crlyric)
+)
 const displayedLyricLines = computed(() => {
   const lines = toRaw(player.value.lyrics.lines)
   if (playSetting.getShowLyricRomanization) return lines
@@ -934,9 +938,7 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
       <div class="left" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 && !regionView('player.lyrics') }">
         <template v-if="playSetting.getLayoutMode === 'cd'">
           <PluginRegion name="player.artwork" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-artwork">
-          <PlayerArtwork mode="vinyl" :artwork="coverImage" :alt="songName" :playing="isAudioPlaying" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 }">
-            <s-image :src="coverImage" shape="circle" class="cover" />
-          </PlayerArtwork>
+          <PlayerArtwork mode="vinyl" :artwork="coverImage" :alt="songName" :playing="isAudioPlaying" :class="{ 'no-lyric': player.lyrics.lines.length <= 0 }" />
           </PluginRegion>
           <PluginRegion v-if="regionView('player.songInfo')" name="player.songInfo" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-song-info" />
         </template>
@@ -945,9 +947,7 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
           <div class="cover-layout-container">
             <div class="cover-wrapper-square">
               <PluginRegion name="player.artwork" :visible="partsVisible" :content="regionContent" :position-ms="effectiveLyricTime" :playing="isAudioPlaying" surface-class="plugin-artwork">
-              <PlayerArtwork mode="square" :artwork="actualCoverImage" :alt="songName" :playing="controlAudio.Audio.isPlay">
-                <s-image :src="actualCoverImage" class="cover-img-square" shape="round" fit="cover" />
-              </PlayerArtwork>
+              <PlayerArtwork mode="square" :artwork="actualCoverImage" :alt="songName" :playing="controlAudio.Audio.isPlay" />
               </PluginRegion>
             </div>
             <div class="song-info-area">
@@ -1003,7 +1003,11 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
           @wheel="scheduleLyricAutoResume"
           @touchend="scheduleLyricAutoResume"
           @line-click="jumpTime"
-        />
+        >
+          <template v-if="lyricSongwriters.length" #bottom-line>
+            <div class="lyric-songwriters">{{ '词曲署名：' + lyricSongwriters.join('、') }}</div>
+          </template>
+        </component>
         </PluginRegion>
       </div>
     </div>
@@ -1019,6 +1023,7 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
         :height="70"
         :bar-count="80"
         :color="mainColor"
+        continuous
       />
       </PluginRegion>
     </div>
@@ -1035,7 +1040,7 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
       <TitleBarControls v-if="props.show" class="top" style="-webkit-app-region: drag" :color="useBlackText ? 'black' : 'white'" :show-account="false" />
     </Transition>
 
-    <div ref="floatActionRef" class="float-action" :class="{ 'with-float-ball': settingsStore.settings.showFloatBall, idle: isIdle && !stageSelected && !showSettings && !warnings.length }" @keydown.esc.stop="closeSettings">
+    <div ref="floatActionRef" class="float-action" :class="{ 'with-float-ball': settingsStore.settings.showFloatBall, idle: isIdle && !showSettings }" @keydown.esc.stop="closeSettings">
       <div v-if="!showSettings && warnings.length" class="health-summary">
         <InfoCircleIcon aria-hidden="true" />
         <span role="status">{{ warnings.length === 1 ? '皮肤显示不够流畅' : `${warnings.length} 个区域显示不够流畅` }}</span>
@@ -1226,6 +1231,13 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
   to {
     transform: rotate(360deg);
   }
+}
+
+.lyric-songwriters {
+  padding: 0.6em 0;
+  font-size: 0.9rem;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
 }
 
 /* 动态背景层：仅全屏激活后淡入显示 */
@@ -1589,7 +1601,7 @@ const stageContent = computed(() => stageSelected.value ? {...regionContent.valu
   color: #f7f8fa;
   transition: opacity 180ms ease;
 
-  &.idle:not(:focus-within) { opacity: 0; pointer-events: none; }
+  &.idle:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
   &.with-float-ball { --tool-inset: 60px; }
   button:focus-visible { outline: 2px solid #c4e8dc; outline-offset: 3px; }
 }

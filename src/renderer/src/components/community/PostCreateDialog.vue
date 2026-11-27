@@ -29,12 +29,23 @@ import {
 } from '@renderer/api/community'
 import { cloudSongListAPI } from '@renderer/api/cloudSongList'
 import songListAPI from '@renderer/api/songList'
+import type { MusicItem } from '@common/musicItem'
+import type { SongList } from '@common/types/songList'
 import { showSupportNotice } from '@renderer/utils/communitySupport'
+import type { Sticker } from '@renderer/utils/listenTogether/stickers'
+import {
+  LANYIN_STICKERS,
+  decodeNoteStickers,
+  encodeNoteStickers,
+  lanyinStickerLabel
+} from '@renderer/utils/listenTogether/lanyinStickers'
 
 const props = defineProps<{
   visible: boolean
   /** 传入即进入编辑模式 —— 预填该帖内容,提交时更新而不是新建 */
   editPost?: CommunityPost | null
+  initialSong?: MusicItem
+  initialPlaylist?: SongList
 }>()
 
 const emit = defineEmits<{
@@ -51,9 +62,12 @@ const visibleLocal = computed({
 })
 
 const content = ref('')
+const publishedContent = computed(() => encodeNoteStickers(content.value))
+const showStickers = ref(false)
 const images = ref<PostImage[]>([])
 const uploadingImage = ref(false)
 const attachment = ref<PostAttachment | null>(null)
+const pendingPlaylist = ref<PickerPlaylist>()
 const submitting = ref(false)
 const imageInput = ref<HTMLInputElement>()
 const contentInput = ref<HTMLTextAreaElement | null>(null)
@@ -63,38 +77,43 @@ const attachmentCover = computed(() =>
     : attachment.value?.cover || attachment.value?.preview?.[0]?.img
 )
 const canSubmit = computed(
-  () => !!content.value.trim() && !uploadingImage.value && !submitting.value
+  () =>
+    !!content.value.trim() &&
+    publishedContent.value.length <= 1000 &&
+    !uploadingImage.value &&
+    !submitting.value
 )
 
 /* 附件选择器状态 */
 const showPicker = ref(false)
 const pickerTab = ref<'playlist' | 'song'>('playlist')
-const pickerLists = ref<
-  Array<{
-    /** 当 isCloud=true 时是云 id;否则是本地 hashId */
-    id: string
-    name: string
-    cover: string
-    songCount: number
-    isCloud: boolean
-    /** 关联的云 id(本地已同步时填) */
-    cloudId?: string
-    /** 是否是"我的喜欢" */
-    isFavorite?: boolean
-  }>
->([])
+interface PickerPlaylist {
+  id: string
+  name: string
+  cover: string
+  songCount: number
+  isCloud: boolean
+  cloudId?: string
+  isFavorite?: boolean
+}
+
+const pickerLists = ref<PickerPlaylist[]>([])
 const pickerLoading = ref(false)
 const pickerSongs = ref<any[]>([])
 const pickerSelectedListIdx = ref<number>(-1)
 
 watch(contentInput, () => resizeContentInput(), { flush: 'post' })
 
-watch(visibleLocal, (v) => {
-  if (v) {
-    reset()
-    void nextTick(resizeContentInput)
-  }
-})
+watch(
+  visibleLocal,
+  (v) => {
+    if (v) {
+      reset()
+      void nextTick(resizeContentInput)
+    }
+  },
+  { immediate: true }
+)
 
 function resizeContentInput() {
   const el = contentInput.value
@@ -105,14 +124,54 @@ function resizeContentInput() {
   el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
 }
 
+async function insertSticker(sticker: Sticker) {
+  const el = contentInput.value
+  if (!el || submitting.value) return
+  const start = el.selectionStart
+  const label = lanyinStickerLabel(sticker)
+  const next = content.value.slice(0, start) + label + content.value.slice(el.selectionEnd)
+  if (encodeNoteStickers(next).length > 1000) {
+    MessagePlugin.warning('正文超过 1000 字')
+    return
+  }
+  content.value = next
+  showStickers.value = false
+  await nextTick()
+  el.focus()
+  el.setSelectionRange(start + label.length, start + label.length)
+  resizeContentInput()
+}
+
 function reset() {
   const src = props.editPost
-  content.value = src?.content || ''
+  content.value = decodeNoteStickers(src?.content || '')
+  showStickers.value = false
   // 兼容旧帖子里纯 URL 字符串的图片项
   images.value = (src?.images || []).map((it) =>
     typeof it === 'string' ? { url: it, w: 0, h: 0 } : it
   )
+  pendingPlaylist.value = undefined
   attachment.value = src?.attachment ? { ...src.attachment } : null
+  if (!src && props.initialSong) attachment.value = songAttachment(props.initialSong)
+  if (!src && props.initialPlaylist) {
+    const playlist = props.initialPlaylist
+    const cloudId = playlist.meta?.cloudId || (playlist.meta?.isCloudOnly ? playlist.id : undefined)
+    pendingPlaylist.value = {
+      id: playlist.id,
+      name: playlist.name,
+      cover: playlist.coverImgUrl,
+      songCount: Number(playlist.meta?.songCount) || 0,
+      isCloud: !!playlist.meta?.isCloudOnly,
+      cloudId
+    }
+    // Preview locally. Resolve the cloud attachment only when publishing the draft.
+    attachment.value = {
+      type: 'playlist',
+      listId: cloudId,
+      name: playlist.name,
+      cover: playlist.coverImgUrl
+    }
+  }
   showPicker.value = false
   pickerSongs.value = []
   pickerSelectedListIdx.value = -1
@@ -212,70 +271,58 @@ async function loadPickerLists() {
   }
 }
 
-/* 选歌单作为附件;本地未同步则先自动上传 */
+async function buildPlaylistAttachment(playlist: PickerPlaylist): Promise<PostAttachment> {
+  let cloudId = playlist.cloudId
+  let cover = playlist.cover
+  let preview: PostAttachment['preview'] = []
+  let total = playlist.songCount
+  if (!cloudId) {
+    MessagePlugin.info('正在上传歌单以生成社区附件…')
+    const response = await songListAPI.getSongs(playlist.id)
+    if (!response.success) throw new Error(response.error || '读取歌单失败')
+    const songs = (response.data || []).map((song) => songAttachment(song).song!)
+    const info = await songListAPI.getById(playlist.id).catch(() => null)
+    const created = await cloudSongListAPI.createUserSongList({
+      localId: playlist.id,
+      name: playlist.name,
+      describe: info?.data?.description || '',
+      cover: info?.data?.coverImgUrl || cover,
+      songlist: songs as any
+    })
+    cloudId = created.id
+    cover = created.cover || ''
+    preview = songs.slice(0, 3)
+    total = songs.length
+  } else {
+    try {
+      const detail = await cloudSongListAPI.getSongListDetail(cloudId, 'asc', 3)
+      preview = detail.list || []
+      total = detail.total
+    } catch (error) {
+      console.warn('歌单预览拉取失败', error)
+    }
+  }
+  return {
+    type: 'playlist',
+    listId: cloudId,
+    name: playlist.name,
+    cover,
+    songCount: total,
+    preview
+  }
+}
+
 async function pickPlaylist(idx: number) {
-  const l = pickerLists.value[idx]
-  if (!l) return
+  const playlist = pickerLists.value[idx]
+  if (!playlist) return
   pickerLoading.value = true
   try {
-    let cloudId = l.cloudId
-    let cover = l.cover
-    let name = l.name
-    let preview: any[] = []
-    let total = l.songCount
-
-    if (!cloudId) {
-      // 本地未上传 -> 自动上传(复用 cmpl 那套逻辑)
-      MessagePlugin.info('歌单未上传,正在自动上传到云端...')
-      const songsRes = await songListAPI.getSongs(l.id)
-      const songs = (songsRes?.success ? songsRes.data : []) || []
-      const local = await songListAPI.getAll().catch(() => ({ success: false, data: [] }) as any)
-      const localItem = (local.data || []).find((x: any) => x.id === l.id)
-      const created = await cloudSongListAPI.createUserSongList({
-        localId: l.id,
-        name: l.name,
-        describe: localItem?.description || '',
-        cover: localItem?.coverImgUrl || cover,
-        songlist: songs.map((s: any) => ({
-          songmid: String(s.songmid),
-          name: s.name,
-          singer: s.singer,
-          albumName: s.albumName || '',
-          albumId: s.albumId || '',
-          source: s.source,
-          interval: String(s.interval || '0'),
-          img: s.img || '',
-          types: s.types || []
-        })) as any
-      })
-      cloudId = created.id
-      cover = created.cover || ''
-      preview = songs.slice(0, 3)
-      total = songs.length
-    } else {
-      // 已云端 -> 拉前 3 首做预览
-      try {
-        const detail = await cloudSongListAPI.getSongListDetail(cloudId, 'asc', 3)
-        preview = detail.list || []
-        total = detail.total
-      } catch (e: any) {
-        // 拉不到预览不阻断附加
-        console.warn('歌单预览拉取失败', e)
-      }
-    }
-
-    attachment.value = {
-      type: 'playlist',
-      listId: cloudId,
-      name,
-      cover,
-      songCount: total,
-      preview
-    }
+    attachment.value = await buildPlaylistAttachment(playlist)
+    pendingPlaylist.value = undefined
     showPicker.value = false
     MessagePlugin.success('歌单已附加')
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || '附加歌单失败')
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error ? error.message : '附加歌单失败')
   } finally {
     pickerLoading.value = false
   }
@@ -300,8 +347,8 @@ async function pickListForSongs(idx: number) {
   }
 }
 
-function pickSong(s: any) {
-  attachment.value = {
+function songAttachment(s: MusicItem): PostAttachment {
+  return {
     type: 'song',
     song: {
       songmid: String(s.songmid),
@@ -315,11 +362,17 @@ function pickSong(s: any) {
       types: s.types || []
     }
   }
+}
+
+function pickSong(song: MusicItem) {
+  attachment.value = songAttachment(song)
+  pendingPlaylist.value = undefined
   showPicker.value = false
   MessagePlugin.success('歌曲已附加')
 }
 
 function removeAttachment() {
+  pendingPlaylist.value = undefined
   attachment.value = null
 }
 
@@ -331,14 +384,18 @@ async function submit() {
     MessagePlugin.warning('请填写正文')
     return
   }
-  if (content.value.length > 1000) {
+  if (publishedContent.value.length > 1000) {
     MessagePlugin.warning('正文超过 1000 字')
     return
   }
   submitting.value = true
   try {
+    if (pendingPlaylist.value) {
+      attachment.value = await buildPlaylistAttachment(pendingPlaylist.value)
+      pendingPlaylist.value = undefined
+    }
     const payload = {
-      content: content.value.trim(),
+      content: publishedContent.value.trim(),
       images: images.value,
       attachment: attachment.value || undefined
     }
@@ -407,8 +464,31 @@ async function submit() {
           @input="resizeContentInput"
         />
         <div class="editor-meta">
-          <span>让音乐和故事相遇</span>
-          <span class="counter">{{ content.length }}<span> / 1000</span></span>
+          <button
+            type="button"
+            class="sticker-toggle"
+            :aria-expanded="showStickers"
+            :disabled="submitting"
+            @mousedown.prevent
+            @click="showStickers = !showStickers"
+          >
+            <img :src="LANYIN_STICKERS[0].src" alt="" />
+            澜音娘表情
+          </button>
+          <span class="counter">{{ publishedContent.length }}<span> / 1000</span></span>
+        </div>
+        <div v-if="showStickers" class="note-sticker-grid" role="group" aria-label="澜音娘表情">
+          <button
+            v-for="sticker in LANYIN_STICKERS"
+            :key="sticker.id"
+            type="button"
+            :title="sticker.label"
+            :disabled="submitting"
+            @mousedown.prevent
+            @click="insertSticker(sticker)"
+          >
+            <img :src="sticker.src" :alt="sticker.label" />
+          </button>
         </div>
       </div>
 
@@ -441,7 +521,9 @@ async function submit() {
           <span>{{
             attachment.type === 'song'
               ? attachment.song?.singer
-              : `${attachment.songCount || 0} 首歌曲`
+              : attachment.songCount === undefined
+                ? ''
+                : `${attachment.songCount} 首歌曲`
           }}</span>
         </div>
         <button
@@ -775,6 +857,43 @@ async function submit() {
     span {
       color: var(--td-text-color-placeholder);
     }
+  }
+  .sticker-toggle,
+  .note-sticker-grid button {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--td-text-color-secondary);
+    cursor: pointer;
+  }
+  .sticker-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    img {
+      width: 24px;
+      height: 24px;
+    }
+  }
+  .note-sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+    gap: 4px;
+    margin-top: 8px;
+    button {
+      padding: 2px;
+    }
+    img {
+      display: block;
+      width: 100%;
+      max-height: 60px;
+      object-fit: contain;
+    }
+  }
+  .sticker-toggle:hover,
+  .note-sticker-grid button:hover {
+    background: var(--td-bg-color-component-hover);
   }
   .images {
     display: grid;

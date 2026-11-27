@@ -45,7 +45,12 @@ import TextNoteCover from './TextNoteCover.vue'
 import ExpandableNoteText from './ExpandableNoteText.vue'
 import CommunityCommentText from './CommunityCommentText.vue'
 import PostCreateDialog from './PostCreateDialog.vue'
-import { KAOMOJI, STICKERS } from '@renderer/utils/listenTogether/stickers'
+import {
+  KAOMOJI,
+  STICKER_PACKS,
+  type Sticker,
+  type StickerPackId
+} from '@renderer/utils/listenTogether/stickers'
 
 /** 无归属地 / 解析失败时统一展示的文案 */
 const IP_LOCATION_FALLBACK = '澜星'
@@ -351,7 +356,7 @@ const comments = ref<CommunityComment[]>([])
 const commentsLoading = ref(true)
 const commentInput = ref('')
 const commentInputEl = ref<HTMLTextAreaElement | null>(null)
-const selectedCommentStickers = ref<(typeof STICKERS)[number][]>([])
+const selectedCommentStickers = ref<Sticker[]>([])
 const commentStickerContent = computed(() =>
   selectedCommentStickers.value.map((sticker) => '[' + sticker.id + ']').join('')
 )
@@ -361,7 +366,11 @@ const commentCharacterCount = computed(
 const commentTooLong = computed(() => commentCharacterCount.value > COMMENT_MAX_LENGTH)
 const submittingComment = ref(false)
 const showCommentEmoji = ref(false)
-const commentEmojiTab = ref<'sticker' | 'emoji' | 'kaomoji'>('sticker')
+type CommentEmojiTab = StickerPackId | 'emoji' | 'kaomoji'
+const commentEmojiTab = ref<CommentEmojiTab>('sticker')
+const commentStickerPack = computed(() =>
+  STICKER_PACKS.find((pack) => pack.id === commentEmojiTab.value)
+)
 const COMMENT_MAX_LENGTH = 150
 const COMMENT_MAX_STICKERS = 3
 const COMMENT_EMOJIS = [
@@ -744,9 +753,7 @@ function onCommentEnter(event: KeyboardEvent) {
   void submitComment()
 }
 
-function insertCommentSticker(id: string) {
-  const sticker = STICKERS.find((item) => item.id === id)
-  if (!sticker) return
+function insertCommentSticker(sticker: Sticker) {
   if (
     selectedCommentStickers.value.length +
       (commentInput.value.match(/\[sticker-\d+\]/g)?.length ?? 0) >=
@@ -1578,14 +1585,16 @@ function formatTime(iso: string): string {
                     >
                       <div class="comment-emoji-tabs" role="tablist">
                         <button
+                          v-for="pack in STICKER_PACKS"
+                          :key="pack.id"
                           type="button"
                           role="tab"
-                          :aria-selected="commentEmojiTab === 'sticker'"
-                          :class="{ active: commentEmojiTab === 'sticker' }"
+                          :aria-selected="commentEmojiTab === pack.id"
+                          :class="{ active: commentEmojiTab === pack.id }"
                           @mousedown.prevent
-                          @click="commentEmojiTab = 'sticker'"
+                          @click="commentEmojiTab = pack.id"
                         >
-                          小澜的日常
+                          {{ pack.label }}
                         </button>
                         <button
                           type="button"
@@ -1608,9 +1617,9 @@ function formatTime(iso: string): string {
                           颜文字
                         </button>
                       </div>
-                      <div v-if="commentEmojiTab === 'sticker'" class="comment-sticker-grid">
+                      <div v-if="commentStickerPack" class="comment-sticker-grid">
                         <button
-                          v-for="sticker in STICKERS"
+                          v-for="sticker in commentStickerPack.stickers"
                           :key="sticker.id"
                           type="button"
                           class="comment-sticker"
@@ -1618,7 +1627,7 @@ function formatTime(iso: string): string {
                           :title="sticker.label"
                           :aria-label="sticker.label"
                           @mousedown.prevent
-                          @click="insertCommentSticker(sticker.id)"
+                          @click="insertCommentSticker(sticker)"
                         >
                           <img :src="sticker.src" :alt="sticker.label" draggable="false" />
                         </button>

@@ -1,8 +1,28 @@
 import { ipcRenderer, webUtils } from 'electron'
+import type { PackId } from '@common/karaoke'
 import type { HotkeyConfigPayload } from '@common/types/hotkeys'
 
 // Custom APIs for renderer
 export const desktopApi = {
+  karaoke: {
+    status: () => ipcRenderer.invoke('karaoke:status'),
+    download: (id: PackId) => ipcRenderer.invoke('karaoke:download', id),
+    pause: (id: PackId) => ipcRenderer.invoke('karaoke:pause', id),
+    cancel: (id: PackId, keepRecord?: boolean) => ipcRenderer.invoke('karaoke:cancel', id, keepRecord),
+    forget: (id: PackId) => ipcRenderer.invoke('karaoke:forget', id),
+    openLocation: (id: PackId) => ipcRenderer.invoke('karaoke:open-location', id),
+    remove: (id: PackId) => ipcRenderer.invoke('karaoke:remove', id),
+    fileSize: (url: string) => ipcRenderer.invoke('karaoke:file-size', url),
+    readFile: (url: string, start: number, end: number) => ipcRenderer.invoke('karaoke:read-file', url, start, end),
+    release: () => ipcRenderer.invoke('karaoke:release'),
+    separate: (id: PackId, samples: Float32Array[], sampleRate: number) =>
+      ipcRenderer.invoke('karaoke:separate', id, samples, sampleRate),
+    subscribe: (callback: (state: import('../common/karaoke').ModelDownload) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, state: import('../common/karaoke').ModelDownload) => callback(state)
+      ipcRenderer.on('karaoke:state', listener)
+      return () => ipcRenderer.removeListener('karaoke:state', listener)
+    }
+  },
   musicDataRepair: {
     inspect: () => ipcRenderer.invoke('music:repair-inspect'),
     begin: (storage: Record<string, string | null>, restoreMissing: boolean) =>
@@ -546,6 +566,7 @@ export const desktopApi = {
     setDirs: (dirs: string[]) => ipcRenderer.invoke('local-music:set-dirs', dirs),
     getList: () => ipcRenderer.invoke('local-music:get-list'),
     getUrlById: (id: string | number) => ipcRenderer.invoke('local-music:get-url', id),
+    readAnalysisAudio: (url: string) => ipcRenderer.invoke('local-music:read-analysis-audio', url),
     clearIndex: () => ipcRenderer.invoke('local-music:clear-index'),
     getCoverBase64: async (trackId: string) => {
       try {

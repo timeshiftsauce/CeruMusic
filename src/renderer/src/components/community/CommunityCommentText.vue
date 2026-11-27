@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { STICKER_MAP } from '@renderer/utils/listenTogether/stickers'
 import ExpandableNoteText from './ExpandableNoteText.vue'
 
-const props = defineProps<{ text: string }>()
+const props = defineProps<{ text: string; compact?: boolean }>()
 const content = computed(() => {
   const stickers: { id: string; src: string; label: string }[] = []
   const text = props.text.replace(/\[(sticker-\d+)\]/g, (token, id: string) => {
@@ -17,8 +17,9 @@ const content = computed(() => {
 </script>
 
 <template>
-  <div class="comment-content">
-    <ExpandableNoteText v-if="content.text.trim()" class="comment-text" :text="content.text" />
+  <div class="comment-content" :class="{ compact }">
+    <div v-if="compact && content.text.trim()" class="comment-preview">{{ content.text }}</div>
+    <ExpandableNoteText v-else-if="content.text.trim()" class="comment-text" :text="content.text" />
     <div v-if="content.stickers.length" class="comment-stickers" aria-label="评论贴纸">
       <img
         v-for="(sticker, index) in content.stickers"
@@ -58,5 +59,15 @@ const content = computed(() => {
 .comment-text {
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+.comment-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.compact .comment-sticker-image {
+  width: 48px;
 }
 </style>

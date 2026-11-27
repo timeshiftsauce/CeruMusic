@@ -9,6 +9,7 @@ import type {
 // 自定义 API 接口
 interface DevModeState {enabled:boolean;entries:{path:string;enabled:boolean;id?:string;runtime?:2|3;error?:string}[]}
 interface CustomAPI {
+  karaoke: import('../common/karaoke').KaraokeApi
   musicDataRepair: {
     inspect: () => Promise<any>
     begin: (storage: Record<string, string | null>, restoreMissing: boolean) => Promise<any>
@@ -416,6 +417,7 @@ interface CustomAPI {
   }
 
   localMusic: {
+    readAnalysisAudio: (url: string) => Promise<ArrayBuffer | null>
     getCoverBase64: (trackId: string) => Promise<string>
     [x: string]: any
     selectDirs: () => Promise<string[]>

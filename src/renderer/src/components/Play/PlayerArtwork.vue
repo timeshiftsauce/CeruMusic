@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import pointer from '../../assets/pointer.png'
+import PlayerCover from './PlayerCover.vue'
 
 defineProps<{ mode: 'vinyl' | 'square'; artwork?: string | null; alt?: string; playing?: boolean }>()
 </script>
@@ -10,14 +11,14 @@ defineProps<{ mode: 'vinyl' | 'square'; artwork?: string | null; alt?: string; p
     <div class="cd-container" :style="{ animationPlayState: playing ? 'running' : 'paused' }">
       <div class="vinyl-record" />
       <div class="vinyl-label">
-        <slot><div class="cover"><img v-if="artwork" :src="artwork" alt="" draggable="false" /><span v-else aria-hidden="true">♪</span></div></slot>
+        <slot><PlayerCover :src="artwork" class="cover" /></slot>
         <div class="label-shine" />
       </div>
       <div class="center-hole" />
     </div>
   </div>
   <div v-else class="square-artwork ceru-hc-square-cover" :class="{ playing }" role="img" :aria-label="alt || '歌曲封面'">
-    <slot><img v-if="artwork" :src="artwork" alt="" draggable="false" /><span v-else aria-hidden="true">♪</span></slot>
+    <slot><PlayerCover :src="artwork" /></slot>
   </div>
 </template>
 
@@ -40,7 +41,6 @@ defineProps<{ mode: 'vinyl' | 'square'; artwork?: string | null; alt?: string; p
     pointer-events: none;
   }
   &.playing .pointer { transform: rotate(0deg); }
-  .cover { display: grid; place-items: center; color: var(--ceru-hc-foreground, white); }
 }
 .square-artwork {
   width: 100%; aspect-ratio: 1; display: grid; place-items: center;
@@ -50,7 +50,7 @@ defineProps<{ mode: 'vinyl' | 'square'; artwork?: string | null; alt?: string; p
   &:hover { transform: scale(.82); }
   &.playing { transform: scale(1); }
   &.playing:hover { transition: transform .2s; transform: scale(1.02); }
-  > img, :deep(.cover-img-square) { width: 100%; height: 100%; object-fit: cover; }
+  > img { width: 100%; height: 100%; object-fit: cover; }
   :deep(img) { -webkit-user-drag: none; }
 }
 

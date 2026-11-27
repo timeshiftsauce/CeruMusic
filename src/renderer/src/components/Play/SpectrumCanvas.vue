@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-const props = withDefaults(defineProps<{ height?: number; barCount?: number; color?: string; backgroundColor?: string }>(), {
+const props = withDefaults(defineProps<{ height?: number; barCount?: number; color?: string; backgroundColor?: string; continuous?: boolean }>(), {
   height: 80, barCount: 64, color: 'rgba(255, 255, 255, 0.8)', backgroundColor: 'transparent'
 })
 const canvas = ref<HTMLCanvasElement>()
+const bandY = new Float64Array(65)
 let observer: ResizeObserver | undefined
 let latest: ArrayLike<number> = []
 let width = 0
@@ -32,9 +33,47 @@ function draw(samples: ArrayLike<number>, timestamp = performance.now(), force =
   context.fillStyle = gradient
   const pairs = Math.max(1, Math.min(64, Math.floor(props.barCount / 2)))
   const barWidth = width / (2 * pairs)
-  for (let index = 0; index < pairs; index++) {
+  const bandHeight = (index: number) => {
     const value = Math.max(0, Math.min(1, samples[index] || 0))
-    const barHeight = Math.pow(value, 0.6) * height * 0.9
+    return Math.pow(value, 0.6) * height * 0.9
+  }
+
+  if (props.continuous) {
+    for (let index = 0; index < pairs; index++) {
+      bandY[index] = height - bandHeight(index)
+    }
+    bandY[pairs] = height
+
+    context.beginPath()
+    context.moveTo(0, height)
+    let previousY = height
+    let previousSlope = 0
+    for (let step = 1; step <= 2 * pairs; step++) {
+      const y = bandY[Math.abs(step - pairs)]
+      const nextY = bandY[Math.min(pairs, Math.abs(step + 1 - pairs))]
+      const incoming = y - previousY
+      const outgoing = nextY - y
+      // Keep a flat tangent at peaks and valleys so interpolation cannot overshoot.
+      const slope = incoming * outgoing > 0 ? (2 * incoming * outgoing) / (incoming + outgoing) : 0
+      const x = step * barWidth
+      context.bezierCurveTo(
+        x - (2 * barWidth) / 3,
+        previousY + previousSlope / 3,
+        x - barWidth / 3,
+        y - slope / 3,
+        x,
+        y
+      )
+      previousY = y
+      previousSlope = slope
+    }
+    context.closePath()
+    context.fill()
+    return
+  }
+
+  for (let index = 0; index < pairs; index++) {
+    const barHeight = bandHeight(index)
     context.fillRect(width / 2 - (index + 1) * barWidth, height - barHeight, barWidth, barHeight)
     context.fillRect(width / 2 + index * barWidth, height - barHeight, barWidth, barHeight)
   }
@@ -52,7 +91,7 @@ function resize() {
 }
 
 watch(() => props.height, resize, { flush: 'post' })
-watch(() => [props.color, props.barCount, props.backgroundColor], () => {
+watch(() => [props.color, props.barCount, props.backgroundColor, props.continuous], () => {
   gradient = undefined
   draw(latest, performance.now(), true)
 }, { flush: 'post' })
@@ -67,11 +106,26 @@ defineExpose({ draw })
 
 <template>
   <div class="audio-visualizer" role="img" aria-label="频谱" :style="{ height: `${height}px` }">
-    <canvas ref="canvas" class="visualizer-canvas" :style="{ height: `${height}px`, color }" />
+    <canvas
+      ref="canvas"
+      class="visualizer-canvas"
+      :class="{ 'soft-edges': continuous }"
+      :style="{ height: `${height}px`, color }"
+    />
   </div>
 </template>
 
 <style scoped>
 .audio-visualizer { width: 100%; position: relative; overflow: hidden; }
 .visualizer-canvas { width: 100%; display: block; border-radius: 4px; }
+.visualizer-canvas.soft-edges {
+  --edge-fade: min(2.5%, 96px);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--edge-fade),
+    #000 calc(100% - var(--edge-fade)),
+    transparent
+  );
+}
 </style>

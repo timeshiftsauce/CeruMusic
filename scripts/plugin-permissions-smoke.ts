@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -18,6 +19,8 @@ await mkdir(temporary, { recursive: true })
 app.setPath('userData', temporary)
 app.on('window-all-closed', () => {})
 await app.whenReady()
+const { default: InitPluginService } = await import('../src/main/events/plugins')
+InitPluginService()
 const hosts: PluginHost[] = []
 const log = { log() {}, info() {}, warn() {}, error() {}, debug() {} }
 const manifest = {
@@ -25,12 +28,21 @@ const manifest = {
   id: 'test.dynamic-permissions',
   name: '权限回归测试',
   version: '1.0.0',
-  engines: { hostApi: '^2.0.0', logicRuntime: 'ceru-js@1' },
-  modules: { logic: { entry: 'logic.main' } },
+  engines: { hostApi: '^2.0.0', logicRuntime: 'ceru-js@1', uiSchema: '^1.0.0' },
+  modules: {
+    logic: { entry: 'logic.main' },
+    surfaces: [{ id: 'settings', kind: 'schema', entry: 'schema.settings' }]
+  },
   contributes: { commands: [{ id: 'request', title: '请求', action: 'request' }] },
   permissions: [{ key: 'network', name: 'network.request', reason: '测试网络请求' }]
 }
 const artifact = `exports.manifest = ${JSON.stringify(manifest)};
+exports.resources = {
+  'schema.settings': { type: 'json', value: {
+    schemaVersion: '1.0', presentation: { kind: 'drawer', openOnFirstUse: true },
+    root: { type: 'form', title: 'Test settings', submitAction: 'request', children: [] }
+  } }
+};
 exports.activate = async function(ctx) {
   const http = ctx.http.create({permissionKey: 'network', requestPermission: true});
   ctx.actions.register('request', async (input, operation) => {
@@ -51,6 +63,7 @@ try {
   // nodeIntegration is only for this isolated test page, never the production window.
   const main = new BrowserWindow({
     show: false,
+    skipTaskbar: true,
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   })
   bindPluginUIWindow(main)
@@ -67,10 +80,13 @@ try {
     false
   )
   await assert.rejects(callPluginUI('test', 'ui.permissions.request', {}), /主界面加载/)
-  await main.webContents.executeJavaScript(`
+  const connectMainUI = () => main.webContents.executeJavaScript(`
     window.requests = []; window.cancelled = []; window.answer = true;
+    window.advanceCount = 0; window.drawerCount = 0;
     const ipc = require('electron').ipcRenderer;
     ipc.on('plugin:ui', (_, request) => {
+      if (request.method === 'operation.default' && request.data.name === 'player.next') window.advanceCount++;
+      if (request.method === 'ui.drawer.open') window.drawerCount++;
       if (request.method !== 'ui.permissions.request') {
         ipc.invoke('plugin:ui-result', { id: request.id, value: null }); return;
       }
@@ -80,8 +96,36 @@ try {
     ipc.on('plugin:ui-cancel', (_, request) => window.cancelled.push(request.id));
     ipc.invoke('plugin:ui-ready', true);
   `)
+  assert.equal(await connectMainUI(), true)
   const host = await start('granted-test')
+  const advancePlayback = () => main.webContents.executeJavaScript(`
+    require('electron').ipcRenderer.invoke('plugin:run-playback-operation',
+      require('node:crypto').randomUUID(), 'player.next', { reason: 'ended' }, undefined, true)
+  `)
   await main.loadURL(main.webContents.getURL() + '#/home/find')
+  if (process.platform === 'win32') {
+    const minimized = once(main, 'minimize', { signal: AbortSignal.timeout(3000) })
+    main.minimize()
+    await minimized
+    const restored = once(main, 'restore', { signal: AbortSignal.timeout(3000) })
+    main.restore()
+    await restored
+    main.hide()
+  }
+  await advancePlayback()
+  // The main window cancels in-app navigation when it hands sign-in to the browser.
+  const beforeNavigation = main.webContents.getURL()
+  const blockedNavigation = new Promise<void>((resolve) => {
+    main.webContents.once('will-navigate', (event) => {
+      event.preventDefault()
+      resolve()
+    })
+  })
+  await main.webContents.executeJavaScript("void (location.href = 'https://example.test/sign-in')")
+  await blockedNavigation
+  assert.equal(main.webContents.getURL(), beforeNavigation)
+  await advancePlayback()
+  assert.equal(await main.webContents.executeJavaScript('window.advanceCount'), 2)
   assert.deepEqual(host.getGrantedPermissions(), [])
   assert.equal(
     await main.webContents.executeJavaScript('window.requests.length'),
@@ -172,8 +216,24 @@ try {
     ['222'],
     'a later refresh must not reactivate a disabled plugin'
   )
+  assert.equal(await main.webContents.executeJavaScript('window.drawerCount'), 0)
+  assert.deepEqual(
+    await main.webContents.executeJavaScript("require('electron').ipcRenderer.invoke('plugin:set-active', '333')"),
+    { success: true, viewError: undefined }
+  )
+  assert.equal(await main.webContents.executeJavaScript('window.drawerCount'), 1)
+
+  const staleRequest = assert.rejects(
+    callPluginUI('test', 'ui.permissions.request', {}),
+    /主界面正在重新加载/
+  )
+  await main.loadFile(page)
+  await staleRequest
+  await assert.rejects(callPluginUI('test', 'ui.toast', {}), /主界面加载/)
+  assert.equal(await connectMainUI(), true)
+  assert.equal(await callPluginUI('test', 'ui.toast', {}), null)
   console.log(
-    'PASS: dynamic permissions after navigation, persistence, denial, cancellation; cold-start restores all enabled plugins and leaves disabled plugins stopped'
+    'PASS: playback and plugin activation after navigation, UI reconnect after reload, dynamic permissions and cold-start restoration'
   )
 } catch (error) {
   console.error(error)

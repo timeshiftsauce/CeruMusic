@@ -1,27 +1,38 @@
 import { songKey } from '@common/musicItem'
-import { reactive, toRaw } from 'vue'
+import { nextTick, reactive } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { usePlaySettingStore } from '@renderer/store'
 import { useDlnaStore } from '@renderer/store/dlna'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { isLtInRoom } from '@renderer/utils/listenTogether/state'
-import { getCandidateSongs, waitForAudioReady } from './audioHelpers'
+import { waitForAudioReady } from './audioHelpers'
+import { createPlaybackFallback } from './playbackFallback'
 import AudioManager from './audioManager'
+import { analyseMixTrack } from './automixAnalysis'
+import { alignedMixPosition, matchTempos, type TempoMatch } from './automixTempo'
 import type { SongList } from '@renderer/types/audio'
 
 type GetNextSong = () => SongList | null
+type AuthorizeAdvance = (song: SongList) => Promise<boolean>
+let _authorizeAdvance: AuthorizeAdvance | undefined
+let _traceMedia: string | undefined
+let _lastStage: string | undefined
+let _rejectedMedia: string | undefined
+
+function trace(stage: string, details?: Record<string, unknown>) {
+  if (stage === _lastStage) return
+  _lastStage = stage
+  console.info('[crossfade]', stage, details ?? {})
+}
 
 // ---- 常量 ----
-const OBSERVATION_WINDOW = 15 // 进入尾段观察窗口 (秒)
-const QUIET_REMAINING = 13 // 安静时刻可触发 (秒)
-const FORCED_REMAINING = 12 // 保底触发 (秒)，参考 Apple Music：保证每首歌都有完整过渡
-const EMERGENCY_REMAINING = 8 // 紧急兜底 (秒)
+const OBSERVATION_WINDOW = 40 // 预缓冲和观察开始（秒）
+const QUIET_REMAINING = 11 // 安静时刻可提前混入（秒）
+const FORCED_REMAINING = 8 // 未遇到安静段时按媒体时钟触发（秒）
 const QUIET_RMS = 0.04 // 安静阈值（更敏感，让更多尾段时刻被判定为安静）
 const MIN_SONG_DURATION = 25 // 太短的歌不过渡
-const MIN_FADE_TIME = 6
-const MAX_FADE_TIME = 12
+const MAX_FADE_TIME = 10
 const FADE_SAFETY_MARGIN = 0.3
 
 // ---- 预计算等功率曲线（smoothstep 时间扭曲） ----
@@ -67,7 +78,10 @@ let _rmsWindow: number[] = []
 
 let _finalizing = false
 let _completeTimer: any = null
-let _cancelled = false
+let _preparation: AbortController | null = null
+let _requestMix: (() => void) | null = null
+let _mixTempo: { audio: HTMLAudioElement; baseRate: number; factor: number } | null = null
+let _tempoTimer: ReturnType<typeof setInterval> | undefined
 
 let _currentNextSong: SongList | null = null
 let _beginningInProgress = false
@@ -84,7 +98,19 @@ const stopRmsWatch = () => {
   _rmsWindow = []
 }
 
+const restoreMixTempo = () => {
+  clearInterval(_tempoTimer)
+  _tempoTimer = undefined
+  const tempo = _mixTempo
+  _mixTempo = null
+  if (tempo) tempo.audio.playbackRate = tempo.baseRate
+}
+
 const resetState = () => {
+  restoreMixTempo()
+  _preparation?.abort()
+  _preparation = null
+  _requestMix = null
   crossfadeState.active = false
   crossfadeState.scheduled = false
   crossfadeState.fadeStart = 0
@@ -103,30 +129,29 @@ const resetState = () => {
 
 /**
  * 计算进度条上应标记的过渡预告区间
- * 当设置启用、歌曲时长合适、且 DLNA 未连接时，标记末尾的 OBSERVATION_WINDOW ~ FORCED_REMAINING 区间
+ * 当可以过渡时，标记安静段可切入到按媒体时钟强制切入的区间。
  */
 const updateMarkRange = () => {
   try {
-    const audioStore = ControlAudioStore()
     const playSetting = usePlaySettingStore()
     const dlnaStore = useDlnaStore()
 
-    const duration = audioStore.Audio.duration
+    const duration = readLiveDuration()
     if (
       _naturalNextDelayEnabled ||
       !playSetting.getIsSeamlessTransition ||
       isLtInRoom() ||
       dlnaStore.currentDevice ||
-      !duration ||
+      !Number.isFinite(duration) ||
       duration < MIN_SONG_DURATION
     ) {
       crossfadeState.markStart = 0
       crossfadeState.markEnd = 0
       return
     }
-    // 预告区间：从 duration - OBSERVATION_WINDOW 到 duration - FORCED_REMAINING
+    // 预告区间以混入时机为准，不包含提前缓冲音频的时间。
     // 这正是"最早可能触发（安静时刻）"和"最晚一定触发"的两个端点
-    const start = Math.max(0, duration - OBSERVATION_WINDOW)
+    const start = Math.max(0, duration - QUIET_REMAINING)
     const end = Math.max(start, duration - FORCED_REMAINING)
     crossfadeState.markStart = start
     crossfadeState.markEnd = end
@@ -145,6 +170,14 @@ const readLiveCurrentTime = (): number => {
   const el = audioStore.Audio.audio
   const live = el?.currentTime
   return typeof live === 'number' && Number.isFinite(live) ? live : audioStore.Audio.currentTime
+}
+
+const readLiveDuration = (): number => {
+  const { Audio } = ControlAudioStore()
+  const duration = Audio.audio?.duration
+  return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+    ? duration
+    : Audio.duration
 }
 
 // ------- RMS 观察 -------
@@ -172,7 +205,7 @@ const startRmsWatch = () => {
       if (_rmsWindow.length > 10) _rmsWindow.shift()
       const avgRms = _rmsWindow.reduce((a, b) => a + b, 0) / Math.max(1, _rmsWindow.length)
 
-      const duration = audioStore.Audio.duration
+      const duration = readLiveDuration()
       const current = readLiveCurrentTime()
       const remaining = duration - current
       if (remaining <= 0) {
@@ -180,18 +213,7 @@ const startRmsWatch = () => {
         return
       }
 
-      // 触发规则 (任一命中):
-      // 1. 安静时刻且 remaining <= QUIET_REMAINING
-      // 2. remaining <= FORCED_REMAINING (无论音量)
-      // 3. remaining <= EMERGENCY_REMAINING (强制兜底)
-      if (
-        (avgRms < QUIET_RMS && remaining <= QUIET_REMAINING) ||
-        remaining <= FORCED_REMAINING ||
-        remaining <= EMERGENCY_REMAINING
-      ) {
-        stopRmsWatch()
-        void beginCrossfade()
-      }
+      if (avgRms < QUIET_RMS && remaining <= QUIET_REMAINING) triggerCrossfade()
     } catch (e) {
       console.warn('[crossfade] RMS watch error:', e)
     }
@@ -202,35 +224,52 @@ const startRmsWatch = () => {
 
 const onTimeUpdate = () => {
   try {
-    const audioStore = ControlAudioStore()
     const playSetting = usePlaySettingStore()
     const dlnaStore = useDlnaStore()
+    const media = ControlAudioStore().Audio.audio?.currentSrc
+    if (_traceMedia !== media) {
+      _traceMedia = media
+      _lastStage = undefined
+      _rejectedMedia = undefined
+    }
 
     // 每次 timeupdate 都刷新 mark range（低成本）
     updateMarkRange()
 
-    if (_naturalNextDelayEnabled) return
-    if (!playSetting.getIsSeamlessTransition) return
+    if (_naturalNextDelayEnabled) return trace('skipped: delayed next')
+    if (!playSetting.getIsSeamlessTransition) return trace('skipped: disabled')
     /* 一起听:房间内不做无感过渡 —— 切歌由服务端 SYNC 驱动,提前过渡会和 SYNC
      * 冲突(本地切到下一首,但服务端可能切到完全不同的歌)。 */
-    if (isLtInRoom()) return
-    if (dlnaStore.currentDevice) return
-    if (crossfadeState.scheduled || crossfadeState.active) return
+    if (isLtInRoom()) return trace('skipped: listen together')
+    if (dlnaStore.currentDevice) return trace('skipped: DLNA')
+    if (crossfadeState.active) return
+    if (_rejectedMedia !== undefined && _rejectedMedia === media) return
 
-    const duration = audioStore.Audio.duration
+    const duration = readLiveDuration()
     const current = readLiveCurrentTime()
-    if (!duration || duration < MIN_SONG_DURATION) return
+    if (!Number.isFinite(duration) || duration < MIN_SONG_DURATION)
+      return trace('waiting: unavailable or short duration', { duration })
     const remaining = duration - current
-    if (remaining > OBSERVATION_WINDOW) return
+    if (remaining <= 0) return
+    if (remaining > OBSERVATION_WINDOW) return trace('monitoring', { duration, current })
+
+    // 保底触发使用媒体时钟，即使 RMS 分析器不可用也能进入过渡。
+    if (crossfadeState.scheduled) {
+      if (remaining <= FORCED_REMAINING) triggerCrossfade()
+      return
+    }
 
     // 进入观察窗口
-    if (!_getNextSong) return
+    if (!_getNextSong) return trace('skipped: no queue resolver')
     const next = _getNextSong()
-    if (!next) return // 单曲循环或列表末尾：不触发
+    if (!next) return trace('waiting: no eligible next track', { remaining })
     _currentNextSong = next
 
     crossfadeState.scheduled = true
-    startRmsWatch()
+    trace('preparing next', { source: next.source, remaining })
+    void beginCrossfade()
+    if (remaining <= FORCED_REMAINING) triggerCrossfade()
+    else startRmsWatch()
   } catch (e) {
     console.warn('[crossfade] onTimeUpdate error:', e)
   }
@@ -240,7 +279,6 @@ const cancelCrossfade = () => {
   if (!crossfadeState.scheduled && !crossfadeState.active && !_beginningInProgress) {
     return
   }
-  _cancelled = true
   const audioStore = ControlAudioStore()
   const primary = audioStore.getPrimaryEl()
   const secondary = audioStore.getSecondaryEl()
@@ -276,33 +314,39 @@ const cancelCrossfade = () => {
   }
 
   resetState()
-  console.log('[crossfade] cancelled')
+  console.info('[crossfade] cancelled', { stage: _lastStage })
 }
 
 const onSeeked = () => {
   // 仅在 scheduled（观察期）且尚未 active（未开始淡化）时，才判断是否取消
   // 一旦 active，槽位已翻转到新歌，seek 是用户在新歌上操作，不影响老歌淡出
   if (!crossfadeState.scheduled || crossfadeState.active) return
-  const audioStore = ControlAudioStore()
-  const remaining = audioStore.Audio.duration - readLiveCurrentTime()
+  const remaining = readLiveDuration() - readLiveCurrentTime()
   if (remaining > OBSERVATION_WINDOW + 1) {
     cancelCrossfade()
   }
 }
 
 const onPlaybackEnded = () => {
-  // 若正在完成交叉淡化，由 completeCrossfade 处理后续；否则不做事，让 ended 继续常规路径
-  if (_finalizing) return
+  if (!_finalizing) cancelCrossfade()
 }
 
 // ------- 交叉淡化主流程 -------
+
+const triggerCrossfade = () => {
+  stopRmsWatch()
+  _requestMix?.()
+  _requestMix = null
+}
 
 const beginCrossfade = async () => {
   if (_beginningInProgress || crossfadeState.active) return
   /* 一起听:房间内绝不进入 crossfade 流程(防御性检查;onTimeUpdate 也已经过滤) */
   if (isLtInRoom()) return
   _beginningInProgress = true
-  _cancelled = false
+  const preparation = new AbortController()
+  _preparation = preparation
+  const { signal } = preparation
 
   const audioStore = ControlAudioStore()
   const localUserStore = LocalUserDetailStore()
@@ -311,7 +355,13 @@ const beginCrossfade = async () => {
 
   const primary = audioStore.getPrimaryEl()
   const secondary = audioStore.getSecondaryEl()
-  if (!primary || !secondary) {
+  if (
+    !primary ||
+    !secondary ||
+    primary.paused ||
+    !playSetting.getIsSeamlessTransition ||
+    useDlnaStore().currentDevice
+  ) {
     _beginningInProgress = false
     resetState()
     return
@@ -324,75 +374,120 @@ const beginCrossfade = async () => {
     return
   }
 
-  // 1. 预取下一首 URL (含换源 fallback)
-  let nextUrl = ''
-  try {
-    nextUrl = await getSongRealUrl(toRaw(nextSong))
-  } catch (e) {
-    console.warn('[crossfade] primary source URL failed, trying candidates', e)
-    try {
-      const candidates = await getCandidateSongs(nextSong, localUserStore.userInfo)
-      for (const c of candidates) {
-        try {
-          const u = await getSongRealUrl(toRaw(c))
-          if (u && typeof u === 'string' && !u.includes('error')) {
-            nextUrl = u
-            break
-          }
-        } catch {
-          continue
-        }
+  const canStart = () => {
+    if (
+      signal.aborted ||
+      primary.paused ||
+      primary.ended ||
+      !playSetting.getIsSeamlessTransition ||
+      isLtInRoom() ||
+      useDlnaStore().currentDevice
+    )
+      return false
+    const next = _getNextSong?.()
+    return !!next && songKey(next) === songKey(nextSong)
+  }
+  const mixCue = new Promise<void>((resolve) => {
+    _requestMix = resolve
+    signal.addEventListener('abort', () => resolve(), { once: true })
+  })
+  const analysis = new AbortController()
+  const analysisSignal = AbortSignal.any([signal, analysis.signal, AbortSignal.timeout(20_000)])
+  const analysisSeconds = playSetting.getAutomixMaxAnalyzeTime
+  const outgoingGrid = analyseMixTrack(
+    primary.currentSrc,
+    primary.duration,
+    'tail',
+    analysisSeconds,
+    analysisSignal
+  )
+
+  // The same policy drives the secondary slot. Publish its trace only when
+  // it becomes the audible track rather than while the previous track plays.
+  const fallback = createPlaybackFallback(nextSong, () => !signal.aborted, true)
+  const loading = fallback
+    .load(async (url) => {
+      audioStore.setSecondaryUrl(url)
+      await nextTick()
+      try {
+        await waitForAudioReady(secondary, signal)
+      } catch (error) {
+        if (!signal.aborted)
+          console.warn('[crossfade] next audio buffer failed', {
+            scheme: url.match(/^([a-z][a-z0-9+.-]*):/i)?.[1],
+            readyState: secondary.readyState,
+            mediaError: secondary.error?.code
+          })
+        throw error
       }
-    } catch {
-      // 换源失败
+    })
+    .catch((error) => {
+      if (!signal.aborted) console.warn('[crossfade] next audio preparation failed', error)
+      return undefined
+    })
+  const pending: { ready?: Awaited<ReturnType<typeof globalPlayStatus.prepareSong>> } = {}
+  const metadata = globalPlayStatus
+    .prepareSong(nextSong, signal)
+    .then((prepared) => {
+      pending.ready = prepared
+      return prepared
+    })
+    .catch((error) => {
+      if (!signal.aborted) console.warn('[crossfade] metadata preparation failed', error)
+      return null
+    })
+  signal.addEventListener(
+    'abort',
+    () => {
+      void metadata.then((prepared) => prepared?.dispose())
+    },
+    { once: true }
+  )
+  const loaded = await loading
+  if (!loaded || signal.aborted) {
+    if (!signal.aborted) {
+      trace('failed: no playable next audio')
+      cancelCrossfade()
     }
-  }
-
-  if (_cancelled) {
-    _beginningInProgress = false
     return
   }
-
-  if (!nextUrl) {
-    console.warn('[crossfade] 无法获取下一首 URL，放弃过渡')
-    _beginningInProgress = false
-    resetState()
+  trace('next audio ready', {
+    readyState: secondary.readyState,
+    remaining: readLiveDuration() - readLiveCurrentTime()
+  })
+  const result: { tempo: TempoMatch | null } = { tempo: null }
+  void Promise.all([
+    outgoingGrid,
+    analyseMixTrack(
+      secondary.currentSrc || loaded.url,
+      secondary.duration,
+      'head',
+      analysisSeconds,
+      analysisSignal
+    )
+  ]).then(([outgoing, incoming]) => {
+    if (outgoing && incoming && !analysisSignal.aborted)
+      result.tempo = matchTempos(outgoing, incoming)
+  })
+  await mixCue
+  analysis.abort()
+  if (signal.aborted) return
+  if (_authorizeAdvance && !(await _authorizeAdvance(nextSong))) {
+    if (!signal.aborted) {
+      _rejectedMedia = primary.currentSrc
+      trace('skipped: plugin did not approve preloaded track')
+      cancelCrossfade()
+    }
     return
   }
-
-  // 2. 装载非活跃槽
-  try {
-    audioStore.setSecondaryUrl(nextUrl)
-  } catch (e) {
-    console.warn('[crossfade] setSecondaryUrl failed', e)
-    _beginningInProgress = false
-    resetState()
-    return
-  }
-
-  // 等模板把 src 应用到 element 上
-  await new Promise((r) => setTimeout(r, 30))
-  if (_cancelled) {
-    _beginningInProgress = false
-    return
-  }
-
-  try {
-    secondary.load()
-    await waitForAudioReady(secondary)
-  } catch (e) {
-    console.warn('[crossfade] secondary not ready', e)
-    _beginningInProgress = false
-    resetState()
-    return
-  }
-  if (_cancelled) {
-    _beginningInProgress = false
+  if (signal.aborted || !canStart()) {
+    if (!signal.aborted) cancelCrossfade()
     return
   }
 
   try {
     secondary.currentTime = 0
+    secondary.playbackRate = primary.playbackRate
   } catch {}
 
   // 确保非活跃槽建立了 Web Audio 链 + crossfade 节点
@@ -400,14 +495,14 @@ const beginCrossfade = async () => {
 
   const gS = AudioManager.getCrossfadeGain(secondary)
   const gP = AudioManager.getCrossfadeGain(primary)
-  const lpP = AudioManager.getCrossfadeLowpass(primary)
+  const bassP = AudioManager.getCrossfadeBassGain(primary)
+  const bassS = AudioManager.getCrossfadeBassGain(secondary)
   const ctxP = AudioManager.getContext(primary)
   const ctxS = AudioManager.getContext(secondary)
 
-  if (!gS || !gP || !lpP || !ctxP || !ctxS) {
+  if (!gS || !gP || !bassP || !bassS || !ctxP || !ctxS) {
     console.warn('[crossfade] crossfade nodes unavailable, aborting')
-    _beginningInProgress = false
-    resetState()
+    cancelCrossfade()
     return
   }
 
@@ -424,62 +519,75 @@ const beginCrossfade = async () => {
     gP.gain.setValueAtTime(1, ctxP.currentTime)
     gS.gain.cancelScheduledValues(0)
     gS.gain.setValueAtTime(0, ctxS.currentTime)
-    lpP.frequency.cancelScheduledValues(0)
-    lpP.frequency.setValueAtTime(22050, ctxP.currentTime)
+    bassP.cancelScheduledValues(0)
+    bassP.setValueAtTime(0, ctxP.currentTime)
+    bassS.cancelScheduledValues(0)
+    bassS.setValueAtTime(-12, ctxS.currentTime)
   } catch {}
 
-  // 开始播放 secondary
-  const prepared = await globalPlayStatus.prepareSong(nextSong)
-  if (_cancelled || _currentNextSong !== nextSong) {
-    prepared.dispose()
-    _beginningInProgress = false
-    return
-  }
+  // 在静音的备用槽对齐拍相。匹配可用时保留音高并临时调整倍速。
   try {
+    if (result.tempo) {
+      const { rate } = result.tempo
+      _mixTempo = { audio: secondary, baseRate: primary.playbackRate, factor: rate }
+      secondary.preservesPitch = true
+      secondary.playbackRate = _mixTempo.baseRate * rate
+      secondary.currentTime = alignedMixPosition(result.tempo, primary.currentTime)
+    }
     await secondary.play()
   } catch (e) {
-    console.warn('[crossfade] secondary.play() failed', e)
-    prepared.dispose()
-    _beginningInProgress = false
-    resetState()
+    if (!signal.aborted) {
+      console.warn('[crossfade] secondary.play() failed', e)
+      cancelCrossfade()
+    }
     return
   }
-  if (_cancelled) {
-    try {
-      secondary.pause()
-    } catch {}
-    prepared.dispose()
-    _beginningInProgress = false
+  const remaining = (primary.duration - primary.currentTime) / primary.playbackRate
+  if (!canStart() || !Number.isFinite(remaining) || remaining <= FADE_SAFETY_MARGIN) {
+    if (!signal.aborted) cancelCrossfade()
     return
   }
 
   // 3. 计算过渡时长
-  const remaining = audioStore.Audio.duration - readLiveCurrentTime()
-  const fadeTime = Math.min(MAX_FADE_TIME, Math.max(MIN_FADE_TIME, remaining - FADE_SAFETY_MARGIN))
+  const fadeTime = Math.min(MAX_FADE_TIME, remaining - FADE_SAFETY_MARGIN)
 
-  // 4. 启动 gain 包络 + 低通扫频
+  // 4. 启动等功率交叉淡化，在中段交接两首歌的低频。
+  const startP = ctxP.currentTime
+  const startS = ctxS.currentTime
+  const tempo = _mixTempo
+  if (tempo && tempo.factor !== 1) {
+    const alignedRate = tempo.factor
+    _tempoTimer = setInterval(() => {
+      const progress = (ctxS.currentTime - startS) / fadeTime
+      const release = Math.max(0, Math.min(1, (progress - 0.7) / 0.3))
+      tempo.factor = 1 + (alignedRate - 1) * (1 - release)
+      tempo.audio.playbackRate = tempo.baseRate * tempo.factor
+    }, 50)
+  }
   try {
-    gP.gain.setValueCurveAtTime(cosCurve, ctxP.currentTime, fadeTime)
+    gP.gain.setValueCurveAtTime(cosCurve, startP, fadeTime)
   } catch (e) {
     // 某些浏览器对 setValueCurveAtTime 的参数有严格要求；退回线性 ramp
     try {
       gP.gain.cancelScheduledValues(0)
-      gP.gain.setValueAtTime(1, ctxP.currentTime)
-      gP.gain.linearRampToValueAtTime(0, ctxP.currentTime + fadeTime)
+      gP.gain.setValueAtTime(1, startP)
+      gP.gain.linearRampToValueAtTime(0, startP + fadeTime)
     } catch {}
   }
   try {
-    gS.gain.setValueCurveAtTime(sinCurve, ctxS.currentTime, fadeTime)
+    gS.gain.setValueCurveAtTime(sinCurve, startS, fadeTime)
   } catch (e) {
     try {
       gS.gain.cancelScheduledValues(0)
-      gS.gain.setValueAtTime(0, ctxS.currentTime)
-      gS.gain.linearRampToValueAtTime(1, ctxS.currentTime + fadeTime)
+      gS.gain.setValueAtTime(0, startS)
+      gS.gain.linearRampToValueAtTime(1, startS + fadeTime)
     } catch {}
   }
   try {
-    lpP.frequency.setValueAtTime(22050, ctxP.currentTime)
-    lpP.frequency.linearRampToValueAtTime(900, ctxP.currentTime + fadeTime)
+    bassP.setValueAtTime(0, startP + fadeTime * 0.25)
+    bassP.linearRampToValueAtTime(-12, startP + fadeTime * 0.65)
+    bassS.setValueAtTime(-12, startS + fadeTime * 0.35)
+    bassS.linearRampToValueAtTime(0, startS + fadeTime * 0.75)
   } catch {}
 
   crossfadeState.active = true
@@ -489,11 +597,13 @@ const beginCrossfade = async () => {
   crossfadeState.fadeDuration = 0
   _finalizing = true
   _beginningInProgress = false
+  _preparation = null
 
   // 立即翻转槽位：让进度条显示新歌的时间/总时长，并让 RAF 循环从新 primary 读数据。
   // 老歌继续在"新的 secondary 槽"中完成淡出播放，completeCrossfade 负责清理。
   try {
     audioStore.swapPrimarySlot()
+    fallback.playing(loaded)
     const newPrimary = audioStore.getPrimaryEl()
     if (newPrimary) {
       const d = newPrimary.duration
@@ -513,8 +623,11 @@ const beginCrossfade = async () => {
     localUserStore.userInfo.lastPlaySongKey = songKey(nextSong)
   } catch {}
   try {
-    globalPlayStatus.commitPrepared(prepared)
-  } catch {}
+    if (pending.ready) globalPlayStatus.commitPrepared(pending.ready)
+    else globalPlayStatus.commitTransitionSong(nextSong, metadata)
+  } catch (error) {
+    console.warn('[crossfade] failed to commit song metadata', error)
+  }
   // SMTC 元数据由 commitPrepared 统一更新(使用已加载好的封面)，此处不再重复调用。
 
   // 在新歌开头打上淡入标记：0 ~ fadeTime 秒
@@ -544,9 +657,6 @@ const beginCrossfade = async () => {
     nextSong: nextSong.name,
     remaining
   })
-
-  // 避免 unused 警告
-  void playSetting
 }
 
 const completeCrossfade = (nextSong: SongList) => {
@@ -589,18 +699,21 @@ export const crossfadeManager = {
    * 初始化：订阅音频事件。应在 GlobalAudio.vue 挂载后调用一次。
    * @param getNextSong 返回下一首歌曲的回调（由 globaPlayList 注入，避免循环依赖）
    */
-  init(getNextSong: GetNextSong) {
+  init(getNextSong: GetNextSong, authorizeAdvance?: AuthorizeAdvance) {
+    _authorizeAdvance = authorizeAdvance
     if (_inited) {
       _getNextSong = getNextSong
       return
     }
     _inited = true
+    trace('initialized')
     _getNextSong = getNextSong
 
     const audioStore = ControlAudioStore()
     _unsubs.push(audioStore.subscribe('timeupdate', onTimeUpdate))
     _unsubs.push(audioStore.subscribe('seeked', onSeeked))
     _unsubs.push(audioStore.subscribe('ended', onPlaybackEnded))
+    _unsubs.push(audioStore.subscribe('pause', cancelCrossfade))
   },
 
   /**
@@ -608,6 +721,12 @@ export const crossfadeManager = {
    */
   setGetNextSong(cb: GetNextSong) {
     _getNextSong = cb
+  },
+
+  playbackRateFor(audio: HTMLAudioElement, baseRate: number): number {
+    if (_mixTempo?.audio !== audio) return baseRate
+    _mixTempo.baseRate = baseRate
+    return baseRate * _mixTempo.factor
   },
 
   /**
@@ -628,6 +747,7 @@ export const crossfadeManager = {
    * 在用户主动切歌 / seek 离开尾段 / 禁用设置时调用。
    */
   cancel() {
+    _rejectedMedia = undefined
     cancelCrossfade()
   },
 
@@ -654,6 +774,10 @@ export const crossfadeManager = {
     _unsubs = []
     _inited = false
     _getNextSong = null
+    _authorizeAdvance = undefined
+    _traceMedia = undefined
+    _lastStage = undefined
+    _rejectedMedia = undefined
     _naturalNextDelayEnabled = false
     crossfadeState.fadeInMarkEnd = 0
     if (_fadeInClearTimer !== null) {

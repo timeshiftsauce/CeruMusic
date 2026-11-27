@@ -5,7 +5,7 @@ import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { acquireSpectrum } from '@renderer/plugin/spectrum'
 import SpectrumCanvas from './SpectrumCanvas.vue'
 
-const props = withDefaults(defineProps<{ show?: boolean; height?: number; barCount?: number; color?: string; backgroundColor?: string }>(), { show: true })
+const props = withDefaults(defineProps<{ show?: boolean; height?: number; barCount?: number; color?: string; backgroundColor?: string; continuous?: boolean }>(), { show: true })
 const emit = defineEmits<{ lowFreqUpdate: [volume: number] }>()
 const canvas = ref<InstanceType<typeof SpectrumCanvas>>()
 const { Audio } = storeToRefs(ControlAudioStore())
@@ -22,5 +22,5 @@ watch(() => [Audio.value.audio, Audio.value.isPlay, props.show, canvas.value] as
 </script>
 
 <template>
-  <SpectrumCanvas ref="canvas" :height="height" :bar-count="barCount" :color="color" :background-color="backgroundColor" />
+  <SpectrumCanvas ref="canvas" :height="height" :bar-count="barCount" :color="color" :background-color="backgroundColor" :continuous="continuous" />
 </template>

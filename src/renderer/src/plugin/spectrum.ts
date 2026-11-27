@@ -17,7 +17,7 @@ export function listenRegionSpectrum(name: PlayerRegion, audio: HTMLAudioElement
   return lease?.release
 }
 function sample(source:Source, audio:HTMLAudioElement, time:number) {
-  if (document.hidden || !document.hasFocus()) return source.bytes
+  if (document.hidden) return source.bytes
   if (audio.paused || audio.seeking || audio.readyState < 2) {
     source.time = -1
     source.bytes.fill(0)
@@ -44,22 +44,18 @@ export function acquireSpectrum(audio:HTMLAudioElement) {
   const owned = new Set<Consumer>()
   const tick = (time:number) => {
     source.frame = 0
-    if (!source.listeners.size || document.hidden || !document.hasFocus()) return
+    if (!source.listeners.size || document.hidden) return
     sample(source,audio,time)
     for (const listener of source.listeners) listener(source.bins)
     if (source.listeners.size) source.frame = requestAnimationFrame(tick)
   }
   const activity = () => {
-    if (document.hidden || !document.hasFocus()) { cancelAnimationFrame(source.frame); source.frame = 0; source.time = -1 }
+    if (document.hidden) { cancelAnimationFrame(source.frame); source.frame = 0; source.time = -1 }
     else if (source.listeners.size && !source.frame) source.frame = requestAnimationFrame(tick)
   }
   if (!source.releaseActivity) {
-    window.addEventListener('focus', activity)
-    window.addEventListener('blur', activity)
     document.addEventListener('visibilitychange', activity)
     source.releaseActivity = () => {
-      window.removeEventListener('focus', activity)
-      window.removeEventListener('blur', activity)
       document.removeEventListener('visibilitychange', activity)
     }
   }
@@ -69,7 +65,7 @@ export function acquireSpectrum(audio:HTMLAudioElement) {
       if (released) return
       const subscription: Consumer = bins => listener(bins)
       owned.add(subscription); source.listeners.add(subscription)
-      if (!source.frame && !document.hidden && document.hasFocus()) source.frame = requestAnimationFrame(tick)
+      if (!source.frame && !document.hidden) source.frame = requestAnimationFrame(tick)
     },
     release() {
       if (released) return

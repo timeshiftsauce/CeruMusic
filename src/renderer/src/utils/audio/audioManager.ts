@@ -23,9 +23,15 @@ class AudioManager {
 
   // Crossfade Nodes (插在 splitter 和 destination 之间，供无感过渡使用)
   private crossfadeGains = new WeakMap<HTMLAudioElement, GainNode>()
-  private crossfadeLowpasses = new WeakMap<HTMLAudioElement, BiquadFilterNode>()
+  private crossfadeBassFilters = new WeakMap<HTMLAudioElement, BiquadFilterNode>()
   // 过渡时机检测专用的 analyser，按需惰性创建，tap 在 splitter 上，与可视化分析器独立
   private envelopeAnalysers = new WeakMap<HTMLAudioElement, AnalyserNode>()
+
+  private karaokeInputs = new WeakMap<HTMLAudioElement, { dry: GainNode; input: AudioNode }>()
+  getKaraokeInput(el: HTMLAudioElement) {
+    this.getOrCreateAudioSource(el)
+    return this.karaokeInputs.get(el)
+  }
 
   // 10 bands frequencies
   public readonly EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -123,7 +129,10 @@ class AudioManager {
         })
 
         // 连接滤波器链: source -> filter1 -> ... -> filterN
-        let lastNode: AudioNode = source
+        const dry = ctx.createGain()
+        source.connect(dry)
+        this.karaokeInputs.set(audioElement, { dry, input: filters[0] })
+        let lastNode: AudioNode = dry
         filters.forEach((filter) => {
           lastNode.connect(filter)
           lastNode = filter
@@ -198,21 +207,21 @@ class AudioManager {
           // 连接最后一个滤波器到分流器
           lastNode.connect(splitter)
 
-          // 无感过渡节点: splitter -> crossfadeLowpass -> crossfadeGain -> destination
-          // 默认 bypass 状态：lowpass 截止频率最高 (22050Hz)，gain 为 1.0
-          const crossfadeLowpass = context.createBiquadFilter()
-          crossfadeLowpass.type = 'lowpass'
-          crossfadeLowpass.frequency.value = 22050
-          crossfadeLowpass.Q.value = 0.707
+          // 无感过渡节点: splitter -> crossfadeBass -> crossfadeGain -> destination
+          // 默认低架滤波器增益为 0 dB，音量增益为 1.0
+          const crossfadeBass = context.createBiquadFilter()
+          crossfadeBass.type = 'lowshelf'
+          crossfadeBass.frequency.value = 150
+          crossfadeBass.gain.value = 0
 
           const crossfadeGain = context.createGain()
           crossfadeGain.gain.value = 1.0
 
-          splitter.connect(crossfadeLowpass)
-          crossfadeLowpass.connect(crossfadeGain)
+          splitter.connect(crossfadeBass)
+          crossfadeBass.connect(crossfadeGain)
           crossfadeGain.connect(context.destination)
 
-          this.crossfadeLowpasses.set(audioElement, crossfadeLowpass)
+          this.crossfadeBassFilters.set(audioElement, crossfadeBass)
           this.crossfadeGains.set(audioElement, crossfadeGain)
           this.splitters.set(audioElement, splitter)
         }
@@ -303,17 +312,17 @@ class AudioManager {
         splitter.gain.value = 1.0
         source.connect(splitter)
 
-        // 重建 crossfade 链：splitter -> lowpass -> gain -> destination
-        const crossfadeLowpass = context.createBiquadFilter()
-        crossfadeLowpass.type = 'lowpass'
-        crossfadeLowpass.frequency.value = 22050
-        crossfadeLowpass.Q.value = 0.707
+        // 重建 crossfade 链：splitter -> bass shelf -> gain -> destination
+        const crossfadeBass = context.createBiquadFilter()
+        crossfadeBass.type = 'lowshelf'
+        crossfadeBass.frequency.value = 150
+        crossfadeBass.gain.value = 0
         const crossfadeGain = context.createGain()
         crossfadeGain.gain.value = 1.0
-        splitter.connect(crossfadeLowpass)
-        crossfadeLowpass.connect(crossfadeGain)
+        splitter.connect(crossfadeBass)
+        crossfadeBass.connect(crossfadeGain)
         crossfadeGain.connect(context.destination)
-        this.crossfadeLowpasses.set(audioElement, crossfadeLowpass)
+        this.crossfadeBassFilters.set(audioElement, crossfadeBass)
         this.crossfadeGains.set(audioElement, crossfadeGain)
 
         this.splitters.set(audioElement, splitter)
@@ -427,12 +436,12 @@ class AudioManager {
       }
 
       // 清理 crossfade 节点
-      const cfLowpass = this.crossfadeLowpasses.get(audioElement)
-      if (cfLowpass) {
+      const cfBass = this.crossfadeBassFilters.get(audioElement)
+      if (cfBass) {
         try {
-          cfLowpass.disconnect()
+          cfBass.disconnect()
         } catch {}
-        this.crossfadeLowpasses.delete(audioElement)
+        this.crossfadeBassFilters.delete(audioElement)
       }
       const cfGain = this.crossfadeGains.get(audioElement)
       if (cfGain) {
@@ -619,10 +628,10 @@ class AudioManager {
   }
 
   /**
-   * 获取元素的 crossfade lowpass 节点（用于无感过渡的低通扫频）
+   * 获取交叉淡化用的低架滤波器增益
    */
-  getCrossfadeLowpass(audioElement: HTMLAudioElement): BiquadFilterNode | null {
-    return this.crossfadeLowpasses.get(audioElement) || null
+  getCrossfadeBassGain(audioElement: HTMLAudioElement): AudioParam | null {
+    return this.crossfadeBassFilters.get(audioElement)?.gain ?? null
   }
 
   /**
@@ -662,13 +671,13 @@ class AudioManager {
   }
 
   /**
-   * 复位 crossfade 节点到 bypass 状态（gain=1, lowpass freq=22050）。
+   * 复位 crossfade 节点到 bypass 状态（音量增益=1, 低频增益=0 dB）。
    * 过渡完成或取消后调用。
    */
   resetCrossfadeNodes(audioElement: HTMLAudioElement): void {
     const ctx = this.audioContexts.get(audioElement)
     const gain = this.crossfadeGains.get(audioElement)
-    const lowpass = this.crossfadeLowpasses.get(audioElement)
+    const bass = this.crossfadeBassFilters.get(audioElement)
     if (!ctx) return
     const now = ctx.currentTime
     if (gain) {
@@ -677,10 +686,10 @@ class AudioManager {
         gain.gain.setValueAtTime(1, now)
       } catch {}
     }
-    if (lowpass) {
+    if (bass) {
       try {
-        lowpass.frequency.cancelScheduledValues(0)
-        lowpass.frequency.setValueAtTime(22050, now)
+        bass.gain.cancelScheduledValues(0)
+        bass.gain.setValueAtTime(0, now)
       } catch {}
     }
   }

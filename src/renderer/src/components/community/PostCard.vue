@@ -68,7 +68,11 @@ const likeText = computed(() => formatCount(props.post.likeCount))
 /** 无图时取正文前 ~60 字做封面文字 */
 const textExcerpt = computed(() => {
   const t = props.post.content.replace(/\n+/g, ' ')
-  return t.length > 60 ? t.slice(0, 60) + '...' : t
+  if (t.length <= 60) return t
+  const excerpt = t.slice(0, 60)
+  const lastOpen = excerpt.lastIndexOf('[')
+  const sticker = lastOpen >= 0 && t.slice(lastOpen).match(/^\[sticker-\d+\]/)
+  return (sticker ? t.slice(0, Math.max(60, lastOpen + sticker[0].length)) : excerpt) + '...'
 })
 </script>
 
@@ -162,6 +166,7 @@ const textExcerpt = computed(() => {
 }
 
 .title {
+  --note-sticker-size: 1.5em;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--td-text-color-primary);

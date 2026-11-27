@@ -50,6 +50,8 @@ import {
   handleUploadToCloudHelper,
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
+import { openCommunityShare } from '@renderer/services/communityShareDraft'
+import { LinkIcon, ChatBubbleIcon } from 'tdesign-icons-vue-next'
 import SharePlaylistDialog from '@renderer/components/Share/SharePlaylistDialog.vue'
 import { useAuthStore } from '@renderer/store'
 
@@ -1080,6 +1082,16 @@ const handleDeleteCloudPlaylist = (playlist: SongList) => confirmPlaylistDelete(
 const handleDeletePlaylist = (playlist: SongList) => confirmPlaylistDelete(playlist,'local')
 const handleDeleteBoth = (playlist: SongList) => confirmPlaylistDelete(playlist,'both')
 
+const playlistShareMenu = {
+  label: '分享歌单',
+  key: 'share-playlist-menu',
+  icon: renderIcon(ShareIcon),
+  children: [
+    { label: '分享到社区', key: 'share-playlist-community', icon: renderIcon(ChatBubbleIcon) },
+    { label: '分享到社交软件', key: 'share-playlist', icon: renderIcon(LinkIcon) }
+  ]
+}
+
 // 右键菜单项配置 (Naive UI Dropdown 格式)
 const contextMenuOptions = computed(() => {
   if (!contextMenuPlaylist.value) return []
@@ -1093,7 +1105,7 @@ const contextMenuOptions = computed(() => {
       { label: '播放歌单', key: 'play', icon: renderIcon(PlayCircleIcon) },
       { label: '查看详情', key: 'view', icon: renderIcon(ViewListIcon) },
       { type: 'divider', key: 'd1' },
-      { label: '分享歌单', key: 'share-playlist', icon: renderIcon(ShareIcon) },
+      playlistShareMenu,
       { label: '下载到本地', key: 'download-cloud', icon: renderIcon(CloudDownloadIcon) },
       { type: 'divider', key: 'd2' },
       { label: '删除云端歌单', key: 'delete-cloud', icon: renderIcon(DeleteIcon) }
@@ -1127,7 +1139,7 @@ const contextMenuOptions = computed(() => {
   }
 
   items.push(
-    { label: '分享歌单', key: 'share-playlist', icon: renderIcon(ShareIcon) },
+    playlistShareMenu,
     { label: '全部下载', key: 'download-all', icon: renderIcon(DownloadIcon) },
     { type: 'divider', key: 'd2' },
     { label: '编辑歌单', key: 'edit', icon: renderIcon(Edit2Icon) },
@@ -1176,6 +1188,9 @@ const handleContextMenuSelect = async (key: string) => {
       break
     case 'upload-cloud':
       handleUploadToCloud(pl)
+      break
+    case 'share-playlist-community':
+      openCommunityShare({ type: 'playlist', playlist: pl })
       break
     case 'share-playlist':
       handleSharePlaylist(pl)

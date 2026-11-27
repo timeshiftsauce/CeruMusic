@@ -77,7 +77,7 @@ test('canvas and plugin leases share each sample until the last consumer release
   }
 })
 
-test('blur pauses shared analysis and focus resumes one frame loop', () => {
+test('blur keeps visible analysis running and visibility changes restart one frame loop', () => {
   const audio = {paused:false,seeking:false,readyState:4} as HTMLAudioElement
   const read = jest.fn((bytes:Uint8Array)=>bytes.fill(10))
   jest.mocked(audioManager.createAnalyser).mockReturnValue({getByteFrequencyData:read} as unknown as AnalyserNode)
@@ -92,17 +92,27 @@ test('blur pauses shared analysis and focus resumes one frame loop', () => {
     expect(frames.size).toBe(1)
     focused = false
     window.dispatchEvent(new Event('blur'))
-    expect(frames.size).toBe(0)
-    lease.bytes(10)
-    expect(read).not.toHaveBeenCalled()
-    focused = true
-    window.dispatchEvent(new Event('focus'))
     expect(frames.size).toBe(1)
-    window.dispatchEvent(new Event('focus'))
-    expect(frames.size).toBe(1)
-    const [id,callback]=[...frames][0]
-    frames.delete(id);callback(20)
+    const [id, callback] = [...frames][0]
+    frames.delete(id)
+    callback(10)
     expect(read).toHaveBeenCalledTimes(1)
+    expect(frames.size).toBe(1)
+
+    Object.assign(document, { hidden: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(frames.size).toBe(0)
+    lease.bytes(20)
+    expect(read).toHaveBeenCalledTimes(1)
+
+    Object.assign(document, { hidden: false })
+    document.dispatchEvent(new Event('visibilitychange'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(frames.size).toBe(1)
+    const [resumedId, resumedFrame] = [...frames][0]
+    frames.delete(resumedId)
+    resumedFrame(30)
+    expect(read).toHaveBeenCalledTimes(2)
     expect(frames.size).toBe(1)
   } finally {
     lease.release()

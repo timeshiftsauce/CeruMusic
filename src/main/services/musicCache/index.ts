@@ -434,6 +434,11 @@ export class MusicCacheService {
     return null
   }
 
+  hasCachedAudioFile(file: string): boolean {
+    const resolved = path.resolve(file)
+    return [...this.cacheIndex.values()].some((entry) => path.resolve(entry.file) === resolved)
+  }
+
   /**
    * 缓存歌曲（音频本体）。同一首歌只保留一份。
    *

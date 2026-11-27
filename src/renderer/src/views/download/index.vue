@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { desktopBridge } from '@renderer/services/desktopBridge'
-import { onMounted, computed, ref, watch } from 'vue'
-import { useDownloadStore, DownloadStatus } from '../../store/download'
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
+import {
+  karaokePacks,
+  modelPhaseLabel,
+  packBytes,
+  type ModelPhase,
+  type PackId
+} from '@common/karaoke'
+import { modelDownloads, observeKaraokeModel } from '@renderer/services/karaoke'
+import { MessagePlugin } from '@renderer/plugin/notifications'
+import { useDownloadStore, DownloadStatus, type DownloadTask } from '../../store/download'
 import {
   PauseCircleIcon,
   PlayCircleIcon,
@@ -30,72 +39,134 @@ onMounted(async () => {
   maxConcurrent.value = await store.getMaxConcurrent()
 })
 
-const activeTab = ref('downloading')
+const karaoke = desktopBridge.api.karaoke
+onUnmounted(observeKaraokeModel())
+const tabs = [
+  { id: 'downloading', label: '进行中' },
+  { id: 'completed', label: '已完成' },
+  { id: 'failed', label: '失败/已取消' }
+] as const
+type Tab = (typeof tabs)[number]['id']
+const activeTab = ref<Tab>('downloading')
 
 watch(activeTab, (val) => {
-  if (val === 'completed') {
-    store.validateFiles()
-  }
+  if (val === 'completed') store.validateFiles()
 })
 
-const filteredTasks = computed(() => {
-  const tasks = store.tasks.filter((task) => {
-    if (activeTab.value === 'downloading') {
-      return [DownloadStatus.Downloading, DownloadStatus.Queued, DownloadStatus.Paused].includes(
-        task.status
-      )
-    } else if (activeTab.value === 'completed') {
-      return task.status === DownloadStatus.Completed
-    } else if (activeTab.value === 'failed') {
-      return [DownloadStatus.Error, DownloadStatus.Cancelled].includes(task.status)
-    }
-    return false
-  })
+type TaskRow = Pick<
+  DownloadTask,
+  | 'id'
+  | 'status'
+  | 'priority'
+  | 'createdAt'
+  | 'progress'
+  | 'speed'
+  | 'downloadedSize'
+  | 'totalSize'
+  | 'error'
+> & {
+  title: string
+  statusText?: string
+  packId?: PackId
+  filePath?: string
+  isUpdate?: boolean
+}
 
-  // Sort tasks（副本排序，不动原数组）
-  return [...tasks].sort((a, b) => {
-    // 最新在上：完成与失败页按创建时间降序
-    if (activeTab.value === 'completed' || activeTab.value === 'failed') {
-      return b.createdAt - a.createdAt
-    }
-
-    // 1. Status Priority for Downloading tab
-    if (activeTab.value === 'downloading') {
-      const statusOrder = {
-        [DownloadStatus.Downloading]: 0,
-        [DownloadStatus.Queued]: 1,
-        [DownloadStatus.Paused]: 2
+const modelStatus: Record<Exclude<ModelPhase, 'absent'>, DownloadStatus> = {
+  probing: DownloadStatus.Queued,
+  downloading: DownloadStatus.Downloading,
+  paused: DownloadStatus.Paused,
+  verifying: DownloadStatus.Downloading,
+  ready: DownloadStatus.Completed,
+  failed: DownloadStatus.Error,
+  cancelled: DownloadStatus.Cancelled
+}
+const modelRows = computed(() =>
+  karaokePacks.flatMap<TaskRow>((pack) => {
+    const state = modelDownloads.value.find((item) => item.id === pack.id)
+    if (!state || state.historyHidden || state.phase === 'absent') return []
+    const totalSize = packBytes(pack)
+    return [
+      {
+        id: 'karaoke:' + pack.id,
+        packId: pack.id,
+        title: '伴唱 · ' + pack.name,
+        status: modelStatus[state.phase],
+        statusText:
+          state.phase === 'probing' || state.phase === 'verifying'
+            ? modelPhaseLabel[state.phase]
+            : undefined,
+        createdAt: state.createdAt,
+        progress: Math.min(100, (state.bytes / totalSize) * 100),
+        speed: state.speed ?? 0,
+        downloadedSize: state.bytes,
+        totalSize,
+        error: state.phase === 'failed' ? state.message : null
       }
-      const scoreA = statusOrder[a.status] ?? 99
-      const scoreB = statusOrder[b.status] ?? 99
-      if (scoreA !== scoreB) return scoreA - scoreB
-
-      // For Queued tasks, sort by priority (descending) then createdAt (ascending - FIFO)
-      // Assuming higher priority number means higher priority. If backend uses 0 as default and sorts (a-b), then smaller is first?
-      // Let's check backend: this.queue.sort((a, b) => (this.tasks.get(a)?.priority ?? 0) - (this.tasks.get(b)?.priority ?? 0))
-      // Backend sorts ascending by priority. So smaller priority value comes first in queue.
-      if (a.status === DownloadStatus.Queued && b.status === DownloadStatus.Queued) {
-        if (a.priority !== b.priority) return (a.priority || 0) - (b.priority || 0)
-        return a.createdAt - b.createdAt
-      }
-    }
-
-    // Default sort by creation time (oldest first) for other tabs
-    return a.createdAt - b.createdAt
+    ]
   })
-})
-
-const downloadingTasks = computed(() =>
-  store.tasks.filter((t) =>
-    [DownloadStatus.Downloading, DownloadStatus.Queued, DownloadStatus.Paused].includes(t.status)
+)
+const taskGroups = computed(() => {
+  const groups: Record<Tab, TaskRow[]> = { downloading: [], completed: [], failed: [] }
+  const songs = store.tasks.map(
+    (task): TaskRow => ({
+      ...task,
+      title: formatMusicInfo(filenameTemplate.value, { ...task.songInfo, quality: task.quality }),
+      isUpdate: task.songInfo?.source === 'update'
+    })
   )
-)
-const completedTasks = computed(() =>
-  store.tasks.filter((t) => t.status === DownloadStatus.Completed)
-)
-const failedTasks = computed(() =>
-  store.tasks.filter((t) => [DownloadStatus.Error, DownloadStatus.Cancelled].includes(t.status))
-)
+  for (const task of [...songs, ...modelRows.value]) {
+    const tab =
+      task.status === DownloadStatus.Completed
+        ? 'completed'
+        : [DownloadStatus.Error, DownloadStatus.Cancelled].includes(task.status)
+          ? 'failed'
+          : 'downloading'
+    groups[tab].push(task)
+  }
+  const order = {
+    [DownloadStatus.Downloading]: 0,
+    [DownloadStatus.Queued]: 1,
+    [DownloadStatus.Paused]: 2
+  }
+  groups.downloading.sort(
+    (a, b) =>
+      (order[a.status] ?? 99) - (order[b.status] ?? 99) ||
+      (a.status === DownloadStatus.Queued ? (a.priority ?? 0) - (b.priority ?? 0) : 0) ||
+      a.createdAt - b.createdAt
+  )
+  groups.completed.sort((a, b) => b.createdAt - a.createdAt)
+  groups.failed.sort((a, b) => b.createdAt - a.createdAt)
+  return groups
+})
+const filteredTasks = computed(() => taskGroups.value[activeTab.value])
+
+async function runAction(action: () => Promise<unknown>) {
+  try {
+    await action()
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error ? error.message : String(error))
+  }
+}
+function runBatch(resume: boolean) {
+  const ids = taskGroups.value.downloading.flatMap((task) => (task.packId ? [task.packId] : []))
+  return runAction(() =>
+    Promise.all([
+      resume ? store.resumeAllTasks() : store.pauseAllTasks(),
+      ...ids.map((id) => (resume ? karaoke.download(id) : karaoke.pause(id)))
+    ])
+  )
+}
+function clearCurrentTab() {
+  const tab = activeTab.value
+  const ids = filteredTasks.value.flatMap((task) => (task.packId ? [task.packId] : []))
+  return runAction(() =>
+    Promise.all([
+      store.clearTasks(tab === 'downloading' ? 'queue' : tab),
+      ...ids.map((id) => (tab === 'downloading' ? karaoke.cancel(id, false) : karaoke.forget(id)))
+    ])
+  )
+}
 
 const formatSpeed = (speed: number) => {
   if (speed === 0) return '0 B/s'
@@ -171,11 +242,11 @@ const getStatusText = (status: DownloadStatus) => {
       <h2>下载管理</h2>
       <div class="settings">
         <div v-if="activeTab === 'downloading'" class="batch-actions">
-          <t-button theme="primary" variant="text" size="small" @click="store.resumeAllTasks()">
+          <t-button theme="primary" variant="text" size="small" @click="runBatch(true)">
             <template #icon><PlayCircleIcon /></template>
             全部开始
           </t-button>
-          <t-button theme="warning" variant="text" size="small" @click="store.pauseAllTasks()">
+          <t-button theme="warning" variant="text" size="small" @click="runBatch(false)">
             <template #icon><PauseCircleIcon /></template>
             全部暂停
           </t-button>
@@ -187,13 +258,7 @@ const getStatusText = (status: DownloadStatus) => {
           theme="default"
           variant="outline"
           size="small"
-          @click="
-            () => {
-              if (activeTab === 'downloading') store.clearTasks('queue')
-              else if (activeTab === 'completed') store.clearTasks('completed')
-              else if (activeTab === 'failed') store.clearTasks('failed')
-            }
-          "
+          @click="clearCurrentTab"
         >
           {{ activeTab === 'downloading' ? '清空队列' : '清空记录' }}
         </t-button>
@@ -211,18 +276,10 @@ const getStatusText = (status: DownloadStatus) => {
 
     <t-tabs v-model="activeTab" class="tabs">
       <t-tab-panel
-        value="downloading"
-        :label="downloadingTasks.length ? `进行中(${downloadingTasks.length})` : '进行中'"
-        :destroy-on-hide="false"
-      />
-      <t-tab-panel
-        value="completed"
-        :label="completedTasks.length ? `已完成(${completedTasks.length})` : '已完成'"
-        :destroy-on-hide="false"
-      />
-      <t-tab-panel
-        value="failed"
-        :label="failedTasks.length ? `失败/已取消(${failedTasks.length})` : '失败/已取消'"
+        v-for="{ id, label } in tabs"
+        :key="id"
+        :value="id"
+        :label="taskGroups[id].length ? `${label}(${taskGroups[id].length})` : label"
         :destroy-on-hide="false"
       />
     </t-tabs>
@@ -236,27 +293,18 @@ const getStatusText = (status: DownloadStatus) => {
       <div v-else class="tasks">
         <div v-for="task in filteredTasks" :key="task.id" class="task-item">
           <div class="task-info">
-            <div class="task-name">
-              {{
-                formatMusicInfo(
-                  filenameTemplate,
-                  Object.assign({}, task.songInfo, { quality: task.quality })
-                )
-              }}
-            </div>
+            <div class="task-name">{{ task.title }}</div>
             <div class="task-meta">
               <t-tag :theme="getStatusColor(task.status)" variant="light" size="small">
-                {{ getStatusText(task.status) }}
+                {{ task.statusText ?? getStatusText(task.status) }}
               </t-tag>
-              <t-tag
-                v-if="task.songInfo && task.songInfo.source === 'update'"
-                theme="warning"
-                variant="light-outline"
-                size="small"
-              >
+              <t-tag v-if="task.isUpdate" theme="warning" variant="light-outline" size="small">
                 应用更新
               </t-tag>
-              <span v-if="task.status === DownloadStatus.Downloading" class="speed">
+              <span
+                v-if="task.status === DownloadStatus.Downloading && !task.statusText"
+                class="speed"
+              >
                 {{ formatSpeed(task.speed) }}
               </span>
               <span class="size">
@@ -286,7 +334,13 @@ const getStatusText = (status: DownloadStatus) => {
               "
               shape="circle"
               variant="text"
-              @click="store.pauseTask(task.id)"
+              title="暂停"
+              aria-label="暂停"
+              @click="
+                runAction(() =>
+                  task.packId ? karaoke.pause(task.packId) : store.pauseTask(task.id)
+                )
+              "
             >
               <template #icon><PauseCircleIcon /></template>
             </t-button>
@@ -295,7 +349,13 @@ const getStatusText = (status: DownloadStatus) => {
               v-if="task.status === DownloadStatus.Paused"
               shape="circle"
               variant="text"
-              @click="store.resumeTask(task.id)"
+              title="继续"
+              aria-label="继续"
+              @click="
+                runAction(() =>
+                  task.packId ? karaoke.download(task.packId) : store.resumeTask(task.id)
+                )
+              "
             >
               <template #icon><PlayCircleIcon /></template>
             </t-button>
@@ -304,7 +364,13 @@ const getStatusText = (status: DownloadStatus) => {
               v-if="task.status === DownloadStatus.Error"
               shape="circle"
               variant="text"
-              @click="store.retryTask(task.id)"
+              title="重试"
+              aria-label="重试"
+              @click="
+                runAction(() =>
+                  task.packId ? karaoke.download(task.packId) : store.retryTask(task.id)
+                )
+              "
             >
               <template #icon><RefreshIcon /></template>
             </t-button>
@@ -316,7 +382,13 @@ const getStatusText = (status: DownloadStatus) => {
               shape="circle"
               variant="text"
               theme="danger"
-              @click="store.cancelTask(task.id)"
+              title="取消下载"
+              aria-label="取消下载"
+              @click="
+                runAction(() =>
+                  task.packId ? karaoke.cancel(task.packId) : store.cancelTask(task.id)
+                )
+              "
             >
               <template #icon><CloseCircleIcon /></template>
             </t-button>
@@ -325,18 +397,22 @@ const getStatusText = (status: DownloadStatus) => {
               v-if="task.status === DownloadStatus.Completed"
               shape="circle"
               variant="text"
-              @click="store.openFileLocation(task.filePath)"
+              title="打开文件位置"
+              aria-label="打开文件位置"
+              @click="
+                runAction(() =>
+                  task.packId
+                    ? karaoke.openLocation(task.packId)
+                    : store.openFileLocation(task.filePath ?? '')
+                )
+              "
             >
               <template #icon><FolderOpenIcon /></template>
             </t-button>
 
             <!-- 应用更新：立即安装按钮 -->
             <t-button
-              v-if="
-                task.status === DownloadStatus.Completed &&
-                task.songInfo &&
-                task.songInfo.source === 'update'
-              "
+              v-if="task.status === DownloadStatus.Completed && task.isUpdate"
               size="small"
               theme="primary"
               variant="outline"
@@ -354,7 +430,13 @@ const getStatusText = (status: DownloadStatus) => {
               shape="circle"
               variant="text"
               theme="danger"
-              @click="store.deleteTask(task.id)"
+              title="删除记录"
+              aria-label="删除记录"
+              @click="
+                runAction(() =>
+                  task.packId ? karaoke.forget(task.packId) : store.deleteTask(task.id)
+                )
+              "
             >
               <template #icon><DeleteIcon /></template>
             </t-button>

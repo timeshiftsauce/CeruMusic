@@ -20,7 +20,12 @@ import { TTMLParser, TTMLGenerator, toAmllLyrics, toTTMLResult } from '@applemus
 import { DOMParser, DOMImplementation, XMLSerializer } from '@xmldom/xmldom'
 import { assertLyricsDocument, type CrLyric, type ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import { lyricFormats, normalizeLyricFormat } from './lyricFormats'
-import { sanitizeLyricText, toPlayerLyrics } from './pluginLyrics'
+import {
+  getLyricSongwriters,
+  sanitizeLyricText,
+  toPlayerLyrics,
+  type LyricWithSongwriters
+} from './pluginLyrics'
 
 const MAX_LENGTH = 2 * 1024 * 1024
 
@@ -151,7 +156,11 @@ function toDocument(
 }
 
 /** Return null for unsupported text so plugin converters can handle it. */
-export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'): CrLyric | null {
+export function parseLocalLyrics(
+  text: string,
+  track: ResourceRef,
+  hint = 'auto'
+): LyricWithSongwriters | null {
   if (text.length > MAX_LENGTH) throw new Error('歌词内容过大')
   let input = text
     .replace(/^\uFEFF/, '')
@@ -166,6 +175,7 @@ export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'
   let parsed: LyricLine[]
   let timedWords = true
   let structuredSources: any[] = []
+  let songwriters: string[] | undefined
   switch (format) {
     case 'lrc':
     case 'enhanced-lrc':
@@ -178,6 +188,7 @@ export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'
     case 'ttml': {
       const result = TTMLParser.parse(input, { domParser: xmlParser() })
       parsed = toAmllLyrics(result).lines
+      songwriters = result.metadata.songwriters
       structuredSources = result.lines.flatMap((line: any) =>
         line.backgroundVocal ? [line, line.backgroundVocal] : [line]
       )
@@ -203,13 +214,14 @@ export function parseLocalLyrics(text: string, track: ResourceRef, hint = 'auto'
       return null
   }
   const offset = Number(input.match(/^\s*\[offset:([+-]?\d+)\]/im)?.[1] || 0)
-  return toDocument(
+  const document = toDocument(
     parsed,
     track,
     Number.isFinite(offset) ? offset : 0,
     timedWords,
     structuredSources
   )
+  return document && songwriters?.length ? { ...document, songwriters } : document
 }
 
 /** Compatibility for callers explicitly expecting LRC only. */
@@ -266,10 +278,11 @@ export function exportBuiltinLyrics(document: CrLyric, requestedFormat?: string)
 }
 
 function toStructuredTtmlResult(
-  document: CrLyric,
+  document: LyricWithSongwriters,
   lines: import('@applemusic-like-lyrics/core').LyricLine[]
 ) {
-  const result: any = toTTMLResult(lines, [])
+  const result = toTTMLResult(lines, [])
+  result.metadata.songwriters = getLyricSongwriters(document)
   const targets = result.lines.flatMap((line: any) =>
     line.backgroundVocal ? [line, line.backgroundVocal] : [line]
   )

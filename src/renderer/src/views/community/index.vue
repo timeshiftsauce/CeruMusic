@@ -19,6 +19,7 @@ import PostCard from '@renderer/components/community/PostCard.vue'
 import PostDetailModal from '@renderer/components/community/PostDetailModal.vue'
 import NotePositionIndicator from '@renderer/components/community/NotePositionIndicator.vue'
 import PostCreateDialog from '@renderer/components/community/PostCreateDialog.vue'
+import { communityShareEvents } from '@renderer/services/communityShareDraft'
 import { useAuthStore } from '@renderer/store/Auth'
 
 type FeedMode = 'latest' | 'recommend' | 'mine'
@@ -375,9 +376,17 @@ function onClose() {
   outgoingPost.value = null
 }
 
-function onCreated(newPost: CommunityPost) {
+function insertCreatedPost(newPost: CommunityPost) {
+  if (posts.value.some(({ id }) => id === newPost.id)) return
   posts.value.unshift(newPost)
   itemRefs.value = []
+}
+
+onMounted(() => communityShareEvents.on('created', insertCreatedPost))
+onUnmounted(() => communityShareEvents.off('created', insertCreatedPost))
+
+function onCreated(newPost: CommunityPost) {
+  insertCreatedPost(newPost)
   showCreate.value = false
   MessagePlugin.success('发布成功')
 }

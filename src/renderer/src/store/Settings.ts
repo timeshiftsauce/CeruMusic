@@ -1,3 +1,4 @@
+import { fallbackPreferences, type FallbackPreferences } from '@renderer/utils/audio/fallbackPreferences'
 import { desktopBridge } from '@renderer/services/desktopBridge'
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
@@ -24,6 +25,7 @@ export interface GlobalBackgroundSettings {
 }
 
 export interface SettingsState {
+  playbackFallback?: FallbackPreferences
   showFloatBall: boolean
   autoCacheMusic?: boolean
   directories?: {
@@ -108,6 +110,7 @@ export const useSettingsStore = defineStore(
             return {
               ...defaultSettings,
               ...parsed,
+              playbackFallback: fallbackPreferences(parsed.playbackFallback),
               globalBackground: {
                 ...defaultSettings.globalBackground,
                 ...parsed.globalBackground

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { DEFAULT_ANALYSIS_SECONDS, normalizeAnalysisSeconds } from '@common/automix'
 import {
   getBackgroundRenderer,
   type BackgroundRendererType
@@ -19,6 +20,7 @@ export const playSetting = defineStore('playSetting', {
     autoHideBottom: true, // 是否自动隐藏底部控制栏
     isPauseTransition: true, // 是否开启暂停播放过渡
     isSeamlessTransition: false, // 是否开启无感过渡（智能交叉淡化）
+    automixMaxAnalyzeTime: DEFAULT_ANALYSIS_SECONDS,
     useAmlLyricRenderer: true, // 使用 AppleMusicLike 的歌词组件渲染
     showLyricRomanization: false,
     isGrepLyricInfo: false, // 是否开启歌词信息 grep
@@ -44,6 +46,7 @@ export const playSetting = defineStore('playSetting', {
     getAutoHideBottom: (state) => state.autoHideBottom,
     getIsPauseTransition: (state) => state.isPauseTransition,
     getIsSeamlessTransition: (state) => state.isSeamlessTransition,
+    getAutomixMaxAnalyzeTime: (state) => normalizeAnalysisSeconds(state.automixMaxAnalyzeTime),
     getUseAmlLyricRenderer: (state) => state.useAmlLyricRenderer,
     getShowLyricRomanization: (state) => state.showLyricRomanization,
     getIsGrepLyricInfo: (state) => state.isGrepLyricInfo,
@@ -96,6 +99,9 @@ export const playSetting = defineStore('playSetting', {
     },
     setIsSeamlessTransition(isSeamlessTransition: boolean) {
       this.isSeamlessTransition = isSeamlessTransition
+    },
+    setAutomixMaxAnalyzeTime(seconds: number) {
+      this.automixMaxAnalyzeTime = normalizeAnalysisSeconds(seconds)
     },
     setUseAmlLyricRenderer(use: boolean) {
       this.useAmlLyricRenderer = use

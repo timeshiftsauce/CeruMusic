@@ -4,7 +4,7 @@ import { canPersistMusicData } from '@renderer/services/musicDataPersistence'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
 import PluginSidebarIcon from '@renderer/components/PluginSidebarIcon.vue'
-import { SearchIcon, MicrophoneIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon } from 'tdesign-icons-vue-next'
 import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter, useRoute } from 'vue-router'
@@ -449,7 +449,19 @@ function checkGuide() {
                   aria-label="听歌识曲"
                   @click="router.push('/home/recognize')"
                 >
-                  <MicrophoneIcon class="recognize-glyph" aria-hidden="true" />
+                  <svg
+                    class="recognize-glyph"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M6 11a6 6 0 0 0 12 0M12 17v4m-3 0h6" />
+                  </svg>
                 </button>
               </t-tooltip>
 
@@ -691,8 +703,7 @@ function checkGuide() {
       .recognize-button {
         -webkit-app-region: no-drag;
         margin-inline-start: 0.25rem;
-        display: grid;
-        place-items: center;
+        position: relative;
         flex: 0 0 var(--end-button-size);
         width: var(--end-button-size);
         height: var(--end-button-size);
@@ -703,6 +714,11 @@ function checkGuide() {
         color: var(--td-text-color-primary);
         cursor: pointer;
 
+        > .recognize-glyph {
+          position: absolute;
+          inset: 0;
+          margin: auto;
+        }
       }
 
       .search-input .search-submit,

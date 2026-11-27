@@ -70,7 +70,10 @@ export async function verifySearchQuery(page) {
   const pager={...base,id:'test.result-pages',name:'Result pages',provides:{providers:[{id:'paged',name:'Result pages',connectionMode:'none',protocols:['music.search@1','playlists.search@1']}]}}
   await add('exports.manifest='+JSON.stringify(pager)+`;exports.activate=ctx=>{
     const search=kind=>async request=>{
-      const token='second-'+kind, titles=request.cursor===undefined?['skip']:request.cursor===token?['one','two']:['wrong cursor'];
+      const token='second-'+kind;
+      const titles=request.query==='scroll-pages'
+        ? request.cursor===undefined?Array.from({length:30},(_,i)=>'row '+i):['reached bottom']
+        : request.cursor===undefined?['skip']:request.cursor===token?['one','two']:['wrong cursor'];
       return {items:titles.map(title=>({title,ref:{pluginId:ctx.plugin.id,kind,providerId:'paged',id:title,data:{fixture:'private-payload'}},metadata:{artists:['test']},capabilities:[]})),...(request.cursor===undefined?{nextCursor:token}:{})}
     };ctx.providers.register('paged',{tracks:{search:search('track')},playlists:{search:search('playlist')}})
   }`,'paged.js')
@@ -88,7 +91,6 @@ export async function verifySearchQuery(page) {
   await submit('pages')
   for (const [tab,more] of [['单曲','加载更多单曲'],['歌单','加载更多歌单']]) {
     if(tab==='歌单')await results.locator('.n-tabs-tab').getByText('歌单',{exact:true}).click()
-    await results.getByRole('button',{name:more}).click()
     const list=results.locator(tab==='歌单'?'.playlist-tab':'.song-tab')
     for(const title of ['two','one','merged'])await list.getByText(title,{exact:true}).waitFor()
     const order=await list.innerText()
@@ -99,6 +101,16 @@ export async function verifySearchQuery(page) {
   await grant(resultHook,false)
   await page.waitForFunction(()=>window.ceruQa.plugins.hookSnapshot().then(row=>!row.names.includes('search.results')))
   await submit('raw');await results.locator('.playlist-tab').getByText('skip',{exact:true}).waitFor()
+  await submit('scroll-pages')
+  for (const [tab, scrollSelector] of [['歌单','.grid-scroll-container'],['单曲','.virtual-scroll-container']]) {
+    if (tab==='单曲') await results.locator('.n-tabs-tab').getByText(tab,{exact:true}).click()
+    const list=results.locator(tab==='歌单'?'.playlist-tab':'.song-tab')
+    await list.getByText('row 0',{exact:true}).waitFor()
+    assert.equal(await list.getByText('reached bottom',{exact:true}).count(),0)
+    assert.equal(await list.getByRole('button',{name:/加载更多/}).count(),0)
+    await list.locator(scrollSelector).evaluate(el=>{el.scrollTop=el.scrollHeight})
+    await list.getByText('reached bottom',{exact:true}).waitFor()
+  }
   console.log('Electron result pages: filtered first pages, opaque provider cursors, ordered merges and revocation passed for tracks and playlists.')
   console.log('Electron suggestions: provider strings, authorized ordering, stale reply suppression, selection, separate history and revoked default passed.')
   console.log('Electron search: ordered rewrites reached the real provider, draft blur preserved results, cancellation and revocation passed.')

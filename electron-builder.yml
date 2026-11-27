@@ -36,6 +36,7 @@ asarUnpack:
   - resources/**
   - node_modules/ffmpeg-static/**
   - node_modules/better-sqlite3/**
+  - node_modules/onnxruntime-node/bin/**
   - node_modules/bindings/**
   - node_modules/file-uri-to-path/**
   # 系统媒体控件原生模块（SMTC / MPRIS / NowPlayingInfoCenter）。
@@ -44,6 +45,10 @@ asarUnpack:
   - native/external-media-integration/**
   - '**/*.node'
 win:
+  files:
+    - 'out/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v3/!(win32)/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v3/win32/!(${arch})/**'
   executableName: ceru-music
   icon: 'resources/icons/icon.ico'
   target:
@@ -81,6 +86,10 @@ nsis:
   allowToChangeInstallationDirectory: true
   allowElevation: true
 mac:
+  files:
+    - 'out/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v3/!(darwin)/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v3/darwin/!(${arch})/**'
   artifactName: ${name}-${version}-${arch}-mac.${ext}
   minimumSystemVersion: '13.0'
   icon: 'resources/icons/icon.icns'
@@ -107,6 +116,10 @@ dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
   title: ${productName}
 linux:
+  files:
+    - 'out/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v3/!(linux)/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v3/linux/!(${arch})/**'
   icon: 'resources/icons'
   target:
     - target: AppImage

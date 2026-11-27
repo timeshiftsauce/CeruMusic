@@ -880,13 +880,7 @@ function startHostEventPublishing() {
 }
 
 onMounted(() => {
-  stopVisibilityWatch = watchPageVisibility()
-  hostEventCleanups.push(watchPluginSelection(value => publishHostEvent('entries.selectionChanged',value)))
   mounted = true
-  startHostEventPublishing()
-  hostEventCleanups.push(bindPlaybackOperations(() => {
-    if (!crossfadeManager.isFinalizingCurrentAdvance()) crossfadeManager.cancel()
-  }))
   surfaceClosed = desktopBridge.api.plugins.onSurfaceState((event) => {
     if (event.closed && qrLogin.value?.pluginId===event.pluginId && qrLogin.value.view?.sessionId===event.sessionId)
       qrLogin.value=null
@@ -900,9 +894,6 @@ onMounted(() => {
   accountChanged = desktopBridge.api.plugins.onAccountChanged(
     ({ pluginId }) => { invalidatePageVisibility(pluginId); void refreshPluginAccounts(pluginId) }
   )
-  stopAccountWatch = watch(pluginAccountItems, () => void refreshPluginAccounts(), {
-    immediate: true
-  })
   unsubscribe = desktopBridge.api.plugins.onUI((request) => {
     const controller = new AbortController()
     uiRequests.set(request.id, controller)
@@ -947,6 +938,17 @@ onMounted(() => {
         },
         { immediate: true }
       )
+      // Immediate watchers can notify plugins that survived a renderer reload.
+      // Their callbacks can already invoke the UI, so publish only after the handshake.
+      stopVisibilityWatch = watchPageVisibility()
+      hostEventCleanups.push(watchPluginSelection(value => publishHostEvent('entries.selectionChanged',value)))
+      hostEventCleanups.push(bindPlaybackOperations(() => {
+        if (!crossfadeManager.isFinalizingCurrentAdvance()) crossfadeManager.cancel()
+      }))
+      stopAccountWatch = watch(pluginAccountItems, () => void refreshPluginAccounts(), {
+        immediate: true
+      })
+      startHostEventPublishing()
     })
     .catch((error) => console.warn('插件界面连接失败:', error))
 })

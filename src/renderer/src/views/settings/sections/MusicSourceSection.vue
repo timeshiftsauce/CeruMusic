@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import PlaybackFallbackSettings from '@renderer/components/Settings/PlaybackFallbackSettings.vue'
 import { getQualityDisplayName } from '@common/utils/quality'
 import { canPersistMusicData } from '@renderer/services/musicDataPersistence'
 import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
-import { TreeRoundDotIcon } from 'tdesign-icons-vue-next'
+import { CheckIcon, MusicIcon, TreeRoundDotIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from '@renderer/plugin/notifications'
 import fonts from '@renderer/assets/icon_font/icons'
 import SourceDisabledHint from '@renderer/components/SourceDisabledHint.vue'
@@ -39,10 +40,13 @@ const currentSourceQualities = computed(() => {
   return selectedSource?.qualitys || []
 })
 const currentProviderOptions = computed(() =>
-  sourcePickerEntries.value.some(entry => entry.source === userInfo.value.selectSources && entry.split) ? [] :
-  providerImplementations.value
-    .filter((item) => item.providerId === userInfo.value.selectSources)
-    .map((item) => ({ label: item.pluginName, value: item.pluginId }))
+  sourcePickerEntries.value.some(
+    (entry) => entry.source === userInfo.value.selectSources && entry.split
+  )
+    ? []
+    : providerImplementations.value
+        .filter((item) => item.providerId === userInfo.value.selectSources)
+        .map((item) => ({ label: item.pluginName, value: item.pluginId }))
 )
 const currentProviderPlugin = computed({
   get: () => userInfo.value.sourcePluginMap?.[userInfo.value.selectSources || ''] || '',
@@ -52,16 +56,6 @@ const currentProviderPlugin = computed({
         MessagePlugin.error(error?.message || '切换音源插件失败，已保留原选择')
       )
   }
-})
-
-const qualitySliderValue = ref(0)
-
-const qualityMarks = computed(() => {
-  const marks: Record<number, string> = {}
-  currentSourceQualities.value.forEach((quality, index) => {
-    marks[index] = String(getQualityDisplayName(quality))
-  })
-  return marks
 })
 
 const globalQualityOptions = computed(() => {
@@ -107,63 +101,23 @@ const applyGlobalQuality = (q: string) => {
   if (arr.includes(q)) userInfo.value.selectQuality = q
 }
 
-// Watch current quality to update slider
-watch(
-  [() => userInfo.value.selectQuality, () => currentSourceQualities.value],
-  ([newQuality, qualities]) => {
-    if (qualities.length > 0 && newQuality) {
-      const index = qualities.indexOf(newQuality)
-      if (index !== -1) {
-        qualitySliderValue.value = index
-      } else {
-        // Rendering a partial provider list must not overwrite a saved preference.
-        qualitySliderValue.value = Math.max(0, qualities.length - 1)
-      }
-    }
-  },
-  { immediate: true }
+const activeQuality = computed(() => {
+  const selected = userInfo.value.selectQuality || ''
+  return currentSourceQualities.value.includes(selected)
+    ? selected
+    : currentSourceQualities.value.at(-1)
+})
+
+const setQuality = (quality: string) => {
+  const source = userInfo.value.selectSources
+  if (!source || !currentSourceQualities.value.includes(quality)) return
+  userInfo.value.selectQuality = quality
+  userInfo.value.sourceQualityMap = { ...userInfo.value.sourceQualityMap, [source]: quality }
+}
+
+const sources = computed(() =>
+  sourcePickerEntries.value.filter((entry) => entry.source !== 'local')
 )
-
-const onQualityChange = (value: any) => {
-  if (
-    currentSourceQualities.value.length > 0 &&
-    value >= 0 &&
-    value < currentSourceQualities.value.length
-  ) {
-    const q = currentSourceQualities.value[value]
-    userInfo.value.selectQuality = q
-    if (!userInfo.value.sourceQualityMap) userInfo.value.sourceQualityMap = {}
-    const key = userInfo.value.selectSources as string
-    userInfo.value.sourceQualityMap[key] = q
-  }
-}
-
-
-
-const getQualityDescription = (quality: string) => {
-  const descriptions: Record<string, string> = {
-    low: '适合网络较慢的环境，节省流量',
-    standard: '平衡音质与文件大小，推荐选择',
-    high: '高音质体验，适合有线网络',
-    lossless: '最佳音质体验，需要较好的网络环境',
-    '128k': '基础音质，文件较小',
-    '192k': '良好音质，适合大多数场景',
-    '320k': '高品质音质，接近CD品质',
-    flac: '无损音质，完美还原原始录音',
-    flac24bit: '更饱满清晰的高解析度音质，最高192kHz/24bit',
-    hires: '声音听感加强，96kHz/24bit',
-    atmos: '沉浸式空间环绕音感，最高5.1声道',
-    atmos_plus: '音源提供的增强环绕音质',
-    master: '母带级音质,192kHz/24bit'
-  }
-  return descriptions[quality] || '自定义音质设置'
-}
-
-const getCurrentSourceName = () => {
-  if (!hasPluginData.value || !userInfo.value.selectSources) return '未选择'
-  const source = userInfo.value.supportedSources?.[userInfo.value.selectSources]
-  return source?.name || userInfo.value.selectSources
-}
 
 const goPlugin = () => {
   emit('switch-category', 'plugins')
@@ -171,87 +125,88 @@ const goPlugin = () => {
 </script>
 
 <template>
-  <div class="settings-section">
-    <!-- 有插件数据时显示配置 -->
-    <div v-if="hasPluginData" class="music-config-container">
-      <div class="setting-group">
-        <div class="plugin-info">
-          <span class="plugin-name">当前插件: {{ currentPluginName }}</span>
-          <span class="plugin-status">已启用</span>
-        </div>
-      </div>
-
-      <div id="music-source" class="setting-group">
-        <h3>音乐源选择</h3>
-        <div class="source-cards">
-          <SourceDisabledHint v-for="source in sourcePickerEntries.filter(entry => entry.source !== 'local')" :key="source.key" :reason="source.reason" v-slot="{ events }">
-          <button type="button" v-on="events"
-            class="source-card"
-            :class="{ active: source.selected }"
-            :aria-label="source.name"
-            :aria-description="source.reason"
-            :aria-disabled="source.disabled || undefined"
-            :disabled="!canPersistMusicData()"
-            :aria-pressed="source.selected"
-            @click="chooseSourceEntry(source.source, source.owner)"
-          >
-            <div class="source-icon">
-              <img
-                v-if="source.iconUrl"
-                :src="source.iconUrl"
-                :alt="source.name"
-                class="provider-logo"
-              />
-              <component v-else-if="fonts[source.source]" :is="fonts[source.source]" style="font-size: 2em" />
-              <span v-else>{{ source.name.slice(0, 1) }}</span>
-            </div>
-            <div class="source-info">
-              <div class="source-name">{{ source.name }}</div>
-              <div class="source-type">{{ source.type || '音乐源' }}</div>
-            </div>
-            <div v-if="source.selected" class="source-check">
-              <i class="iconfont icon-check"></i>
-            </div>
+  <div class="source-settings">
+    <div v-if="hasPluginData" class="source-overview">
+      <section id="music-source" class="source-panel">
+        <header class="panel-header">
+          <div class="panel-title">
+            <MusicIcon aria-hidden="true" />
+            <h3>音乐源选择</h3>
+          </div>
+          <button class="plugin-link" type="button" @click="goPlugin" :title="currentPluginName">
+            {{ currentPluginName }}
           </button>
-          </SourceDisabledHint>
-        </div>
-      </div>
+        </header>
 
-      <div v-if="currentProviderOptions.length > 1" class="setting-group">
-          <h3>平台实现</h3>
-          <t-select v-model="currentProviderPlugin" :options="currentProviderOptions" />
-          <p class="quality-hint">同一平台由多个插件提供时，可在这里指定当前使用的实现。</p>
-      </div>
-      <div v-if="currentSourceQualities.length > 0" id="music-quality" class="setting-group">
-        <h3>音质选择</h3>
-        <div class="quality-slider-container">
-          <t-slider
-            v-model="qualitySliderValue"
-            :min="0"
-            :max="currentSourceQualities.length - 1"
-            :step="1"
-            :marks="qualityMarks"
-            :label="qualityMarks[qualitySliderValue]"
-            class="quality-slider"
-            @change="onQualityChange"
+        <div class="source-cards">
+          <SourceDisabledHint
+            v-for="source in sources"
+            :key="source.key"
+            :reason="source.reason"
+            v-slot="{ events }"
+          >
+            <button
+              type="button"
+              v-on="events"
+              class="source-card"
+              :class="{ selected: source.selected }"
+              :aria-description="source.reason"
+              :aria-disabled="source.disabled || undefined"
+              :aria-pressed="source.selected"
+              :disabled="!canPersistMusicData()"
+              @click="chooseSourceEntry(source.source, source.owner)"
+            >
+              <span class="source-icon" aria-hidden="true">
+                <img v-if="source.iconUrl" :src="source.iconUrl" alt="" />
+                <component v-else-if="fonts[source.source]" :is="fonts[source.source]" />
+                <MusicIcon v-else />
+              </span>
+              <span class="source-name">{{ source.name }}</span>
+              <CheckIcon v-if="source.selected" class="selected-icon" aria-hidden="true" />
+            </button>
+          </SourceDisabledHint>
+          <p v-if="!sources.length" class="panel-note">暂无可选择的在线音源。</p>
+        </div>
+
+        <div v-if="currentProviderOptions.length > 1" class="panel-setting">
+          <span>平台实现</span>
+          <t-select
+            v-model="currentProviderPlugin"
+            :options="currentProviderOptions"
+            aria-label="平台实现"
+            size="small"
           />
         </div>
-        <div class="quality-description">
-          <p>
-            当前选择:
-            <strong>{{ getQualityDisplayName(userInfo.selectQuality || '') }}</strong>
-          </p>
-          <p class="quality-hint">
-            {{ getQualityDescription(userInfo.selectQuality || '') }}
-          </p>
-        </div>
-      </div>
+      </section>
 
-      <div v-if="globalQualityOptions.length > 0" class="setting-group">
-        <h3>全局音质（支持交集）</h3>
-        <div class="quality-slider-container">
+      <section id="music-quality" class="source-panel quality-panel">
+        <header class="panel-header">
+          <div class="panel-title"><h3>默认音质</h3></div>
+        </header>
+        <div
+          v-if="currentSourceQualities.length"
+          class="quality-choices"
+          role="group"
+          aria-label="默认音质"
+        >
+          <button
+            v-for="quality in currentSourceQualities"
+            :key="quality"
+            type="button"
+            :class="{ selected: activeQuality === quality }"
+            :aria-pressed="activeQuality === quality"
+            @click="setQuality(quality)"
+          >
+            {{ getQualityDisplayName(quality) }}
+          </button>
+        </div>
+        <p v-else class="panel-note">所选音源没有提供可配置的音质。</p>
+        <div v-if="globalQualityOptions.length" class="panel-setting">
+          <span>统一设置所有音源</span>
           <t-select
             v-model="globalQualitySelected"
+            size="small"
+            aria-label="统一设置所有音源"
             @change="(v) => applyGlobalQuality(v as string)"
           >
             <t-option
@@ -262,295 +217,202 @@ const goPlugin = () => {
             />
           </t-select>
         </div>
-      </div>
-
-      <div class="setting-group">
-        <h3>配置状态</h3>
-        <div class="config-status">
-          <div class="status-item">
-            <span class="status-label">音乐源:</span>
-            <span class="status-value">{{ getCurrentSourceName() }}</span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">音质:</span>
-            <span class="status-value">{{
-              getQualityDisplayName(userInfo.selectQuality || '')
-            }}</span>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
 
-    <!-- 未配置插件提示 -->
-    <div v-else class="plugin-prompt">
-      <div class="prompt-icon">
-        <TreeRoundDotIcon />
+    <section v-else id="music-source" class="source-panel empty-panel">
+      <span class="empty-icon"><TreeRoundDotIcon aria-hidden="true" /></span>
+      <div>
+        <h3>音乐源选择</h3>
+        <p>安装音源插件后即可选择平台和音质。</p>
       </div>
-      <div class="prompt-content">
-        <h4>未检测到插件配置</h4>
-        <p>请先安装并选择一个音乐插件，然后返回此处配置音乐源和音质选项。</p>
-        <t-button theme="primary" @click="goPlugin">
-          <i class="iconfont icon-plugin"></i>
-          前往插件管理
-        </t-button>
-      </div>
-    </div>
+      <t-button theme="primary" variant="outline" @click="goPlugin">插件管理</t-button>
+    </section>
+
+    <PlaybackFallbackSettings />
   </div>
 </template>
 
-<style lang="scss" scoped>
-.settings-section {
-  animation: fadeInUp 0.4s ease-out;
-  animation-fill-mode: both;
+<style scoped>
+.source-settings {
+  --source-line: var(--td-component-stroke);
+  --source-primary: var(--td-text-color-primary);
+  --source-muted: var(--td-text-color-secondary);
+  --source-accent: var(--td-brand-color);
+  --source-highlight: color-mix(in srgb, var(--source-accent) 9%, var(--td-bg-color-container));
+  container-type: inline-size;
+  display: grid;
+  gap: 18px;
 }
-
-.setting-group {
-  background: var(--settings-group-bg);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid var(--settings-group-border);
-  box-shadow: 0 1px 3px var(--settings-group-shadow);
-  animation: fadeInUp 0.4s ease-out;
-  animation-fill-mode: both;
-
-  @for $i from 1 through 5 {
-    &:nth-child(#{$i}) {
-      animation-delay: #{$i * 0.1}s;
-    }
-  }
-
-  h3 {
-    margin: 0 0 0.5rem;
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--settings-text-primary);
-  }
+.source-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 16px;
 }
-
-.music-config-container {
-  .plugin-info {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: linear-gradient(135deg, var(--td-brand-color-1) 0%, var(--td-brand-color-2) 100%);
-    border-radius: 0.75rem;
-    border: 1px solid var(--td-brand-color-3);
-
-    .plugin-name {
-      font-weight: 600;
-      font-size: 1rem;
-      color: var(--td-brand-color-6);
-    }
-
-    .plugin-status {
-      background: var(--td-brand-color-5);
-      color: white;
-      padding: 0.25rem 0.75rem;
-      border-radius: 1rem;
-      font-size: 0.75rem;
-      font-weight: 500;
-    }
-  }
-
-  .source-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
-  }
-
-  .source-card {
-    font: inherit; color: inherit; text-align: start;
-    &:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: var(--settings-source-card-bg);
-    border: 2px solid var(--settings-source-card-border);
-    border-radius: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
-
-    &:hover:not([aria-disabled='true']) {
-      border-color: var(--settings-source-card-hover-border);
-      box-shadow: 0 4px 6px -1px var(--settings-group-shadow);
-    }
-
-    &.active {
-      border-color: var(--settings-source-card-active-border);
-      background: var(--settings-source-card-active-bg);
-      box-shadow: 0 0 0 3px var(--td-brand-color-2);
-    }
-
-    .source-icon {
-      width: 2.5rem;
-      height: 2.5rem;
-      background: var(--settings-source-icon-bg);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--settings-text-secondary);
-
-      .provider-logo {
-        width: 1.75rem;
-        height: 1.75rem;
-        object-fit: contain;
-      }
-    }
-
-    .source-info {
-      flex: 1;
-
-      .source-name {
-        font-weight: 600;
-        font-size: 0.875rem;
-        color: var(--settings-text-primary);
-        margin-bottom: 0.125rem;
-      }
-
-      .source-type {
-        font-size: 0.75rem;
-        color: var(--settings-text-secondary);
-      }
-    }
-
-    .source-check {
-      color: var(--td-brand-color-5);
-      font-size: 1.125rem;
-    }
-  }
-
-  .quality-slider-container {
-    background: var(--settings-quality-container-bg);
-    padding: 1.5rem;
-    border-radius: 0.75rem;
-    border: 1px solid var(--settings-quality-container-border);
-
-    .quality-slider {
-      margin-bottom: 1rem;
-    }
-  }
-
-  .quality-description {
-    text-align: center;
-    margin-top: 1rem;
-
-    p {
-      margin: 0.5rem 0;
-
-      &:first-child {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--settings-text-primary);
-      }
-
-      &.quality-hint {
-        font-size: 0.875rem;
-        color: var(--settings-text-secondary);
-      }
-    }
-  }
-
-  .config-status {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-
-    .status-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem;
-      background: var(--settings-status-item-bg);
-      border-radius: 0.5rem;
-      border: 1px solid var(--settings-status-item-border);
-
-      .status-label {
-        font-weight: 500;
-        color: var(--settings-text-secondary);
-        font-size: 0.875rem;
-      }
-
-      .status-value {
-        font-weight: 600;
-        color: var(--settings-text-primary);
-        font-size: 0.875rem;
-      }
-    }
-  }
+.source-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--source-line);
+  border-radius: 16px;
+  background: var(--td-bg-color-container);
 }
-
-.plugin-prompt {
+.panel-header,
+.panel-title {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 2rem;
-  background: var(--settings-plugin-prompt-bg);
-  border-radius: 1rem;
-  border: 2px dashed var(--settings-plugin-prompt-border);
-
-  .prompt-icon {
-    width: 3rem;
-    height: 3rem;
-    background: linear-gradient(135deg, var(--td-brand-color-5) 0%, var(--td-brand-color-6) 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: white;
-    font-size: 1.5rem;
-  }
-
-  .prompt-content {
-    flex: 1;
-
-    h4 {
-      color: var(--settings-text-primary);
-      margin: 0 0 0.5rem 0;
-      font-size: 1.125rem;
-      font-weight: 600;
-    }
-
-    p {
-      color: var(--settings-text-secondary);
-      margin: 0 0 1.5rem 0;
-      line-height: 1.5;
-    }
+  gap: 8px;
+}
+.panel-header {
+  justify-content: space-between;
+  margin-bottom: 13px;
+  min-height: 26px;
+}
+.panel-title svg {
+  color: var(--source-accent);
+  font-size: 17px;
+}
+.source-panel h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+.panel-note,
+.empty-panel p {
+  margin: 4px 0 0;
+  color: var(--source-muted);
+  font-size: 12px;
+}
+.plugin-link {
+  max-width: 58%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--td-bg-color-container-hover);
+  color: var(--source-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  cursor: pointer;
+}
+.plugin-link:hover {
+  color: var(--source-accent);
+}
+.source-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(138px, 100%), 1fr));
+  gap: 7px;
+}
+.source-card,
+.quality-choices button {
+  border: 1px solid var(--source-line);
+  background: transparent;
+  color: var(--source-primary);
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+.source-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9px;
+  min-height: 40px;
+  padding: 6px 8px;
+  text-align: left;
+}
+.source-card:hover,
+.quality-choices button:hover {
+  background: var(--td-bg-color-container-hover);
+}
+.source-card.selected,
+.quality-choices button.selected {
+  border-color: color-mix(in srgb, var(--source-accent) 42%, var(--source-line));
+  background: var(--source-highlight);
+  color: var(--source-accent);
+}
+.source-card[aria-disabled='true'],
+.source-card:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+.source-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--td-bg-color-container-hover);
+  font-size: 15px;
+}
+.source-icon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+.source-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.selected-icon {
+  flex: 0 0 auto;
+}
+.panel-setting {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(105px, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--source-line);
+  color: var(--source-muted);
+  font-size: 12px;
+}
+.quality-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.quality-choices button {
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.empty-panel {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.empty-panel > div {
+  flex: 1;
+  min-width: 0;
+}
+.empty-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  height: 40px;
+  border-radius: 11px;
+  color: var(--source-accent);
+  background: var(--source-highlight);
+  font-size: 19px;
+}
+@container (max-width: 630px) {
+  .source-overview {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
-
-@media (max-width: 768px) {
-  .music-config-container {
-    .source-cards {
-      grid-template-columns: 1fr;
-    }
-
-    .config-status {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .plugin-prompt {
-    flex-direction: column;
-    text-align: center;
-    gap: 1rem;
-  }
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@media (prefers-reduced-motion: reduce) {
+  .source-card,
+  .quality-choices button {
+    transition: none;
   }
 }
 </style>

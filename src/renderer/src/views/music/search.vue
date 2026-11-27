@@ -69,6 +69,8 @@ const totalItems = ref(0)
 const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
 const activeTab = ref<'songs' | 'playlists'>('songs')
+const songListRef = ref<InstanceType<typeof SongVirtualList> | null>(null)
+const playlistScrollRef = ref<HTMLElement | null>(null)
 
 // 歌单搜索状态
 const playlistResults = ref<any[]>([])
@@ -193,14 +195,12 @@ const handleAddToPlaylist = (song: MusicItem) => {
   }
 }
 
-const handleScroll = (event: Event) => {
-  const target = event.target as HTMLElement
-  const { scrollTop, scrollHeight, clientHeight } = target
+const nearBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight < 100
 
-  // 检查是否需要加载更多
-  if (scrollHeight - scrollTop - clientHeight < 100 && !loading.value && hasMore.value) {
-    performSearch(false)
-  }
+const handleScroll = () => {
+  if (activeTab.value !== 'songs' || currentPage.value <= 1 || loading.value || !hasMore.value) return
+  const el = songListRef.value?.scrollContainer
+  if (!el || nearBottom(el)) void performSearch()
 }
 
 // 执行歌单搜索（分页）
@@ -273,15 +273,10 @@ const routerToPlaylist = (playlist: any) => {
   })
 }
 
-const onPlaylistScroll = (event: Event) => {
-  const target = event.target as HTMLElement
-  const { scrollTop, scrollHeight, clientHeight } = target
-  const nearBottom = scrollHeight - scrollTop - clientHeight < 100
-  const hasMore = playlistMore.value
-  // console.log('歌单搜索结果', nearBottom, hasMore, !playlistLoading.value)
-  if (nearBottom && hasMore && !playlistLoading.value) {
-    fetchPlaylists(false)
-  }
+const onPlaylistScroll = () => {
+  if (activeTab.value !== 'playlists' || playlistPage.value <= 1 || playlistLoading.value || !playlistMore.value) return
+  const el = playlistScrollRef.value
+  if (el && nearBottom(el)) void fetchPlaylists()
 }
 
 const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
@@ -313,6 +308,14 @@ watch(activeTab, async tab => {
   if (tab === 'songs' && currentPage.value === 1) await performSearch(true)
   if (tab === 'playlists' && playlistPage.value === 1) await fetchPlaylists(true)
 })
+
+// A plugin can hide a whole page or leave too few rows to scroll. Recheck the
+// bottom after a successful page and when its tab becomes visible.
+watch([currentPage, playlistPage, activeTab], () => {
+  if (!keyword.value || route.name !== 'search') return
+  if (activeTab.value === 'songs') handleScroll()
+  else onPlaylistScroll()
+}, { flush: 'post' })
 </script>
 
 <template>
@@ -341,6 +344,7 @@ watch(activeTab, async tab => {
       <div v-show="activeTab === 'songs'" class="song-tab">
         <div v-if="hasSongResults" class="song-list-wrapper">
           <SongVirtualList
+            ref="songListRef"
             :songs="searchResults"
             :current-song="currentSong"
             :is-playing="isPlaying"
@@ -367,12 +371,11 @@ watch(activeTab, async tab => {
             <p>搜索中...</p>
           </div>
         </div>
-        <n-button v-if="hasMore && currentPage > 1" size="small" text :loading="loading" @click="performSearch(false)">加载更多单曲</n-button>
       </div>
 
       <!-- 歌单列表 -->
       <div v-show="activeTab === 'playlists'" class="playlist-tab">
-        <div class="grid-scroll-container" @scroll="onPlaylistScroll">
+        <div ref="playlistScrollRef" class="grid-scroll-container" @scroll="onPlaylistScroll">
           <TransitionGroup
             v-if="hasPlaylistResults"
             name="grid-fade"
@@ -426,7 +429,6 @@ watch(activeTab, async tab => {
               </div>
             </div>
           </div>
-          <n-button v-if="playlistMore" size="small" text :loading="playlistLoading" @click="fetchPlaylists(false)">加载更多歌单</n-button>
         </div>
       </div>
     </div>

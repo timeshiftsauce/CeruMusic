@@ -1,4 +1,5 @@
 import './musicDataRepair'
+import { registerKaraoke } from './karaoke'
 import InitPluginService from './plugins'
 import InitShareService from './share'
 import '../services/musicSdk/index'
@@ -23,6 +24,7 @@ import {
 } from '../services/systemCaTrust'
 
 export default function InitEventServices(mainWindow: BrowserWindow) {
+  registerKaraoke(mainWindow)
   InitPluginService()
   InitShareService()
   aiEvents(mainWindow)

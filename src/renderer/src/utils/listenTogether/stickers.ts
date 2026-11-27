@@ -28,6 +28,7 @@ import s12 from '@renderer/assets/smallBag/image-1778940202767-12.png'
 import s13 from '@renderer/assets/smallBag/image-1778940202912-13.png'
 import s14 from '@renderer/assets/smallBag/image-1778940203058-14.png'
 import s15 from '@renderer/assets/smallBag/image-1778940203214-15.png'
+import { LANYIN_STICKERS } from './lanyinStickers'
 
 export interface Sticker {
   /** 协议传输用 id —— 务必保持稳定,改名会导致老消息无法渲染 */
@@ -71,13 +72,20 @@ export const STICKERS: Sticker[] = [
   { id: 'sticker-13', src: s13, label: '拜拜' }
 ]
 
+export const STICKER_PACKS = [
+  { id: 'sticker', label: '小澜的日常', stickers: STICKERS },
+  { id: 'lanyin', label: '澜音娘', stickers: LANYIN_STICKERS }
+] as const
+
+export type StickerPackId = (typeof STICKER_PACKS)[number]['id']
+
 /**
  * id → 贴纸快查表(O(1) 渲染)。
  * 接收消息时用 `STICKER_MAP[msg.content]` 取贴纸,取不到则回退到纯文本展示
  * `content`(老/新客户端兼容)。
  */
 export const STICKER_MAP: Record<string, Sticker> = Object.fromEntries(
-  STICKERS.map((s) => [s.id, s])
+  STICKER_PACKS.flatMap((pack) => pack.stickers.map((s) => [s.id, s]))
 )
 
 /**

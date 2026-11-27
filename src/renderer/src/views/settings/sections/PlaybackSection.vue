@@ -5,6 +5,7 @@ import PlaylistSettings from '@renderer/components/Settings/PlaylistSettings.vue
 import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
 import EqualizerSettings from '@renderer/components/Settings/EqualizerSettings.vue'
 import AudioEffectSettings from '@renderer/components/Settings/AudioEffectSettings.vue'
+import AutomixSettings from '@renderer/components/Settings/AutomixSettings.vue'
 
 const playSettingStore = usePlaySetting()
 const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingStore)
@@ -20,6 +21,11 @@ const { isJumpLyric, bgPlaying, isAudioVisualizer } = storeToRefs(playSettingSto
     <div id="playback-audio-output" class="setting-group">
       <h3>音频输出</h3>
       <AudioOutputSettings />
+    </div>
+
+    <div id="playback-automix" class="setting-group">
+      <h3>自动混音</h3>
+      <AutomixSettings />
     </div>
 
     <div id="playback-equalizer" class="setting-group">

@@ -1,3 +1,4 @@
+import type { PlaybackAttemptResult, PlaybackTarget } from '@common/playbackAttempt'
 import { desktopBridge } from '@renderer/services/desktopBridge'
 import { normalizeMusicItem, sameSong, restoredSong } from '@common/musicItem'
 import mitt, { type Emitter } from 'mitt'
@@ -5,7 +6,7 @@ import { MessagePlugin } from '@renderer/plugin/notifications'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useSettingsStore } from '@renderer/store/Settings'
-import { calculateBestQuality, getQualityDisplayName } from '@common/utils/quality'
+import { calculateBestQuality } from '@common/utils/quality'
 import { pluginQualityOrder } from '@renderer/utils/pluginQuality'
 import { runQueue } from '@renderer/plugin/operations'
 
@@ -128,7 +129,14 @@ if (import.meta.hot) {
  * @param song 歌曲对象
  * @returns 真实播放URL
  */
-export async function getSongRealUrl(song: SongList): Promise<string> {
+export type PlaybackResolution = {
+  target?: PlaybackTarget
+  blockedPluginIds?: string[]
+  skipCachedAudio?: boolean
+  report: (result: PlaybackAttemptResult) => void
+}
+
+export async function getSongRealUrl(song: SongList, playback?: PlaybackResolution): Promise<string> {
   try {
     if ((song as any).source === 'local') {
       const id = (song as any).songmid
@@ -142,36 +150,46 @@ export async function getSongRealUrl(song: SongList): Promise<string> {
       return (song as any).url
     }
     const LocalUserDetail = LocalUserDetailStore()
-    let quality =
+    const preferredQuality =
       (LocalUserDetail.userInfo.sourceQualityMap || {})[(song as any).source] ||
-      (LocalUserDetail.userSource.quality as string)
+      LocalUserDetail.userSource.quality || ''
     // 读取设置：是否启用缓存
     const settingsStore = useSettingsStore()
     const isCache = settingsStore.settings.autoCacheMusic ?? true
 
     const order = pluginQualityOrder(song.source)
-    quality = calculateBestQuality(song.types, quality, order) || order.at(-1) || quality
+    const quality = playback?.target?.quality ??
+      (calculateBestQuality(song.types, preferredQuality, order) || order.at(-1) || preferredQuality)
 
-    console.log(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)
-    const urlData = await desktopBridge.api.music.requestSdk('getPlaybackUrl', {
+    const args = {
       pluginId: song.pluginResource?.pluginId || LocalUserDetail.userSource.pluginId,
       source: song.source,
-      songInfo: song as any,
+      songInfo: song,
       quality,
       isCache,
-      // 主进程用它判断两件事：① 该音质是否高于缓存上限（高于则不缓存）
-      // ② 缓存里的音质是否低于本次请求（低则视为未命中，回源重取）
       qualityOrder: order
-    })
+    }
+    if (playback) {
+      const result: PlaybackAttemptResult = await desktopBridge.api.music.requestSdk('getPlaybackAttempt', {
+        ...args,
+        ownerId: playback.target?.pluginId,
+        blockedPluginIds: playback.blockedPluginIds,
+        skipCachedAudio: playback.skipCachedAudio,
+        preferredQuality: playback.target ? undefined : preferredQuality
+      })
+      playback.report(result)
+      if (result.url) return result.url
+      throw new Error(result.error ?? '未能解析播放地址')
+    }
 
-    // message.success(`使用音质: ${quality} - ${getQualityDisplayName(quality)}`)
+    const urlData = await desktopBridge.api.music.requestSdk('getPlaybackUrl', args)
     if (typeof urlData === 'object' && urlData.error) {
       throw new Error(urlData.error)
     } else {
       return urlData as string
     }
   } catch (error: any) {
-    console.error('获取歌曲URL失败,换个插件看看吧:', error)
+    if (!playback) console.error('获取歌曲URL失败,换个插件看看吧:', error)
     throw new Error('获取歌曲播放链接失败' + error.message)
   }
 }

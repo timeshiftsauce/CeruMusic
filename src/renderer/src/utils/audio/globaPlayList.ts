@@ -14,7 +14,8 @@ import {
   initPlaylistEventListeners,
   destroyPlaylistEventListeners
 } from '@renderer/utils/playlist/playlistManager'
-import { waitForAudioReady, getCandidateSongs, parseInterval } from './audioHelpers'
+import { waitForAudioReady, parseInterval } from './audioHelpers'
+import { createPlaybackFallback, notePlaybackThrottle } from './playbackFallback'
 import { crossfadeManager } from './crossfade'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 
@@ -22,9 +23,6 @@ const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
-
-/** 切歌各阶段耗时超过该阈值才打日志，避免正常情况刷屏（用于排查切歌变慢） */
-const SWITCH_SLOW_MS = 300
 
 const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number | string }>({
   songmid: null,
@@ -55,22 +53,11 @@ const AUTO_NEXT_DELAY_MS = 1500
 let pendingAutoNextTimer: ReturnType<typeof setTimeout> | null = null
 let pendingAutoNextToken = 0
 
-// ==================== 插件限流状态 ====================
-// 当插件调用 stopRequests 时，主进程会通过 IPC 通知渲染进程。
-// 限流期间：换源循环提前退出，tryAutoNext 静默放弃，不再堆 notice。
-// 以 pluginId 为键，切换插件后旧插件的限流不影响新插件。
-const _throttledPlugins = new Set<string>()
-const _throttleTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const _disabledPlugins = new Set<string>()
 let _unsubscribeThrottle: (() => void) | null = null
 let _unsubscribeDisabled: (() => void) | null = null
 let unsubscribeLocalTags: (() => void) | undefined
 let unsubscribeRestorePosition: (() => void) | undefined
-
-function _isThrottled(): boolean {
-  const pluginId = localUserStore.userSource.pluginId
-  return pluginId != null && (_throttledPlugins.has(pluginId) || _disabledPlugins.has(pluginId))
-}
+let playbackController: AbortController | undefined
 
 const setUrl = controlAudio.setUrl
 
@@ -87,7 +74,8 @@ const start = controlAudio.start
 const stop = controlAudio.stop
 const setCurrentTime = controlAudio.setCurrentTime
 
-const cancelPendingAutoNext = () => {
+const cancelPendingAutoNext = (keepAutomaticDecision = false) => {
+  if (!keepAutomaticDecision) automaticAdvance = undefined
   pendingAutoNextToken++
   if (pendingAutoNextTimer !== null) {
     clearTimeout(pendingAutoNextTimer)
@@ -95,13 +83,7 @@ const cancelPendingAutoNext = () => {
   }
 }
 
-const PluginErrorMsgs = [
-  '插件都不配就想播放，想的倒挺美呢',
-  '插件插件老弟我需要插件',
-  '我肚子饿啦，请给我安装一个插件吧',
-  '插件呢？插件呢？插件呢？',
-  '哥哥~ 你需要安装一个插件来播放歌曲哦~'
-]
+
 
 /**
  * 异步取一起听 store —— 用动态 import 避免循环依赖
@@ -221,25 +203,28 @@ const togglePlayPause = async (system = false) => {
   }
 }
 
-type PlayOptions = { immediate?: boolean; shouldAutoStart?: () => boolean; pluginId?: string; beforePlay?: (song:SongList)=>void }
+type PlayOptions = {
+  immediate?: boolean
+  shouldAutoStart?: () => boolean
+  pluginId?: string
+  beforePlay?: (song: SongList) => void
+  fromFailure?: boolean
+}
 let playIntent = 0
 const playSong = (song:SongList, options:PlayOptions = {}):Promise<void> => {
   const intent = ++playIntent
   return runPlay(song,localUserStore.list,options.pluginId,async selected => {
     if (intent!==playIntent) return
     options.beforePlay?.(selected)
-    await playSelectedSong(selected,options)
+    if (!options.fromFailure) autoNextCount.value = 0
+    await playSelectedSong(selected, options, intent)
   })
 }
-const playSelectedSong = async (song:SongList, options:PlayOptions) => {
+const playSelectedSong = async (song: SongList, options: PlayOptions, intent: number) => {
   const selection = ++selectionSequence
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
   crossfadeManager.cancel()
-  if (!localUserStore.userSource.pluginId && song.source !== 'local') {
-    MessagePlugin.error(PluginErrorMsgs[Math.floor(Math.random() * PluginErrorMsgs.length)])
-    return
-  }
 
   /* 一起听守卫与路由
    *
@@ -255,7 +240,7 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
    */
   let isHostInitiatedChange = false
   const lt = await getListenTogetherStore()
-  if (selection !== selectionSequence) return
+  if (selection !== selectionSequence || intent !== playIntent) return
   if (lt.isInRoom) {
     const remoteSongmid = lt.current.song?.songmid
     const remoteSource = lt.current.song?.source
@@ -320,13 +305,29 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
 
   // Monotonic IDs keep rapid clicks distinct, even within one millisecond.
   const requestId = ++currentPlayRequestId
-  const intent = playIntent
+  playbackController?.abort()
+  const controller = new AbortController()
+  playbackController = controller
+  const current = () => requestId === currentPlayRequestId &&
+    intent === playIntent && !controller.signal.aborted
+  const fallback = createPlaybackFallback(song, current)
+  let pending = true
+  controller.signal.addEventListener('abort', () => {
+    if (pending) fallback.trace.status('cancelled')
+  }, { once: true })
   let failureHandled = false
   const tryAutoNext = (reason: string, error: Parameters<typeof runPlaybackFailure>[1]) => {
-    if (failureHandled || requestId !== currentPlayRequestId || intent !== playIntent) return
+    if (failureHandled || !current()) return
     failureHandled = true
     void runPlaybackFailure(song, error, async () => {
-      if (requestId === currentPlayRequestId && intent === playIntent) await advanceAfterFailure(reason)
+      if (!current()) return
+      if (fallback.autoNext) {
+        fallback.trace.step('尝试自动跳过', 'warning')
+        await advanceAfterFailure(song, reason, current)
+      } else {
+        fallback.trace.step('停止自动推进播放列表', 'warning')
+        MessagePlugin.error(reason)
+      }
     }).catch(console.warn)
   }
   pendingSongId = songKey(song)
@@ -334,18 +335,9 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
   const metadataController = new AbortController()
   pendingMetadataController = metadataController
   isLoadingSong.value = true
-  // songInfo 上不存在 requestId 属性，移除该行；requestId 仅通过闭包变量跟踪即可
-
-  // 更好的方式：使用闭包变量跟踪是否是最新请求
-  // 但是 playSong 是 async 的，我们需要在关键的 await 之后检查
-
-  // 更新全局的 currentPlayRequestId
-  currentPlayRequestId = requestId
-
   if (!options.immediate) {
     // 防抖：给一个短暂的缓冲期，避免连续快速点击导致并发请求错误
     await new Promise((resolve) => setTimeout(resolve, 300))
-    if (currentPlayRequestId !== requestId) return
   }
 
   let preparedMetadata:
@@ -353,6 +345,7 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
     | undefined
   let metadataCommitted = false
   try {
+    if (!current()) return
     isLoadingSong.value = true
     // 清理之前的监听器
     if (Audio.value.audio) {
@@ -402,166 +395,23 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
     preparedPromise.catch(() => {})
     // 注意：SMTC 的 updateMetadata 会在音频准备好后再调用，避免切换时空隙
 
-    let urlToPlay = ''
-    // let usedAutoSwitch = false
-    try {
-      const __pt0 = performance.now()
-      urlToPlay = await getSongRealUrl(toRaw(song))
-      const cost = performance.now() - __pt0
-      if (cost > SWITCH_SLOW_MS) {
-        console.warn(`[切歌耗时] ${song.name} 取URL=${cost.toFixed(0)}ms（偏慢）`)
-      }
-    } catch (error: any) {
-      // 检查是否已过期
-      if (currentPlayRequestId !== requestId) return
-
-      console.warn('Original source failed, trying auto switch...', error)
-      try {
-        throw new Error('Force switch')
-      } catch (switchError) {}
+    const load = (url: string) => {
+      const audio = Audio.value.audio
+      if (!audio) throw new Error('音频元素未初始化')
+      reloadPlaybackUrl(url)
+      return waitForAudioReady(audio, controller.signal)
     }
-
-    // 再次检查请求ID
-    if (currentPlayRequestId !== requestId) return
-
-    // 如果 urlToPlay 为空或者上面抛出了错误，说明原源不行，开始尝试 candidates
-    if (!urlToPlay || urlToPlay.includes('error')) {
-      // 限流期间不进入换源循环
-      if (_isThrottled()) {
-        isLoadingSong.value = false
-        return
-      }
-      try {
-        const candidates = await getCandidateSongs(song, userInfo.value)
-
-        // 再次检查请求ID，因为 search 也耗时
-        if (currentPlayRequestId !== requestId) return
-
-        let playSuccess = false
-        for (const item of candidates) {
-          // 每次循环前都检查是否被新的播放请求打断，或者插件已限流
-          if (currentPlayRequestId !== requestId) return
-          if (_isThrottled()) break
-
-          try {
-            const url = await getSongRealUrl(toRaw(item))
-            if (currentPlayRequestId !== requestId) return // getSongRealUrl 也是 async
-
-            if (!url || typeof url !== 'string' || url.includes('error')) continue
-
-            if (Audio.value.audio) {
-              reloadPlaybackUrl(url)
-
-              try {
-                await waitForAudioReady(Audio.value.audio)
-                if (currentPlayRequestId !== requestId) return // 等待期间可能切歌
-
-                /* 一起听:audio ready 之后再广播 —— 确保广播给 member 的是真的能播
-                 * 的 URL,避免 member 收到失效 URL 反复换源"来回跳" */
-                broadcastChangeSongIfNeeded(url)
-
-                MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
-                playSuccess = true
-                urlToPlay = url
-                break
-              } catch (e) {
-                continue
-              }
-            }
-          } catch {
-            continue
-          }
-        }
-
-        if (currentPlayRequestId !== requestId) return
-
-        if (!playSuccess) {
-          isLoadingSong.value = false
-          tryAutoNext('自动换源失败：所有源均无法播放', 'resolve')
-          return
-        }
-      } catch (e: any) {
-        if (currentPlayRequestId !== requestId) return
-        isLoadingSong.value = false
-        tryAutoNext('自动换源失败，原因：' + (e?.message || '未知'), 'resolve')
-        return
-      }
-    } else {
-      // 原源 URL 获取成功，尝试播放
-      const __ptSet = performance.now()
-      reloadPlaybackUrl(urlToPlay)
-      try {
-        if (Audio.value.audio) {
-          await waitForAudioReady(Audio.value.audio)
-        }
-        const readyCost = performance.now() - __ptSet
-        if (readyCost > SWITCH_SLOW_MS) {
-          console.warn(`[切歌耗时] ${song.name} 音频就绪=${readyCost.toFixed(0)}ms（偏慢）`)
-        }
-        if (currentPlayRequestId !== requestId) return
-        /* 一起听:audio ready 之后再广播 —— 确保 member 拿到的是真的能播的 URL,
-         * 失败/换源场景里 broadcastedChange flag 仍只让 emit 一次。 */
-        broadcastChangeSongIfNeeded(urlToPlay)
-      } catch (e) {
-        if (currentPlayRequestId !== requestId) return
-        // 原源 URL 获取成功但播放/加载失败
-        console.warn('Audio ready failed, trying auto switch...', e)
-        try {
-          const candidates = await getCandidateSongs(song, userInfo.value)
-          if (currentPlayRequestId !== requestId) return
-
-          let playSuccess = false
-          for (const item of candidates) {
-            if (currentPlayRequestId !== requestId) return
-            try {
-              const url = await getSongRealUrl(toRaw(item))
-              if (currentPlayRequestId !== requestId) return
-
-              if (!url || typeof url !== 'string' || url.includes('error')) continue
-
-              // 避免重复尝试那个失败的 URL
-              if (url === urlToPlay) continue
-
-              setUrl(url)
-              if (Audio.value.audio) {
-                Audio.value.audio.load()
-                try {
-                  await waitForAudioReady(Audio.value.audio)
-                  if (currentPlayRequestId !== requestId) return
-
-                  /* 一起听:audio ready 之后再广播 candidate URL,确保 member 拿到能播的 */
-                  broadcastChangeSongIfNeeded(url)
-
-                  MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
-                  playSuccess = true
-                  break
-                } catch (e) {
-                  continue
-                }
-              }
-            } catch {
-              continue
-            }
-          }
-
-          if (currentPlayRequestId !== requestId) return
-
-          if (!playSuccess) {
-            throw e
-          }
-        } catch (switchError) {
-          if (currentPlayRequestId !== requestId) return
-          throw switchError
-        }
-      }
+    const loaded = await fallback.load(load)
+    if (!current()) return
+    if (!loaded) {
+      tryAutoNext('无法播放当前歌曲', 'resolve')
+      return
     }
-
-    if (currentPlayRequestId !== requestId) return
 
     // 等到「封面 + 歌词」全部就绪后再提交并出声 —— 切歌时不出现中间态。
     // （prepareSong 内部会 await 这两者。）
     const prepared = await preparedPromise
-    if (currentPlayRequestId !== requestId) {
+    if (!current()) {
       prepared.dispose()
       return
     }
@@ -574,22 +424,20 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
     // SMTC 元数据由 commitPrepared 统一更新(使用已加载好的封面)，
     // 此处不再重复调用，避免用 song.img(可能为空/不可达)覆盖。
     isLoadingSong.value = false
-    if (options.shouldAutoStart && !options.shouldAutoStart()) {
-      mediaSessionController.updatePlaybackState('paused')
-      return
-    }
-    start()
-      .then(() => {
-        if (currentPlayRequestId !== requestId) return
-        autoNextCount.value = 0
-      }, () => {
-        if (currentPlayRequestId !== requestId) return
-        tryAutoNext('启动播放失败', 'start')
-      })
 
-    // 只有在确定是当前请求时，才挂载错误监听
+    let activating = loaded
+    let markedPlaying: typeof loaded | undefined
+    const markPlaying = () => {
+      if (!current() || markedPlaying === activating) return
+      markedPlaying = activating
+      fallback.playing(activating)
+      autoNextCount.value = 0
+    }
+
     if (Audio.value.audio) {
       currentPlaybackPlayingHandler = () => {
+        if (!current()) return
+        markPlaying()
         isLoadingSong.value = false
         currentPlaybackPlayingHandler = null
         // 最终一致性兜底：音频真正开始播放时，把当前歌曲重新推给系统媒体卡片。
@@ -616,86 +464,70 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
         } catch {}
       }
       Audio.value.audio.addEventListener('playing', currentPlaybackPlayingHandler, { once: true })
-      currentPlaybackErrorHandler = async () => {
-        // 如果触发了 error，也要检查是不是当前这首歌的 error
-        // 其实 error listener 是一次性的，并且每次 playSong 开头都会清理
-        // 所以理论上只要 playSong 没被新的打断，这个 listener 就是有效的。
-        // 但如果快速切歌，旧的 playSong 可能还在运行，挂载了 listener，
-        // 然后新的 playSong 运行，清理了 listener。
-        //
-        // 现在的逻辑是：只有 playSong 走到最后才会挂载 listener。
-        // 由于我们加了 currentPlayRequestId check，旧的 playSong 即使没执行完，
-        // 只要遇到 await 就会停止，不会走到最后挂载 listener。
-        //
-        // 唯一的问题是：如果旧的 playSong 已经挂载了 listener，然后新的 playSong 开始了，
-        // 新的 playSong 会清理旧的 listener。
-        // 所以这里不需要额外的 check，只要保证 playSong 中途退出即可。
-
-        console.warn('Playback error, trying auto switch...')
-        currentPlaybackErrorHandler = null
-
-        if (_isThrottled()) return
-
-        try {
-          const candidates = await getCandidateSongs(song, userInfo.value)
-          // 注意：这里的 song 是闭包变量，仍然引用着当时那首歌。
-          // 如果此时用户已经切到下一首了，我们不应该继续这个重试逻辑。
-          // 所以这里也需要检查 requestId。
-          if (currentPlayRequestId !== requestId) return
-
-          let playSuccess = false
-          for (const item of candidates) {
-            if (currentPlayRequestId !== requestId) return
-            if (_isThrottled()) break
-            try {
-              const url = await getSongRealUrl(toRaw(item))
-              if (currentPlayRequestId !== requestId) return
-              if (!url || typeof url !== 'string' || url.includes('error')) continue
-
-              if (Audio.value.audio && Audio.value.audio.src === url) continue
-
-              setUrl(url)
-              if (Audio.value.audio) {
-                Audio.value.audio.load()
-                await waitForAudioReady(Audio.value.audio)
-                if (currentPlayRequestId !== requestId) return
-
-                MessagePlugin.success(`已自动切换到 ${item.source} 源播放`)
-                playSuccess = true
-                if (options.shouldAutoStart && !options.shouldAutoStart()) {
-                  mediaSessionController.updatePlaybackState('paused')
-                  break
-                }
-                start().catch(() => {
-                  if (currentPlayRequestId !== requestId) return
-                  tryAutoNext('换源后启动播放失败', 'start')
-                })
-                break
-              }
-            } catch (e) {
-              continue
-            }
-          }
-
-          if (currentPlayRequestId !== requestId) return
-
-          if (!playSuccess) {
-            isLoadingSong.value = false
-            tryAutoNext('所有自动换源尝试均失败', 'media')
-          }
-        } catch (e) {
-          if (currentPlayRequestId !== requestId) return
-          isLoadingSong.value = false
-          tryAutoNext('播放出错且自动换源失败', 'media')
-        }
-      }
-      Audio.value.audio.addEventListener('error', currentPlaybackErrorHandler, { once: true })
     }
-  } catch (error: any) {
-    if (currentPlayRequestId !== requestId) return
+
+    const audio = Audio.value.audio
+    const playLoaded = async (
+      result: NonNullable<typeof loaded>,
+      failure: 'start' | 'media'
+    ) => {
+      while (current()) {
+        activating = result
+        const shouldStart = !options.shouldAutoStart || options.shouldAutoStart()
+        if (shouldStart) {
+          try {
+            await start()
+            if (!current()) return
+          } catch {
+            if (!current()) return
+            fallback.failPlayback(result, 'start')
+            const next = await fallback.load(load)
+            if (!next) break
+            result = next
+            continue
+          }
+          if (audio && !audio.paused) markPlaying()
+        } else {
+          mediaSessionController.updatePlaybackState('paused')
+        }
+        broadcastChangeSongIfNeeded(result.url)
+        if (result.fallback) MessagePlugin.success('已自动换源')
+        // Attach after load/start so one audio error cannot start a second recovery.
+        currentPlaybackErrorHandler = () => {
+          currentPlaybackErrorHandler = null
+          if (!current()) return
+          fallback.failPlayback(result, 'media')
+          Audio.value.isPlay = false
+          isLoadingSong.value = true
+          pending = true
+          void fallback.load(load)
+            .then(async (next) => {
+              if (!current()) return
+              if (next) await playLoaded(next, 'media')
+              else tryAutoNext('播放中断，未找到可播放的音源', 'media')
+            })
+            .catch(() => {
+              if (!current()) return
+              fallback.trace.status('failed')
+              tryAutoNext('播放中断，换源失败', 'media')
+            })
+            .finally(() => {
+              pending = false
+              if (current()) isLoadingSong.value = false
+            })
+        }
+        audio?.addEventListener('error', currentPlaybackErrorHandler, { once: true })
+        return
+      }
+      if (current()) tryAutoNext('启动播放失败', failure)
+    }
+    await playLoaded(loaded, 'start')
+  } catch {
+    if (!current()) return
+    fallback.trace.status('failed')
     tryAutoNext('播放歌曲失败', 'playback')
-    isLoadingSong.value = false
   } finally {
+    pending = false
     if (!metadataCommitted) {
       metadataController.abort()
       preparedMetadata?.dispose()
@@ -716,25 +548,22 @@ const playSelectedSong = async (song:SongList, options:PlayOptions) => {
   }
 }
 
-const advanceAfterFailure = async (reason: string) => {
-  if (
-    localUserStore.userSource.pluginId === undefined ||
-    _isThrottled() ||
-    reason.includes('频率') ||
-    reason.includes('限制')
-  ) {
+const advanceAfterFailure = async (song: SongList, reason: string, current: () => boolean) => {
+  const limit = Math.min(10, Math.max(3, getAutoNextLimit()), list.value.length - 1)
+  if (limit < 1) {
+    MessagePlugin.error(reason)
     return
   }
-  const limit = getAutoNextLimit()
   MessagePlugin.error(`自动跳过当前歌曲：原因：${reason}`)
-  if ((autoNextCount.value >= limit || autoNextCount.value >= 10) && autoNextCount.value > 2) {
+  if (autoNextCount.value >= limit) {
     MessagePlugin.error(
       `自动下一首失败：${autoNextCount.value}/${limit > 10 ? 10 : limit}次。原因：${reason}`
     )
     return
   }
   autoNextCount.value++
-  await playNext(undefined, true, 'error')
+  await runAdvance('error', list.value, (selected) =>
+    nextPlayback(selected, undefined, { key: songKey(song), current }), undefined, true)
 }
 
 const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
@@ -826,17 +655,19 @@ const updatePlayMode = () => {
 
 const resolveNextSong = ({
   respectSingleMode,
-  rebuildShuffleOnWrap
+  rebuildShuffleOnWrap,
+  fromSongKey
 }: {
   respectSingleMode: boolean
   rebuildShuffleOnWrap: boolean
+  fromSongKey?: string
 }): SongList | null => {
   if (list.value.length === 0) return null
   if (respectSingleMode && playMode.value === PlayMode.SINGLE) return null
 
   if (playMode.value === PlayMode.RANDOM) {
     ensureShuffleOrder()
-    const curId = pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
+    const curId = fromSongKey ?? pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
     let idx = shuffleOrder.value.findIndex((id) => id === curId)
     if (idx < 0) idx = -1
     let nextIdx = idx + 1
@@ -853,7 +684,7 @@ const resolveNextSong = ({
   const currentIndex = list.value.findIndex(
     (song) =>
       songKey(song) ===
-      (pendingSongId ??
+      (fromSongKey ?? pendingSongId ??
         userInfo.value.lastPlaySongKey ??
         songKey(
           restoredSong(
@@ -883,34 +714,38 @@ const atQueueEnd = () => {
 
 const getNextSong = (): SongList | null => {
   if (interceptsQueueEnd() && atQueueEnd()) return null
-  if (interceptsAdvance() || (playMode.value === PlayMode.RANDOM && (interceptsShuffle() || pendingShuffle))) return null
+  if (
+    playMode.value === PlayMode.RANDOM &&
+    (pendingShuffle || (interceptsShuffle() && atQueueEnd()))
+  )
+    return null
   return resolveNextSong({
     respectSingleMode: true,
     rebuildShuffleOnWrap: false
   })
 }
 
-const resolvePlaybackAdvance = (respectSingleMode: boolean) => {
+const resolvePlaybackAdvance = (respectSingleMode: boolean, fromSongKey?: string) => {
   if (playMode.value !== PlayMode.RANDOM || (!interceptsShuffle() && !pendingShuffle))
-    return resolveNextSong({respectSingleMode, rebuildShuffleOnWrap:true})
-  return resolveHookedShuffleAdvance(respectSingleMode)
+    return resolveNextSong({respectSingleMode, rebuildShuffleOnWrap:true, fromSongKey})
+  return resolveHookedShuffleAdvance(respectSingleMode, fromSongKey)
 }
 
-const resolveHookedShuffleAdvance = async (respectSingleMode: boolean) => {
+const resolveHookedShuffleAdvance = async (respectSingleMode: boolean, fromSongKey?: string) => {
   const token = pendingAutoNextToken, intent = playIntent
   ensureShuffleOrder()
   let revision = shuffleRevision
   const current = () => token === pendingAutoNextToken && intent === playIntent && revision === shuffleRevision && playMode.value === PlayMode.RANDOM
   if (pendingShuffle) await pendingShuffle
   if (!current() || !shuffleOrder.value.length) return null
-  const id = pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
+  const id = fromSongKey ?? pendingSongId ?? userInfo.value.lastPlaySongKey ?? userInfo.value.lastPlaySongId
   if (id != null && shuffleOrder.value.indexOf(id) === shuffleOrder.value.length - 1) {
     ensureShuffleOrder(true)
     revision = shuffleRevision
     if (pendingShuffle) await pendingShuffle
     return current() ? list.value.find(song => songKey(song) === shuffleOrder.value[0]) ?? null : null
   }
-  return resolveNextSong({respectSingleMode, rebuildShuffleOnWrap:false})
+  return resolveNextSong({respectSingleMode, rebuildShuffleOnWrap:false, fromSongKey})
 }
 
 const playPrevious = (pluginId?: string, system = false) =>
@@ -955,10 +790,16 @@ const previousPlayback = async (pluginId?: string) => {
 
 const playNext = (pluginId?: string, system = false, reason: 'user' | 'error' = 'user') =>
   runAdvance(reason, list.value, selected => nextPlayback(selected, pluginId), pluginId, system)
-const nextPlayback = async (selected?: SongList, pluginId?: string) => {
+const nextPlayback = async (
+  selected?: SongList,
+  pluginId?: string,
+  failed?: { key: string; current: () => boolean }
+) => {
+  if (failed && !failed.current()) return
   cancelPendingAutoNext()
   crossfadeManager.cancel()
   const lt = await getListenTogetherStore()
+  if (failed && !failed.current()) return
   if (lt.isInRoom) {
     if (lt.canControl) {
       lt.skip()
@@ -969,10 +810,10 @@ const nextPlayback = async (selected?: SongList, pluginId?: string) => {
   }
   if (list.value.length === 0) return
   try {
-    const advance = selected ?? resolvePlaybackAdvance(false)
+    const advance = selected ?? resolvePlaybackAdvance(false, failed?.key)
     const nextSong = advance instanceof Promise ? await advance : advance
-    if (nextSong) {
-      await playSong(nextSong, { pluginId })
+    if (nextSong && (!failed || (failed.current() && songKey(nextSong) !== failed.key))) {
+      await playSong(nextSong, { pluginId, fromFailure: !!failed })
     }
   } catch {
     MessagePlugin.error('播放下一首失败')
@@ -1025,7 +866,7 @@ const playNextAutoNow = async (selected?: SongList) => {
 }
 
 const playNextAuto = () => {
-  cancelPendingAutoNext()
+  cancelPendingAutoNext(true)
   if (list.value.length === 0) return
 
   /* 一起听场景:不需要 1500ms 的 crossfade 缓冲(房间内不预加载下一首),
@@ -1038,9 +879,17 @@ const playNextAuto = () => {
     if (token !== pendingAutoNextToken) return
     pendingAutoNextTimer = null
     if (crossfadeManager.isFinalizingCurrentAdvance()) return
-    const advance = () => runAdvance('ended', list.value, async selected => {
-      if (token === pendingAutoNextToken) await playNextAutoNow(selected)
-    }, undefined, true)
+    const advance = async () => {
+      const decision = getAutomaticAdvance()
+      if (decision) {
+        const { allowed, selected } = await decision
+        if (allowed && token === pendingAutoNextToken) await playNextAutoNow(selected)
+        return
+      }
+      await runAdvance('ended', list.value, async selected => {
+        if (token === pendingAutoNextToken) await playNextAutoNow(selected)
+      }, undefined, true)
+    }
     if (!interceptsQueueEnd()) { void advance(); return }
     const intent = playIntent, mode = playMode.value
     const handleEnd = async () => {
@@ -1058,6 +907,50 @@ const playNextAuto = () => {
     }
     void handleEnd().catch(console.warn)
   }, delay)
+}
+
+// A plugin may allow, redirect or veto the advance. Reuse its decision at ended
+// if the fade misses its window, so the same automatic advance only runs hooks once.
+type AutomaticDecision = { allowed: boolean; selected?: SongList }
+let automaticAdvance: {
+  audio: typeof Audio.value.audio
+  url: string
+  intent: number
+  mode: PlayMode
+  result: Promise<AutomaticDecision>
+} | undefined
+
+const getAutomaticAdvance = () => {
+  const advance = automaticAdvance
+  if (
+    advance &&
+    advance.audio === Audio.value.audio &&
+    advance.url === Audio.value.url &&
+    advance.intent === playIntent &&
+    advance.mode === playMode.value
+  ) return advance.result
+  return undefined
+}
+
+const authorizeCrossfade = async (song: SongList) => {
+  let decision = getAutomaticAdvance()
+  if (!decision && !interceptsAdvance()) return true
+  if (!decision) {
+    const state = { audio: Audio.value.audio, url: Audio.value.url, intent: playIntent, mode: playMode.value }
+    let outcome: AutomaticDecision = { allowed: false }
+    decision = runAdvance('ended', list.value, async (selected) => {
+      outcome = { allowed: true, selected }
+    }, undefined, true).then(() => outcome).catch((error) => {
+      console.warn('[crossfade] plugin advance failed', error)
+      return { allowed: true }
+    })
+    automaticAdvance = { ...state, result: decision }
+  }
+  const { allowed, selected } = await decision
+  const candidate = selected ?? getNextSong()
+  const matches = allowed && !!candidate && songKey(candidate) === songKey(song)
+  console.info('[crossfade] plugin advance', { allowed, matches })
+  return matches && decision === getAutomaticAdvance()
 }
 
 const setVolume = (percent: number, pluginId?: string, system = false) => {
@@ -1147,6 +1040,7 @@ const installPlayback = async () => {
   initPlaylistEventListeners(localUserStore, playSong)
   if (playbackInstalled) return
   playbackInstalled = true
+  crossfadeManager.init(getNextSong, authorizeCrossfade)
   unsubscribeLocalTags = desktopBridge.api.localMusic.onTagsChanged?.(({ oldSongmid, song }) => {
     if (songInfo.value.source === 'local' && String(songInfo.value.songmid) === oldSongmid) {
       songInfo.value = { ...songInfo.value, ...song }
@@ -1181,45 +1075,22 @@ const installPlayback = async () => {
   })
 
   // 注册插件限流监听（绑定到生命周期，避免重复注册）
-  _unsubscribeThrottle = desktopBridge.api.pluginNotice.onPluginThrottle(
-    ({ pluginId, reason, duration }) => {
-      _throttledPlugins.add(pluginId)
-      MessagePlugin.warning(
-        `插件请求受限：${reason}${duration ? `，${Math.ceil(duration / 1000)}秒后自动恢复` : '，已暂停换源'}`
-      )
-      const old = _throttleTimers.get(pluginId)
-      if (old !== undefined) clearTimeout(old)
-      if (duration && duration > 0) {
-        _throttleTimers.set(
-          pluginId,
-          setTimeout(() => {
-            _throttledPlugins.delete(pluginId)
-            _throttleTimers.delete(pluginId)
-          }, duration)
-        )
-      } else {
-        _throttleTimers.delete(pluginId)
-      }
-    }
-  )
+  _unsubscribeThrottle =
+    desktopBridge.api.pluginNotice?.onPluginThrottle?.(({ pluginId, reason, duration }) => {
+      notePlaybackThrottle(pluginId, duration)
+      MessagePlugin.warning('插件请求受限：' + reason)
+    }) ?? null
 
   // 注册插件禁用监听：插件因崩溃次数过多被永久禁用，提示用户并停止换源
-  _unsubscribeDisabled = desktopBridge.api.pluginNotice.onPluginDisabled(({ pluginId, reason }) => {
-    _disabledPlugins.add(pluginId)
-    // 清理限流定时器（已禁用的插件不需要再恢复）
-    const t = _throttleTimers.get(pluginId)
-    if (t !== undefined) {
-      clearTimeout(t)
-      _throttleTimers.delete(pluginId)
-    }
-    MessagePlugin.error(
-      `插件已被禁用：${reason}。请检查插件是否包含死循环或异常逻辑，必要时重新加载或卸载该插件。`,
-      8000
-    )
-  })
+  _unsubscribeDisabled =
+    desktopBridge.api.pluginNotice?.onPluginDisabled?.(({ reason }) => {
+      MessagePlugin.error(
+        `插件已被禁用：${reason}。请检查插件是否包含死循环或异常逻辑，必要时重新加载或卸载该插件。`,
+        8000
+      )
+    }) ?? null
 
   // 初始化无感过渡管理器：注入 getNextSong 回调，订阅 slotSwap 重置自动下一首计数
-  crossfadeManager.init(getNextSong)
   controlAudio.subscribe('slotSwap', () => {
     autoNextCount.value = 0
     // 关键：翻转槽位后，playSong 挂在旧 primary 上的 DOM error/playing 监听器仍然存在。
@@ -1348,10 +1219,8 @@ const uninstallPlayback = () => {
   unsubscribeLocalTags = undefined
   unsubscribeRestorePosition?.()
   unsubscribeRestorePosition = undefined
-  _throttleTimers.forEach(clearTimeout)
-  _throttleTimers.clear()
-  _throttledPlugins.clear()
-  _disabledPlugins.clear()
+  playbackController?.abort()
+  playbackController = undefined
 }
 
 export {

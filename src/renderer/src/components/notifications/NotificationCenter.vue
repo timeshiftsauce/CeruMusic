@@ -16,6 +16,7 @@ import { useNotificationConnection } from '@renderer/composables/useNotification
 import { ossAvatar, ossCard } from '@renderer/utils/ossImage'
 import type { InboxMessage, MessageCategory } from '@renderer/api/notifications'
 import NoticeCard from './NoticeCard.vue'
+import CommunityCommentText from '../community/CommunityCommentText.vue'
 import PostDetailModal from '../community/PostDetailModal.vue'
 
 const inbox = useNotificationsStore()
@@ -194,7 +195,7 @@ async function openMessage(item: InboxMessage) {
                 {{ item.title }}
                 <time>{{ new Date(item.createdAt).toLocaleDateString('zh-CN') }}</time>
               </div>
-              <p>{{ item.content }}</p>
+              <CommunityCommentText class="interaction-preview" :text="item.content" compact />
               <button class="view-message" @click="openMessage(item)">
                 {{ item.kind === 'reply' || item.kind === 'comment' ? '回复评论' : '查看笔记' }} →
               </button>
@@ -439,14 +440,9 @@ time {
   color: var(--td-text-color-placeholder);
   margin-left: 3px;
 }
-.interaction-body p {
+.interaction-preview {
   margin: 8px 0;
   color: var(--td-text-color-secondary);
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .view-message {
   border: none;
