@@ -192,7 +192,7 @@ jobs:
           compgen -G 'dist/*-win-x64-setup.exe' > /dev/null
           compgen -G 'dist/*-x64.dmg' > /dev/null
           compgen -G 'dist/*-arm64.dmg' > /dev/null
-          compgen -G 'dist/*.AppImage' > /dev/null
+          compgen -G 'dist/*-linux-x64.AppImage' > /dev/null
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3

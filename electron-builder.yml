@@ -134,7 +134,8 @@ linux:
   maintainer: electronjs.org
   category: Utility
 appImage:
-  artifactName: ${name}-${version}-linux-${arch}.${ext}
+  # The Linux update endpoint expects the x64 suffix for this target.
+  artifactName: ${name}-${version}-linux-x64.${ext}
 snap:
   artifactName: ${name}-${version}-linux-${arch}.${ext}
 deb:
