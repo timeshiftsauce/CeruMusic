@@ -1,121 +1,147 @@
-name: Upload Build To Latest Release
-
-permissions:
-  contents: write
+name: Upload Signed macOS Builds To Release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: '目标 Release tag（留空 = 最新 Release）'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-release-assets
 
 jobs:
-  build-and-upload:
-    name: build and upload to latest release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      # macos-15-intel = Intel x64 runner (macos-13 已于 2025-12-04 下线), macos-latest = Apple Silicon arm64 runner
-      matrix:
-        os: [macos-15-intel, macos-latest]
-
+  release:
+    name: Resolve target release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.target.outputs.tag }}
     steps:
-      - name: Check out git repository
-        uses: actions/checkout@v5
-
-      - name: Resolve target release tag
-        id: release
+      - name: Resolve release tag
+        id: target
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          TAG_NAME="$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')"
-          RELEASE_NAME="$(gh api repos/${{ github.repository }}/releases/latest --jq '.name')"
-
-          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "null" ]; then
-            echo "未找到可上传的最新 Release"
+          set -euo pipefail
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.+-]+)?$ ]]; then
+            echo 'Invalid release tag' >&2
             exit 1
           fi
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          echo "release_name=${RELEASE_NAME:-$TAG_NAME}" >> "$GITHUB_OUTPUT"
-          echo "目标 Release: ${RELEASE_NAME:-$TAG_NAME} ($TAG_NAME)"
-
+  build:
+    name: Build signed macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            arch: x64
+          - os: macos-latest
+            arch: arm64
+    defaults:
+      run:
+        working-directory: release-source
+    steps:
+      - name: Check out signing workflow
+        uses: actions/checkout@v5
+        with:
+          path: release-workflow
+      - name: Check out the released sources
+        uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ needs.release.outputs.tag }}
+          path: release-source
       - name: Install Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: 'yarn'
-
-      - name: Cache Electron Binaries
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-electron-v1-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-v1-
-
-      - name: Install Dependencies
+          cache: yarn
+          cache-dependency-path: release-source/yarn.lock
+      - name: Verify source version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          test "v$(node -p "require('./package.json').version")" = "$RELEASE_TAG"
+          git rev-parse HEAD
+      - name: Install dependencies
         shell: bash
         run: |
           npm i -g yarn@1.22.22
           yarn run setup
-
-      - name: Build Electron App for macOS Intel (x64)
-        if: matrix.os == 'macos-15-intel'
+      - name: Verify Electron runtime and native modules
+        run: node scripts/check-native-runtime.cjs
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build native external-media-integration module
+        run: yarn run build:native:emi
+      - name: Build, sign and notarize Electron App for macOS
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder@1.2.0'
-          ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-        run: |
-          # CI 直连 GitHub 拉 electron-builder-binaries 更稳;npmmirror 未必同步 dmg-builder 新版二进制
-          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
-          export npm_config_electron_builder_binaries_mirror='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          unset npm_package_config_electron_builder_binaries_mirror || true
-          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
-          yarn run build:mac:intel
-          if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-x64.yml; fi
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash ../release-workflow/scripts/build-macos-release.sh
+      - name: Verify packaged native modules
+        run: node scripts/check-native-runtime.cjs --packaged
+      - name: Stage signed macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: signed-mac-${{ matrix.arch }}
+          path: |
+            release-source/dist/*.dmg
+            release-source/dist/*.zip
+            release-source/dist/*.blockmap
+            release-source/dist/latest-mac-${{ matrix.arch }}.yml
+          if-no-files-found: error
 
-      - name: Build Electron App for macOS Apple Silicon (arm64)
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder@1.2.0'
-          ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-        run: |
-          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
-          export npm_config_electron_builder_binaries_mirror='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          unset npm_package_config_electron_builder_binaries_mirror || true
-          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
-          yarn run build:mac:arm64
-          if [ -f dist/latest-mac.yml ]; then mv dist/latest-mac.yml dist/latest-mac-arm64.yml; fi
-
-      - name: Cleanup Artifacts for MacOS
-        shell: bash
-        run: |
-          npx del-cli "dist/*" "!dist/(*.dmg|*.zip|*.blockmap|latest*.yml)"
-
-      - name: Upload build outputs to latest release
+  publish:
+    name: Replace macOS release assets
+    runs-on: ubuntu-latest
+    needs: [release, build]
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified macOS artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: signed-mac-*
+          path: dist
+          merge-multiple: true
+      - name: Verify files and update the release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
         run: |
-          shopt -s nullglob
-          files=(dist/*)
-
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "dist 目录没有可上传文件"
-            exit 1
-          fi
-
-          echo "准备上传到 Release: $TAG_NAME"
-          printf ' - %s\n' "${files[@]}"
-          gh release upload "$TAG_NAME" "${files[@]}" --clobber --repo "${{ github.repository }}"
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          packages=()
+          metadata=()
+          for arch in x64 arm64; do
+            prefix="dist/ceru-music-$version-$arch"
+            packages+=("$prefix.dmg" "$prefix.dmg.blockmap" "$prefix-mac.zip" "$prefix-mac.zip.blockmap")
+            info="dist/latest-mac-$arch.yml"
+            grep -Fx "version: $version" "$info"
+            grep -F "path: ceru-music-$version-$arch-mac.zip" "$info"
+            metadata+=("$info")
+          done
+          for file in "${packages[@]}" "${metadata[@]}"; do test -s "$file"; done
+          gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" "${metadata[@]}" --clobber --repo "$GITHUB_REPOSITORY"

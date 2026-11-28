@@ -119,35 +119,24 @@ jobs:
         if: steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest'
         run: yarn run build:win
 
-      - name: Build Electron App for macOS Intel (x64)
-        if: steps.gate.outputs.run == 'true' && matrix.os == 'macos-15-intel'
-        shell: bash
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder@1.2.0'
-          ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-        run: |
-          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
-          export npm_config_electron_builder_binaries_mirror='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          unset npm_package_config_electron_builder_binaries_mirror || true
-          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
-          yarn run build:mac:intel
+      - name: Install Rust toolchain for macOS
+        if: steps.gate.outputs.run == 'true' && startsWith(matrix.os, 'macos')
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Electron App for macOS Apple Silicon (arm64)
-        if: steps.gate.outputs.run == 'true' && matrix.os == 'macos-latest'
+      - name: Build native external-media-integration module for macOS
+        if: steps.gate.outputs.run == 'true' && startsWith(matrix.os, 'macos')
+        run: yarn run build:native:emi
+
+      - name: Build, sign and notarize Electron App for macOS
+        if: steps.gate.outputs.run == 'true' && startsWith(matrix.os, 'macos')
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          ELECTRON_BUILDER_BINARIES_DOWNLOAD_OVERRIDE_URL: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/dmg-builder@1.2.0'
-          ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          NPM_CONFIG_ELECTRON_BUILDER_BINARIES_MIRROR: 'https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-        run: |
-          sed -i.bak '/electron_builder_binaries_mirror/d' .npmrc || true
-          export npm_config_electron_builder_binaries_mirror='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-          unset npm_package_config_electron_builder_binaries_mirror || true
-          sed -i.bak 's/^  notarize: true$/  notarize: false/' electron-builder.yml
-          yarn run build:mac:arm64
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/build-macos-release.sh
 
       - name: Build Electron App for Linux
         if: steps.gate.outputs.run == 'true' && matrix.os == 'ubuntu-latest'
